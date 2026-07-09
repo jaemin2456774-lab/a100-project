@@ -117,3 +117,21 @@ services:
 
       - key: V42_MIN_SCORE
         value: "48"
+
+      - key: V43_TICKER_TTL
+        value: "30"
+
+      - key: V43_TIMEOUT
+        value: "7"
+
+      - key: V43_LIMIT
+        value: "30"
+
+      - key: V43_ANALYZE_LIMIT
+        value: "8"
+
+      - key: V43_TOP
+        value: "5"
+
+      - key: V43_MIN_SCORE
+        value: "48"
