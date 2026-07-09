@@ -63,3 +63,15 @@ services:
 
       - key: HYPER_FINAL_TOP
         value: "3"
+
+      - key: PARALLEL_WORKERS
+        value: "5"
+
+      - key: V39_LIMIT
+        value: "5"
+
+      - key: V39_TOP
+        value: "3"
+
+      - key: V39_TTL
+        value: "120"
