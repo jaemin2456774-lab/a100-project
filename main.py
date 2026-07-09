@@ -4,7 +4,7 @@
 import os, time, requests, asyncio, threading, traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -22,13 +22,15 @@ DEFAULT_SYMBOLS = [x.strip().upper() for x in os.getenv(
 SCORE_ALERT = float(os.getenv("SCORE_ALERT", "80"))
 
 BINANCE_MARKET = "https://data-api.binance.vision"
+UPBIT = "https://api.upbit.com"
+BITHUMB = "https://api.bithumb.com"
 
 def log(msg: str):
     print(msg, flush=True)
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"A100 v9 top10 alert worker is running"
+        body = b"A100 v10 KR markets worker is running"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -90,13 +92,21 @@ def macd_hist(closes: List[float]) -> float:
     sig = ema(macd, 9)
     return macd[-1] - sig[-1]
 
-def get_json(url: str, params=None):
-    r = requests.get(url, params=params or {}, timeout=15)
+def get_json(url: str, params=None, headers=None):
+    r = requests.get(url, params=params or {}, headers=headers or {}, timeout=15)
     if r.status_code >= 400:
         raise RuntimeError(f"HTTP {r.status_code} {url} {r.text[:160]}")
     return r.json()
 
-def get_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[str, float]]:
+def grade(score: float) -> str:
+    if score >= 90: return "S"
+    if score >= 80: return "A"
+    if score >= 70: return "B"
+    if score >= 60: return "C"
+    return "PASS"
+
+# ---------- Binance market data ----------
+def get_binance_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[str, float]]:
     rows = get_json(f"{BINANCE_MARKET}/api/v3/klines", {"symbol": pair, "interval": interval, "limit": limit})
     return [{
         "open": safe_float(r[1]),
@@ -108,7 +118,7 @@ def get_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[s
         "taker_buy_quote": safe_float(r[10]),
     } for r in rows]
 
-def get_top_usdt(limit: int = 40) -> List[str]:
+def get_binance_top_usdt(limit: int = 40) -> List[str]:
     data = get_json(f"{BINANCE_MARKET}/api/v3/ticker/24hr")
     rows = []
     for x in data:
@@ -122,6 +132,90 @@ def get_top_usdt(limit: int = 40) -> List[str]:
     rows.sort(key=lambda x: x[1], reverse=True)
     return [s for s, _ in rows[:limit]]
 
+# ---------- Korean markets ----------
+def upbit_markets() -> List[str]:
+    data = get_json(f"{UPBIT}/v1/market/all", {"isDetails": "false"})
+    return [x["market"] for x in data if x.get("market", "").startswith("KRW-")]
+
+def upbit_tickers(markets: List[str]) -> Dict[str, Dict[str, float]]:
+    out = {}
+    for i in range(0, len(markets), 100):
+        chunk = markets[i:i+100]
+        data = get_json(f"{UPBIT}/v1/ticker", {"markets": ",".join(chunk)})
+        for x in data:
+            sym = x["market"].replace("KRW-", "")
+            out[sym] = {
+                "price": safe_float(x.get("trade_price")),
+                "change_pct": safe_float(x.get("signed_change_rate")) * 100,
+                "acc_trade_price_24h": safe_float(x.get("acc_trade_price_24h")),
+            }
+        time.sleep(0.08)
+    return out
+
+def bithumb_tickers() -> Dict[str, Dict[str, float]]:
+    data = get_json(f"{BITHUMB}/public/ticker/ALL_KRW")
+    raw = data.get("data", {})
+    out = {}
+    for sym, x in raw.items():
+        if sym == "date" or not isinstance(x, dict):
+            continue
+        out[sym.upper()] = {
+            "price": safe_float(x.get("closing_price")),
+            "change_pct": safe_float(x.get("fluctate_rate_24H")),
+            "acc_trade_price_24h": safe_float(x.get("acc_trade_value_24H")),
+        }
+    return out
+
+def kr_market_snapshot() -> Dict[str, Dict[str, float]]:
+    result = {}
+    try:
+        um = upbit_markets()
+        ut = upbit_tickers(um)
+        for sym, x in ut.items():
+            result.setdefault(sym, {})
+            result[sym]["upbit_value"] = x["acc_trade_price_24h"]
+            result[sym]["upbit_change"] = x["change_pct"]
+            result[sym]["upbit_price"] = x["price"]
+    except Exception as e:
+        log(f"Upbit error: {e}")
+
+    try:
+        bt = bithumb_tickers()
+        for sym, x in bt.items():
+            result.setdefault(sym, {})
+            result[sym]["bithumb_value"] = x["acc_trade_price_24h"]
+            result[sym]["bithumb_change"] = x["change_pct"]
+            result[sym]["bithumb_price"] = x["price"]
+    except Exception as e:
+        log(f"Bithumb error: {e}")
+
+    for sym, x in result.items():
+        x["kr_value"] = safe_float(x.get("upbit_value")) + safe_float(x.get("bithumb_value"))
+        vals = []
+        if "upbit_change" in x: vals.append(x["upbit_change"])
+        if "bithumb_change" in x: vals.append(x["bithumb_change"])
+        x["kr_change"] = avg(vals) if vals else 0.0
+    return result
+
+def kr_score_for_symbol(sym: str, kr: Dict[str, Dict[str, float]]) -> Tuple[float, str]:
+    x = kr.get(sym.upper())
+    if not x:
+        return 0.0, "국내 미상장/데이터 없음"
+    value = x.get("kr_value", 0)
+    chg = x.get("kr_change", 0)
+
+    score = 0
+    if value >= 10_000_000_000: score += 6     # 100억 KRW
+    if value >= 30_000_000_000: score += 6     # 300억 KRW
+    if value >= 100_000_000_000: score += 6    # 1000억 KRW
+    if chg > 2: score += 4
+    if chg > 5: score += 4
+    if chg > 10: score += 4
+    score = min(score, 25)
+
+    note = f"KR거래대금 {value/100000000:.1f}억 / KR등락 {chg:.2f}%"
+    return score, note
+
 @dataclass
 class Result:
     pair: str
@@ -132,28 +226,22 @@ class Result:
     volume: float
     buy_pressure: float
     momentum: float
+    kr_score: float
     risk: float
     vol_ratio: float
     buy_ratio: float
     rsi14: float
-    macd: float
     support: float
     resistance: float
     note: str
+    kr_note: str
 
-def grade(score: float) -> str:
-    if score >= 90: return "S"
-    if score >= 80: return "A"
-    if score >= 70: return "B"
-    if score >= 60: return "C"
-    return "PASS"
-
-def analyze(symbol: str, interval: str = "4h") -> Result:
+def analyze(symbol: str, kr: Optional[Dict[str, Dict[str, float]]] = None, interval: str = "4h") -> Result:
     symbol = symbol.upper().replace("USDT", "")
     pair = f"{symbol}USDT"
     log(f"analyze start: {pair}")
 
-    kl = get_klines(pair, interval, 120)
+    kl = get_binance_klines(pair, interval, 120)
     if len(kl) < 60:
         raise RuntimeError(f"{pair} kline data too short: {len(kl)}")
 
@@ -173,67 +261,72 @@ def analyze(symbol: str, interval: str = "4h") -> Result:
     resistance = max(highs[-20:])
 
     trend = 0
-    if price > ma5: trend += 8
-    if price > ma20: trend += 10
-    if ma5 > ma20: trend += 7
-    if price > ma60: trend += 6
-    if recent_low >= prev_low * 0.98: trend += 6
-    trend = min(trend, 35)
+    if price > ma5: trend += 7
+    if price > ma20: trend += 8
+    if ma5 > ma20: trend += 6
+    if price > ma60: trend += 5
+    if recent_low >= prev_low * 0.98: trend += 4
+    trend = min(trend, 30)
 
     vol_now = avg(qvols[-3:])
     vol_base = avg(qvols[-60:-15])
     vol_ratio = vol_now / vol_base if vol_base else 1.0
-    volume = min(max((vol_ratio - 1) * 12, 0), 25)
+    volume = min(max((vol_ratio - 1) * 10, 0), 20)
 
     buy_now = avg(buyq[-3:])
     buy_ratio = buy_now / vol_now if vol_now else 0.5
     buy_pressure = 0
-    if buy_ratio > 0.52: buy_pressure += 8
-    if buy_ratio > 0.56: buy_pressure += 7
-    if buy_ratio > 0.60: buy_pressure += 5
+    if buy_ratio > 0.52: buy_pressure += 7
+    if buy_ratio > 0.56: buy_pressure += 6
+    if buy_ratio > 0.60: buy_pressure += 4
 
     rsi14 = rsi(closes, 14)
     mh = macd_hist(closes)
     momentum = 0
-    if 45 <= rsi14 <= 68: momentum += 7
+    if 45 <= rsi14 <= 68: momentum += 6
     if rsi14 > 68: momentum += 2
-    if mh > 0: momentum += 8
-    if closes[-1] > closes[-4]: momentum += 5
+    if mh > 0: momentum += 7
+    if closes[-1] > closes[-4]: momentum += 4
+
+    kr = kr or {}
+    kr_score, kr_note = kr_score_for_symbol(symbol, kr)
 
     chg_24 = pct(closes[-1], closes[-7])
-    risk = 20
-    if chg_24 > 25: risk -= 6
-    if chg_24 > 45: risk -= 8
-    if price < ma20: risk -= 5
+    risk = 15
+    if chg_24 > 25: risk -= 5
+    if chg_24 > 45: risk -= 6
+    if price < ma20: risk -= 4
     risk = max(risk, 0)
 
-    score = trend + volume + buy_pressure + momentum + risk
+    score = trend + volume + buy_pressure + momentum + kr_score + risk
 
     notes = []
-    if vol_ratio < 1.5: notes.append("거래량 부족")
-    if buy_ratio < 0.52: notes.append("매수압 약함")
+    if vol_ratio < 1.5: notes.append("글로벌 거래량 부족")
+    if buy_ratio < 0.52: notes.append("글로벌 매수압 약함")
     if price < ma20: notes.append("MA20 아래")
     if mh <= 0: notes.append("MACD 약함")
+    if kr_score >= 12: notes.append("국내 현물 수급 감지")
     if chg_24 > 35: notes.append("단기 급등 리스크")
     if not notes: notes.append("A100 조건 양호")
 
     result = Result(
         pair, round(price, 8), round(score, 2), grade(score),
         round(trend, 2), round(volume, 2), round(buy_pressure, 2),
-        round(momentum, 2), round(risk, 2), round(vol_ratio, 2),
-        round(buy_ratio, 3), round(rsi14, 2), round(mh, 8),
+        round(momentum, 2), round(kr_score, 2), round(risk, 2),
+        round(vol_ratio, 2), round(buy_ratio, 3), round(rsi14, 2),
         round(support, 8), round(resistance, 8),
-        " / ".join(notes)
+        " / ".join(notes), kr_note
     )
     log(f"analyze done: {pair} score={result.score}")
     return result
 
-def scan(symbols: List[str]) -> List[Result]:
-    log(f"scan symbols={symbols}")
+def scan(symbols: List[str], use_kr: bool = True) -> List[Result]:
+    log(f"scan symbols={symbols}, use_kr={use_kr}")
+    kr = kr_market_snapshot() if use_kr else {}
     out = []
     for s in symbols:
         try:
-            out.append(analyze(s))
+            out.append(analyze(s, kr))
         except Exception as e:
             log(f"{s} error: {e}")
             log(traceback.format_exc())
@@ -246,26 +339,38 @@ def format_result(r: Result) -> str:
         f"가격: <code>{r.price}</code>\n"
         f"점수: <b>{r.score}</b> / 등급: <b>{r.grade}</b>\n"
         f"지지: <code>{r.support}</code> | 저항: <code>{r.resistance}</code>\n"
-        f"거래량: {r.vol_ratio}x | 매수비율: {r.buy_ratio} | RSI: {r.rsi14}\n"
-        f"차트 {r.trend}/35 | 거래량 {r.volume}/25 | 매수압 {r.buy_pressure}/20 | 모멘텀 {r.momentum}/20 | 리스크 {r.risk}/20\n"
+        f"글로벌Vol: {r.vol_ratio}x | 매수비율: {r.buy_ratio} | RSI: {r.rsi14}\n"
+        f"차트 {r.trend}/30 | 거래량 {r.volume}/20 | 매수압 {r.buy_pressure}/17 | 모멘텀 {r.momentum}/17 | KR {r.kr_score}/25 | 리스크 {r.risk}/15\n"
+        f"{r.kr_note}\n"
         f"진단: {r.note}\n"
     )
 
-def build_report(symbols: List[str], top_n: int = 10) -> str:
-    results = scan(symbols)
+def build_report(symbols: List[str], top_n: int = 10, use_kr: bool = True) -> str:
+    results = scan(symbols, use_kr=use_kr)
     if not results:
         return "A100 결과 없음\n\nRender 로그 error 확인 필요"
-    return "🔥 <b>A100 리포트</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:top_n])
+    return "🔥 <b>A100 KR+Global 리포트</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:top_n])
+
+def build_kr_report(top_n: int = 20) -> str:
+    kr = kr_market_snapshot()
+    rows = []
+    for sym, x in kr.items():
+        rows.append((sym, x.get("kr_value", 0), x.get("kr_change", 0)))
+    rows.sort(key=lambda x: x[1], reverse=True)
+    lines = ["🇰🇷 <b>업비트+빗썸 KRW 거래대금 상위</b>\n"]
+    for i, (sym, value, chg) in enumerate(rows[:top_n], 1):
+        lines.append(f"{i}. <b>{sym}</b> | {value/100000000:.1f}억 | {chg:.2f}%")
+    return "\n".join(lines)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 봇 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/myid")
+    await update.message.reply_text("A100 봇 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/kr\n/myid")
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 기본 리스트 분석 중...")
-    await update.message.reply_text(build_report(DEFAULT_SYMBOLS, 10), parse_mode="HTML")
+    await update.message.reply_text("A100 KR+Global 기본 리스트 분석 중...")
+    await update.message.reply_text(build_report(DEFAULT_SYMBOLS, 10, True), parse_mode="HTML")
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw = " ".join(context.args).strip()
@@ -273,16 +378,20 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("예: /scan ARKM,SYN,SENT")
         return
     symbols = [x.strip().upper() for x in raw.replace(" ", "").split(",") if x.strip()]
-    await update.message.reply_text("A100 분석 중...")
-    await update.message.reply_text(build_report(symbols, 10), parse_mode="HTML")
+    await update.message.reply_text("A100 KR+Global 분석 중...")
+    await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
 
 async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 거래량 상위 USDT 40개 스캔 중...")
-    symbols = get_top_usdt(40)
-    await update.message.reply_text(build_report(symbols, 10), parse_mode="HTML")
+    await update.message.reply_text("A100 거래량 상위 USDT 40개 + 국내수급 스캔 중...")
+    symbols = get_binance_top_usdt(40)
+    await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
+
+async def kr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("업비트+빗썸 KRW 거래대금 확인 중...")
+    await update.message.reply_text(build_kr_report(20), parse_mode="HTML")
 
 async def arkm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(build_report(["ARKM"], 1), parse_mode="HTML")
+    await update.message.reply_text(build_report(["ARKM"], 1, True), parse_mode="HTML")
 
 def send_telegram(text: str):
     if not BOT_TOKEN or not CHAT_ID:
@@ -294,10 +403,10 @@ def send_telegram(text: str):
         log(f"telegram send error: {e}")
 
 def morning_job():
-    send_telegram("🌅 <b>A100 오전 5시 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10))
+    send_telegram("🌅 <b>A100 오전 5시 KR+Global 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10, True))
 
 def alert_job():
-    hits = [r for r in scan(DEFAULT_SYMBOLS) if r.score >= SCORE_ALERT]
+    hits = [r for r in scan(DEFAULT_SYMBOLS, True) if r.score >= SCORE_ALERT]
     if hits:
         send_telegram("🚨 <b>A100 조건 감지</b>\n\n" + "\n---\n".join(format_result(r) for r in hits[:5]))
 
@@ -323,8 +432,9 @@ def main():
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CommandHandler("scan", scan_cmd))
     app.add_handler(CommandHandler("top", top_cmd))
+    app.add_handler(CommandHandler("kr", kr_cmd))
     app.add_handler(CommandHandler("arkm", arkm))
-    log("A100 v9 top10 alert worker running...")
+    log("A100 v10 KR markets worker running...")
     app.run_polling()
 
 if __name__ == "__main__":
