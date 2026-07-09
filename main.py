@@ -22,7 +22,7 @@ CG_CACHE={}; KR_CACHE=(0,{})
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
-        b=b"A100 v19 Strict Elite running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
+        b=b"A100 v20 Adaptive AI running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self,*a): return
 def health(): HTTPServer(("0.0.0.0", int(os.getenv("PORT","10000"))), Health).serve_forever()
 def sf(x,d=0.0):
@@ -233,6 +233,52 @@ def quality_score(r):
     return round(clamp(q), 1)
 
 
+
+def market_regime():
+    # BTC 4H 기준 시장상태 자동판정
+    try:
+        k = klines("BTC")
+        c = [x["c"] for x in k]
+        price = c[-1]
+        ma20 = sma(c, 20)
+        ma60 = sma(c, 60)
+        mh = macd(c)
+        rr = rsi(c)
+        if price > ma20 > ma60 and mh > 0:
+            return "상승장", 0
+        if price < ma20 and price < ma60:
+            return "하락장", 12
+        if price < ma20:
+            return "약세횡보", 7
+        if rr > 72:
+            return "과열장", 8
+        return "횡보장", 5
+    except Exception as e:
+        log(f"market_regime error {e}")
+        return "중립", 5
+
+def adaptive_thresholds():
+    regime, add = market_regime()
+    return {
+        "regime": regime,
+        "quality": 60 + add,
+        "explosion": 55 + add,
+        "confidence": 50 + max(0, add - 3),
+        "accumulation": 55 + max(0, add - 4),
+        "only_quality": 70 + add,
+        "only_explosion": 65 + add,
+        "only_confidence": 60 + max(0, add - 4),
+        "only_accumulation": 65 + max(0, add - 5),
+    }
+
+def market_header():
+    th = adaptive_thresholds()
+    return (
+        f"시장상태: <b>{th['regime']}</b>\n"
+        f"Elite기준: 품질 {th['quality']}↑ / 폭발 {th['explosion']}↑ / 신뢰 {th['confidence']}↑ / 매집 {th['accumulation']}↑"
+    )
+
+
 def strict_action(r):
     q = quality_score(r)
     ex = explosion_score(r)
@@ -249,11 +295,12 @@ def strict_action(r):
 def strict_pass(r):
     q = quality_score(r)
     ex = explosion_score(r)
+    th = adaptive_thresholds()
     return (
-        q >= 60
-        and ex >= 55
-        and r.confidence >= 50
-        and r.accumulation >= 55
+        q >= th["quality"]
+        and ex >= th["explosion"]
+        and r.confidence >= th["confidence"]
+        and r.accumulation >= th["accumulation"]
         and r.bubble < 75
         and r.distribution < 75
         and "관망" not in strict_action(r)
@@ -263,12 +310,14 @@ def strict_pass(r):
 def only_pass(r):
     q = quality_score(r)
     ex = explosion_score(r)
+    th = adaptive_thresholds()
     return (
-        q >= 70
-        and ex >= 65
-        and r.confidence >= 60
-        and r.accumulation >= 65
+        q >= th["only_quality"]
+        and ex >= th["only_explosion"]
+        and r.confidence >= th["only_confidence"]
+        and r.accumulation >= th["only_accumulation"]
         and r.smart >= 55
+        and r.cg >= 10
         and r.bubble < 70
         and r.distribution < 70
         and ("분할매수" in strict_action(r) or "적극" in strict_action(r))
@@ -333,16 +382,16 @@ def elite_sort(res):
 
 def ranktxt(res,n=10):
     ranked = elite_sort(res) if res else []
-    lines = ["⚡ <b>A100 v19 Elite Signal Rank</b>", "추천품질·폭발확률 기준으로 재정렬\n"]
+    lines = ["⚡ <b>A100 v20 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
     for i, r in enumerate(ranked[:n], 1):
         lines.append(format_elite(r, i))
     return "\n".join(lines) if ranked else "A100 후보 없음"
 
 def report(symbols,n=10):
     res=scan(symbols)
-    return "A100 결과 없음" if not res else "🔥 <b>A100 v19 Strict Elite</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
+    return "A100 결과 없음" if not res else "🔥 <b>A100 v20 Adaptive AI</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
 
-async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v19 시작\n/check\n/scan ARKM,SYN,SENT\n/rank\n/hot\n/sniper\n/elite\n/only\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
+async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v20 시작\n/check\n/scan ARKM,SYN,SENT\n/rank\n/hot\n/sniper\n/elite\n/only\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
 async def myid(update,context): await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 async def check(update,context): await update.message.reply_text("A100 분석 중..."); await update.message.reply_text(report(DEFAULT_SYMBOLS,10),parse_mode="HTML")
 async def scan_cmd(update,context):
@@ -356,7 +405,7 @@ async def hot_cmd(update,context):
     await update.message.reply_text(ranktxt(hot,10) if hot else "HOT 후보 없음",parse_mode="HTML")
 
 async def sniper_cmd(update,context):
-    await update.message.reply_text("🎯 A100 v19 스나이퍼 단일 후보 스캔 중...")
+    await update.message.reply_text("🎯 A100 v20 스나이퍼 단일 후보 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🎯 오늘은 스나이퍼 후보 없음\n\n기준 미달이면 억지 추천하지 않습니다.\n무리하게 진입하지 않는 것이 더 좋습니다.")
@@ -368,7 +417,7 @@ async def sniper_cmd(update,context):
     ex = explosion_score(r)
     q = quality_score(r)
     text = (
-        "🎯 <b>A100 v19 SNIPER PICK</b>\n\n"
+        "🎯 <b>A100 v20 SNIPER PICK</b>\n\n"
         f"<b>{r.sym}</b> {stars(q)}\n"
         f"추천품질: <b>{q}%</b>\n"
         f"폭발확률: <b>{ex}%</b>\n"
@@ -387,17 +436,15 @@ async def sniper_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def elite_cmd(update,context):
-    await update.message.reply_text("🏆 A100 Elite Pick TOP5 스캔 중...")
+    await update.message.reply_text("🏆 A100 v20 Elite Pick TOP5 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
-        await update.message.reply_text("Elite 후보 없음")
+        await update.message.reply_text("🏆 A100 ELITE\n\n오늘은 Elite 후보가 없습니다.\n무리한 진입보다 기다리는 것이 유리합니다.")
         return
-    lines = ["🏆 <b>A100 ELITE PICK TOP5</b>\n"]
+    lines = ["🏆 <b>A100 v20 ELITE PICK TOP5</b>", market_header(), ""]
     for i, r in enumerate(res[:5], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-
-
 
 async def only_cmd(update,context):
     await update.message.reply_text("🔥 A100 오늘 단 하나 후보 스캔 중...")
@@ -406,7 +453,7 @@ async def only_cmd(update,context):
     if not cand:
         await update.message.reply_text(
             "🔥 오늘 단 하나 후보 없음\n\n"
-            "V19 기준 미달입니다.\n"
+            "V20 적응형 기준 미달입니다.\n"
             "조건: 추천품질 70↑ / 폭발확률 65↑ / 신뢰도 60↑ / 매집 65↑ / 과열·분배 낮음"
         )
         return
@@ -446,10 +493,10 @@ def send(text):
     if not BOT_TOKEN or not CHAT_ID: log("TOKEN/CHAT_ID missing"); return
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=15)
     except Exception as e: log(f"telegram {e}")
-def morning(): send("🌅 <b>A100 v19 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
+def morning(): send("🌅 <b>A100 v20 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75)]
-    if hit: send("🚨 <b>A100 v19 조건 감지</b>\n\n"+ranktxt(hit,5))
+    if hit: send("🚨 <b>A100 v20 조건 감지</b>\n\n"+ranktxt(hit,5))
 def main():
     if not BOT_TOKEN: raise RuntimeError("TELEGRAM_BOT_TOKEN 필요")
     threading.Thread(target=health,daemon=True).start()
@@ -457,7 +504,7 @@ def main():
     try: asyncio.get_running_loop()
     except RuntimeError: asyncio.set_event_loop(asyncio.new_event_loop())
     app=Application.builder().token(BOT_TOKEN).build()
-    for name,fn in [("start",start),("help",start),("myid",myid),("check",check),("scan",scan_cmd),("rank",rank_cmd),("best",rank_cmd),("top",rank_cmd),("hot",hot_cmd),("sniper",sniper_cmd),("elite",elite_cmd),("only",only_cmd),("risk",risk_cmd),("kr",kr_cmd),("cgtest",cgtest_cmd)]:
+    for name,fn in [("start",start),("help",start),("myid",myid),("check",check),("scan",scan_cmd),("rank",rank_cmd),("best",rank_cmd),("top",rank_cmd),("hot",hot_cmd),("sniper",sniper_cmd),("elite",elite_cmd),("only",only_cmd),("smart",smart_cmd),("danger",danger_cmd),("watch",watch_cmd),("risk",risk_cmd),("kr",kr_cmd),("cgtest",cgtest_cmd)]:
         app.add_handler(CommandHandler(name,fn))
-    log("A100 v19 Strict Elite worker running..."); app.run_polling()
+    log("A100 v20 Adaptive AI worker running..."); app.run_polling()
 if __name__=="__main__": main()
