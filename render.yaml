@@ -17,11 +17,11 @@ services:
       - key: SCORE_ALERT
         value: "85"
       - key: TOP_SCAN_LIMIT
-        value: "15"
+        value: "10"
       - key: CG_CACHE_TTL
-        value: "300"
+        value: "900"
       - key: CG_MIN_INTERVAL
-        value: "0.45"
+        value: "1.2"
       - key: AUTO_MACRO_TTL
         value: "900"
       - key: NEWS_TTL
@@ -70,3 +70,10 @@ services:
         value: "0"
       - key: MACRO_NOTE
         value: "자동/수동 매크로 입력 없음"
+
+      - key: CG_429_COOLDOWN
+        value: "900"
+      - key: CG_PREFILTER_LIMIT
+        value: "8"
+      - key: FAST_SCAN_LIMIT
+        value: "25"
