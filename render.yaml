@@ -10,6 +10,8 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: COINGLASS_API_KEY
+        sync: false
       - key: DEFAULT_SYMBOLS
         value: BTC,ETH,SOL,ARKM,SYN,SENT,ALT,VANRY,CELO,COTI,NFP,TIA,INJ,WLD,ZEC
       - key: SCORE_ALERT
