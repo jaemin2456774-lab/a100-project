@@ -39,7 +39,7 @@ def keep_alive_after_error(e):
         time.sleep(60)
 
 
-# ===== A100 v35 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
+# ===== A100 v36 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
 import time as _a100_time
 import re
 import html
@@ -131,7 +131,7 @@ def macro_text():
     else:
         level = "🟢 낮음"
     return (
-        f"🌎 <b>A100 v35 매크로 리스크</b>\n"
+        f"🌎 <b>A100 v36 매크로 리스크</b>\n"
         f"위험도: <b>{risk}%</b> {level}\n"
         f"FOMC D-{int(fomc) if fomc < 90 else '?'} | CPI D-{int(cpi) if cpi < 90 else '?'} | 전쟁위험 {war}%\n"
         f"메모: {note}\n"
@@ -150,7 +150,7 @@ CG_CACHE={}; KR_CACHE=(0,{})
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
-        b=b"A100 v35.1 Port Fix running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
+        b=b"A100 v36.1 Port Fix running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self,*a): return
 def health(): HTTPServer(("0.0.0.0", int(os.getenv("PORT","10000"))), Health).serve_forever()
 def sf(x,d=0.0):
@@ -688,7 +688,7 @@ def v34_base_macro_report():
     m = v34_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v35 매크로 엔진</b>\n"
+        f"🌎 <b>A100 v36 매크로 엔진</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -972,16 +972,16 @@ def elite_sort(res):
 
 def ranktxt(res,n=10):
     ranked = elite_sort(res) if res else []
-    lines = ["⚡ <b>A100 v35 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
+    lines = ["⚡ <b>A100 v36 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
     for i, r in enumerate(ranked[:n], 1):
         lines.append(format_elite(r, i))
     return "\n".join(lines) if ranked else "A100 후보 없음"
 
 def report(symbols,n=10):
     res=scan(symbols)
-    return "A100 결과 없음" if not res else "🔥 <b>A100 v35.1 Port Fix</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
+    return "A100 결과 없음" if not res else "🔥 <b>A100 v36.1 Port Fix</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
 
-async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v35 시작\n/check\n/scan ARKM,SYN,SENT\n/ultimate\n/chart\n/fast\n/cgstatus\n/cgreset\n/macro\n/live\n/news\n/smartnews\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
+async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v36 시작\n/check\n/scan ARKM,SYN,SENT\n/ultimate\n/chart\n/fast\n/cgstatus\n/cgreset\n/macro\n/live\n/news\n/smartnews\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
 async def myid(update,context): await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 async def check(update,context): await update.message.reply_text("A100 분석 중..."); await update.message.reply_text(report(DEFAULT_SYMBOLS,10),parse_mode="HTML")
 async def scan_cmd(update,context):
@@ -995,7 +995,7 @@ async def hot_cmd(update,context):
     await update.message.reply_text(ranktxt(hot,10) if hot else "HOT 후보 없음",parse_mode="HTML")
 
 async def sniper_cmd(update,context):
-    await update.message.reply_text("🎯 A100 v35 스나이퍼 단일 후보 스캔 중...")
+    await update.message.reply_text("🎯 A100 v36 스나이퍼 단일 후보 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🎯 오늘은 스나이퍼 후보 없음\n\n기준 미달이면 억지 추천하지 않습니다.\n무리하게 진입하지 않는 것이 더 좋습니다.")
@@ -1007,7 +1007,7 @@ async def sniper_cmd(update,context):
     ex = explosion_score(r)
     q = quality_score(r)
     text = (
-        "🎯 <b>A100 v35 SNIPER PICK</b>\n\n"
+        "🎯 <b>A100 v36 SNIPER PICK</b>\n\n"
         f"<b>{r.sym}</b> {stars(q)}\n"
         f"추천품질: <b>{q}%</b>\n"
         f"폭발확률: <b>{ex}%</b>\n"
@@ -1027,12 +1027,12 @@ async def sniper_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def elite_cmd(update,context):
-    await update.message.reply_text("🏆 A100 v35 Elite Pick TOP5 스캔 중...")
+    await update.message.reply_text("🏆 A100 v36 Elite Pick TOP5 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🏆 A100 ELITE\n\n오늘은 Elite 후보가 없습니다.\n무리한 진입보다 기다리는 것이 유리합니다.")
         return
-    lines = ["🏆 <b>A100 v35 ELITE PICK TOP5</b>", market_header(), ""]
+    lines = ["🏆 <b>A100 v36 ELITE PICK TOP5</b>", market_header(), ""]
     for i, r in enumerate(res[:5], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1086,19 +1086,19 @@ def send(text):
     if not BOT_TOKEN or not CHAT_ID: log("TOKEN/CHAT_ID missing"); return
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=15)
     except Exception as e: log(f"telegram {e}")
-def morning(): send("🌅 <b>A100 v35 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
+def morning(): send("🌅 <b>A100 v36 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75 or timing_score(r)>=72 or god_score(r)>=70 or real_signal_score(r)>=70)]
-    if hit: send("🚨 <b>A100 v35 조건 감지</b>\n\n"+ranktxt(hit,5))
+    if hit: send("🚨 <b>A100 v36 조건 감지</b>\n\n"+ranktxt(hit,5))
 
 
 
 async def auto_cmd(update,context):
-    await update.message.reply_text("🤖 A100 v35 자동판정 스캔 중...")
+    await update.message.reply_text("🤖 A100 v36 자동판정 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🤖 <b>A100 v35 AUTO THRESHOLD</b>", v34_header(), ""]
+    lines = ["🤖 <b>A100 v36 AUTO THRESHOLD</b>", v34_header(), ""]
     if cand:
         lines.append("✅ 실전 후보")
         for i, r in enumerate(cand[:5], 1):
@@ -1110,7 +1110,7 @@ async def auto_cmd(update,context):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def god_cmd(update,context):
-    await update.message.reply_text("🔥 A100 v35 Auto GOD 실전 단일 후보 스캔 중...")
+    await update.message.reply_text("🔥 A100 v36 Auto GOD 실전 단일 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if god_v34_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), god_score(r), timing_score(r), breakout_score(r)), reverse=True)
@@ -1123,7 +1123,7 @@ async def god_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🔥 <b>A100 v35 GOD PICK</b>\n"
+        "🔥 <b>A100 v36 GOD PICK</b>\n"
         "24시간 내 실전 신호 단일 후보\n\n"
         + v34_header()
         + "\n\n"
@@ -1133,7 +1133,7 @@ async def god_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def real_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v35 Auto 실전신호 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v36 Auto 실전신호 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r)), reverse=True)
@@ -1144,7 +1144,7 @@ async def real_cmd(update,context):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
-    lines = ["⚡ <b>A100 v35 REAL SIGNAL</b>", v34_header(), "24시간 내 터질 가능성 중심\n"]
+    lines = ["⚡ <b>A100 v36 REAL SIGNAL</b>", v34_header(), "24시간 내 터질 가능성 중심\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_real(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1168,14 +1168,14 @@ async def scalp_cmd(update,context):
 
 
 async def timing_cmd(update,context):
-    await update.message.reply_text("⏱ A100 v35 진입 타이밍 후보 스캔 중...")
+    await update.message.reply_text("⏱ A100 v36 진입 타이밍 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if timing_pass(r)]
     cand = sorted(cand, key=lambda r: (timing_score(r), quality_score(r), win_rate_estimate(r)), reverse=True)
     if not cand:
         await update.message.reply_text("⏱ 지금 진입 타이밍 후보 없음\n\n기준 미달이면 기다리는 것이 유리합니다.")
         return
-    lines = ["⏱ <b>A100 v35 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
+    lines = ["⏱ <b>A100 v36 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1190,7 +1190,7 @@ async def now_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🚨 <b>A100 v35 NOW ENTRY</b>\n\n"
+        "🚨 <b>A100 v36 NOW ENTRY</b>\n\n"
         f"<b>{r.sym}</b> {stars(quality_score(r))}\n"
         f"진입타이밍: <b>{timing_score(r)}%</b>\n"
         f"추천품질: <b>{quality_score(r)}%</b>\n"
@@ -1212,7 +1212,7 @@ async def win_cmd(update,context):
     await update.message.reply_text("📊 A100 예상승률 계산 중...")
     res = scan(syms)
     res = sorted(res, key=lambda r: (win_rate_estimate(r), rr_score(r), quality_score(r)), reverse=True)
-    lines = ["📊 <b>A100 v35 예상승률 TOP</b>\n"]
+    lines = ["📊 <b>A100 v36 예상승률 TOP</b>\n"]
     for i, r in enumerate(res[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b>\n"
@@ -1275,47 +1275,47 @@ async def watch_cmd(update,context):
 
 
 async def tenx_cmd(update,context):
-    await update.message.reply_text("💎 A100 v35 10X 잠재 후보 스캔 중...")
+    await update.message.reply_text("💎 A100 v36 10X 잠재 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if tenx_score(r) >= 48 and r.bubble < 70 and r.distribution < 70]
     cand = sorted(cand, key=lambda r: (tenx_score(r), bottom_score(r), whale_score(r)), reverse=True)
     if not cand:
         await update.message.reply_text("💎 10X 잠재 후보 없음")
         return
-    lines = ["💎 <b>A100 v35 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
+    lines = ["💎 <b>A100 v36 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def breakout_cmd(update,context):
-    await update.message.reply_text("🚀 A100 v35 돌파직전 후보 스캔 중...")
+    await update.message.reply_text("🚀 A100 v36 돌파직전 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if breakout_score(r) >= 45 and r.bubble < 75 and r.distribution < 75]
     cand = sorted(cand, key=lambda r: (breakout_score(r), timing_score(r), r.squeeze), reverse=True)
     if not cand:
         await update.message.reply_text("🚀 돌파직전 후보 없음")
         return
-    lines = ["🚀 <b>A100 v35 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
+    lines = ["🚀 <b>A100 v36 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def bottom_cmd(update,context):
-    await update.message.reply_text("🧱 A100 v35 바닥매집 후보 스캔 중...")
+    await update.message.reply_text("🧱 A100 v36 바닥매집 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if bottom_score(r) >= 55 and r.accumulation >= 45 and r.bubble < 65]
     cand = sorted(cand, key=lambda r: (bottom_score(r), r.accumulation, r.smart), reverse=True)
     if not cand:
         await update.message.reply_text("🧱 바닥매집 후보 없음")
         return
-    lines = ["🧱 <b>A100 v35 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
+    lines = ["🧱 <b>A100 v36 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 
-# ===== A100 v35 뉴스/전쟁/고래 AI =====
+# ===== A100 v36 뉴스/전쟁/고래 AI =====
 NEWS_CACHE = {}
 NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
 
@@ -1445,7 +1445,7 @@ def v34_macro_report():
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     titles = "\n".join([f"- {x}" for x in n.get("titles", [])]) or "- 주요 리스크 뉴스 없음"
     return (
-        f"🌎 <b>A100 v35 NEWS/WAR/WHALE AI</b>\n"
+        f"🌎 <b>A100 v36 NEWS/WAR/WHALE AI</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -1488,7 +1488,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v35 자동 매크로 수집 엔진 =====
+# ===== A100 v36 자동 매크로 수집 엔진 =====
 AUTO_MACRO_CACHE = {}
 AUTO_MACRO_TTL = int(os.getenv("AUTO_MACRO_TTL", "900"))
 
@@ -1689,7 +1689,7 @@ def v34_base_macro_report():
     m = v34_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v35 AUTO MACRO LIVE</b>\n"
+        f"🌎 <b>A100 v36 AUTO MACRO LIVE</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'} / GDP D-{int(m['gdp']) if m['gdp'] < 90 else '?'}\n"
@@ -1703,7 +1703,7 @@ def v34_base_macro_report():
 async def events_cmd(update,context):
     m = v34_base_macro_engine()
     text = (
-        "📅 <b>A100 v35 주요 이벤트</b>\n"
+        "📅 <b>A100 v36 주요 이벤트</b>\n"
         f"FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'}\n"
         f"CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'}\n"
         f"PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'}\n"
@@ -1741,7 +1741,7 @@ async def live_cmd(update,context):
     m = v34_macro_engine()
     n = m.get("news_ai", {})
     text = (
-        "📡 <b>A100 v35 LIVE DATA</b>\n"
+        "📡 <b>A100 v36 LIVE DATA</b>\n"
         f"Fear&Greed: {m['fg']} {'(자동)' if os.getenv('AUTO_FEAR_GREED','1')=='1' else '(수동)'}\n"
         f"BTC Dominance Trend: {m['btc_dom']} {'(자동)' if os.getenv('AUTO_MARKET','1')=='1' else '(수동)'}\n"
         f"News Feed: {n.get('feed_count', 0)}개 / NewsRisk {m.get('news_risk', 0)}% / War {m['war']}% / Whale {m['whale']}%\n"
@@ -1752,7 +1752,7 @@ async def live_cmd(update,context):
 
 
 
-# ===== A100 v35 한글 뉴스 요약 / 영향도 / 메타스코어 =====
+# ===== A100 v36 한글 뉴스 요약 / 영향도 / 메타스코어 =====
 SEEN_NEWS = set()
 
 def safe_html(s):
@@ -1971,7 +1971,7 @@ def v34_market_mode():
     return "🟡 Rotation"
 
 
-# ===== A100 v35 클린 한글 뉴스 AI =====
+# ===== A100 v36 클린 한글 뉴스 AI =====
 def clean_html(text):
     text = str(text or "")
     text = re.sub(r"<script.*?</script>", " ", text, flags=re.I | re.S)
@@ -2103,7 +2103,7 @@ def format_news_ko(t, idx=1):
     )
 
 
-# ===== A100 v35.1 Port Fix =====
+# ===== A100 v36.1 Port Fix =====
 def news_source_score(text):
     low = clean_html(text).lower()
     sources = {
@@ -2318,7 +2318,7 @@ async def news_cmd(update,context):
             raw = dedupe_news_list(n.get("raw_titles", [])[:5])
             items = [(news_importance_score(t), t) for t in raw]
         lines = [
-            "📰 <b>A100 v35 클린 한글 뉴스 AI</b>",
+            "📰 <b>A100 v36 클린 한글 뉴스 AI</b>",
             f"뉴스위험 {n.get('news_risk', 0)}% | 전쟁위험 {n.get('war_risk', 0)}% | 고래위험 {n.get('whale_risk', 0)}%",
             f"Feed {n.get('feed_count', 0)}개 | 신뢰도·중요도·수혜피해\n"
         ]
@@ -2331,10 +2331,10 @@ async def news_cmd(update,context):
 
 
 async def final_cmd(update,context):
-    await update.message.reply_text("🧠 A100 v35 메타 AI 점수 스캔 중...")
+    await update.message.reply_text("🧠 A100 v36 메타 AI 점수 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     res = sorted(res, key=lambda r: (v34_meta_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🧠 <b>A100 v35 META AI RANK</b>", f"시장모드: <b>{v34_market_mode()}</b> / 매크로위험 {v34_macro_engine()['risk']}%", ""]
+    lines = ["🧠 <b>A100 v36 META AI RANK</b>", f"시장모드: <b>{v34_market_mode()}</b> / 매크로위험 {v34_macro_engine()['risk']}%", ""]
     for i, r in enumerate(res[:10], 1):
         decision_fn = globals().get("v25_decision") or globals().get("v24_decision") or globals().get("v23_decision")
         decision = decision_fn(r) if decision_fn else "대기"
@@ -2348,7 +2348,7 @@ async def final_cmd(update,context):
 
 async def mode_cmd(update,context):
     await update.message.reply_text(
-        f"🧭 <b>A100 v35 시장모드</b>\n"
+        f"🧭 <b>A100 v36 시장모드</b>\n"
         f"현재: <b>{v34_market_mode()}</b>\n"
         f"매크로위험: {v34_macro_engine()['risk']}%\n"
         f"추천: {'고배율 금지 / 관망 우선' if v34_macro_engine()['risk'] >= 60 else '일반 기준 / 추격매수 금지'}",
@@ -2388,7 +2388,7 @@ async def cleannews_cmd(update,context):
 
 
 
-# ===== A100 v35.1 Port Fix / 429 방지 엔진 =====
+# ===== A100 v36.1 Port Fix / 429 방지 엔진 =====
 CG_429_UNTIL = 0.0
 CG_FAIL_COUNT = 0
 CG_HARD_TTL = int(os.getenv("CG_HARD_TTL", "900"))
@@ -2505,10 +2505,10 @@ def v34_format_pick(r, idx=1):
 
 
 async def fast_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v35 FAST 차트-only 스캔 중...")
+    await update.message.reply_text("⚡ A100 v36 FAST 차트-only 스캔 중...")
     res = scan(top_usdt(FAST_SCAN_LIMIT))
     cand = v34_fast_prefilter(res, 10)
-    lines = ["⚡ <b>A100 v35 FAST FILTER</b>", "CoinGlass 호출 최소화용 1차 후보\n"]
+    lines = ["⚡ <b>A100 v36 FAST FILTER</b>", "CoinGlass 호출 최소화용 1차 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b> | V34 {v34_ultimate_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격 {chase_risk(r)}%\n"
@@ -2536,7 +2536,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v35 EventLoop Fix =====
+# ===== A100 v36 Speed Boost =====
 ULTIMATE_CACHE = {}
 ULTIMATE_TTL = int(os.getenv("ULTIMATE_TTL", "600"))
 
@@ -2627,7 +2627,7 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached[1], parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("🏆 A100 v35 Ultimate AI 최종 후보 스캔 중...")
+    await update.message.reply_text("🏆 A100 v36 Ultimate AI 최종 후보 스캔 중...")
     try:
         limit = min(int(os.getenv("FAST_SCAN_LIMIT", "25")), 30)
         res = scan(top_usdt(limit))
@@ -2642,7 +2642,7 @@ async def ultimate_cmd(update, context):
         cand = sorted(cand, key=lambda r: ultimate_pick_score(r), reverse=True)
 
         lines = [
-            "🏆 <b>A100 v35 ULTIMATE AI</b>",
+            "🏆 <b>A100 v36 ULTIMATE AI</b>",
             ultimate_market_line(),
             "CoinGlass: 429 방지 캐시/쿨다운 우선",
             "",
@@ -2680,7 +2680,109 @@ async def chart_cmd(update, context):
 
 
 # ===== V35 Missing handler fallback =====
-# ===== A100 v35 Python 3.14 EventLoop Fix =====
+
+# ===== A100 v36 Speed Boost =====
+SPEED_CACHE = {}
+SPEED_TTL = int(os.getenv("SPEED_TTL", "300"))
+SPEED_SCAN_LIMIT = int(os.getenv("SPEED_SCAN_LIMIT", "12"))
+SPEED_FINAL_LIMIT = int(os.getenv("SPEED_FINAL_LIMIT", "3"))
+
+def speed_cache_get(key):
+    v = SPEED_CACHE.get(key)
+    if not v:
+        return None
+    ts, data = v
+    if now_ts() - ts <= SPEED_TTL:
+        return data
+    return None
+
+def speed_cache_set(key, data):
+    SPEED_CACHE[key] = (now_ts(), data)
+
+def speed_pick_score(r):
+    # CoinGlass/뉴스 호출 없이 빠른 차트 점수
+    try:
+        s = 0
+        s += timing_score(r) * 0.26
+        s += breakout_score(r) * 0.23
+        s += bottom_score(r) * 0.18
+        s += real_signal_score(r) * 0.18
+        s += min(max(getattr(r, "vol_ratio", 1), 0), 3) * 5
+        s -= chase_risk(r) * 0.12
+        return round(clamp(s), 1)
+    except Exception:
+        return round(getattr(r, "score", 0), 1)
+
+def speed_format_one(r, idx):
+    score = speed_pick_score(r)
+    medal = ["🥇","🥈","🥉"][idx-1] if idx <= 3 else "🏅"
+    risk = "낮음" if chase_risk(r) < 45 else "보통" if chase_risk(r) < 65 else "높음"
+    return (
+        f"{medal} <b>{r.sym}</b> {stars(score)}\n"
+        f"빠른AI <b>{score}%</b> | 위험 {risk}\n"
+        f"타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 매집 {bottom_score(r)}% | 추격 {chase_risk(r)}%\n"
+        f"진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"손절 <code>{r.stop}</code> | 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+    )
+
+async def ultimate_cmd(update, context):
+    key = "ultimate_fast"
+    cached = speed_cache_get(key)
+    if cached:
+        await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    await update.message.reply_text("⚡ A100 v36 초고속 후보 스캔 중...")
+    try:
+        # 기존 25~30개 대신 12개만 1차 스캔
+        res = scan(top_usdt(SPEED_SCAN_LIMIT))
+        cand = sorted(res, key=lambda r: speed_pick_score(r), reverse=True)[:SPEED_FINAL_LIMIT]
+
+        lines = [
+            "⚡ <b>A100 v36 SPEED ULTIMATE</b>",
+            f"스캔: {SPEED_SCAN_LIMIT}개 | 결과캐시 {SPEED_TTL}초 | CoinGlass 호출 최소화",
+            "뉴스/매크로는 /news, 정밀분석은 /deep 사용 권장",
+            "────────────",
+            ""
+        ]
+        if not cand:
+            lines.append("현재 빠른 후보 없음. 대기.")
+        else:
+            for i, r in enumerate(cand, 1):
+                lines.append(speed_format_one(r, i))
+                lines.append("────────────")
+
+        text = "\n".join(lines)
+        speed_cache_set(key, text)
+        await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
+    except Exception as e:
+        log(f"v36 ultimate error: {e}\n{traceback.format_exc()}")
+        await update.message.reply_text(f"초고속 분석 오류: {e}")
+
+async def deep_cmd(update, context):
+    await update.message.reply_text("🧠 정밀분석은 시간이 걸립니다. CoinGlass 제한 때문에 후보 5개만 분석합니다.")
+    try:
+        res = scan(top_usdt(SPEED_SCAN_LIMIT))
+        cand = sorted(res, key=lambda r: ultimate_pick_score(r) if "ultimate_pick_score" in globals() else speed_pick_score(r), reverse=True)[:5]
+        lines = ["🧠 <b>A100 v36 DEEP</b>", "정밀 후보 TOP5\n"]
+        for i, r in enumerate(cand, 1):
+            if "ultimate_format_one" in globals():
+                lines.append(ultimate_format_one(r, i))
+            else:
+                lines.append(speed_format_one(r, i))
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+    except Exception as e:
+        await update.message.reply_text(f"정밀분석 오류: {e}")
+
+async def cache_cmd(update, context):
+    SPEED_CACHE.clear()
+    try:
+        ULTIMATE_CACHE.clear()
+    except Exception:
+        pass
+    await update.message.reply_text("♻️ 추천 캐시 초기화 완료")
+
+# ===== A100 v36 Python 3.14 EventLoop Fix =====
 async def error_handler(update, context):
     try:
         log(f"Telegram error: {context.error}")
@@ -2708,7 +2810,9 @@ async def run_bot_async():
         ("cleannews", cleannews_cmd), ("translate", translate_cmd),
         ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
         ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd)
-    ]
+    ,
+        ("deep", deep_cmd),
+        ("cache", cache_cmd)]
 
     for name, fn in handlers:
         if fn is not None:
@@ -2734,7 +2838,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v35 EventLoop Fix worker running...", flush=True)
+    print("A100 v36 Speed Boost worker running...", flush=True)
     try:
         asyncio.run(run_bot_async())
     except Exception as e:
