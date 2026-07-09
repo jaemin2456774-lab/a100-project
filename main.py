@@ -497,6 +497,58 @@ def morning(): send("🌅 <b>A100 v20 오전 5시 Elite 리포트</b>\n\n"+repor
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75)]
     if hit: send("🚨 <b>A100 v20 조건 감지</b>\n\n"+ranktxt(hit,5))
+
+async def smart_cmd(update,context):
+    await update.message.reply_text("🧠 A100 스마트머니 후보 스캔 중...")
+    res = scan(top_usdt(TOP_SCAN_LIMIT))
+    cand = [r for r in res if r.smart >= 45 and r.accumulation >= 50 and r.distribution < 75]
+    cand = sorted(cand, key=lambda r: (r.smart, r.accumulation, r.confidence), reverse=True)
+    if not cand:
+        await update.message.reply_text("🧠 스마트머니 후보 없음")
+        return
+    lines = ["🧠 <b>A100 SMART MONEY</b>"]
+    try:
+        lines.append(market_header())
+    except Exception:
+        pass
+    lines.append("")
+    for i, r in enumerate(cand[:10], 1):
+        lines.append(format_elite(r, i))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def danger_cmd(update,context):
+    await update.message.reply_text("⚠️ A100 위험 후보 스캔 중...")
+    raw = " ".join(context.args).strip()
+    syms = [x.strip().upper() for x in raw.replace(" ","").split(",") if x.strip()] if raw else top_usdt(TOP_SCAN_LIMIT)
+    res = scan(syms)
+    bad = sorted(res, key=lambda r: (r.bubble + r.distribution - r.confidence), reverse=True)
+    lines = ["⚠️ <b>A100 DANGER LIST</b>", "분배·과열·신뢰도 저하 후보\n"]
+    for i, r in enumerate(bad[:10], 1):
+        lines.append(
+            f"{i}. <b>{r.sym}</b>\n"
+            f"버블 {r.bubble}% | 분배 {r.distribution}% | 신뢰 {r.confidence}%\n"
+            f"판정: <b>{strict_action(r)}</b>\n"
+            f"경고: {r.warning}\n"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def watch_cmd(update,context):
+    await update.message.reply_text("👀 A100 관심 후보 스캔 중...")
+    res = scan(top_usdt(TOP_SCAN_LIMIT))
+    watch = []
+    for r in res:
+        if not strict_pass(r) and r.accumulation >= 45 and r.smart >= 35 and r.bubble < 75:
+            watch.append(r)
+    watch = sorted(watch, key=lambda r: (r.accumulation, r.smart, r.confidence), reverse=True)
+    if not watch:
+        await update.message.reply_text("👀 관심 후보 없음")
+        return
+    lines = ["👀 <b>A100 WATCH LIST</b>", "아직 진입은 아니지만 관찰할 후보\n"]
+    for i, r in enumerate(watch[:10], 1):
+        lines.append(format_elite(r, i))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
 def main():
     if not BOT_TOKEN: raise RuntimeError("TELEGRAM_BOT_TOKEN 필요")
     threading.Thread(target=health,daemon=True).start()
