@@ -17,4 +17,4 @@ services:
       - key: SCORE_ALERT
         value: "85"
       - key: TOP_SCAN_LIMIT
-        value: "30"
+        value: "25"
