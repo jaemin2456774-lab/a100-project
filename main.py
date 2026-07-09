@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, time, requests
+import os, time, requests, asyncio
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
@@ -222,6 +222,13 @@ def main():
     scheduler.add_job(morning_job, CronTrigger(hour=5, minute=0))
     scheduler.add_job(alert_job, "interval", minutes=30)
     scheduler.start()
+
+    # Python 3.14 / Render event loop compatibility fix
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
