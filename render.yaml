@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: a100-project
     runtime: python
     plan: free

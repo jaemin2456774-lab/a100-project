@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, time, requests, asyncio
+import os, time, requests, asyncio, threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
@@ -215,9 +216,30 @@ def alert_job():
     if hits:
         send_telegram("🚨 <b>A100 조건 감지</b>\n\n" + "\n---\n".join(format_result(r) for r in hits[:5]))
 
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b"A100 worker is running"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        return
+
+def start_health_server():
+    port = int(os.getenv("PORT", "10000"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"Health server listening on port {port}")
+    server.serve_forever()
+
+
 def main():
     if not BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN 필요")
+    threading.Thread(target=start_health_server, daemon=True).start()
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
     scheduler.add_job(morning_job, CronTrigger(hour=5, minute=0))
     scheduler.add_job(alert_job, "interval", minutes=30)
