@@ -75,3 +75,15 @@ services:
 
       - key: V39_TTL
         value: "120"
+
+      - key: KLINE_RESULT_TTL
+        value: "60"
+
+      - key: V40_TTL
+        value: "120"
+
+      - key: V40_LIMIT
+        value: "5"
+
+      - key: V40_TOP
+        value: "3"
