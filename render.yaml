@@ -96,3 +96,9 @@ services:
 
       - key: TRACK_FILE
         value: "a100_recommendations.json"
+
+      - key: V41_LIMIT
+        value: "5"
+
+      - key: V41_TOP
+        value: "3"
