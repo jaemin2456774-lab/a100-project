@@ -102,3 +102,18 @@ services:
 
       - key: V41_TOP
         value: "3"
+
+      - key: V42_TICKER_TTL
+        value: "20"
+
+      - key: V42_LIMIT
+        value: "20"
+
+      - key: V42_ANALYZE_LIMIT
+        value: "7"
+
+      - key: V42_TOP
+        value: "5"
+
+      - key: V42_MIN_SCORE
+        value: "48"
