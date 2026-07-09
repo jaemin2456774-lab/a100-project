@@ -24,9 +24,13 @@ services:
         value: "0.45"
       - key: AUTO_MACRO_TTL
         value: "900"
+      - key: NEWS_TTL
+        value: "900"
       - key: AUTO_FEAR_GREED
         value: "1"
       - key: AUTO_MARKET
+        value: "1"
+      - key: AUTO_NEWS
         value: "1"
       - key: MACRO_RISK
         value: "35"

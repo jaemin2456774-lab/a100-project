@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 load_dotenv()
 
-# ===== A100 v27 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
+# ===== A100 v28 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
 import time as _a100_time
 
 CG_CACHE = {}
@@ -98,7 +98,7 @@ def macro_text():
     else:
         level = "🟢 낮음"
     return (
-        f"🌎 <b>A100 v27 매크로 리스크</b>\n"
+        f"🌎 <b>A100 v28 매크로 리스크</b>\n"
         f"위험도: <b>{risk}%</b> {level}\n"
         f"FOMC D-{int(fomc) if fomc < 90 else '?'} | CPI D-{int(cpi) if cpi < 90 else '?'} | 전쟁위험 {war}%\n"
         f"메모: {note}\n"
@@ -117,7 +117,7 @@ CG_CACHE={}; KR_CACHE=(0,{})
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
-        b=b"A100 v27 Auto Macro Live running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
+        b=b"A100 v28 News War Whale AI running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self,*a): return
 def health(): HTTPServer(("0.0.0.0", int(os.getenv("PORT","10000"))), Health).serve_forever()
 def sf(x,d=0.0):
@@ -535,14 +535,14 @@ def real_signal_score(r):
     s += r.kr * 0.8
     s += r.cg * 0.35
     s -= chase_risk(r) * 0.20
-    return v27_macro_adjust_score(r, round(clamp(s), 1))
+    return v28_macro_adjust_score(r, round(clamp(s), 1))
 
 
 
 def env_num(name, default=0.0):
     return safe_num(os.getenv(name, str(default)), default)
 
-def v27_macro_engine():
+def v28_base_macro_engine():
     # 외부 API 과부하 방지를 위해 기본은 Environment 수동/반자동 입력 기반
     base_risk, note, fomc, cpi, war = macro_risk_score()
 
@@ -649,13 +649,13 @@ def v27_macro_engine():
     }
 
 def macro_guard_add():
-    return v27_macro_engine()["guard"]
+    return v28_base_macro_engine()["guard"]
 
-def v27_macro_report():
-    m = v27_macro_engine()
+def v28_base_macro_report():
+    m = v28_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v27 매크로 엔진</b>\n"
+        f"🌎 <b>A100 v28 매크로 엔진</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -666,8 +666,8 @@ def v27_macro_report():
         f"AI판정: {'알트 고배율 금지 / BTC 우선 / 손절 짧게' if m['risk'] >= 60 else '일반 기준, 단 추격매수 금지'}"
     )
 
-def v27_macro_adjust_score(r, score):
-    m = v27_macro_engine()
+def v28_macro_adjust_score(r, score):
+    m = v28_base_macro_engine()
     s = score
     # BTC/ETH는 리스크오프 때 알트보다 덜 감점
     major = r.sym.startswith(("BTC", "ETH"))
@@ -681,7 +681,7 @@ def v27_macro_adjust_score(r, score):
         s += 4
     return round(clamp(s), 1)
 
-def v27_real_thresholds():
+def v28_real_thresholds():
     regime, add = market_regime()
     guard = macro_guard_add()
     if regime == "상승장":
@@ -703,14 +703,14 @@ def v27_real_thresholds():
     return base
 
 
-def v27_header():
-    th = v27_real_thresholds()
+def v28_header():
+    th = v28_real_thresholds()
     return (
         f"시장상태: <b>{th['regime']}</b>\n"
-        f"실전기준: 실전 {th['real']}↑ / 타이밍 {th['timing']}↑ / 돌파 {th['breakout']}↑ / 매집 {th['accumulation']}↑ / 신뢰 {th['confidence']}↑\n매크로가드: +{macro_guard_add()}점 / {v27_macro_engine()['mode']}"
+        f"실전기준: 실전 {th['real']}↑ / 타이밍 {th['timing']}↑ / 돌파 {th['breakout']}↑ / 매집 {th['accumulation']}↑ / 신뢰 {th['confidence']}↑\n매크로가드: +{macro_guard_add()}점 / {v28_macro_engine()['mode']}"
     )
 
-def v27_best_fallback(res, n=3):
+def v28_best_fallback(res, n=3):
     return sorted(
         res,
         key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r), -chase_risk(r)),
@@ -721,14 +721,14 @@ def format_fallback(r, rank=1):
     return (
         f"🟡 <b>{rank}. {r.sym}</b>\n"
         f"실전 {real_signal_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격위험 {chase_risk(r)}%\n"
-        f"판정: <b>{v27_decision(r)}</b>\n"
+        f"판정: <b>{v28_decision(r)}</b>\n"
         f"진입관찰 <code>{r.entry_low}~{r.entry_high}</code> / 손절 <code>{r.stop}</code>\n"
-        f"이유: {v27_reason(r)}\n"
+        f"이유: {v28_reason(r)}\n"
     )
 
 
 def real_pass(r):
-    th = v27_real_thresholds()
+    th = v28_real_thresholds()
     rs = real_signal_score(r)
     return (
         rs >= th["real"]
@@ -741,8 +741,8 @@ def real_pass(r):
     )
 
 
-def god_v27_pass(r):
-    th = v27_real_thresholds()
+def god_v28_pass(r):
+    th = v28_real_thresholds()
     return (
         real_signal_score(r) >= max(th["real"] + 3, 48)
         and timing_score(r) >= max(th["timing"] + 2, 40)
@@ -755,7 +755,7 @@ def god_v27_pass(r):
     )
 
 
-def v27_decision(r):
+def v28_decision(r):
     rs = real_signal_score(r)
     if chase_risk(r) >= 70 or r.distribution >= 75:
         return "🔴 추격금지"
@@ -767,7 +767,7 @@ def v27_decision(r):
         return "🟡 관찰"
     return "⚪ 대기"
 
-def v27_reason(r):
+def v28_reason(r):
     arr = []
     if real_signal_score(r) >= 55: arr.append("실전신호 양호")
     if trend_power(r) >= 50: arr.append("추세회복")
@@ -786,10 +786,10 @@ def format_real(r, rank=1):
         f"실전신호 {real_signal_score(r)}% | GOD {god_score(r)}% | 10X {tenx_score(r)}%\n"
         f"24H타이밍 {timing_score(r)}% | 추세 {trend_power(r)}% | 추격위험 {chase_risk(r)}%\n"
         f"돌파 {breakout_score(r)}% | 고래 {whale_score(r)}% | 스퀴즈 {r.squeeze}% | 승률 {win_rate_estimate(r)}%\n"
-        f"AI판정: <b>{v27_decision(r)}</b>\n"
+        f"AI판정: <b>{v28_decision(r)}</b>\n"
         f"진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
         f"손절 <code>{r.stop}</code> | 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
-        f"이유: {v27_reason(r)}\n"
+        f"이유: {v28_reason(r)}\n"
         f"리스크: 버블 {r.bubble}% / 분배 {r.distribution}%\n"
     )
 
@@ -939,16 +939,16 @@ def elite_sort(res):
 
 def ranktxt(res,n=10):
     ranked = elite_sort(res) if res else []
-    lines = ["⚡ <b>A100 v27 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
+    lines = ["⚡ <b>A100 v28 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
     for i, r in enumerate(ranked[:n], 1):
         lines.append(format_elite(r, i))
     return "\n".join(lines) if ranked else "A100 후보 없음"
 
 def report(symbols,n=10):
     res=scan(symbols)
-    return "A100 결과 없음" if not res else "🔥 <b>A100 v27 Auto Macro Live</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
+    return "A100 결과 없음" if not res else "🔥 <b>A100 v28 News War Whale AI</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
 
-async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v27 시작\n/check\n/scan ARKM,SYN,SENT\n/macro\n/live\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
+async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v28 시작\n/check\n/scan ARKM,SYN,SENT\n/macro\n/live\n/news\n/final\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
 async def myid(update,context): await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 async def check(update,context): await update.message.reply_text("A100 분석 중..."); await update.message.reply_text(report(DEFAULT_SYMBOLS,10),parse_mode="HTML")
 async def scan_cmd(update,context):
@@ -962,7 +962,7 @@ async def hot_cmd(update,context):
     await update.message.reply_text(ranktxt(hot,10) if hot else "HOT 후보 없음",parse_mode="HTML")
 
 async def sniper_cmd(update,context):
-    await update.message.reply_text("🎯 A100 v27 스나이퍼 단일 후보 스캔 중...")
+    await update.message.reply_text("🎯 A100 v28 스나이퍼 단일 후보 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🎯 오늘은 스나이퍼 후보 없음\n\n기준 미달이면 억지 추천하지 않습니다.\n무리하게 진입하지 않는 것이 더 좋습니다.")
@@ -974,7 +974,7 @@ async def sniper_cmd(update,context):
     ex = explosion_score(r)
     q = quality_score(r)
     text = (
-        "🎯 <b>A100 v27 SNIPER PICK</b>\n\n"
+        "🎯 <b>A100 v28 SNIPER PICK</b>\n\n"
         f"<b>{r.sym}</b> {stars(q)}\n"
         f"추천품질: <b>{q}%</b>\n"
         f"폭발확률: <b>{ex}%</b>\n"
@@ -994,12 +994,12 @@ async def sniper_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def elite_cmd(update,context):
-    await update.message.reply_text("🏆 A100 v27 Elite Pick TOP5 스캔 중...")
+    await update.message.reply_text("🏆 A100 v28 Elite Pick TOP5 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🏆 A100 ELITE\n\n오늘은 Elite 후보가 없습니다.\n무리한 진입보다 기다리는 것이 유리합니다.")
         return
-    lines = ["🏆 <b>A100 v27 ELITE PICK TOP5</b>", market_header(), ""]
+    lines = ["🏆 <b>A100 v28 ELITE PICK TOP5</b>", market_header(), ""]
     for i, r in enumerate(res[:5], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1053,46 +1053,46 @@ def send(text):
     if not BOT_TOKEN or not CHAT_ID: log("TOKEN/CHAT_ID missing"); return
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=15)
     except Exception as e: log(f"telegram {e}")
-def morning(): send("🌅 <b>A100 v27 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
+def morning(): send("🌅 <b>A100 v28 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75 or timing_score(r)>=72 or god_score(r)>=70 or real_signal_score(r)>=70)]
-    if hit: send("🚨 <b>A100 v27 조건 감지</b>\n\n"+ranktxt(hit,5))
+    if hit: send("🚨 <b>A100 v28 조건 감지</b>\n\n"+ranktxt(hit,5))
 
 
 
 async def auto_cmd(update,context):
-    await update.message.reply_text("🤖 A100 v27 자동판정 스캔 중...")
+    await update.message.reply_text("🤖 A100 v28 자동판정 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🤖 <b>A100 v27 AUTO THRESHOLD</b>", v27_header(), ""]
+    lines = ["🤖 <b>A100 v28 AUTO THRESHOLD</b>", v28_header(), ""]
     if cand:
         lines.append("✅ 실전 후보")
         for i, r in enumerate(cand[:5], 1):
             lines.append(format_real(r, i))
     else:
         lines.append("⚪ 기준 통과 후보 없음\n관찰 TOP3")
-        for i, r in enumerate(v27_best_fallback(res, 3), 1):
+        for i, r in enumerate(v28_best_fallback(res, 3), 1):
             lines.append(format_fallback(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def god_cmd(update,context):
-    await update.message.reply_text("🔥 A100 v27 Auto GOD 실전 단일 후보 스캔 중...")
+    await update.message.reply_text("🔥 A100 v28 Auto GOD 실전 단일 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
-    cand = [r for r in res if god_v27_pass(r)]
+    cand = [r for r in res if god_v28_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), god_score(r), timing_score(r), breakout_score(r)), reverse=True)
     if not cand:
-        fb = v27_best_fallback(res, 3)
-        lines = ["🔥 <b>GOD 실전 후보 없음</b>", v27_header(), "기준 미달이라 매수 추천은 하지 않습니다.\n현재 가장 나은 관찰 후보 TOP3:\n"]
+        fb = v28_best_fallback(res, 3)
+        lines = ["🔥 <b>GOD 실전 후보 없음</b>", v28_header(), "기준 미달이라 매수 추천은 하지 않습니다.\n현재 가장 나은 관찰 후보 TOP3:\n"]
         for i, r in enumerate(fb, 1):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
     r = cand[0]
     text = (
-        "🔥 <b>A100 v27 GOD PICK</b>\n"
+        "🔥 <b>A100 v28 GOD PICK</b>\n"
         "24시간 내 실전 신호 단일 후보\n\n"
-        + v27_header()
+        + v28_header()
         + "\n\n"
         + format_real(r, 1)
         + f"\nCG: {r.cg_text}\nKR: {r.kr_text}"
@@ -1100,18 +1100,18 @@ async def god_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def real_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v27 Auto 실전신호 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v28 Auto 실전신호 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r)), reverse=True)
     if not cand:
-        fb = v27_best_fallback(res, 3)
-        lines = ["⚡ <b>실전신호 후보 없음</b>", v27_header(), "현재는 기다리는 구간입니다.\n그래도 관찰할 TOP3:\n"]
+        fb = v28_best_fallback(res, 3)
+        lines = ["⚡ <b>실전신호 후보 없음</b>", v28_header(), "현재는 기다리는 구간입니다.\n그래도 관찰할 TOP3:\n"]
         for i, r in enumerate(fb, 1):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
-    lines = ["⚡ <b>A100 v27 REAL SIGNAL</b>", v27_header(), "24시간 내 터질 가능성 중심\n"]
+    lines = ["⚡ <b>A100 v28 REAL SIGNAL</b>", v28_header(), "24시간 내 터질 가능성 중심\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_real(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1135,14 +1135,14 @@ async def scalp_cmd(update,context):
 
 
 async def timing_cmd(update,context):
-    await update.message.reply_text("⏱ A100 v27 진입 타이밍 후보 스캔 중...")
+    await update.message.reply_text("⏱ A100 v28 진입 타이밍 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if timing_pass(r)]
     cand = sorted(cand, key=lambda r: (timing_score(r), quality_score(r), win_rate_estimate(r)), reverse=True)
     if not cand:
         await update.message.reply_text("⏱ 지금 진입 타이밍 후보 없음\n\n기준 미달이면 기다리는 것이 유리합니다.")
         return
-    lines = ["⏱ <b>A100 v27 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
+    lines = ["⏱ <b>A100 v28 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1157,7 +1157,7 @@ async def now_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🚨 <b>A100 v27 NOW ENTRY</b>\n\n"
+        "🚨 <b>A100 v28 NOW ENTRY</b>\n\n"
         f"<b>{r.sym}</b> {stars(quality_score(r))}\n"
         f"진입타이밍: <b>{timing_score(r)}%</b>\n"
         f"추천품질: <b>{quality_score(r)}%</b>\n"
@@ -1179,7 +1179,7 @@ async def win_cmd(update,context):
     await update.message.reply_text("📊 A100 예상승률 계산 중...")
     res = scan(syms)
     res = sorted(res, key=lambda r: (win_rate_estimate(r), rr_score(r), quality_score(r)), reverse=True)
-    lines = ["📊 <b>A100 v27 예상승률 TOP</b>\n"]
+    lines = ["📊 <b>A100 v28 예상승률 TOP</b>\n"]
     for i, r in enumerate(res[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b>\n"
@@ -1242,47 +1242,206 @@ async def watch_cmd(update,context):
 
 
 async def tenx_cmd(update,context):
-    await update.message.reply_text("💎 A100 v27 10X 잠재 후보 스캔 중...")
+    await update.message.reply_text("💎 A100 v28 10X 잠재 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if tenx_score(r) >= 48 and r.bubble < 70 and r.distribution < 70]
     cand = sorted(cand, key=lambda r: (tenx_score(r), bottom_score(r), whale_score(r)), reverse=True)
     if not cand:
         await update.message.reply_text("💎 10X 잠재 후보 없음")
         return
-    lines = ["💎 <b>A100 v27 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
+    lines = ["💎 <b>A100 v28 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def breakout_cmd(update,context):
-    await update.message.reply_text("🚀 A100 v27 돌파직전 후보 스캔 중...")
+    await update.message.reply_text("🚀 A100 v28 돌파직전 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if breakout_score(r) >= 45 and r.bubble < 75 and r.distribution < 75]
     cand = sorted(cand, key=lambda r: (breakout_score(r), timing_score(r), r.squeeze), reverse=True)
     if not cand:
         await update.message.reply_text("🚀 돌파직전 후보 없음")
         return
-    lines = ["🚀 <b>A100 v27 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
+    lines = ["🚀 <b>A100 v28 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def bottom_cmd(update,context):
-    await update.message.reply_text("🧱 A100 v27 바닥매집 후보 스캔 중...")
+    await update.message.reply_text("🧱 A100 v28 바닥매집 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if bottom_score(r) >= 55 and r.accumulation >= 45 and r.bubble < 65]
     cand = sorted(cand, key=lambda r: (bottom_score(r), r.accumulation, r.smart), reverse=True)
     if not cand:
         await update.message.reply_text("🧱 바닥매집 후보 없음")
         return
-    lines = ["🧱 <b>A100 v27 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
+    lines = ["🧱 <b>A100 v28 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+
+# ===== A100 v28 뉴스/전쟁/고래 AI =====
+NEWS_CACHE = {}
+NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
+
+def text_hits(text, words):
+    t = (text or "").lower()
+    return sum(1 for w in words if w.lower() in t)
+
+def rss_fetch_titles(name, url, ttl=NEWS_TTL):
+    key = ("rss", name, url)
+    old = NEWS_CACHE.get(key)
+    if old and now_ts() - old[0] <= ttl:
+        return old[1]
+    titles = []
+    try:
+        r = requests.get(url, timeout=8, headers={"User-Agent": "A100Bot/1.0"})
+        if r.status_code == 200:
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(r.text)
+            for item in root.findall(".//item")[:20]:
+                title = item.findtext("title") or ""
+                desc = item.findtext("description") or ""
+                titles.append((title + " " + desc)[:500])
+            NEWS_CACHE[key] = (now_ts(), titles)
+            return titles
+        log(f"rss {name} status {r.status_code}")
+    except Exception as e:
+        log(f"rss {name} err {e}")
+    return old[1] if old else []
+
+def v28_news_engine():
+    feeds = [
+        ("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+        ("cointelegraph", "https://cointelegraph.com/rss"),
+        ("investing", "https://www.investing.com/rss/news_301.rss"),
+    ]
+    titles = []
+    if os.getenv("AUTO_NEWS", "1") == "1":
+        for name, url in feeds:
+            titles += rss_fetch_titles(name, url)
+    joined = " ".join(titles) + " " + os.getenv("MACRO_NOTE", "")
+
+    risk_words = ["sec","lawsuit","hack","exploit","ban","sanction","liquidation","fed","powell","rate hike","inflation","tariff","default","소송","해킹","제재","금리","인플레이션","관세","청산"]
+    bull_words = ["etf inflow","approval","rate cut","easing","institutional","adoption","승인","금리인하","유입","기관","채택"]
+    war_words = ["iran","israel","russia","ukraine","taiwan","china","missile","attack","war","strike","red sea","houthi","이란","이스라엘","러시아","우크라이나","대만","중국","미사일","공격","전쟁","홍해"]
+    whale_words = ["whale","large transfer","exchange inflow","exchange outflow","tether minted","usdt minted","bitcoin transfer","ethereum transfer","고래","대량이동","거래소 유입","거래소 유출","테더 발행"]
+
+    risk_hit = text_hits(joined, risk_words)
+    bull_hit = text_hits(joined, bull_words)
+    war_hit = text_hits(joined, war_words)
+    whale_hit = text_hits(joined, whale_words)
+
+    news_risk = min(100, env_num("NEWS_RISK", 0) + risk_hit * 8 + war_hit * 4 - bull_hit * 4)
+    war_risk = min(100, env_num("WAR_RISK", 0) + war_hit * 12)
+    whale_risk = min(100, env_num("WHALE_RISK", 0) + whale_hit * 14)
+
+    top_titles = []
+    for t in titles[:10]:
+        if text_hits(t, risk_words + bull_words + war_words + whale_words):
+            top_titles.append(t[:140])
+
+    return {
+        "news_risk": round(max(0, news_risk), 1),
+        "war_risk": round(max(0, war_risk), 1),
+        "whale_risk": round(max(0, whale_risk), 1),
+        "risk_hit": risk_hit,
+        "bull_hit": bull_hit,
+        "war_hit": war_hit,
+        "whale_hit": whale_hit,
+        "titles": top_titles[:5],
+        "feed_count": len(titles),
+    }
+
+def v28_macro_engine():
+    m = v28_base_macro_engine()
+    n = v28_news_engine()
+    risk = m["risk"]
+    risk += min(n["news_risk"] * 0.25, 18)
+    risk += min(n["war_risk"] * 0.22, 18)
+    risk += min(n["whale_risk"] * 0.15, 12)
+    risk = round(max(0, min(100, risk)), 1)
+
+    events = list(m.get("events", []))
+    if n["news_risk"] >= 60:
+        events.append("뉴스위험 상승")
+    if n["war_risk"] >= 60:
+        events.append("전쟁/지정학 위험")
+    if n["whale_risk"] >= 60:
+        events.append("고래/거래소 이동 위험")
+
+    if risk >= 78:
+        mode, guard = "🔴 리스크오프", 16
+    elif risk >= 62:
+        mode, guard = "🟠 방어모드", 11
+    elif risk >= 45:
+        mode, guard = "🟡 보수모드", 6
+    else:
+        mode, guard = "🟢 일반모드", 0
+
+    alt_penalty = m.get("alt_penalty", 0)
+    if n["news_risk"] >= 50 or n["war_risk"] >= 50:
+        alt_penalty += 6
+    if n["whale_risk"] >= 60:
+        alt_penalty += 4
+
+    m.update({
+        "risk": risk,
+        "mode": mode,
+        "guard": guard,
+        "alt_penalty": alt_penalty,
+        "events": events,
+        "news_risk": n["news_risk"],
+        "war": max(m.get("war", 0), n["war_risk"]),
+        "whale": max(m.get("whale", 0), n["whale_risk"]),
+        "news_ai": n,
+    })
+    return m
+
+def macro_guard_add():
+    return v28_macro_engine()["guard"]
+
+def v26_macro_engine():
+    return v28_macro_engine()
+
+def v28_macro_report():
+    m = v28_macro_engine()
+    n = m.get("news_ai", {})
+    ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
+    titles = "\n".join([f"- {x}" for x in n.get("titles", [])]) or "- 주요 리스크 뉴스 없음"
+    return (
+        f"🌎 <b>A100 v28 NEWS/WAR/WHALE AI</b>\n"
+        f"모드: <b>{m['mode']}</b>\n"
+        f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
+        f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
+        f"시장: FearGreed {m['fg']} / DXY {m['dxy']} / VIX {m['vix']} / BTC.D {m['btc_dom']} / USDT.D {m['usdt_dom']} / ETF {m['etf']}M\n"
+        f"AI위험: 뉴스 {m.get('news_risk', m.get('news', 0))}% / 전쟁 {m['war']}% / 고래 {m['whale']}%\n"
+        f"이벤트: {ev}\n"
+        f"뉴스요약:\n{titles}\n\n"
+        f"AI판정: {'FOMC/뉴스/전쟁 리스크 구간 — 알트 고배율 금지' if m['risk'] >= 60 else '일반 기준, 단 추격매수 금지'}"
+    )
+
+def v28_final_ai_score(r):
+    base = real_signal_score(r)
+    m = v28_macro_engine()
+    major = r.sym.startswith(("BTC", "ETH"))
+    s = base
+    if not major:
+        s -= m["alt_penalty"]
+    if m["risk"] >= 75:
+        s -= 10 if not major else 4
+    elif m["risk"] >= 60:
+        s -= 6 if not major else 2
+    if m.get("news_risk", 0) >= 60 and not major:
+        s -= 5
+    if m["whale"] >= 60 and getattr(r, "smart", 0) >= 50:
+        s += 3
+    return round(clamp(s), 1)
+
 async def macro_cmd(update,context):
-    await update.message.reply_text(v27_macro_report(), parse_mode="HTML")
+    await update.message.reply_text(v28_macro_report(), parse_mode="HTML")
 
 async def cgstatus_cmd(update,context):
     await update.message.reply_text(
@@ -1296,7 +1455,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v27 자동 매크로 수집 엔진 =====
+# ===== A100 v28 자동 매크로 수집 엔진 =====
 AUTO_MACRO_CACHE = {}
 AUTO_MACRO_TTL = int(os.getenv("AUTO_MACRO_TTL", "900"))
 
@@ -1369,7 +1528,7 @@ def auto_news_risk():
     hit = sum(1 for w in hot_words if w in memo)
     return min(100, risk + hit * 8)
 
-def v27_macro_engine():
+def v28_macro_engine():
     base_risk = env_num("MACRO_RISK", 35)
     note = os.getenv("MACRO_NOTE", "자동/수동 매크로 입력 없음")
     ev = auto_events_days()
@@ -1488,16 +1647,16 @@ def v27_macro_engine():
 
 # V27에서는 기존 v26 엔진을 자동 엔진으로 대체
 def v26_macro_engine():
-    return v27_macro_engine()
+    return v28_base_macro_engine()
 
 def macro_guard_add():
-    return v27_macro_engine()["guard"]
+    return v28_macro_engine()["guard"]
 
-def v27_macro_report():
-    m = v27_macro_engine()
+def v28_base_macro_report():
+    m = v28_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v27 AUTO MACRO LIVE</b>\n"
+        f"🌎 <b>A100 v28 AUTO MACRO LIVE</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'} / GDP D-{int(m['gdp']) if m['gdp'] < 90 else '?'}\n"
@@ -1509,9 +1668,9 @@ def v27_macro_report():
     )
 
 async def events_cmd(update,context):
-    m = v27_macro_engine()
+    m = v28_base_macro_engine()
     text = (
-        "📅 <b>A100 v27 주요 이벤트</b>\n"
+        "📅 <b>A100 v28 주요 이벤트</b>\n"
         f"FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'}\n"
         f"CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'}\n"
         f"PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'}\n"
@@ -1546,15 +1705,44 @@ async def macrohelp_cmd(update,context):
 
 
 async def live_cmd(update,context):
-    m = v27_macro_engine()
-    await update.message.reply_text(
-        "📡 <b>A100 v27 LIVE DATA</b>\n"
+    m = v28_macro_engine()
+    n = m.get("news_ai", {})
+    text = (
+        "📡 <b>A100 v28 LIVE DATA</b>\n"
         f"Fear&Greed: {m['fg']} {'(자동)' if os.getenv('AUTO_FEAR_GREED','1')=='1' else '(수동)'}\n"
         f"BTC Dominance Trend: {m['btc_dom']} {'(자동)' if os.getenv('AUTO_MARKET','1')=='1' else '(수동)'}\n"
-        f"Macro Cache: {len(AUTO_MACRO_CACHE)}개 / TTL {AUTO_MACRO_TTL}초\n"
-        f"Risk: {m['risk']}% / Mode: {m['mode']}",
+        f"News Feed: {n.get('feed_count', 0)}개 / NewsRisk {m.get('news_risk', 0)}% / War {m['war']}% / Whale {m['whale']}%\n"
+        f"Macro Cache: {len(AUTO_MACRO_CACHE)}개 / News Cache: {len(NEWS_CACHE)}개\n"
+        f"Risk: {m['risk']}% / Mode: {m['mode']}"
+    )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def news_cmd(update,context):
+    n = v28_news_engine()
+    titles = "\n".join([f"- {x}" for x in n.get("titles", [])]) or "- 주요 뉴스 없음"
+    await update.message.reply_text(
+        f"📰 <b>A100 v28 NEWS AI</b>\n"
+        f"뉴스위험 {n['news_risk']}% | 전쟁위험 {n['war_risk']}% | 고래위험 {n['whale_risk']}%\n"
+        f"Feed {n['feed_count']}개 | RiskHit {n['risk_hit']} | WarHit {n['war_hit']} | WhaleHit {n['whale_hit']}\n\n"
+        f"{titles}",
         parse_mode="HTML"
     )
+
+async def final_cmd(update,context):
+    await update.message.reply_text("🧠 A100 v28 최종 AI 점수 스캔 중...")
+    res = scan(top_usdt(TOP_SCAN_LIMIT))
+    res = sorted(res, key=lambda r: (v28_final_ai_score(r), timing_score(r), breakout_score(r)), reverse=True)
+    lines = ["🧠 <b>A100 v28 FINAL AI RANK</b>", f"매크로: {v28_macro_engine()['mode']} / 위험 {v28_macro_engine()['risk']}%", ""]
+    for i, r in enumerate(res[:10], 1):
+        decision_fn = globals().get("v25_decision") or globals().get("v24_decision") or globals().get("v23_decision")
+        decision = decision_fn(r) if decision_fn else "대기"
+        lines.append(
+            f"{i}. <b>{r.sym}</b> {stars(v28_final_ai_score(r))}\n"
+            f"최종AI {v28_final_ai_score(r)}% | 실전 {real_signal_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격위험 {chase_risk(r)}%\n"
+            f"판정: {decision}\n"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 def main():
     if not BOT_TOKEN: raise RuntimeError("TELEGRAM_BOT_TOKEN 필요")
@@ -1563,7 +1751,7 @@ def main():
     try: asyncio.get_running_loop()
     except RuntimeError: asyncio.set_event_loop(asyncio.new_event_loop())
     app=Application.builder().token(BOT_TOKEN).build()
-    for name,fn in [("start",start),("help",start),("myid",myid),("check",check),("scan",scan_cmd),("rank",rank_cmd),("best",rank_cmd),("top",rank_cmd),("hot",hot_cmd),("sniper",sniper_cmd),("elite",elite_cmd),("only",only_cmd),("auto",auto_cmd),("god",god_cmd),("real",real_cmd),("scalp",scalp_cmd),("tenx",tenx_cmd),("breakout",breakout_cmd),("bottom",bottom_cmd),("timing",timing_cmd),("now",now_cmd),("win",win_cmd),("smart",smart_cmd),("danger",danger_cmd),("watch",watch_cmd),("risk",risk_cmd),("kr",kr_cmd),("cgtest",cgtest_cmd),("macro",macro_cmd),("cgstatus",cgstatus_cmd),("events",events_cmd),("macrohelp",macrohelp_cmd),("live",live_cmd)]:
+    for name,fn in [("start",start),("help",start),("myid",myid),("check",check),("scan",scan_cmd),("rank",rank_cmd),("best",rank_cmd),("top",rank_cmd),("hot",hot_cmd),("sniper",sniper_cmd),("elite",elite_cmd),("only",only_cmd),("auto",auto_cmd),("god",god_cmd),("real",real_cmd),("scalp",scalp_cmd),("tenx",tenx_cmd),("breakout",breakout_cmd),("bottom",bottom_cmd),("timing",timing_cmd),("now",now_cmd),("win",win_cmd),("smart",smart_cmd),("danger",danger_cmd),("watch",watch_cmd),("risk",risk_cmd),("kr",kr_cmd),("cgtest",cgtest_cmd),("macro",macro_cmd),("cgstatus",cgstatus_cmd),("events",events_cmd),("macrohelp",macrohelp_cmd),("live",live_cmd),("news",news_cmd),("final",final_cmd)]:
         app.add_handler(CommandHandler(name,fn))
-    log("A100 v27 Auto Macro Live worker running..."); app.run_polling()
+    log("A100 v28 News War Whale AI worker running..."); app.run_polling()
 if __name__=="__main__": main()
