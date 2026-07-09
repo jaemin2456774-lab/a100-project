@@ -28,7 +28,27 @@ services:
         value: "99"
       - key: CPI_DAYS
         value: "99"
+      - key: PPI_DAYS
+        value: "99"
+      - key: PCE_DAYS
+        value: "99"
+      - key: NFP_DAYS
+        value: "99"
+      - key: GDP_DAYS
+        value: "99"
       - key: WAR_RISK
+        value: "0"
+      - key: NEWS_RISK
+        value: "0"
+      - key: FEAR_GREED
+        value: "50"
+      - key: DXY_TREND
+        value: "0"
+      - key: VIX_LEVEL
+        value: "15"
+      - key: BTC_DOM_TREND
+        value: "0"
+      - key: ETF_FLOW_M
         value: "0"
       - key: MACRO_NOTE
         value: "수동 매크로 입력 없음"
