@@ -18,14 +18,16 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 DEFAULT_SYMBOLS = [x.strip().upper() for x in os.getenv("DEFAULT_SYMBOLS", "BTC,ETH,SOL,ARKM,SYN,SENT").split(",") if x.strip()]
 SCORE_ALERT = float(os.getenv("SCORE_ALERT", "80"))
 
-BINANCE_SPOT = "https://api.binance.com"
+# api.binance.com / fapi.binance.com are blocked on Render US region.
+# data-api.binance.vision is Binance public market-data only endpoint.
+BINANCE_MARKET = "https://data-api.binance.vision"
 
 def log(msg: str):
     print(msg, flush=True)
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"A100 spot-only worker is running"
+        body = b"A100 Binance Vision worker is running"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -65,11 +67,11 @@ def sma(values: List[float], n: int) -> Optional[float]:
 def get_json(url: str, params=None):
     r = requests.get(url, params=params or {}, timeout=15)
     if r.status_code >= 400:
-        raise RuntimeError(f"HTTP {r.status_code} {url} {r.text[:120]}")
+        raise RuntimeError(f"HTTP {r.status_code} {url} {r.text[:160]}")
     return r.json()
 
-def get_spot_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[str, float]]:
-    rows = get_json(f"{BINANCE_SPOT}/api/v3/klines", {"symbol": pair, "interval": interval, "limit": limit})
+def get_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[str, float]]:
+    rows = get_json(f"{BINANCE_MARKET}/api/v3/klines", {"symbol": pair, "interval": interval, "limit": limit})
     return [{
         "open": safe_float(r[1]),
         "high": safe_float(r[2]),
@@ -97,9 +99,12 @@ class Result:
 def analyze(symbol: str, interval: str = "4h") -> Result:
     symbol = symbol.upper().replace("USDT", "")
     pair = f"{symbol}USDT"
-    log(f"SPOT analyze start: {pair}")
+    log(f"analyze start: {pair}")
 
-    kl = get_spot_klines(pair, interval, 120)
+    kl = get_klines(pair, interval, 120)
+    if len(kl) < 30:
+        raise RuntimeError(f"{pair} kline data too short: {len(kl)}")
+
     closes = [x["close"] for x in kl]
     lows = [x["low"] for x in kl]
     qvols = [x["quote_volume"] for x in kl]
@@ -146,10 +151,10 @@ def analyze(symbol: str, interval: str = "4h") -> Result:
     if buy_ratio < 0.52: notes.append("매수압 약함")
     if price < ma20: notes.append("MA20 아래")
     if chg_24 > 35: notes.append("단기 급등 리스크")
-    if not notes: notes.append("현물 구조 양호")
+    if not notes: notes.append("구조 양호")
 
     result = Result(pair, round(price, 8), round(score, 2), grade(score), round(trend, 2), round(volume, 2), round(buy_pressure, 2), round(risk, 2), round(vol_ratio, 2), round(buy_ratio, 3), " / ".join(notes))
-    log(f"SPOT analyze done: {pair} score={result.score}")
+    log(f"analyze done: {pair} score={result.score}")
     return result
 
 def scan(symbols: List[str]) -> List[Result]:
@@ -177,8 +182,8 @@ def format_result(r: Result) -> str:
 def build_report(symbols: List[str]) -> str:
     results = scan(symbols)
     if not results:
-        return "A100 결과 없음\n\nBinance Spot에서도 데이터 실패. Render 로그 error 확인 필요"
-    return "🔥 <b>A100 Spot 리포트</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:10])
+        return "A100 결과 없음\n\nBinance Vision 데이터 실패. Render 로그 error 확인 필요"
+    return "🔥 <b>A100 리포트</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:10])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("A100 봇 시작\n/check\n/scan ARKM,SYN,SENT\n/myid")
@@ -241,7 +246,7 @@ def main():
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CommandHandler("scan", scan_cmd))
     app.add_handler(CommandHandler("arkm", arkm))
-    log("A100 spot-only worker running...")
+    log("A100 Binance Vision worker running...")
     app.run_polling()
 
 if __name__ == "__main__":
