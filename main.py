@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-A100 v14 Smart Money
+A100 v15 Readable AI
 
 Added over v12:
 - Accumulation Index
@@ -46,7 +46,7 @@ def log(msg: str):
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"A100 v14 Smart Money is running"
+        body = b"A100 v15 Readable AI is running"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -305,7 +305,7 @@ def cg_test_text(symbol="BTC") -> str:
     sym = symbol.upper().replace("USDT", "")
     snap = cg_snapshot(sym)
     return (
-        f"🧪 <b>CoinGlass v14 테스트 {sym}</b>\n"
+        f"🧪 <b>CoinGlass v15 테스트 {sym}</b>\n"
         f"OI: {snap['oi_change']}% / {snap['oi_score']} ({snap['oi_note']})\n"
         f"Funding: {snap['funding_rate']}% / {snap['funding_score']} ({snap['funding_note']})\n"
         f"Taker: {snap['taker_ratio']} / {snap['taker_score']} ({snap['taker_note']})\n"
@@ -638,35 +638,122 @@ def scan(symbols: List[str], use_kr: bool = True) -> List[Result]:
         time.sleep(0.12)
     return sorted(out, key=lambda x: x.score, reverse=True)
 
+def bar(value: float, width: int = 10) -> str:
+    try:
+        v = max(0, min(100, float(value)))
+    except Exception:
+        v = 0
+    filled = int(round(v / 100 * width))
+    return "■" * filled + "□" * (width - filled)
+
+def star(value: float) -> str:
+    try:
+        v = float(value)
+    except Exception:
+        v = 0
+    if v >= 85:
+        return "★★★★★"
+    if v >= 70:
+        return "★★★★☆"
+    if v >= 55:
+        return "★★★☆☆"
+    if v >= 40:
+        return "★★☆☆☆"
+    return "★☆☆☆☆"
+
+def final_action(score, acc, dist, bubble, conf, price, entry_low, entry_high):
+    if conf < 35:
+        return "데이터 부족 — 관망"
+    if bubble >= 75 or dist >= 75:
+        return "추격금지"
+    if score >= 85 and acc >= 70:
+        return "분할매수/적극검토"
+    if score >= 70 and acc >= 55:
+        return "눌림 분할매수"
+    if price < entry_low:
+        return "지지 확인 대기"
+    return "관망"
+
+def one_line_reason(r):
+    reasons = []
+    if r.accumulation >= 70: reasons.append("매집 강함")
+    if r.confidence >= 70: reasons.append("신뢰도 양호")
+    if r.kr_score >= 8: reasons.append("KR수급")
+    if r.cg_score >= 18: reasons.append("선물수급")
+    if r.bubble >= 70: reasons.append("과열")
+    if r.distribution >= 70: reasons.append("분배위험")
+    if r.score < 60: reasons.append("점수 낮음")
+    return " / ".join(reasons) if reasons else "뚜렷한 강점 부족"
+
 def format_result(r: Result) -> str:
+    smart = round((r.accumulation * 0.45 + r.confidence * 0.25 - r.bubble * 0.15 - r.distribution * 0.15), 1)
+    squeeze = round(min(100, max(0, r.cg_score * 2 + (15 if r.accumulation >= 70 else 0))), 1)
+    whale = round(min(100, max(0, (r.vol_ratio - 1) * 25 + (15 if r.buy_ratio > 0.56 else 0) + (10 if r.kr_score >= 8 else 0))), 1)
+    action = final_action(r.score, r.accumulation, r.distribution, r.bubble, r.confidence, r.price, r.entry_low, r.entry_high)
+    stage = "5단계 급등시작" if r.score >= 92 and r.vol_ratio >= 2 else ("4단계 폭발직전" if r.accumulation >= 80 else ("3단계 수급증가" if r.accumulation >= 65 else ("2단계 매집관찰" if r.accumulation >= 50 else "1단계 관찰")))
+    warning = []
+    if r.bubble >= 70: warning.append("과열")
+    if r.distribution >= 70: warning.append("분배")
+    if r.confidence < 45: warning.append("신뢰도 낮음")
+    if "MA20 아래" in r.note: warning.append("MA20 아래")
+    warn_txt = " / ".join(warning) if warning else "특이위험 낮음"
     return (
-        f"📊 <b>{r.pair}</b>\n"
-        f"가격: <code>{r.price}</code>\n"
-        f"점수: <b>{r.score}</b> / 등급: <b>{r.grade}</b> | 위험도: <b>{r.risk_level}</b>\n"
-        f"단계: <b>{'5단계 폭발' if r.score>=92 and r.vol_ratio>=2 else ('4단계 돌파직전' if r.accumulation>=80 else ('3단계 수급증가' if r.accumulation>=65 else ('2단계 매집관찰' if r.accumulation>=50 else '1단계 관찰')))}</b> | "
-        f"타이밍: <b>{'추격금지' if r.bubble>=75 or r.distribution>=75 else ('적극검토' if r.score>=85 and r.accumulation>=70 else ('분할매수' if r.score>=70 and r.accumulation>=55 else '대기'))}</b>\n"
-        f"경고: {'과열주의 ' if r.bubble>=70 else ''}{'분배주의 ' if r.distribution>=70 else ''}{'데이터신뢰도낮음 ' if r.confidence<45 else '특이위험 없음'}\n"
-        f"지지: <code>{r.support}</code> | 저항: <code>{r.resistance}</code>\n"
-        f"진입: <code>{r.entry_low}~{r.entry_high}</code>\n"
-        f"손절: <code>{r.stop}</code> | 목표: <code>{r.target1}</code> / <code>{r.target2}</code>\n"
-        f"확률: 24h {r.prob24}% | 3d {r.prob3d}% | 7d {r.prob7d}%\n"
-        f"AI: 매집 {r.accumulation} | 분배 {r.distribution} | 버블 {r.bubble} | 신뢰도 {r.confidence}%\n"
-        f"SmartMoney: {round((r.accumulation*0.45 + r.confidence*0.25 - r.bubble*0.15 - r.distribution*0.15),1)} | "
-        f"WhaleProxy: {round(min(100, max(0, (r.vol_ratio-1)*25 + (15 if r.buy_ratio>0.56 else 0) + (10 if r.kr_score>=8 else 0))),1)} | "
-        f"Squeeze: {round(min(100, max(0, r.cg_score*2 + (15 if r.accumulation>=70 else 0))),1)}\n"
-        f"점수: 차트 {r.chart_score}/20 | 거래량 {r.volume_score}/15 | KR {r.kr_score}/15 | CG {r.cg_score}/35 | 모멘텀 {r.momentum_score}/5 | 리스크 {r.risk_score}/10\n"
-        f"CG: {r.cg_text}\n"
-        f"청산: {r.liq_text}\n"
-        f"{r.kr_note}\n"
-        f"진단: {r.note}\n"
-        f"AI코멘트: {r.ai_comment}\n"
+        f"🟢 <b>{r.pair}</b>  {star(r.score)}
+"
+        f"<b>A100 SCORE</b> {r.score}점 / {r.grade}
+"
+        f"AI결론: <b>{action}</b>
+"
+        f"현재단계: <b>{stage}</b>
+"
+        f"핵심이유: {one_line_reason(r)}
+
+"
+        f"세력매집  {bar(r.accumulation)} {r.accumulation}%
+"
+        f"스마트머니 {bar(smart)} {smart}%
+"
+        f"고래대체  {bar(whale)} {whale}%
+"
+        f"숏스퀴즈  {bar(squeeze)} {squeeze}%
+"
+        f"신뢰도    {bar(r.confidence)} {r.confidence}%
+"
+        f"분배위험  {bar(r.distribution)} {r.distribution}%
+"
+        f"버블위험  {bar(r.bubble)} {r.bubble}%
+
+"
+        f"가격: <code>{r.price}</code>
+"
+        f"지지/저항: <code>{r.support}</code> / <code>{r.resistance}</code>
+"
+        f"진입: <code>{r.entry_low}~{r.entry_high}</code>
+"
+        f"손절: <code>{r.stop}</code>
+"
+        f"목표: <code>{r.target1}</code> / <code>{r.target2}</code>
+"
+        f"확률: 24h {r.prob24}% | 3d {r.prob3d}% | 7d {r.prob7d}%
+
+"
+        f"수급: KR {r.kr_score}/15 | CG {r.cg_score}/35 | Vol {r.vol_ratio}x | 매수비율 {r.buy_ratio}
+"
+        f"CG: {r.cg_text}
+"
+        f"KR: {r.kr_note}
+"
+        f"경고: {warn_txt}
+"
+        f"AI코멘트: {r.ai_comment}
+"
     )
 
 def build_report(symbols: List[str], top_n: int = 10, use_kr: bool = True) -> str:
     results = scan(symbols, use_kr=use_kr)
     if not results:
         return "A100 결과 없음\n\nRender 로그 error 확인 필요"
-    return "🔥 <b>A100 v14 Smart Money</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:top_n])
+    return "🔥 <b>A100 v15 Readable AI TOP</b>\n보기 쉽게 점수·매집·위험도를 정리했습니다.\n\n" + "\n━━━━━━━━━━━━\n".join(format_result(r) for r in results[:top_n])
 
 def build_kr_report(top_n: int = 20) -> str:
     kr = kr_market_snapshot()
@@ -681,7 +768,7 @@ def build_kr_report(top_n: int = 20) -> str:
 
 # Telegram
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 v14 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/smart\n/kr\n/cgtest BTC\n/myid")
+    await update.message.reply_text("A100 v15 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/best\n/kr\n/cgtest BTC\n/myid")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
@@ -690,7 +777,7 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 v14 기본 리스트 분석 중...")
+    await update.message.reply_text("A100 v15 기본 리스트 분석 중...")
     await update.message.reply_text(build_report(DEFAULT_SYMBOLS, 10, True), parse_mode="HTML")
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -699,16 +786,16 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("예: /scan ARKM,SYN,SENT")
         return
     symbols = [x.strip().upper() for x in raw.replace(" ", "").split(",") if x.strip()]
-    await update.message.reply_text("A100 v14 분석 중...")
+    await update.message.reply_text("A100 v15 분석 중...")
     await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
 
 async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"A100 v14 거래량 상위 USDT {TOP_SCAN_LIMIT}개 스캔 중...")
+    await update.message.reply_text(f"A100 v15 거래량 상위 USDT {TOP_SCAN_LIMIT}개 스캔 중...")
     symbols = get_binance_top_usdt(TOP_SCAN_LIMIT)
     await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
 
-async def smart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 v14 Smart Money 랭킹 스캔 중...")
+async def best_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("A100 v15 오늘의 세력 TOP10 스캔 중...")
     symbols = get_binance_top_usdt(TOP_SCAN_LIMIT)
     await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
 
@@ -735,12 +822,12 @@ def send_telegram(text: str):
         log(f"telegram send error: {e}")
 
 def morning_job():
-    send_telegram("🌅 <b>A100 오전 5시 v14 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10, True))
+    send_telegram("🌅 <b>A100 오전 5시 v15 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10, True))
 
 def alert_job():
-    hits = [r for r in scan(DEFAULT_SYMBOLS, True) if r.score >= SCORE_ALERT or r.accumulation >= 80]
+    hits = [r for r in scan(DEFAULT_SYMBOLS, True) if r.score >= SCORE_ALERT or r.accumulation >= 80 or r.confidence >= 80]
     if hits:
-        send_telegram("🚨 <b>A100 v14 조건 감지</b>\n\n" + "\n---\n".join(format_result(r) for r in hits[:5]))
+        send_telegram("🚨 <b>A100 v15 조건 감지</b>\n\n" + "\n---\n".join(format_result(r) for r in hits[:5]))
 
 def main():
     if not BOT_TOKEN:
@@ -765,11 +852,11 @@ def main():
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CommandHandler("scan", scan_cmd))
     app.add_handler(CommandHandler("top", top_cmd))
-    app.add_handler(CommandHandler("smart", smart_cmd))
+    app.add_handler(CommandHandler("best", best_cmd))
     app.add_handler(CommandHandler("kr", kr_cmd))
     app.add_handler(CommandHandler("cgtest", cgtest_cmd))
     app.add_handler(CommandHandler("arkm", arkm))
-    log("A100 v14 Smart Money worker running...")
+    log("A100 v15 Readable AI worker running...")
     app.run_polling()
 
 if __name__ == "__main__":
