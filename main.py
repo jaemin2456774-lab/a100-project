@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-A100 v12 Ultimate Core
+A100 v13 AI Indices
 
-Core features:
-- Binance public market data via data-api.binance.vision
-- Upbit/Bithumb KRW spot flow
-- CoinGlass OI, Funding, Taker, Long/Short, Liquidation history best-effort
-- A100 100-point scoring
-- Telegram commands:
-  /check
-  /scan ARKM,SYN,SENT
-  /top
-  /kr
-  /cgtest BTC
-  /help
-- Scheduled:
-  05:00 KST morning report
-  every 30 minutes alert scan for DEFAULT_SYMBOLS
+Added over v12:
+- Accumulation Index
+- Distribution Index
+- Bubble Index
+- Confidence Score
+- Auto entry/stop/targets
+- 24h/3d/7d breakout probability estimate
+- Risk level
+- AI comment block
 """
 
 import os, time, requests, asyncio, threading, traceback
@@ -47,13 +41,12 @@ UPBIT = "https://api.upbit.com"
 BITHUMB = "https://api.bithumb.com"
 CG_BASE = "https://open-api-v4.coinglass.com"
 
-# ---------- infra ----------
 def log(msg: str):
     print(msg, flush=True)
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"A100 v12 Ultimate Core is running"
+        body = b"A100 v13 AI Indices is running"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -83,6 +76,9 @@ def avg(values: List[float]) -> float:
 def sma(values: List[float], n: int) -> Optional[float]:
     return sum(values[-n:]) / n if len(values) >= n else None
 
+def clamp(x: float, lo: float = 0.0, hi: float = 100.0) -> float:
+    return max(lo, min(hi, x))
+
 def get_json(url: str, params=None, headers=None):
     r = requests.get(url, params=params or {}, headers=headers or {}, timeout=18)
     if r.status_code >= 400:
@@ -97,7 +93,6 @@ def grade(score: float) -> str:
     if score >= 60: return "C"
     return "PASS"
 
-# ---------- indicators ----------
 def rsi(closes: List[float], period: int = 14) -> float:
     if len(closes) <= period + 1:
         return 50.0
@@ -130,7 +125,16 @@ def macd_hist(closes: List[float]) -> float:
     sig = ema(macd, 9)
     return macd[-1] - sig[-1]
 
-# ---------- Binance market data ----------
+def atr(highs: List[float], lows: List[float], closes: List[float], n: int = 14) -> float:
+    if len(closes) < n + 1:
+        return 0.0
+    trs = []
+    for i in range(-n, 0):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+        trs.append(tr)
+    return avg(trs)
+
+# Binance market data
 def get_binance_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[str, float]]:
     rows = get_json(f"{BINANCE_MARKET}/api/v3/klines", {"symbol": pair, "interval": interval, "limit": limit})
     return [{
@@ -157,7 +161,7 @@ def get_binance_top_usdt(limit: int = 50) -> List[str]:
     rows.sort(key=lambda x: x[1], reverse=True)
     return [s for s, _ in rows[:limit]]
 
-# ---------- CoinGlass best-effort ----------
+# CoinGlass
 def cg_get(path: str, params: Dict[str, Any]) -> Optional[Any]:
     if not CG_KEY:
         log("CoinGlass key empty")
@@ -215,7 +219,6 @@ def cg_funding(symbol: str) -> Tuple[float, float, str]:
             if abs(val) < 1: val *= 100
             vals.append(val)
         rate = vals[-1] if vals else 0
-        # Negative moving toward neutral is healthy for squeeze; very positive is risky.
         if len(vals) >= 3 and vals[-1] > vals[0] and vals[-1] <= 0.03:
             trend_bonus = 2
     if -0.08 <= rate < -0.01: score = 8 + trend_bonus
@@ -242,7 +245,6 @@ def cg_taker(symbol: str) -> Tuple[float, float, str]:
     return 0.0, 0.0, "Taker 없음"
 
 def cg_long_short(symbol: str) -> Tuple[float, float, str]:
-    # Endpoint availability varies by plan. Multiple likely endpoint fallbacks.
     endpoints = [
         ("/api/futures/global-long-short-account-ratio/history", {"symbol": symbol, "interval": "4h", "limit": 10}),
         ("/api/futures/top-long-short-account-ratio/history", {"symbol": symbol, "interval": "4h", "limit": 10}),
@@ -254,7 +256,6 @@ def cg_long_short(symbol: str) -> Tuple[float, float, str]:
             row = rows[-1]
             ratio = cg_num(row, ["longShortRatio", "ratio", "longShortRate"], 0)
             long_pct = cg_num(row, ["longAccount", "longRate", "long"], 0)
-            # For long candidate, not too crowded; mild short bias is good.
             if ratio and 0.6 <= ratio <= 1.15: score = 3
             elif ratio and 1.15 < ratio <= 1.6: score = 2
             else: score = 1
@@ -262,7 +263,6 @@ def cg_long_short(symbol: str) -> Tuple[float, float, str]:
     return 0.0, 0.0, "L/S 없음"
 
 def cg_liquidation(symbol: str) -> Tuple[float, str, str]:
-    # Liquidation heatmap raw may not be available. Use liquidation history best-effort.
     endpoints = [
         ("/api/futures/liquidation/history", {"symbol": symbol, "interval": "4h", "limit": 12}),
         ("/api/futures/liquidation/aggregated-history", {"symbol": symbol, "interval": "4h", "limit": 12}),
@@ -276,19 +276,13 @@ def cg_liquidation(symbol: str) -> Tuple[float, str, str]:
             for row in rows[-6:]:
                 long_liq += cg_num(row, ["longLiquidation", "longLiquidationUsd", "longVolUsd", "long"], 0)
                 short_liq += cg_num(row, ["shortLiquidation", "shortLiquidationUsd", "shortVolUsd", "short"], 0)
-            # If shorts are getting liquidated already, momentum may be active.
-            # If long liq dominates, avoid.
             if short_liq > long_liq * 1.5 and short_liq > 0:
-                score = 5
-                bias = "상방 숏청산 우세"
+                score, bias = 5, "상방 숏청산 우세"
             elif long_liq > short_liq * 1.5 and long_liq > 0:
-                score = 1
-                bias = "하방 롱청산 위험"
+                score, bias = 1, "하방 롱청산 위험"
             else:
-                score = 3 if (long_liq + short_liq) > 0 else 0
-                bias = "청산 중립/부족"
-            note = f"{bias} L:{long_liq:.0f} S:{short_liq:.0f}"
-            return score, bias, note
+                score, bias = (3 if (long_liq + short_liq) > 0 else 0), "청산 중립/부족"
+            return score, bias, f"{bias} L:{long_liq:.0f} S:{short_liq:.0f}"
     return 0.0, "청산데이터 없음", "청산데이터 없음"
 
 def cg_snapshot(symbol: str) -> Dict[str, Any]:
@@ -311,7 +305,7 @@ def cg_test_text(symbol="BTC") -> str:
     sym = symbol.upper().replace("USDT", "")
     snap = cg_snapshot(sym)
     return (
-        f"🧪 <b>CoinGlass v12 테스트 {sym}</b>\n"
+        f"🧪 <b>CoinGlass v13 테스트 {sym}</b>\n"
         f"OI: {snap['oi_change']}% / {snap['oi_score']} ({snap['oi_note']})\n"
         f"Funding: {snap['funding_rate']}% / {snap['funding_score']} ({snap['funding_note']})\n"
         f"Taker: {snap['taker_ratio']} / {snap['taker_score']} ({snap['taker_note']})\n"
@@ -320,7 +314,7 @@ def cg_test_text(symbol="BTC") -> str:
         f"CG total: {snap['total']}/38"
     )
 
-# ---------- Korean markets ----------
+# KR markets
 def upbit_markets() -> List[str]:
     data = get_json(f"{UPBIT}/v1/market/all", {"isDetails": "false"})
     return [x["market"] for x in data if x.get("market", "").startswith("KRW-")]
@@ -380,10 +374,10 @@ def kr_market_snapshot() -> Dict[str, Dict[str, float]]:
         x["kr_change"] = avg(vals) if vals else 0.0
     return result
 
-def kr_score_for_symbol(sym: str, kr: Dict[str, Dict[str, float]]) -> Tuple[float, str]:
+def kr_score_for_symbol(sym: str, kr: Dict[str, Dict[str, float]]) -> Tuple[float, str, float, float]:
     x = kr.get(sym.upper())
     if not x:
-        return 0.0, "KR 미상장/데이터 없음"
+        return 0.0, "KR 미상장/데이터 없음", 0.0, 0.0
     value = x.get("kr_value", 0)
     chg = x.get("kr_change", 0)
     score = 0
@@ -393,9 +387,8 @@ def kr_score_for_symbol(sym: str, kr: Dict[str, Dict[str, float]]) -> Tuple[floa
     if chg > 2: score += 3
     if chg > 5: score += 3
     score = min(score, 15)
-    return score, f"KR거래대금 {value/100000000:.1f}억 / KR등락 {chg:.2f}%"
+    return score, f"KR거래대금 {value/100000000:.1f}억 / KR등락 {chg:.2f}%", value, chg
 
-# ---------- scoring ----------
 @dataclass
 class Result:
     pair: str
@@ -417,6 +410,123 @@ class Result:
     liq_text: str
     kr_note: str
     note: str
+    accumulation: float
+    distribution: float
+    bubble: float
+    confidence: float
+    prob24: float
+    prob3d: float
+    prob7d: float
+    risk_level: str
+    entry_low: float
+    entry_high: float
+    stop: float
+    target1: float
+    target2: float
+    ai_comment: str
+
+def risk_label(x: float) -> str:
+    if x >= 70: return "HIGH"
+    if x >= 40: return "MEDIUM"
+    return "LOW"
+
+def compute_ai_indices(price, ma20, ma60, vol_ratio, buy_ratio, rsi14, macd, chg_24, atr_v, cg, kr_score, kr_value, kr_chg):
+    oi = cg["oi_change"]
+    funding = cg["funding_rate"]
+    # Accumulation: quiet/constructive chart + OI/KR/volume without too much bubble
+    accumulation = 0
+    accumulation += clamp(oi * 2, 0, 25)
+    accumulation += 18 if -0.08 <= funding <= 0.02 else (8 if funding <= 0.05 else 2)
+    accumulation += clamp((vol_ratio - 1) * 18, 0, 18)
+    accumulation += 12 if buy_ratio >= 0.52 else 4
+    accumulation += kr_score * 1.2
+    accumulation += 10 if price >= ma20 else 3
+    accumulation += 8 if macd > 0 else 0
+    accumulation = clamp(accumulation)
+
+    # Distribution: high price extension + high vol but weakening buy pressure
+    distribution = 0
+    distribution += clamp(chg_24 * 1.2, 0, 35)
+    distribution += clamp((vol_ratio - 2) * 12, 0, 25)
+    distribution += 20 if buy_ratio < 0.48 else (10 if buy_ratio < 0.52 else 0)
+    distribution += 15 if rsi14 > 75 else (8 if rsi14 > 68 else 0)
+    distribution += 10 if funding > 0.05 else 0
+    distribution = clamp(distribution)
+
+    # Bubble: too hot / crowded / extended
+    bubble = 0
+    bubble += clamp(chg_24 * 1.5, 0, 35)
+    bubble += 20 if rsi14 > 75 else (10 if rsi14 > 68 else 0)
+    bubble += 15 if funding > 0.05 else (6 if funding > 0.02 else 0)
+    bubble += clamp((vol_ratio - 3) * 10, 0, 20)
+    bubble += 10 if price > ma60 * 1.25 else 0
+    bubble = clamp(bubble)
+
+    # Confidence: data coverage + alignment
+    coverage = 0
+    if cg["oi_note"] != "OI 없음": coverage += 18
+    if cg["funding_note"] != "Funding 없음": coverage += 14
+    if cg["taker_note"] != "Taker 없음": coverage += 10
+    if cg["liq_note"] != "청산데이터 없음": coverage += 8
+    if kr_value > 0: coverage += 10
+    alignment = 0
+    if price >= ma20: alignment += 10
+    if vol_ratio >= 1.2: alignment += 8
+    if buy_ratio >= 0.52: alignment += 8
+    if macd > 0: alignment += 7
+    if accumulation > distribution: alignment += 7
+    confidence = clamp(coverage + alignment)
+
+    # Probability heuristic, not guarantee
+    base = 35 + (accumulation * 0.35) + (confidence * 0.20) - (bubble * 0.20) - (distribution * 0.15)
+    prob24 = clamp(base, 5, 95)
+    prob3d = clamp(base + 8 if accumulation > 60 else base, 5, 97)
+    prob7d = clamp(base + 14 if accumulation > 70 else base + 5, 5, 98)
+
+    # Strategy levels
+    atr_pct = atr_v / price if price else 0.03
+    band = max(atr_pct, 0.025)
+    entry_low = price * (1 - band * 0.55)
+    entry_high = price * (1 + band * 0.15)
+    stop = price * (1 - band * 1.2)
+    target1 = price * (1 + band * 1.8)
+    target2 = price * (1 + band * 3.2)
+
+    risk_value = (bubble * 0.55 + distribution * 0.45)
+    return {
+        "accumulation": round(accumulation, 1),
+        "distribution": round(distribution, 1),
+        "bubble": round(bubble, 1),
+        "confidence": round(confidence, 1),
+        "prob24": round(prob24, 1),
+        "prob3d": round(prob3d, 1),
+        "prob7d": round(prob7d, 1),
+        "risk_level": risk_label(risk_value),
+        "entry_low": round(entry_low, 8),
+        "entry_high": round(entry_high, 8),
+        "stop": round(stop, 8),
+        "target1": round(target1, 8),
+        "target2": round(target2, 8),
+    }
+
+def ai_comment(score, acc, dist, bubble, confidence, cg, kr_score, vol_ratio, buy_ratio, price, ma20):
+    parts = []
+    if score >= 85: parts.append("A+ 후보권")
+    elif score >= 70: parts.append("관찰 후보")
+    else: parts.append("아직 대기")
+    if acc >= 75: parts.append("매집지수 강함")
+    elif acc >= 55: parts.append("매집 가능성 관찰")
+    if dist >= 70: parts.append("분배 위험 높음")
+    if bubble >= 70: parts.append("과열 주의")
+    if cg["oi_score"] >= 7: parts.append("OI 증가")
+    if cg["funding_score"] >= 7: parts.append("펀딩 양호")
+    if cg["liq_score"] >= 4: parts.append("청산 방향성 감지")
+    if kr_score >= 8: parts.append("국내 현물 수급")
+    if vol_ratio >= 1.5: parts.append("거래량 증가")
+    if buy_ratio >= 0.56: parts.append("매수압 우세")
+    if price < ma20: parts.append("MA20 아래라 추격 금지")
+    if confidence < 45: parts.append("데이터 신뢰도 낮음")
+    return " / ".join(parts)
 
 def analyze(symbol: str, kr: Optional[Dict[str, Dict[str, float]]] = None, interval: str = "4h") -> Result:
     symbol = symbol.upper().replace("USDT", "")
@@ -438,6 +548,7 @@ def analyze(symbol: str, kr: Optional[Dict[str, Dict[str, float]]] = None, inter
     prev_low = min(lows[-60:-30])
     support = min(lows[-20:])
     resistance = max(highs[-20:])
+    atr_v = atr(highs, lows, closes, 14)
 
     chart = 0
     if price > ma5: chart += 5
@@ -467,10 +578,9 @@ def analyze(symbol: str, kr: Optional[Dict[str, Dict[str, float]]] = None, inter
     if closes[-1] > closes[-4]: momentum += 1
 
     kr = kr or {}
-    kr_score, kr_note = kr_score_for_symbol(symbol, kr)
+    kr_score, kr_note, kr_value, kr_chg = kr_score_for_symbol(symbol, kr)
 
     cg = cg_snapshot(symbol)
-    # CoinGlass max 38, scale to 35
     cg_score = min(cg["total"] * 35 / 38, 35)
     cg_text = f"OI {cg['oi_change']}% / Funding {cg['funding_rate']}% / Taker {cg['taker_ratio']} / L/S {cg['ls_ratio']}"
     liq_text = cg["liq_note"]
@@ -484,6 +594,8 @@ def analyze(symbol: str, kr: Optional[Dict[str, Dict[str, float]]] = None, inter
 
     score = chart + volume + kr_score + cg_score + momentum + risk
 
+    ai = compute_ai_indices(price, ma20, ma60, vol_ratio, buy_ratio, rsi14, mh, chg_24, atr_v, cg, kr_score, kr_value, kr_chg)
+
     notes = []
     if cg["oi_score"] >= 7: notes.append("OI 증가")
     if cg["funding_score"] >= 7: notes.append("펀딩 양호")
@@ -496,13 +608,19 @@ def analyze(symbol: str, kr: Optional[Dict[str, Dict[str, float]]] = None, inter
     if chg_24 > 35: notes.append("단기 급등 리스크")
     if not notes: notes.append("A100 조건 양호")
 
+    comment = ai_comment(score, ai["accumulation"], ai["distribution"], ai["bubble"], ai["confidence"], cg, kr_score, vol_ratio, buy_ratio, price, ma20)
+
     result = Result(
         pair, round(price, 8), round(score, 2), grade(score),
         round(chart, 2), round(volume, 2), round(kr_score, 2),
         round(cg_score, 2), round(momentum, 2), round(risk, 2),
         round(vol_ratio, 2), round(buy_ratio, 3), round(rsi14, 2),
         round(support, 8), round(resistance, 8),
-        cg_text, liq_text, kr_note, " / ".join(notes)
+        cg_text, liq_text, kr_note, " / ".join(notes),
+        ai["accumulation"], ai["distribution"], ai["bubble"], ai["confidence"],
+        ai["prob24"], ai["prob3d"], ai["prob7d"], ai["risk_level"],
+        ai["entry_low"], ai["entry_high"], ai["stop"], ai["target1"], ai["target2"],
+        comment
     )
     log(f"analyze done: {pair} score={result.score}")
     return result
@@ -524,21 +642,25 @@ def format_result(r: Result) -> str:
     return (
         f"📊 <b>{r.pair}</b>\n"
         f"가격: <code>{r.price}</code>\n"
-        f"점수: <b>{r.score}</b> / 등급: <b>{r.grade}</b>\n"
+        f"점수: <b>{r.score}</b> / 등급: <b>{r.grade}</b> | 위험도: <b>{r.risk_level}</b>\n"
         f"지지: <code>{r.support}</code> | 저항: <code>{r.resistance}</code>\n"
-        f"Vol: {r.vol_ratio}x | 매수비율: {r.buy_ratio} | RSI: {r.rsi14}\n"
+        f"진입: <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"손절: <code>{r.stop}</code> | 목표: <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+        f"확률: 24h {r.prob24}% | 3d {r.prob3d}% | 7d {r.prob7d}%\n"
+        f"AI: 매집 {r.accumulation} | 분배 {r.distribution} | 버블 {r.bubble} | 신뢰도 {r.confidence}%\n"
         f"점수: 차트 {r.chart_score}/20 | 거래량 {r.volume_score}/15 | KR {r.kr_score}/15 | CG {r.cg_score}/35 | 모멘텀 {r.momentum_score}/5 | 리스크 {r.risk_score}/10\n"
         f"CG: {r.cg_text}\n"
         f"청산: {r.liq_text}\n"
         f"{r.kr_note}\n"
         f"진단: {r.note}\n"
+        f"AI코멘트: {r.ai_comment}\n"
     )
 
 def build_report(symbols: List[str], top_n: int = 10, use_kr: bool = True) -> str:
     results = scan(symbols, use_kr=use_kr)
     if not results:
         return "A100 결과 없음\n\nRender 로그 error 확인 필요"
-    return "🔥 <b>A100 v12 Ultimate Core</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:top_n])
+    return "🔥 <b>A100 v13 AI Indices</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:top_n])
 
 def build_kr_report(top_n: int = 20) -> str:
     kr = kr_market_snapshot()
@@ -551,9 +673,9 @@ def build_kr_report(top_n: int = 20) -> str:
         lines.append(f"{i}. <b>{sym}</b> | {value/100000000:.1f}억 | {chg:.2f}%")
     return "\n".join(lines)
 
-# ---------- Telegram ----------
+# Telegram
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 v12 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/kr\n/cgtest BTC\n/myid")
+    await update.message.reply_text("A100 v13 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/kr\n/cgtest BTC\n/myid")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
@@ -562,7 +684,7 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 v12 기본 리스트 분석 중...")
+    await update.message.reply_text("A100 v13 기본 리스트 분석 중...")
     await update.message.reply_text(build_report(DEFAULT_SYMBOLS, 10, True), parse_mode="HTML")
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -571,11 +693,11 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("예: /scan ARKM,SYN,SENT")
         return
     symbols = [x.strip().upper() for x in raw.replace(" ", "").split(",") if x.strip()]
-    await update.message.reply_text("A100 v12 분석 중...")
+    await update.message.reply_text("A100 v13 분석 중...")
     await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
 
 async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"A100 v12 거래량 상위 USDT {TOP_SCAN_LIMIT}개 스캔 중...")
+    await update.message.reply_text(f"A100 v13 거래량 상위 USDT {TOP_SCAN_LIMIT}개 스캔 중...")
     symbols = get_binance_top_usdt(TOP_SCAN_LIMIT)
     await update.message.reply_text(build_report(symbols, 10, True), parse_mode="HTML")
 
@@ -602,12 +724,12 @@ def send_telegram(text: str):
         log(f"telegram send error: {e}")
 
 def morning_job():
-    send_telegram("🌅 <b>A100 오전 5시 Ultimate Core 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10, True))
+    send_telegram("🌅 <b>A100 오전 5시 v13 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10, True))
 
 def alert_job():
-    hits = [r for r in scan(DEFAULT_SYMBOLS, True) if r.score >= SCORE_ALERT]
+    hits = [r for r in scan(DEFAULT_SYMBOLS, True) if r.score >= SCORE_ALERT or r.accumulation >= 80]
     if hits:
-        send_telegram("🚨 <b>A100 v12 조건 감지</b>\n\n" + "\n---\n".join(format_result(r) for r in hits[:5]))
+        send_telegram("🚨 <b>A100 v13 조건 감지</b>\n\n" + "\n---\n".join(format_result(r) for r in hits[:5]))
 
 def main():
     if not BOT_TOKEN:
@@ -635,7 +757,7 @@ def main():
     app.add_handler(CommandHandler("kr", kr_cmd))
     app.add_handler(CommandHandler("cgtest", cgtest_cmd))
     app.add_handler(CommandHandler("arkm", arkm))
-    log("A100 v12 Ultimate Core worker running...")
+    log("A100 v13 AI Indices worker running...")
     app.run_polling()
 
 if __name__ == "__main__":
