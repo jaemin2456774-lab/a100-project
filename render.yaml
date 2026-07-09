@@ -17,4 +17,18 @@ services:
       - key: SCORE_ALERT
         value: "85"
       - key: TOP_SCAN_LIMIT
-        value: "25"
+        value: "15"
+      - key: CG_CACHE_TTL
+        value: "300"
+      - key: CG_MIN_INTERVAL
+        value: "0.45"
+      - key: MACRO_RISK
+        value: "35"
+      - key: FOMC_DAYS
+        value: "99"
+      - key: CPI_DAYS
+        value: "99"
+      - key: WAR_RISK
+        value: "0"
+      - key: MACRO_NOTE
+        value: "수동 매크로 입력 없음"
