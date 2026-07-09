@@ -11,11 +11,13 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 load_dotenv()
 
-# ===== A100 v31 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
+# ===== A100 v32 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
 import time as _a100_time
 import re
 import html
 import textwrap
+from html import unescape
+from difflib import SequenceMatcher
 
 CG_CACHE = {}
 CG_LAST_CALL = 0.0
@@ -101,7 +103,7 @@ def macro_text():
     else:
         level = "🟢 낮음"
     return (
-        f"🌎 <b>A100 v31 매크로 리스크</b>\n"
+        f"🌎 <b>A100 v32 매크로 리스크</b>\n"
         f"위험도: <b>{risk}%</b> {level}\n"
         f"FOMC D-{int(fomc) if fomc < 90 else '?'} | CPI D-{int(cpi) if cpi < 90 else '?'} | 전쟁위험 {war}%\n"
         f"메모: {note}\n"
@@ -120,7 +122,7 @@ CG_CACHE={}; KR_CACHE=(0,{})
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
-        b=b"A100 v31 News Fix Plus running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
+        b=b"A100 v32 Clean Korean News AI running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self,*a): return
 def health(): HTTPServer(("0.0.0.0", int(os.getenv("PORT","10000"))), Health).serve_forever()
 def sf(x,d=0.0):
@@ -538,14 +540,14 @@ def real_signal_score(r):
     s += r.kr * 0.8
     s += r.cg * 0.35
     s -= chase_risk(r) * 0.20
-    return v31_macro_adjust_score(r, round(clamp(s), 1))
+    return v32_macro_adjust_score(r, round(clamp(s), 1))
 
 
 
 def env_num(name, default=0.0):
     return safe_num(os.getenv(name, str(default)), default)
 
-def v31_base_macro_engine():
+def v32_base_macro_engine():
     # 외부 API 과부하 방지를 위해 기본은 Environment 수동/반자동 입력 기반
     base_risk, note, fomc, cpi, war = macro_risk_score()
 
@@ -652,13 +654,13 @@ def v31_base_macro_engine():
     }
 
 def macro_guard_add():
-    return v31_base_macro_engine()["guard"]
+    return v32_base_macro_engine()["guard"]
 
-def v31_base_macro_report():
-    m = v31_base_macro_engine()
+def v32_base_macro_report():
+    m = v32_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v31 매크로 엔진</b>\n"
+        f"🌎 <b>A100 v32 매크로 엔진</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -669,8 +671,8 @@ def v31_base_macro_report():
         f"AI판정: {'알트 고배율 금지 / BTC 우선 / 손절 짧게' if m['risk'] >= 60 else '일반 기준, 단 추격매수 금지'}"
     )
 
-def v31_macro_adjust_score(r, score):
-    m = v31_base_macro_engine()
+def v32_macro_adjust_score(r, score):
+    m = v32_base_macro_engine()
     s = score
     # BTC/ETH는 리스크오프 때 알트보다 덜 감점
     major = r.sym.startswith(("BTC", "ETH"))
@@ -684,7 +686,7 @@ def v31_macro_adjust_score(r, score):
         s += 4
     return round(clamp(s), 1)
 
-def v31_real_thresholds():
+def v32_real_thresholds():
     regime, add = market_regime()
     guard = macro_guard_add()
     if regime == "상승장":
@@ -706,14 +708,14 @@ def v31_real_thresholds():
     return base
 
 
-def v31_header():
-    th = v31_real_thresholds()
+def v32_header():
+    th = v32_real_thresholds()
     return (
         f"시장상태: <b>{th['regime']}</b>\n"
-        f"실전기준: 실전 {th['real']}↑ / 타이밍 {th['timing']}↑ / 돌파 {th['breakout']}↑ / 매집 {th['accumulation']}↑ / 신뢰 {th['confidence']}↑\n매크로가드: +{macro_guard_add()}점 / {v31_macro_engine()['mode']}"
+        f"실전기준: 실전 {th['real']}↑ / 타이밍 {th['timing']}↑ / 돌파 {th['breakout']}↑ / 매집 {th['accumulation']}↑ / 신뢰 {th['confidence']}↑\n매크로가드: +{macro_guard_add()}점 / {v32_macro_engine()['mode']}"
     )
 
-def v31_best_fallback(res, n=3):
+def v32_best_fallback(res, n=3):
     return sorted(
         res,
         key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r), -chase_risk(r)),
@@ -724,14 +726,14 @@ def format_fallback(r, rank=1):
     return (
         f"🟡 <b>{rank}. {r.sym}</b>\n"
         f"실전 {real_signal_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격위험 {chase_risk(r)}%\n"
-        f"판정: <b>{v31_decision(r)}</b>\n"
+        f"판정: <b>{v32_decision(r)}</b>\n"
         f"진입관찰 <code>{r.entry_low}~{r.entry_high}</code> / 손절 <code>{r.stop}</code>\n"
-        f"이유: {v31_reason(r)}\n"
+        f"이유: {v32_reason(r)}\n"
     )
 
 
 def real_pass(r):
-    th = v31_real_thresholds()
+    th = v32_real_thresholds()
     rs = real_signal_score(r)
     return (
         rs >= th["real"]
@@ -744,8 +746,8 @@ def real_pass(r):
     )
 
 
-def god_v31_pass(r):
-    th = v31_real_thresholds()
+def god_v32_pass(r):
+    th = v32_real_thresholds()
     return (
         real_signal_score(r) >= max(th["real"] + 3, 48)
         and timing_score(r) >= max(th["timing"] + 2, 40)
@@ -758,7 +760,7 @@ def god_v31_pass(r):
     )
 
 
-def v31_decision(r):
+def v32_decision(r):
     rs = real_signal_score(r)
     if chase_risk(r) >= 70 or r.distribution >= 75:
         return "🔴 추격금지"
@@ -770,7 +772,7 @@ def v31_decision(r):
         return "🟡 관찰"
     return "⚪ 대기"
 
-def v31_reason(r):
+def v32_reason(r):
     arr = []
     if real_signal_score(r) >= 55: arr.append("실전신호 양호")
     if trend_power(r) >= 50: arr.append("추세회복")
@@ -789,10 +791,10 @@ def format_real(r, rank=1):
         f"실전신호 {real_signal_score(r)}% | GOD {god_score(r)}% | 10X {tenx_score(r)}%\n"
         f"24H타이밍 {timing_score(r)}% | 추세 {trend_power(r)}% | 추격위험 {chase_risk(r)}%\n"
         f"돌파 {breakout_score(r)}% | 고래 {whale_score(r)}% | 스퀴즈 {r.squeeze}% | 승률 {win_rate_estimate(r)}%\n"
-        f"AI판정: <b>{v31_decision(r)}</b>\n"
+        f"AI판정: <b>{v32_decision(r)}</b>\n"
         f"진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
         f"손절 <code>{r.stop}</code> | 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
-        f"이유: {v31_reason(r)}\n"
+        f"이유: {v32_reason(r)}\n"
         f"리스크: 버블 {r.bubble}% / 분배 {r.distribution}%\n"
     )
 
@@ -942,16 +944,16 @@ def elite_sort(res):
 
 def ranktxt(res,n=10):
     ranked = elite_sort(res) if res else []
-    lines = ["⚡ <b>A100 v31 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
+    lines = ["⚡ <b>A100 v32 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
     for i, r in enumerate(ranked[:n], 1):
         lines.append(format_elite(r, i))
     return "\n".join(lines) if ranked else "A100 후보 없음"
 
 def report(symbols,n=10):
     res=scan(symbols)
-    return "A100 결과 없음" if not res else "🔥 <b>A100 v31 News Fix Plus</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
+    return "A100 결과 없음" if not res else "🔥 <b>A100 v32 Clean Korean News AI</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
 
-async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v31 시작\n/check\n/scan ARKM,SYN,SENT\n/macro\n/live\n/news\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
+async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v32 시작\n/check\n/scan ARKM,SYN,SENT\n/macro\n/live\n/news\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
 async def myid(update,context): await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 async def check(update,context): await update.message.reply_text("A100 분석 중..."); await update.message.reply_text(report(DEFAULT_SYMBOLS,10),parse_mode="HTML")
 async def scan_cmd(update,context):
@@ -965,7 +967,7 @@ async def hot_cmd(update,context):
     await update.message.reply_text(ranktxt(hot,10) if hot else "HOT 후보 없음",parse_mode="HTML")
 
 async def sniper_cmd(update,context):
-    await update.message.reply_text("🎯 A100 v31 스나이퍼 단일 후보 스캔 중...")
+    await update.message.reply_text("🎯 A100 v32 스나이퍼 단일 후보 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🎯 오늘은 스나이퍼 후보 없음\n\n기준 미달이면 억지 추천하지 않습니다.\n무리하게 진입하지 않는 것이 더 좋습니다.")
@@ -977,7 +979,7 @@ async def sniper_cmd(update,context):
     ex = explosion_score(r)
     q = quality_score(r)
     text = (
-        "🎯 <b>A100 v31 SNIPER PICK</b>\n\n"
+        "🎯 <b>A100 v32 SNIPER PICK</b>\n\n"
         f"<b>{r.sym}</b> {stars(q)}\n"
         f"추천품질: <b>{q}%</b>\n"
         f"폭발확률: <b>{ex}%</b>\n"
@@ -997,12 +999,12 @@ async def sniper_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def elite_cmd(update,context):
-    await update.message.reply_text("🏆 A100 v31 Elite Pick TOP5 스캔 중...")
+    await update.message.reply_text("🏆 A100 v32 Elite Pick TOP5 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🏆 A100 ELITE\n\n오늘은 Elite 후보가 없습니다.\n무리한 진입보다 기다리는 것이 유리합니다.")
         return
-    lines = ["🏆 <b>A100 v31 ELITE PICK TOP5</b>", market_header(), ""]
+    lines = ["🏆 <b>A100 v32 ELITE PICK TOP5</b>", market_header(), ""]
     for i, r in enumerate(res[:5], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1056,46 +1058,46 @@ def send(text):
     if not BOT_TOKEN or not CHAT_ID: log("TOKEN/CHAT_ID missing"); return
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=15)
     except Exception as e: log(f"telegram {e}")
-def morning(): send("🌅 <b>A100 v31 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
+def morning(): send("🌅 <b>A100 v32 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75 or timing_score(r)>=72 or god_score(r)>=70 or real_signal_score(r)>=70)]
-    if hit: send("🚨 <b>A100 v31 조건 감지</b>\n\n"+ranktxt(hit,5))
+    if hit: send("🚨 <b>A100 v32 조건 감지</b>\n\n"+ranktxt(hit,5))
 
 
 
 async def auto_cmd(update,context):
-    await update.message.reply_text("🤖 A100 v31 자동판정 스캔 중...")
+    await update.message.reply_text("🤖 A100 v32 자동판정 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🤖 <b>A100 v31 AUTO THRESHOLD</b>", v31_header(), ""]
+    lines = ["🤖 <b>A100 v32 AUTO THRESHOLD</b>", v32_header(), ""]
     if cand:
         lines.append("✅ 실전 후보")
         for i, r in enumerate(cand[:5], 1):
             lines.append(format_real(r, i))
     else:
         lines.append("⚪ 기준 통과 후보 없음\n관찰 TOP3")
-        for i, r in enumerate(v31_best_fallback(res, 3), 1):
+        for i, r in enumerate(v32_best_fallback(res, 3), 1):
             lines.append(format_fallback(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def god_cmd(update,context):
-    await update.message.reply_text("🔥 A100 v31 Auto GOD 실전 단일 후보 스캔 중...")
+    await update.message.reply_text("🔥 A100 v32 Auto GOD 실전 단일 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
-    cand = [r for r in res if god_v31_pass(r)]
+    cand = [r for r in res if god_v32_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), god_score(r), timing_score(r), breakout_score(r)), reverse=True)
     if not cand:
-        fb = v31_best_fallback(res, 3)
-        lines = ["🔥 <b>GOD 실전 후보 없음</b>", v31_header(), "기준 미달이라 매수 추천은 하지 않습니다.\n현재 가장 나은 관찰 후보 TOP3:\n"]
+        fb = v32_best_fallback(res, 3)
+        lines = ["🔥 <b>GOD 실전 후보 없음</b>", v32_header(), "기준 미달이라 매수 추천은 하지 않습니다.\n현재 가장 나은 관찰 후보 TOP3:\n"]
         for i, r in enumerate(fb, 1):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
     r = cand[0]
     text = (
-        "🔥 <b>A100 v31 GOD PICK</b>\n"
+        "🔥 <b>A100 v32 GOD PICK</b>\n"
         "24시간 내 실전 신호 단일 후보\n\n"
-        + v31_header()
+        + v32_header()
         + "\n\n"
         + format_real(r, 1)
         + f"\nCG: {r.cg_text}\nKR: {r.kr_text}"
@@ -1103,18 +1105,18 @@ async def god_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def real_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v31 Auto 실전신호 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v32 Auto 실전신호 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r)), reverse=True)
     if not cand:
-        fb = v31_best_fallback(res, 3)
-        lines = ["⚡ <b>실전신호 후보 없음</b>", v31_header(), "현재는 기다리는 구간입니다.\n그래도 관찰할 TOP3:\n"]
+        fb = v32_best_fallback(res, 3)
+        lines = ["⚡ <b>실전신호 후보 없음</b>", v32_header(), "현재는 기다리는 구간입니다.\n그래도 관찰할 TOP3:\n"]
         for i, r in enumerate(fb, 1):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
-    lines = ["⚡ <b>A100 v31 REAL SIGNAL</b>", v31_header(), "24시간 내 터질 가능성 중심\n"]
+    lines = ["⚡ <b>A100 v32 REAL SIGNAL</b>", v32_header(), "24시간 내 터질 가능성 중심\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_real(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1138,14 +1140,14 @@ async def scalp_cmd(update,context):
 
 
 async def timing_cmd(update,context):
-    await update.message.reply_text("⏱ A100 v31 진입 타이밍 후보 스캔 중...")
+    await update.message.reply_text("⏱ A100 v32 진입 타이밍 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if timing_pass(r)]
     cand = sorted(cand, key=lambda r: (timing_score(r), quality_score(r), win_rate_estimate(r)), reverse=True)
     if not cand:
         await update.message.reply_text("⏱ 지금 진입 타이밍 후보 없음\n\n기준 미달이면 기다리는 것이 유리합니다.")
         return
-    lines = ["⏱ <b>A100 v31 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
+    lines = ["⏱ <b>A100 v32 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1160,7 +1162,7 @@ async def now_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🚨 <b>A100 v31 NOW ENTRY</b>\n\n"
+        "🚨 <b>A100 v32 NOW ENTRY</b>\n\n"
         f"<b>{r.sym}</b> {stars(quality_score(r))}\n"
         f"진입타이밍: <b>{timing_score(r)}%</b>\n"
         f"추천품질: <b>{quality_score(r)}%</b>\n"
@@ -1182,7 +1184,7 @@ async def win_cmd(update,context):
     await update.message.reply_text("📊 A100 예상승률 계산 중...")
     res = scan(syms)
     res = sorted(res, key=lambda r: (win_rate_estimate(r), rr_score(r), quality_score(r)), reverse=True)
-    lines = ["📊 <b>A100 v31 예상승률 TOP</b>\n"]
+    lines = ["📊 <b>A100 v32 예상승률 TOP</b>\n"]
     for i, r in enumerate(res[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b>\n"
@@ -1245,47 +1247,47 @@ async def watch_cmd(update,context):
 
 
 async def tenx_cmd(update,context):
-    await update.message.reply_text("💎 A100 v31 10X 잠재 후보 스캔 중...")
+    await update.message.reply_text("💎 A100 v32 10X 잠재 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if tenx_score(r) >= 48 and r.bubble < 70 and r.distribution < 70]
     cand = sorted(cand, key=lambda r: (tenx_score(r), bottom_score(r), whale_score(r)), reverse=True)
     if not cand:
         await update.message.reply_text("💎 10X 잠재 후보 없음")
         return
-    lines = ["💎 <b>A100 v31 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
+    lines = ["💎 <b>A100 v32 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def breakout_cmd(update,context):
-    await update.message.reply_text("🚀 A100 v31 돌파직전 후보 스캔 중...")
+    await update.message.reply_text("🚀 A100 v32 돌파직전 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if breakout_score(r) >= 45 and r.bubble < 75 and r.distribution < 75]
     cand = sorted(cand, key=lambda r: (breakout_score(r), timing_score(r), r.squeeze), reverse=True)
     if not cand:
         await update.message.reply_text("🚀 돌파직전 후보 없음")
         return
-    lines = ["🚀 <b>A100 v31 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
+    lines = ["🚀 <b>A100 v32 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def bottom_cmd(update,context):
-    await update.message.reply_text("🧱 A100 v31 바닥매집 후보 스캔 중...")
+    await update.message.reply_text("🧱 A100 v32 바닥매집 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if bottom_score(r) >= 55 and r.accumulation >= 45 and r.bubble < 65]
     cand = sorted(cand, key=lambda r: (bottom_score(r), r.accumulation, r.smart), reverse=True)
     if not cand:
         await update.message.reply_text("🧱 바닥매집 후보 없음")
         return
-    lines = ["🧱 <b>A100 v31 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
+    lines = ["🧱 <b>A100 v32 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 
-# ===== A100 v31 뉴스/전쟁/고래 AI =====
+# ===== A100 v32 뉴스/전쟁/고래 AI =====
 NEWS_CACHE = {}
 NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
 
@@ -1315,7 +1317,7 @@ def rss_fetch_titles(name, url, ttl=NEWS_TTL):
         log(f"rss {name} err {e}")
     return old[1] if old else []
 
-def v31_news_engine_base():
+def v32_news_engine_base():
     feeds = [
         ("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
         ("cointelegraph", "https://cointelegraph.com/rss"),
@@ -1358,9 +1360,9 @@ def v31_news_engine_base():
         "feed_count": len(titles),
     }
 
-def v31_macro_engine():
-    m = v31_base_macro_engine()
-    n = v31_news_engine()
+def v32_macro_engine():
+    m = v32_base_macro_engine()
+    n = v32_news_engine()
     risk = m["risk"]
     risk += min(n["news_risk"] * 0.25, 18)
     risk += min(n["war_risk"] * 0.22, 18)
@@ -1404,18 +1406,18 @@ def v31_macro_engine():
     return m
 
 def macro_guard_add():
-    return v31_macro_engine()["guard"]
+    return v32_macro_engine()["guard"]
 
 def v26_macro_engine():
-    return v31_macro_engine()
+    return v32_macro_engine()
 
-def v31_macro_report():
-    m = v31_macro_engine()
+def v32_macro_report():
+    m = v32_macro_engine()
     n = m.get("news_ai", {})
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     titles = "\n".join([f"- {x}" for x in n.get("titles", [])]) or "- 주요 리스크 뉴스 없음"
     return (
-        f"🌎 <b>A100 v31 NEWS/WAR/WHALE AI</b>\n"
+        f"🌎 <b>A100 v32 NEWS/WAR/WHALE AI</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -1426,9 +1428,9 @@ def v31_macro_report():
         f"AI판정: {'FOMC/뉴스/전쟁 리스크 구간 — 알트 고배율 금지' if m['risk'] >= 60 else '일반 기준, 단 추격매수 금지'}"
     )
 
-def v31_final_ai_score_base(r):
+def v32_final_ai_score_base(r):
     base = real_signal_score(r)
-    m = v31_macro_engine()
+    m = v32_macro_engine()
     major = r.sym.startswith(("BTC", "ETH"))
     s = base
     if not major:
@@ -1444,7 +1446,7 @@ def v31_final_ai_score_base(r):
     return round(clamp(s), 1)
 
 async def macro_cmd(update,context):
-    await update.message.reply_text(v31_macro_report(), parse_mode="HTML")
+    await update.message.reply_text(v32_macro_report(), parse_mode="HTML")
 
 async def cgstatus_cmd(update,context):
     await update.message.reply_text(
@@ -1458,7 +1460,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v31 자동 매크로 수집 엔진 =====
+# ===== A100 v32 자동 매크로 수집 엔진 =====
 AUTO_MACRO_CACHE = {}
 AUTO_MACRO_TTL = int(os.getenv("AUTO_MACRO_TTL", "900"))
 
@@ -1531,7 +1533,7 @@ def auto_news_risk():
     hit = sum(1 for w in hot_words if w in memo)
     return min(100, risk + hit * 8)
 
-def v31_macro_engine():
+def v32_macro_engine():
     base_risk = env_num("MACRO_RISK", 35)
     note = os.getenv("MACRO_NOTE", "자동/수동 매크로 입력 없음")
     ev = auto_events_days()
@@ -1650,16 +1652,16 @@ def v31_macro_engine():
 
 # V27에서는 기존 v26 엔진을 자동 엔진으로 대체
 def v26_macro_engine():
-    return v31_base_macro_engine()
+    return v32_base_macro_engine()
 
 def macro_guard_add():
-    return v31_macro_engine()["guard"]
+    return v32_macro_engine()["guard"]
 
-def v31_base_macro_report():
-    m = v31_base_macro_engine()
+def v32_base_macro_report():
+    m = v32_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v31 AUTO MACRO LIVE</b>\n"
+        f"🌎 <b>A100 v32 AUTO MACRO LIVE</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'} / GDP D-{int(m['gdp']) if m['gdp'] < 90 else '?'}\n"
@@ -1671,9 +1673,9 @@ def v31_base_macro_report():
     )
 
 async def events_cmd(update,context):
-    m = v31_base_macro_engine()
+    m = v32_base_macro_engine()
     text = (
-        "📅 <b>A100 v31 주요 이벤트</b>\n"
+        "📅 <b>A100 v32 주요 이벤트</b>\n"
         f"FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'}\n"
         f"CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'}\n"
         f"PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'}\n"
@@ -1708,10 +1710,10 @@ async def macrohelp_cmd(update,context):
 
 
 async def live_cmd(update,context):
-    m = v31_macro_engine()
+    m = v32_macro_engine()
     n = m.get("news_ai", {})
     text = (
-        "📡 <b>A100 v31 LIVE DATA</b>\n"
+        "📡 <b>A100 v32 LIVE DATA</b>\n"
         f"Fear&Greed: {m['fg']} {'(자동)' if os.getenv('AUTO_FEAR_GREED','1')=='1' else '(수동)'}\n"
         f"BTC Dominance Trend: {m['btc_dom']} {'(자동)' if os.getenv('AUTO_MARKET','1')=='1' else '(수동)'}\n"
         f"News Feed: {n.get('feed_count', 0)}개 / NewsRisk {m.get('news_risk', 0)}% / War {m['war']}% / Whale {m['whale']}%\n"
@@ -1722,7 +1724,7 @@ async def live_cmd(update,context):
 
 
 
-# ===== A100 v31 한글 뉴스 요약 / 영향도 / 메타스코어 =====
+# ===== A100 v32 한글 뉴스 요약 / 영향도 / 메타스코어 =====
 SEEN_NEWS = set()
 
 def safe_html(s):
@@ -1857,8 +1859,8 @@ def normalize_news_key(t):
     s = re.sub(r"[^a-zA-Z0-9가-힣 ]", "", (t or "").lower())
     return " ".join(s.split()[:10])
 
-def v31_news_engine():
-    n = v31_news_engine_base()
+def v32_news_engine():
+    n = v32_news_engine_base()
     raw = []
     try:
         for key, val in NEWS_CACHE.items():
@@ -1872,7 +1874,7 @@ def v31_news_engine():
     return n
 
 def important_news_items(limit=5):
-    n = v31_news_engine()
+    n = v32_news_engine()
     items = []
     for t in n.get("raw_titles", [])[:30]:
         key = normalize_news_key(t)
@@ -1911,9 +1913,9 @@ def format_news_ko(t, idx=1):
     )
 
 
-def v31_meta_score(r):
-    base = v31_final_ai_score_base(r)
-    macro = v31_macro_engine()
+def v32_meta_score(r):
+    base = v32_final_ai_score_base(r)
+    macro = v32_macro_engine()
     major = r.sym.startswith(("BTC", "ETH"))
     s = base
     s += min(max(timing_score(r) - 45, 0), 10) * 0.4
@@ -1927,8 +1929,8 @@ def v31_meta_score(r):
         s -= 5
     return round(clamp(s), 1)
 
-def v31_market_mode():
-    m = v31_macro_engine()
+def v32_market_mode():
+    m = v32_macro_engine()
     risk = m["risk"]; fg = m.get("fg", 50)
     if risk >= 82:
         return "⚫ Crash"
@@ -1940,21 +1942,152 @@ def v31_market_mode():
         return "🟢 Bull/Recovery"
     return "🟡 Rotation"
 
+
+# ===== A100 v32 클린 한글 뉴스 AI =====
+def clean_html(text):
+    text = str(text or "")
+    text = re.sub(r"<script.*?</script>", " ", text, flags=re.I | re.S)
+    text = re.sub(r"<style.*?</style>", " ", text, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = unescape(text)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+def rough_ko_translate(text):
+    t = clean_html(text)
+    low = t.lower()
+    patterns = [
+        (["bank of japan", "rate"], "일본은행 금리 인상 가능성 관련 뉴스"),
+        (["swift", "blockchain", "ledger"], "Swift, 글로벌 은행용 블록체인 결제망 확대"),
+        (["crypto", "middle east", "tensions"], "중동 긴장 속 암호화폐 시장 회복 뉴스"),
+        (["sony", "stablecoin", "trust bank"], "소니, 미국 스테이블코인 신탁은행 설립 추진"),
+        (["etf", "outflow"], "비트코인 ETF 자금 유출 관련 뉴스"),
+        (["etf", "inflow"], "비트코인·이더리움 ETF 자금 유입 관련 뉴스"),
+        (["hyperliquid"], "하이퍼리퀴드 온체인 파생상품 관련 뉴스"),
+        (["iran"], "이란 지정학 리스크 관련 뉴스"),
+        (["israel"], "이스라엘·중동 지정학 리스크 관련 뉴스"),
+        (["russia"], "러시아 지정학 리스크 관련 뉴스"),
+        (["ukraine"], "우크라이나 전쟁 리스크 관련 뉴스"),
+        (["sec"], "미 SEC 규제 관련 뉴스"),
+        (["hack"], "해킹·보안 사고 관련 뉴스"),
+        (["whale"], "고래 대량 이동 관련 뉴스"),
+        (["tether", "mint"], "테더 USDT 발행 관련 뉴스"),
+        (["bitcoin"], "비트코인 시장 관련 뉴스"),
+        (["ethereum"], "이더리움 시장 관련 뉴스"),
+        (["stablecoin"], "스테이블코인 관련 뉴스"),
+    ]
+    for keys, ko in patterns:
+        if all(k in low for k in keys):
+            return ko
+    return ko_news_title(t)
+
+def impact_numeric(text):
+    low = clean_html(text).lower()
+    btc = eth = alt = 0
+    if any(w in low for w in ["bitcoin", "btc", "etf", "blackrock", "fidelity"]):
+        btc += 2
+    if any(w in low for w in ["ethereum", "eth", "defi", "stablecoin"]):
+        eth += 2
+    if any(w in low for w in ["swift", "stablecoin", "approval", "adoption", "partnership", "inflow", "rate cut"]):
+        alt += 2
+    if any(w in low for w in ["link", "xrp", "ondo", "rwa"]):
+        alt += 2
+    if any(w in low for w in ["sec", "lawsuit", "hack", "exploit", "war", "attack", "missile", "outflow", "rate hike", "inflation", "sanction"]):
+        btc -= 1; eth -= 1; alt -= 3
+    if any(w in low for w in ["iran", "israel", "russia", "ukraine", "middle east"]):
+        btc += 1; alt -= 2
+    return max(-5, min(5, btc)), max(-5, min(5, eth)), max(-5, min(5, alt))
+
+def arrow_score(n):
+    if n >= 3: return "▲▲▲"
+    if n == 2: return "▲▲"
+    if n == 1: return "▲"
+    if n == 0: return "="
+    if n == -1: return "▼"
+    if n == -2: return "▼▼"
+    return "▼▼▼"
+
+def news_importance_score(text):
+    t = clean_html(text)
+    score, label, market, stars_ = news_sentiment_impact(t)
+    btc, eth, alt = impact_numeric(t)
+    key_bonus = text_hits(t, ["fomc","cpi","ppi","pce","nfp","etf","sec","hack","war","attack","whale","fed","powell","iran","israel","russia","ukraine","swift","stablecoin"]) * 7
+    return abs(score - 50) + key_bonus + abs(btc) + abs(eth) + abs(alt)
+
+def dedupe_news_list(news, threshold=0.72):
+    cleaned = []
+    keys = []
+    for item in news:
+        c = clean_html(item)
+        if len(c) < 25:
+            continue
+        key = normalize_news_key(c)
+        duplicate = False
+        for old_key in keys:
+            if key == old_key or SequenceMatcher(None, key, old_key).ratio() >= threshold:
+                duplicate = True
+                break
+        if not duplicate:
+            cleaned.append(c)
+            keys.append(key)
+    return cleaned
+
+def v32_important_news_items(limit=5):
+    n = v32_news_engine()
+    raw = dedupe_news_list(n.get("raw_titles", [])[:50])
+    scored = []
+    for t in raw:
+        imp = news_importance_score(t)
+        if imp >= 15:
+            scored.append((imp, t))
+    scored = sorted(scored, key=lambda x: x[0], reverse=True)
+    return scored[:limit]
+
+def v32_action(score, btc, eth, alt):
+    if score <= 35 or alt <= -3:
+        return "🔴 진입 금지 / 리스크 관리"
+    if score >= 68 and alt >= 2:
+        return "🟢 관심 가능 / 눌림 확인"
+    if btc >= 2 and alt < 0:
+        return "🟡 BTC 위주 관찰 / 알트 주의"
+    return "🟡 관망 / 차트 확인"
+
+def format_news_ko(t, idx=1):
+    t = clean_html(t)
+    score, label, market, stars_ = news_sentiment_impact(t)
+    btc, eth, alt = impact_numeric(t)
+    title = safe_html(rough_ko_translate(t))
+    coins = safe_html(related_coins(t))
+    bullets = summarize_ko(t)
+    b1 = safe_html(bullets[0] if len(bullets) > 0 else "시장 심리 영향 가능")
+    b2 = safe_html(bullets[1] if len(bullets) > 1 else "추가 확인 필요")
+    action = v32_action(score, btc, eth, alt)
+    return (
+        f"📰 <b>{idx}. {title}</b>\n"
+        f"AI판정: <b>{label}</b> | 시장영향: {market} | 중요도 {stars_}\n"
+        f"관련코인: {coins}\n"
+        f"영향점수: BTC {btc:+d} {arrow_score(btc)} / ETH {eth:+d} {arrow_score(eth)} / ALT {alt:+d} {arrow_score(alt)}\n"
+        f"요약:\n"
+        f"• {b1}\n"
+        f"• {b2}\n"
+        f"AI행동: <b>{action}</b>\n"
+    )
+
 async def news_cmd(update,context):
     try:
-        n = v31_news_engine()
-        items = important_news_items(5)
+        n = v32_news_engine()
+        items = v32_important_news_items(5)
         if not items:
-            raw = n.get("raw_titles", [])[:5]
-            items = [(20, t, *news_sentiment_impact(t)) for t in raw]
+            raw = dedupe_news_list(n.get("raw_titles", [])[:5])
+            items = [(news_importance_score(t), t) for t in raw]
         lines = [
-            "📰 <b>A100 v31 한글 뉴스 AI</b>",
+            "📰 <b>A100 v32 클린 한글 뉴스 AI</b>",
             f"뉴스위험 {n.get('news_risk', 0)}% | 전쟁위험 {n.get('war_risk', 0)}% | 고래위험 {n.get('whale_risk', 0)}%",
-            f"Feed {n.get('feed_count', 0)}개 | 중요 뉴스 선별\n"
+            f"Feed {n.get('feed_count', 0)}개 | 중복제거·중요도순\n"
         ]
         for i, item in enumerate(items[:5], 1):
-            t = item[1]
-            lines.append(format_news_ko(t, i))
+            lines.append(format_news_ko(item[1], i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     except Exception as e:
         log(f"news_cmd error: {e}")
@@ -1962,16 +2095,16 @@ async def news_cmd(update,context):
 
 
 async def final_cmd(update,context):
-    await update.message.reply_text("🧠 A100 v31 메타 AI 점수 스캔 중...")
+    await update.message.reply_text("🧠 A100 v32 메타 AI 점수 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
-    res = sorted(res, key=lambda r: (v31_meta_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🧠 <b>A100 v31 META AI RANK</b>", f"시장모드: <b>{v31_market_mode()}</b> / 매크로위험 {v31_macro_engine()['risk']}%", ""]
+    res = sorted(res, key=lambda r: (v32_meta_score(r), timing_score(r), breakout_score(r)), reverse=True)
+    lines = ["🧠 <b>A100 v32 META AI RANK</b>", f"시장모드: <b>{v32_market_mode()}</b> / 매크로위험 {v32_macro_engine()['risk']}%", ""]
     for i, r in enumerate(res[:10], 1):
         decision_fn = globals().get("v25_decision") or globals().get("v24_decision") or globals().get("v23_decision")
         decision = decision_fn(r) if decision_fn else "대기"
         lines.append(
-            f"{i}. <b>{r.sym}</b> {stars(v31_meta_score(r))}\n"
-            f"메타AI {v31_meta_score(r)}% | 실전 {real_signal_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격위험 {chase_risk(r)}%\n"
+            f"{i}. <b>{r.sym}</b> {stars(v32_meta_score(r))}\n"
+            f"메타AI {v32_meta_score(r)}% | 실전 {real_signal_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격위험 {chase_risk(r)}%\n"
             f"판정: {decision}\n"
         )
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1979,10 +2112,10 @@ async def final_cmd(update,context):
 
 async def mode_cmd(update,context):
     await update.message.reply_text(
-        f"🧭 <b>A100 v31 시장모드</b>\n"
-        f"현재: <b>{v31_market_mode()}</b>\n"
-        f"매크로위험: {v31_macro_engine()['risk']}%\n"
-        f"추천: {'고배율 금지 / 관망 우선' if v31_macro_engine()['risk'] >= 60 else '일반 기준 / 추격매수 금지'}",
+        f"🧭 <b>A100 v32 시장모드</b>\n"
+        f"현재: <b>{v32_market_mode()}</b>\n"
+        f"매크로위험: {v32_macro_engine()['risk']}%\n"
+        f"추천: {'고배율 금지 / 관망 우선' if v32_macro_engine()['risk'] >= 60 else '일반 기준 / 추격매수 금지'}",
         parse_mode="HTML"
     )
 
@@ -1991,26 +2124,31 @@ async def mode_cmd(update,context):
 try:
     v30_news_engine
 except NameError:
-    v30_news_engine = v31_news_engine
+    v30_news_engine = v32_news_engine
 try:
     v30_macro_engine
 except NameError:
-    v30_macro_engine = v31_macro_engine
+    v30_macro_engine = v32_macro_engine
 try:
     v30_meta_score
 except NameError:
-    v30_meta_score = v31_meta_score
+    v30_meta_score = v32_meta_score
 try:
     v30_market_mode
 except NameError:
-    v30_market_mode = v31_market_mode
+    v30_market_mode = v32_market_mode
 
 async def translate_cmd(update,context):
     text = " ".join(context.args).strip() if context.args else ""
     if not text:
         await update.message.reply_text("예: /translate Swift rolls out new blockchain ledger")
         return
-    await update.message.reply_text(format_news_ko(text, 1), parse_mode="HTML")
+    await update.message.reply_text(format_news_ko(clean_html(text), 1), parse_mode="HTML")
+
+
+async def cleannews_cmd(update,context):
+    await update.message.reply_text("🧹 뉴스 HTML/중복 제거 테스트 중...")
+    await news_cmd(update, context)
 
 
 def main():
@@ -2020,7 +2158,7 @@ def main():
     try: asyncio.get_running_loop()
     except RuntimeError: asyncio.set_event_loop(asyncio.new_event_loop())
     app=Application.builder().token(BOT_TOKEN).build()
-    for name,fn in [("start",start),("help",start),("myid",myid),("check",check),("scan",scan_cmd),("rank",rank_cmd),("best",rank_cmd),("top",rank_cmd),("hot",hot_cmd),("sniper",sniper_cmd),("elite",elite_cmd),("only",only_cmd),("auto",auto_cmd),("god",god_cmd),("real",real_cmd),("scalp",scalp_cmd),("tenx",tenx_cmd),("breakout",breakout_cmd),("bottom",bottom_cmd),("timing",timing_cmd),("now",now_cmd),("win",win_cmd),("smart",smart_cmd),("danger",danger_cmd),("watch",watch_cmd),("risk",risk_cmd),("kr",kr_cmd),("cgtest",cgtest_cmd),("macro",macro_cmd),("cgstatus",cgstatus_cmd),("events",events_cmd),("macrohelp",macrohelp_cmd),("live",live_cmd),("news",news_cmd),("final",final_cmd),("mode",mode_cmd),("translate",translate_cmd)]:
+    for name,fn in [("start",start),("help",start),("myid",myid),("check",check),("scan",scan_cmd),("rank",rank_cmd),("best",rank_cmd),("top",rank_cmd),("hot",hot_cmd),("sniper",sniper_cmd),("elite",elite_cmd),("only",only_cmd),("auto",auto_cmd),("god",god_cmd),("real",real_cmd),("scalp",scalp_cmd),("tenx",tenx_cmd),("breakout",breakout_cmd),("bottom",bottom_cmd),("timing",timing_cmd),("now",now_cmd),("win",win_cmd),("smart",smart_cmd),("danger",danger_cmd),("watch",watch_cmd),("risk",risk_cmd),("kr",kr_cmd),("cgtest",cgtest_cmd),("macro",macro_cmd),("cgstatus",cgstatus_cmd),("events",events_cmd),("macrohelp",macrohelp_cmd),("live",live_cmd),("news",news_cmd),("final",final_cmd),("mode",mode_cmd),("translate",translate_cmd),("cleannews",cleannews_cmd)]:
         app.add_handler(CommandHandler(name,fn))
-    log("A100 v31 News Fix Plus worker running..."); app.run_polling()
+    log("A100 v32 Clean Korean News AI worker running..."); app.run_polling()
 if __name__=="__main__": main()
