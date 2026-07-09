@@ -37,8 +37,20 @@ services:
       - key: AUTO_FEAR_GREED
         value: "1"
       - key: SPEED_SCAN_LIMIT
-        value: "12"
+        value: "8"
       - key: SPEED_FINAL_LIMIT
         value: "3"
       - key: SPEED_TTL
         value: "300"
+
+      - key: TICKER_TTL
+        value: "20"
+
+      - key: ULTRA_TTL
+        value: "180"
+
+      - key: ULTRA_LIMIT
+        value: "8"
+
+      - key: ULTRA_TOP
+        value: "3"
