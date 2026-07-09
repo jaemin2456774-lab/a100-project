@@ -15,7 +15,7 @@ services:
       - key: DEFAULT_SYMBOLS
         value: BTC,ETH,SOL,XRP,DOGE,UNI,LINK,AAVE,KAITO,ARKM,SYN,SENT,ALT,VANRY,CELO,COTI,NFP,TIA,INJ,WLD,ZEC,ONDO,ENA,PENDLE,JTO
       - key: TOP_SCAN_LIMIT
-        value: "8"
+        value: "5"
       - key: FAST_SCAN_LIMIT
         value: "25"
       - key: CG_PREFILTER_LIMIT
@@ -50,7 +50,16 @@ services:
         value: "180"
 
       - key: ULTRA_LIMIT
-        value: "8"
+        value: "5"
 
       - key: ULTRA_TOP
+        value: "3"
+
+      - key: HYPER_TTL
+        value: "120"
+
+      - key: HYPER_TICKER_LIMIT
+        value: "5"
+
+      - key: HYPER_FINAL_TOP
         value: "3"
