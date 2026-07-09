@@ -87,3 +87,12 @@ services:
 
       - key: V40_TOP
         value: "3"
+
+      - key: V41_MIN_SCORE
+        value: "50"
+
+      - key: V41_TRACK_LIMIT
+        value: "200"
+
+      - key: TRACK_FILE
+        value: "a100_recommendations.json"

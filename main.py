@@ -39,7 +39,7 @@ def keep_alive_after_error(e):
         time.sleep(60)
 
 
-# ===== A100 v40 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
+# ===== A100 v41 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
 import time as _a100_time
 import re
 import html
@@ -132,7 +132,7 @@ def macro_text():
     else:
         level = "🟢 낮음"
     return (
-        f"🌎 <b>A100 v40 매크로 리스크</b>\n"
+        f"🌎 <b>A100 v41 매크로 리스크</b>\n"
         f"위험도: <b>{risk}%</b> {level}\n"
         f"FOMC D-{int(fomc) if fomc < 90 else '?'} | CPI D-{int(cpi) if cpi < 90 else '?'} | 전쟁위험 {war}%\n"
         f"메모: {note}\n"
@@ -151,7 +151,7 @@ CG_CACHE={}; KR_CACHE=(0,{})
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
-        b=b"A100 v40.1 Port Fix running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
+        b=b"A100 v41.1 Port Fix running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self,*a): return
 def health(): HTTPServer(("0.0.0.0", int(os.getenv("PORT","10000"))), Health).serve_forever()
 def sf(x,d=0.0):
@@ -689,7 +689,7 @@ def v34_base_macro_report():
     m = v34_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v40 매크로 엔진</b>\n"
+        f"🌎 <b>A100 v41 매크로 엔진</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -973,16 +973,16 @@ def elite_sort(res):
 
 def ranktxt(res,n=10):
     ranked = elite_sort(res) if res else []
-    lines = ["⚡ <b>A100 v40 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
+    lines = ["⚡ <b>A100 v41 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
     for i, r in enumerate(ranked[:n], 1):
         lines.append(format_elite(r, i))
     return "\n".join(lines) if ranked else "A100 후보 없음"
 
 def report(symbols,n=10):
     res=scan(symbols)
-    return "A100 결과 없음" if not res else "🔥 <b>A100 v40.1 Port Fix</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
+    return "A100 결과 없음" if not res else "🔥 <b>A100 v41.1 Port Fix</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
 
-async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v40 시작\n/check\n/scan ARKM,SYN,SENT\n/ultimate\n/chart\n/fast\n/cgstatus\n/cgreset\n/macro\n/live\n/news\n/smartnews\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
+async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v41 시작\n/check\n/scan ARKM,SYN,SENT\n/ultimate\n/chart\n/fast\n/cgstatus\n/cgreset\n/macro\n/live\n/news\n/smartnews\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
 async def myid(update,context): await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 async def check(update,context): await update.message.reply_text("A100 분석 중..."); await update.message.reply_text(report(DEFAULT_SYMBOLS,10),parse_mode="HTML")
 async def scan_cmd(update,context):
@@ -996,7 +996,7 @@ async def hot_cmd(update,context):
     await update.message.reply_text(ranktxt(hot,10) if hot else "HOT 후보 없음",parse_mode="HTML")
 
 async def sniper_cmd(update,context):
-    await update.message.reply_text("🎯 A100 v40 스나이퍼 단일 후보 스캔 중...")
+    await update.message.reply_text("🎯 A100 v41 스나이퍼 단일 후보 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🎯 오늘은 스나이퍼 후보 없음\n\n기준 미달이면 억지 추천하지 않습니다.\n무리하게 진입하지 않는 것이 더 좋습니다.")
@@ -1008,7 +1008,7 @@ async def sniper_cmd(update,context):
     ex = explosion_score(r)
     q = quality_score(r)
     text = (
-        "🎯 <b>A100 v40 SNIPER PICK</b>\n\n"
+        "🎯 <b>A100 v41 SNIPER PICK</b>\n\n"
         f"<b>{r.sym}</b> {stars(q)}\n"
         f"추천품질: <b>{q}%</b>\n"
         f"폭발확률: <b>{ex}%</b>\n"
@@ -1028,12 +1028,12 @@ async def sniper_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def elite_cmd(update,context):
-    await update.message.reply_text("🏆 A100 v40 Elite Pick TOP5 스캔 중...")
+    await update.message.reply_text("🏆 A100 v41 Elite Pick TOP5 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🏆 A100 ELITE\n\n오늘은 Elite 후보가 없습니다.\n무리한 진입보다 기다리는 것이 유리합니다.")
         return
-    lines = ["🏆 <b>A100 v40 ELITE PICK TOP5</b>", market_header(), ""]
+    lines = ["🏆 <b>A100 v41 ELITE PICK TOP5</b>", market_header(), ""]
     for i, r in enumerate(res[:5], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1087,19 +1087,19 @@ def send(text):
     if not BOT_TOKEN or not CHAT_ID: log("TOKEN/CHAT_ID missing"); return
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=15)
     except Exception as e: log(f"telegram {e}")
-def morning(): send("🌅 <b>A100 v40 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
+def morning(): send("🌅 <b>A100 v41 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75 or timing_score(r)>=72 or god_score(r)>=70 or real_signal_score(r)>=70)]
-    if hit: send("🚨 <b>A100 v40 조건 감지</b>\n\n"+ranktxt(hit,5))
+    if hit: send("🚨 <b>A100 v41 조건 감지</b>\n\n"+ranktxt(hit,5))
 
 
 
 async def auto_cmd(update,context):
-    await update.message.reply_text("🤖 A100 v40 자동판정 스캔 중...")
+    await update.message.reply_text("🤖 A100 v41 자동판정 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🤖 <b>A100 v40 AUTO THRESHOLD</b>", v34_header(), ""]
+    lines = ["🤖 <b>A100 v41 AUTO THRESHOLD</b>", v34_header(), ""]
     if cand:
         lines.append("✅ 실전 후보")
         for i, r in enumerate(cand[:5], 1):
@@ -1111,7 +1111,7 @@ async def auto_cmd(update,context):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def god_cmd(update,context):
-    await update.message.reply_text("🔥 A100 v40 Auto GOD 실전 단일 후보 스캔 중...")
+    await update.message.reply_text("🔥 A100 v41 Auto GOD 실전 단일 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if god_v34_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), god_score(r), timing_score(r), breakout_score(r)), reverse=True)
@@ -1124,7 +1124,7 @@ async def god_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🔥 <b>A100 v40 GOD PICK</b>\n"
+        "🔥 <b>A100 v41 GOD PICK</b>\n"
         "24시간 내 실전 신호 단일 후보\n\n"
         + v34_header()
         + "\n\n"
@@ -1134,7 +1134,7 @@ async def god_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def real_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v40 Auto 실전신호 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v41 Auto 실전신호 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r)), reverse=True)
@@ -1145,7 +1145,7 @@ async def real_cmd(update,context):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
-    lines = ["⚡ <b>A100 v40 REAL SIGNAL</b>", v34_header(), "24시간 내 터질 가능성 중심\n"]
+    lines = ["⚡ <b>A100 v41 REAL SIGNAL</b>", v34_header(), "24시간 내 터질 가능성 중심\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_real(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1169,14 +1169,14 @@ async def scalp_cmd(update,context):
 
 
 async def timing_cmd(update,context):
-    await update.message.reply_text("⏱ A100 v40 진입 타이밍 후보 스캔 중...")
+    await update.message.reply_text("⏱ A100 v41 진입 타이밍 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if timing_pass(r)]
     cand = sorted(cand, key=lambda r: (timing_score(r), quality_score(r), win_rate_estimate(r)), reverse=True)
     if not cand:
         await update.message.reply_text("⏱ 지금 진입 타이밍 후보 없음\n\n기준 미달이면 기다리는 것이 유리합니다.")
         return
-    lines = ["⏱ <b>A100 v40 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
+    lines = ["⏱ <b>A100 v41 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1191,7 +1191,7 @@ async def now_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🚨 <b>A100 v40 NOW ENTRY</b>\n\n"
+        "🚨 <b>A100 v41 NOW ENTRY</b>\n\n"
         f"<b>{r.sym}</b> {stars(quality_score(r))}\n"
         f"진입타이밍: <b>{timing_score(r)}%</b>\n"
         f"추천품질: <b>{quality_score(r)}%</b>\n"
@@ -1213,7 +1213,7 @@ async def win_cmd(update,context):
     await update.message.reply_text("📊 A100 예상승률 계산 중...")
     res = scan(syms)
     res = sorted(res, key=lambda r: (win_rate_estimate(r), rr_score(r), quality_score(r)), reverse=True)
-    lines = ["📊 <b>A100 v40 예상승률 TOP</b>\n"]
+    lines = ["📊 <b>A100 v41 예상승률 TOP</b>\n"]
     for i, r in enumerate(res[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b>\n"
@@ -1276,47 +1276,47 @@ async def watch_cmd(update,context):
 
 
 async def tenx_cmd(update,context):
-    await update.message.reply_text("💎 A100 v40 10X 잠재 후보 스캔 중...")
+    await update.message.reply_text("💎 A100 v41 10X 잠재 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if tenx_score(r) >= 48 and r.bubble < 70 and r.distribution < 70]
     cand = sorted(cand, key=lambda r: (tenx_score(r), bottom_score(r), whale_score(r)), reverse=True)
     if not cand:
         await update.message.reply_text("💎 10X 잠재 후보 없음")
         return
-    lines = ["💎 <b>A100 v40 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
+    lines = ["💎 <b>A100 v41 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def breakout_cmd(update,context):
-    await update.message.reply_text("🚀 A100 v40 돌파직전 후보 스캔 중...")
+    await update.message.reply_text("🚀 A100 v41 돌파직전 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if breakout_score(r) >= 45 and r.bubble < 75 and r.distribution < 75]
     cand = sorted(cand, key=lambda r: (breakout_score(r), timing_score(r), r.squeeze), reverse=True)
     if not cand:
         await update.message.reply_text("🚀 돌파직전 후보 없음")
         return
-    lines = ["🚀 <b>A100 v40 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
+    lines = ["🚀 <b>A100 v41 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def bottom_cmd(update,context):
-    await update.message.reply_text("🧱 A100 v40 바닥매집 후보 스캔 중...")
+    await update.message.reply_text("🧱 A100 v41 바닥매집 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if bottom_score(r) >= 55 and r.accumulation >= 45 and r.bubble < 65]
     cand = sorted(cand, key=lambda r: (bottom_score(r), r.accumulation, r.smart), reverse=True)
     if not cand:
         await update.message.reply_text("🧱 바닥매집 후보 없음")
         return
-    lines = ["🧱 <b>A100 v40 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
+    lines = ["🧱 <b>A100 v41 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 
-# ===== A100 v40 뉴스/전쟁/고래 AI =====
+# ===== A100 v41 뉴스/전쟁/고래 AI =====
 NEWS_CACHE = {}
 NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
 
@@ -1446,7 +1446,7 @@ def v34_macro_report():
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     titles = "\n".join([f"- {x}" for x in n.get("titles", [])]) or "- 주요 리스크 뉴스 없음"
     return (
-        f"🌎 <b>A100 v40 NEWS/WAR/WHALE AI</b>\n"
+        f"🌎 <b>A100 v41 NEWS/WAR/WHALE AI</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -1489,7 +1489,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v40 자동 매크로 수집 엔진 =====
+# ===== A100 v41 자동 매크로 수집 엔진 =====
 AUTO_MACRO_CACHE = {}
 AUTO_MACRO_TTL = int(os.getenv("AUTO_MACRO_TTL", "900"))
 
@@ -1690,7 +1690,7 @@ def v34_base_macro_report():
     m = v34_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v40 AUTO MACRO LIVE</b>\n"
+        f"🌎 <b>A100 v41 AUTO MACRO LIVE</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'} / GDP D-{int(m['gdp']) if m['gdp'] < 90 else '?'}\n"
@@ -1704,7 +1704,7 @@ def v34_base_macro_report():
 async def events_cmd(update,context):
     m = v34_base_macro_engine()
     text = (
-        "📅 <b>A100 v40 주요 이벤트</b>\n"
+        "📅 <b>A100 v41 주요 이벤트</b>\n"
         f"FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'}\n"
         f"CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'}\n"
         f"PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'}\n"
@@ -1742,7 +1742,7 @@ async def live_cmd(update,context):
     m = v34_macro_engine()
     n = m.get("news_ai", {})
     text = (
-        "📡 <b>A100 v40 LIVE DATA</b>\n"
+        "📡 <b>A100 v41 LIVE DATA</b>\n"
         f"Fear&Greed: {m['fg']} {'(자동)' if os.getenv('AUTO_FEAR_GREED','1')=='1' else '(수동)'}\n"
         f"BTC Dominance Trend: {m['btc_dom']} {'(자동)' if os.getenv('AUTO_MARKET','1')=='1' else '(수동)'}\n"
         f"News Feed: {n.get('feed_count', 0)}개 / NewsRisk {m.get('news_risk', 0)}% / War {m['war']}% / Whale {m['whale']}%\n"
@@ -1753,7 +1753,7 @@ async def live_cmd(update,context):
 
 
 
-# ===== A100 v40 한글 뉴스 요약 / 영향도 / 메타스코어 =====
+# ===== A100 v41 한글 뉴스 요약 / 영향도 / 메타스코어 =====
 SEEN_NEWS = set()
 
 def safe_html(s):
@@ -1972,7 +1972,7 @@ def v34_market_mode():
     return "🟡 Rotation"
 
 
-# ===== A100 v40 클린 한글 뉴스 AI =====
+# ===== A100 v41 클린 한글 뉴스 AI =====
 def clean_html(text):
     text = str(text or "")
     text = re.sub(r"<script.*?</script>", " ", text, flags=re.I | re.S)
@@ -2104,7 +2104,7 @@ def format_news_ko(t, idx=1):
     )
 
 
-# ===== A100 v40.1 Port Fix =====
+# ===== A100 v41.1 Port Fix =====
 def news_source_score(text):
     low = clean_html(text).lower()
     sources = {
@@ -2319,7 +2319,7 @@ async def news_cmd(update,context):
             raw = dedupe_news_list(n.get("raw_titles", [])[:5])
             items = [(news_importance_score(t), t) for t in raw]
         lines = [
-            "📰 <b>A100 v40 클린 한글 뉴스 AI</b>",
+            "📰 <b>A100 v41 클린 한글 뉴스 AI</b>",
             f"뉴스위험 {n.get('news_risk', 0)}% | 전쟁위험 {n.get('war_risk', 0)}% | 고래위험 {n.get('whale_risk', 0)}%",
             f"Feed {n.get('feed_count', 0)}개 | 신뢰도·중요도·수혜피해\n"
         ]
@@ -2332,10 +2332,10 @@ async def news_cmd(update,context):
 
 
 async def final_cmd(update,context):
-    await update.message.reply_text("🧠 A100 v40 메타 AI 점수 스캔 중...")
+    await update.message.reply_text("🧠 A100 v41 메타 AI 점수 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     res = sorted(res, key=lambda r: (v34_meta_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🧠 <b>A100 v40 META AI RANK</b>", f"시장모드: <b>{v34_market_mode()}</b> / 매크로위험 {v34_macro_engine()['risk']}%", ""]
+    lines = ["🧠 <b>A100 v41 META AI RANK</b>", f"시장모드: <b>{v34_market_mode()}</b> / 매크로위험 {v34_macro_engine()['risk']}%", ""]
     for i, r in enumerate(res[:10], 1):
         decision_fn = globals().get("v25_decision") or globals().get("v24_decision") or globals().get("v23_decision")
         decision = decision_fn(r) if decision_fn else "대기"
@@ -2349,7 +2349,7 @@ async def final_cmd(update,context):
 
 async def mode_cmd(update,context):
     await update.message.reply_text(
-        f"🧭 <b>A100 v40 시장모드</b>\n"
+        f"🧭 <b>A100 v41 시장모드</b>\n"
         f"현재: <b>{v34_market_mode()}</b>\n"
         f"매크로위험: {v34_macro_engine()['risk']}%\n"
         f"추천: {'고배율 금지 / 관망 우선' if v34_macro_engine()['risk'] >= 60 else '일반 기준 / 추격매수 금지'}",
@@ -2389,7 +2389,7 @@ async def cleannews_cmd(update,context):
 
 
 
-# ===== A100 v40.1 Port Fix / 429 방지 엔진 =====
+# ===== A100 v41.1 Port Fix / 429 방지 엔진 =====
 CG_429_UNTIL = 0.0
 CG_FAIL_COUNT = 0
 CG_HARD_TTL = int(os.getenv("CG_HARD_TTL", "900"))
@@ -2506,10 +2506,10 @@ def v34_format_pick(r, idx=1):
 
 
 async def fast_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v40 FAST 차트-only 스캔 중...")
+    await update.message.reply_text("⚡ A100 v41 FAST 차트-only 스캔 중...")
     res = scan(top_usdt(FAST_SCAN_LIMIT))
     cand = v34_fast_prefilter(res, 10)
-    lines = ["⚡ <b>A100 v40 FAST FILTER</b>", "CoinGlass 호출 최소화용 1차 후보\n"]
+    lines = ["⚡ <b>A100 v41 FAST FILTER</b>", "CoinGlass 호출 최소화용 1차 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b> | V34 {v34_ultimate_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격 {chase_risk(r)}%\n"
@@ -2537,7 +2537,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v40 Fast Quality =====
+# ===== A100 v41 Evolution Tracker =====
 ULTIMATE_CACHE = {}
 ULTIMATE_TTL = int(os.getenv("ULTIMATE_TTL", "600"))
 
@@ -2628,7 +2628,7 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached[1], parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("🏆 A100 v40 Ultimate AI 최종 후보 스캔 중...")
+    await update.message.reply_text("🏆 A100 v41 Ultimate AI 최종 후보 스캔 중...")
     try:
         limit = min(int(os.getenv("FAST_SCAN_LIMIT", "25")), 30)
         res = scan(top_usdt(limit))
@@ -2643,7 +2643,7 @@ async def ultimate_cmd(update, context):
         cand = sorted(cand, key=lambda r: ultimate_pick_score(r), reverse=True)
 
         lines = [
-            "🏆 <b>A100 v40 ULTIMATE AI</b>",
+            "🏆 <b>A100 v41 ULTIMATE AI</b>",
             ultimate_market_line(),
             "CoinGlass: 429 방지 캐시/쿨다운 우선",
             "",
@@ -2682,7 +2682,7 @@ async def chart_cmd(update, context):
 
 # ===== V35 Missing handler fallback =====
 
-# ===== A100 v40 Fast Quality =====
+# ===== A100 v41 Evolution Tracker =====
 SPEED_CACHE = {}
 SPEED_TTL = int(os.getenv("SPEED_TTL", "300"))
 SPEED_SCAN_LIMIT = int(os.getenv("SPEED_SCAN_LIMIT", "12"))
@@ -2733,14 +2733,14 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("⚡ A100 v40 초고속 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v41 초고속 후보 스캔 중...")
     try:
         # 기존 25~30개 대신 12개만 1차 스캔
         res = scan(top_usdt(SPEED_SCAN_LIMIT))
         cand = sorted(res, key=lambda r: speed_pick_score(r), reverse=True)[:SPEED_FINAL_LIMIT]
 
         lines = [
-            "⚡ <b>A100 v40 SPEED ULTIMATE</b>",
+            "⚡ <b>A100 v41 SPEED ULTIMATE</b>",
             f"스캔: {SPEED_SCAN_LIMIT}개 | 결과캐시 {SPEED_TTL}초 | CoinGlass 호출 최소화",
             "뉴스/매크로는 /news, 정밀분석은 /deep 사용 권장",
             "────────────",
@@ -2757,7 +2757,7 @@ async def ultimate_cmd(update, context):
         speed_cache_set(key, text)
         await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
     except Exception as e:
-        log(f"v40 ultimate error: {e}\n{traceback.format_exc()}")
+        log(f"v41 ultimate error: {e}\n{traceback.format_exc()}")
         await update.message.reply_text(f"초고속 분석 오류: {e}")
 
 async def deep_cmd(update, context):
@@ -2765,7 +2765,7 @@ async def deep_cmd(update, context):
     try:
         res = scan(top_usdt(SPEED_SCAN_LIMIT))
         cand = sorted(res, key=lambda r: ultimate_pick_score(r) if "ultimate_pick_score" in globals() else speed_pick_score(r), reverse=True)[:5]
-        lines = ["🧠 <b>A100 v40 DEEP</b>", "정밀 후보 TOP5\n"]
+        lines = ["🧠 <b>A100 v41 DEEP</b>", "정밀 후보 TOP5\n"]
         for i, r in enumerate(cand, 1):
             if "ultimate_format_one" in globals():
                 lines.append(ultimate_format_one(r, i))
@@ -2784,7 +2784,7 @@ async def cache_cmd(update, context):
     await update.message.reply_text("♻️ 추천 캐시 초기화 완료")
 
 
-# ===== A100 v40 Fast Quality Engine =====
+# ===== A100 v41 Evolution Tracker Engine =====
 # 목표: /ultimate 1~3초 응답. 정밀 분석은 /deep 으로 분리.
 TICKER_CACHE = {"ts": 0, "data": []}
 TICKER_TTL = int(os.getenv("TICKER_TTL", "20"))
@@ -2890,7 +2890,7 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("⚡ A100 v40 초고속 스캔 중...")
+    await update.message.reply_text("⚡ A100 v41 초고속 스캔 중...")
 
     try:
         syms = ultra_symbols(ULTRA_LIMIT)
@@ -2901,7 +2901,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "⚡ <b>A100 v40 ULTRA SPEED</b>",
+            "⚡ <b>A100 v41 ULTRA SPEED</b>",
             f"대상 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {ULTRA_TTL}초",
             "CoinGlass·뉴스 제외 초고속 모드",
             "정밀분석은 /deep",
@@ -2919,7 +2919,7 @@ async def ultimate_cmd(update, context):
         ultra_cache_set(text)
         await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
     except Exception as e:
-        log(f"v40 ultra error: {e}\n{traceback.format_exc()}")
+        log(f"v41 ultra error: {e}\n{traceback.format_exc()}")
         await update.message.reply_text(f"초고속 스캔 오류: {e}")
 
 async def quick_cmd(update, context):
@@ -2936,7 +2936,7 @@ async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     ultra_cached = "있음" if ultra_cache_get() else "없음"
     await update.message.reply_text(
-        f"⚡ <b>A100 v40 속도상태</b>\n"
+        f"⚡ <b>A100 v41 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"Ultimate cache: {ultra_cached}\n"
         f"ULTRA_LIMIT: {ULTRA_LIMIT} / TOP: {ULTRA_TOP}\n"
@@ -2945,7 +2945,7 @@ async def speedstatus_cmd(update, context):
     )
 
 
-# ===== A100 v40 Fast Quality Engine =====
+# ===== A100 v41 Evolution Tracker Engine =====
 # 목표: /quick 1초 내외, /ultimate 3~5초 내외
 HYPER_CACHE = {}
 HYPER_TTL = int(os.getenv("HYPER_TTL", "120"))
@@ -3003,7 +3003,7 @@ def hyper_candidates(limit=None):
 def hyper_quick_text():
     rows = hyper_candidates(HYPER_FINAL_TOP)
     lines = [
-        "⚡ <b>A100 v40 QUICK 1차 후보</b>",
+        "⚡ <b>A100 v41 QUICK 1차 후보</b>",
         "OHLCV 계산 없이 24h 거래대금·거래횟수·변동률 기준",
         "정밀 진입가는 /ultimate",
         "────────────",
@@ -3066,7 +3066,7 @@ async def ultimate_cmd(update, context):
         return
 
     t0 = now_ts()
-    await update.message.reply_text("⚡ A100 v40 Fast Quality 정밀 후보 5개만 계산 중...")
+    await update.message.reply_text("⚡ A100 v41 Evolution Tracker 정밀 후보 5개만 계산 중...")
     try:
         rows = hyper_candidates(HYPER_TICKER_LIMIT)
         syms = [r[1] for r in rows]
@@ -3079,7 +3079,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "⚡ <b>A100 v40 HYPER FAST</b>",
+            "⚡ <b>A100 v41 HYPER FAST</b>",
             f"24h 후보 {len(syms)}개만 정밀계산 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {HYPER_TTL}초",
             "CoinGlass·뉴스는 제외, 속도 우선",
             "정밀 파생수급은 /deep",
@@ -3096,13 +3096,13 @@ async def ultimate_cmd(update, context):
         hyper_cache_set("ultimate", text)
         await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
     except Exception as e:
-        log(f"v40 ultimate error: {e}\n{traceback.format_exc()}")
+        log(f"v41 ultimate error: {e}\n{traceback.format_exc()}")
         await update.message.reply_text(f"ultimate 오류: {e}")
 
 async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     await update.message.reply_text(
-        f"⚡ <b>A100 v40 속도상태</b>\n"
+        f"⚡ <b>A100 v41 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"Hyper cache: {list(HYPER_CACHE.keys())}\n"
         f"후보수: {HYPER_TICKER_LIMIT} / 결과: {HYPER_FINAL_TOP}\n"
@@ -3117,10 +3117,10 @@ async def cache_cmd(update, context):
         ULTIMATE_CACHE.clear()
     except Exception:
         pass
-    await update.message.reply_text("♻️ v40 캐시 초기화 완료")
+    await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
 
-# ===== A100 v40 Fast Quality Engine =====
+# ===== A100 v41 Evolution Tracker Engine =====
 # 핵심: /ultimate 에서 5개 OHLCV를 병렬 계산하여 2~5초 목표
 PARALLEL_WORKERS = int(os.getenv("PARALLEL_WORKERS", "5"))
 V39_LIMIT = int(os.getenv("V39_LIMIT", "5"))
@@ -3128,7 +3128,7 @@ V39_TOP = int(os.getenv("V39_TOP", "3"))
 V39_TTL = int(os.getenv("V39_TTL", "120"))
 V39_CACHE = {}
 
-def v40_cache_get(key):
+def v41_cache_get(key):
     v = V39_CACHE.get(key)
     if not v:
         return None
@@ -3137,10 +3137,10 @@ def v40_cache_get(key):
         return text
     return None
 
-def v40_cache_set(key, text):
+def v41_cache_set(key, text):
     V39_CACHE[key] = (now_ts(), text)
 
-def v40_candidates(limit=None):
+def v41_candidates(limit=None):
     # 24h ticker만으로 1차 후보. stable/과열/저유동성 제거.
     limit = limit or V39_LIMIT
     raw = get_24h_tickers_fast()
@@ -3176,7 +3176,7 @@ def v40_candidates(limit=None):
     rows.sort(reverse=True)
     return rows[:limit]
 
-def v40_scan_one(sym):
+def v41_scan_one(sym):
     # 기존 analyze 함수가 있으면 단일분석 사용, 없으면 scan([sym]) 사용
     try:
         if "analyze" in globals():
@@ -3187,15 +3187,15 @@ def v40_scan_one(sym):
         res = scan([sym])
         return res[0] if res else None
     except Exception as e:
-        log(f"v40_scan_one error {sym}: {e}")
+        log(f"v41_scan_one error {sym}: {e}")
         return None
 
-def v40_parallel_scan(symbols):
+def v41_parallel_scan(symbols):
     results = []
     if not symbols:
         return results
     with ThreadPoolExecutor(max_workers=min(PARALLEL_WORKERS, len(symbols))) as ex:
-        futures = {ex.submit(v40_scan_one, s): s for s in symbols}
+        futures = {ex.submit(v41_scan_one, s): s for s in symbols}
         for fut in as_completed(futures):
             sym = futures[fut]
             try:
@@ -3203,10 +3203,10 @@ def v40_parallel_scan(symbols):
                 if r:
                     results.append(r)
             except Exception as e:
-                log(f"v40 future error {sym}: {e}")
+                log(f"v41 future error {sym}: {e}")
     return results
 
-def v40_score(r):
+def v41_score(r):
     try:
         s = (
             timing_score(r) * 0.31 +
@@ -3222,8 +3222,8 @@ def v40_score(r):
     except Exception:
         return round(getattr(r, "score", 0), 1)
 
-def v40_format(r, idx):
-    score = v40_score(r)
+def v41_format(r, idx):
+    score = v41_score(r)
     medal = ["🥇", "🥈", "🥉"][idx-1] if idx <= 3 else "🏅"
     verdict = "관심" if score >= 60 and chase_risk(r) < 65 else "관망" if score >= 45 else "대기"
     return (
@@ -3235,26 +3235,26 @@ def v40_format(r, idx):
     )
 
 async def ultimate_cmd(update, context):
-    cached = v40_cache_get("ultimate")
+    cached = v41_cache_get("ultimate")
     if cached:
         await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
         return
 
     t0 = now_ts()
-    await update.message.reply_text("🚀 A100 v40 병렬 스캔 중...")
+    await update.message.reply_text("🚀 A100 v41 병렬 스캔 중...")
     try:
-        rows = v40_candidates(V39_LIMIT)
+        rows = v41_candidates(V39_LIMIT)
         syms = [r[1] for r in rows]
         if not syms:
             syms = top_usdt(V39_LIMIT)
 
         # 병렬 OHLCV 분석
-        res = v40_parallel_scan(syms)
-        res = sorted(res, key=lambda r: v40_score(r), reverse=True)[:V39_TOP]
+        res = v41_parallel_scan(syms)
+        res = sorted(res, key=lambda r: v41_score(r), reverse=True)[:V39_TOP]
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🚀 <b>A100 v40 PARALLEL SPEED</b>",
+            "🚀 <b>A100 v41 PARALLEL SPEED</b>",
             f"후보 {len(syms)}개 병렬계산 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {V39_TTL}초",
             f"workers {PARALLEL_WORKERS} | CoinGlass·뉴스 제외",
             "정밀 파생수급은 /deep",
@@ -3265,25 +3265,25 @@ async def ultimate_cmd(update, context):
             lines.append("현재 후보 없음")
         else:
             for i, r in enumerate(res, 1):
-                lines.append(v40_format(r, i))
+                lines.append(v41_format(r, i))
                 lines.append("────────────")
 
         text = "\n".join(lines)
-        v40_cache_set("ultimate", text)
+        v41_cache_set("ultimate", text)
         await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
     except Exception as e:
-        log(f"v40 ultimate error: {e}\n{traceback.format_exc()}")
+        log(f"v41 ultimate error: {e}\n{traceback.format_exc()}")
         await update.message.reply_text(f"ultimate 오류: {e}")
 
 async def quick_cmd(update, context):
-    cached = v40_cache_get("quick")
+    cached = v41_cache_get("quick")
     if cached:
         await update.message.reply_text(cached, parse_mode="HTML")
         return
     try:
-        rows = v40_candidates(5)
+        rows = v41_candidates(5)
         lines = [
-            "⚡ <b>A100 v40 QUICK</b>",
+            "⚡ <b>A100 v41 QUICK</b>",
             "24h 티커만 사용 / 즉시 후보",
             "진입가 계산은 /ultimate",
             "────────────",
@@ -3297,7 +3297,7 @@ async def quick_cmd(update, context):
                 f"점수 {round(score,1)} | 24h {pct:+.2f}% | 거래대금 {round(qv/100000000,1)}억 | 거래수 {trades:,}\n"
             )
         text = "\n".join(lines)
-        v40_cache_set("quick", text)
+        v41_cache_set("quick", text)
         await update.message.reply_text(text, parse_mode="HTML")
     except Exception as e:
         await update.message.reply_text(f"quick 오류: {e}")
@@ -3305,7 +3305,7 @@ async def quick_cmd(update, context):
 async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     await update.message.reply_text(
-        f"🚀 <b>A100 v40 속도상태</b>\n"
+        f"🚀 <b>A100 v41 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"V39 cache: {list(V39_CACHE.keys())}\n"
         f"후보수 {V39_LIMIT} / TOP {V39_TOP} / workers {PARALLEL_WORKERS}\n"
@@ -3321,10 +3321,10 @@ async def cache_cmd(update, context):
         ULTIMATE_CACHE.clear()
     except Exception:
         pass
-    await update.message.reply_text("♻️ v40 캐시 초기화 완료")
+    await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
 
-# ===== A100 v40 Fast Quality Engine =====
+# ===== A100 v41 Evolution Tracker Engine =====
 KLINE_RESULT_CACHE = {}
 KLINE_RESULT_TTL = int(os.getenv("KLINE_RESULT_TTL", "60"))
 V40_TTL = int(os.getenv("V40_TTL", "120"))
@@ -3332,7 +3332,7 @@ V40_LIMIT = int(os.getenv("V40_LIMIT", "5"))
 V40_TOP = int(os.getenv("V40_TOP", "3"))
 V40_CACHE = {}
 
-def v40_cache_get(key):
+def v41_cache_get(key):
     v = V40_CACHE.get(key)
     if not v:
         return None
@@ -3341,26 +3341,26 @@ def v40_cache_get(key):
         return text
     return None
 
-def v40_cache_set(key, text):
+def v41_cache_set(key, text):
     V40_CACHE[key] = (now_ts(), text)
 
-def v40_cached_scan_one(sym):
+def v41_cached_scan_one(sym):
     v = KLINE_RESULT_CACHE.get(sym)
     if v:
         ts, obj = v
         if now_ts() - ts <= KLINE_RESULT_TTL:
             return obj
-    r = v40_scan_one(sym) if "v40_scan_one" in globals() else v39_scan_one(sym)
+    r = v41_scan_one(sym) if "v41_scan_one" in globals() else v39_scan_one(sym)
     if r:
         KLINE_RESULT_CACHE[sym] = (now_ts(), r)
     return r
 
-def v40_parallel_scan(symbols):
+def v41_parallel_scan(symbols):
     results = []
     if not symbols:
         return results
     with ThreadPoolExecutor(max_workers=min(PARALLEL_WORKERS, len(symbols))) as ex:
-        futures = {ex.submit(v40_cached_scan_one, s): s for s in symbols}
+        futures = {ex.submit(v41_cached_scan_one, s): s for s in symbols}
         for fut in as_completed(futures):
             sym = futures[fut]
             try:
@@ -3368,10 +3368,10 @@ def v40_parallel_scan(symbols):
                 if r:
                     results.append(r)
             except Exception as e:
-                log(f"v40 future error {sym}: {e}")
+                log(f"v41 future error {sym}: {e}")
     return results
 
-def v40_score(r):
+def v41_score(r):
     try:
         s = (
             timing_score(r) * 0.28 +
@@ -3389,7 +3389,7 @@ def v40_score(r):
     except Exception:
         return round(getattr(r, "score", 0), 1)
 
-def v40_grade(score):
+def v41_grade(score):
     if score >= 75:
         return "🟢 S급"
     if score >= 62:
@@ -3398,8 +3398,8 @@ def v40_grade(score):
         return "🟠 B급"
     return "⚪ 관찰"
 
-def v40_entry_judgement(r):
-    score = v40_score(r)
+def v41_entry_judgement(r):
+    score = v41_score(r)
     chase = chase_risk(r)
     if score >= 70 and chase < 55:
         return "분할진입 가능"
@@ -3409,7 +3409,7 @@ def v40_entry_judgement(r):
         return "추격 금지"
     return "관망"
 
-def v40_reason(r):
+def v41_reason(r):
     reasons = []
     try:
         if bottom_score(r) >= 60:
@@ -3432,7 +3432,7 @@ def v40_reason(r):
         pass
     return " / ".join(reasons[:4]) if reasons else "추가 확인 필요"
 
-def v40_risk_note(r):
+def v41_risk_note(r):
     try:
         if chase_risk(r) >= 70:
             return "급등 후 추격 위험이 높아 손절 짧게"
@@ -3444,40 +3444,40 @@ def v40_risk_note(r):
     except Exception:
         return "리스크 관리 필요"
 
-def v40_format(r, idx):
-    score = v40_score(r)
+def v41_format(r, idx):
+    score = v41_score(r)
     medal = ["🥇", "🥈", "🥉"][idx-1] if idx <= 3 else "🏅"
     return (
-        f"{medal} <b>{r.sym}</b> {stars(score)} {v40_grade(score)}\n"
-        f"AI점수 <b>{score}%</b> | 진입판단 <b>{v40_entry_judgement(r)}</b>\n"
+        f"{medal} <b>{r.sym}</b> {stars(score)} {v41_grade(score)}\n"
+        f"AI점수 <b>{score}%</b> | 진입판단 <b>{v41_entry_judgement(r)}</b>\n"
         f"타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 매집 {bottom_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
         f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
         f"🔴 손절 <code>{r.stop}</code>\n"
         f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
-        f"🧠 이유: {v40_reason(r)}\n"
-        f"⚠️ 리스크: {v40_risk_note(r)}\n"
+        f"🧠 이유: {v41_reason(r)}\n"
+        f"⚠️ 리스크: {v41_risk_note(r)}\n"
     )
 
 async def ultimate_cmd(update, context):
-    cached = v40_cache_get("ultimate")
+    cached = v41_cache_get("ultimate")
     if cached:
         await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
         return
 
     t0 = now_ts()
-    await update.message.reply_text("🚀 A100 v40 빠른 추천/품질분석 중...")
+    await update.message.reply_text("🚀 A100 v41 빠른 추천/품질분석 중...")
     try:
-        rows = v40_candidates(V40_LIMIT) if "v40_candidates" in globals() else v39_candidates(V40_LIMIT)
+        rows = v41_candidates(V40_LIMIT) if "v41_candidates" in globals() else v39_candidates(V40_LIMIT)
         syms = [r[1] for r in rows]
         if not syms:
             syms = top_usdt(V40_LIMIT)
 
-        res = v40_parallel_scan(syms)
-        res = sorted(res, key=lambda r: v40_score(r), reverse=True)[:V40_TOP]
+        res = v41_parallel_scan(syms)
+        res = sorted(res, key=lambda r: v41_score(r), reverse=True)[:V40_TOP]
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🚀 <b>A100 v40 FAST QUALITY</b>",
+            "🚀 <b>A100 v41 FAST QUALITY</b>",
             f"후보 {len(syms)}개 병렬계산 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {V40_TTL}초",
             f"OHLCV 캐시 {KLINE_RESULT_TTL}초 | workers {PARALLEL_WORKERS}",
             "정밀 파생수급은 /deep",
@@ -3488,25 +3488,25 @@ async def ultimate_cmd(update, context):
             lines.append("현재 후보 없음")
         else:
             for i, r in enumerate(res, 1):
-                lines.append(v40_format(r, i))
+                lines.append(v41_format(r, i))
                 lines.append("────────────")
 
         text = "\n".join(lines)
-        v40_cache_set("ultimate", text)
+        v41_cache_set("ultimate", text)
         await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
     except Exception as e:
-        log(f"v40 ultimate error: {e}\n{traceback.format_exc()}")
+        log(f"v41 ultimate error: {e}\n{traceback.format_exc()}")
         await update.message.reply_text(f"ultimate 오류: {e}")
 
 async def quick_cmd(update, context):
-    cached = v40_cache_get("quick")
+    cached = v41_cache_get("quick")
     if cached:
         await update.message.reply_text(cached, parse_mode="HTML")
         return
     try:
-        rows = v40_candidates(5) if "v40_candidates" in globals() else v39_candidates(5)
+        rows = v41_candidates(5) if "v41_candidates" in globals() else v39_candidates(5)
         lines = [
-            "⚡ <b>A100 v40 QUICK</b>",
+            "⚡ <b>A100 v41 QUICK</b>",
             "24h 티커 기준 즉시 후보",
             "진입/손절은 /ultimate",
             "────────────",
@@ -3520,7 +3520,7 @@ async def quick_cmd(update, context):
                 f"점수 {round(score,1)} | 24h {pct:+.2f}% | 거래대금 {round(qv/100000000,1)}억 | 거래수 {trades:,}\n"
             )
         text = "\n".join(lines)
-        v40_cache_set("quick", text)
+        v41_cache_set("quick", text)
         await update.message.reply_text(text, parse_mode="HTML")
     except Exception as e:
         await update.message.reply_text(f"quick 오류: {e}")
@@ -3528,7 +3528,7 @@ async def quick_cmd(update, context):
 async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     await update.message.reply_text(
-        f"🚀 <b>A100 v40 속도상태</b>\n"
+        f"🚀 <b>A100 v41 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"OHLCV result cache: {len(KLINE_RESULT_CACHE)}개\n"
         f"V40 cache: {list(V40_CACHE.keys())}\n"
@@ -3547,9 +3547,303 @@ async def cache_cmd(update, context):
         ULTIMATE_CACHE.clear()
     except Exception:
         pass
-    await update.message.reply_text("♻️ v40 캐시 초기화 완료")
+    await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
-# ===== A100 v40 Python 3.14 EventLoop Fix =====
+
+# ===== A100 v41 Evolution Tracker =====
+# 추천 기록 + 성과 추적 + 신뢰도/등급 + 리포트 기반
+import json
+
+TRACK_FILE = os.getenv("TRACK_FILE", "a100_recommendations.json")
+V41_MIN_SCORE = float(os.getenv("V41_MIN_SCORE", "50"))
+V41_TRACK_LIMIT = int(os.getenv("V41_TRACK_LIMIT", "200"))
+
+def v41_load_records():
+    try:
+        if os.path.exists(TRACK_FILE):
+            with open(TRACK_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+    except Exception as e:
+        log(f"track load error: {e}")
+    return []
+
+def v41_save_records(records):
+    try:
+        records = records[-V41_TRACK_LIMIT:]
+        with open(TRACK_FILE, "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log(f"track save error: {e}")
+
+def v41_price(sym):
+    try:
+        url = "https://api.binance.com/api/v3/ticker/price"
+        return float(requests.get(url, params={"symbol": sym}, timeout=5).json().get("price", 0))
+    except Exception:
+        return 0.0
+
+def v41_confidence(r):
+    try:
+        score = v41_score(r) if "v41_score" in globals() else v40_score(r)
+        conf = score
+        if timing_score(r) >= 55: conf += 6
+        if breakout_score(r) >= 50: conf += 5
+        if bottom_score(r) >= 55: conf += 5
+        if win_rate_estimate(r) >= 55: conf += 4
+        if chase_risk(r) >= 65: conf -= 12
+        if getattr(r, "vol_ratio", 1) >= 1.5: conf += 4
+        return round(max(0, min(99, conf)), 1)
+    except Exception:
+        return 0
+
+def v41_grade(score, conf=None):
+    conf = score if conf is None else conf
+    x = (score * 0.65 + conf * 0.35)
+    if x >= 82: return "🟢 A+"
+    if x >= 72: return "🟢 A"
+    if x >= 62: return "🟡 B+"
+    if x >= 52: return "🟠 B"
+    return "⚪ C"
+
+def v41_market_mode():
+    try:
+        raw = get_24h_tickers_fast()
+        btc = next((x for x in raw if x.get("symbol") == "BTCUSDT"), {})
+        eth = next((x for x in raw if x.get("symbol") == "ETHUSDT"), {})
+        btc_pct = float(btc.get("priceChangePercent", 0) or 0)
+        eth_pct = float(eth.get("priceChangePercent", 0) or 0)
+        if btc_pct > 1.2 and eth_pct > 1.2:
+            return "🟢 RISK ON"
+        if btc_pct < -1.5 or eth_pct < -2.0:
+            return "🔴 RISK OFF"
+        return "🟡 중립"
+    except Exception:
+        return "🟡 중립"
+
+def v41_result_status(rec, cur):
+    try:
+        entry = float(rec.get("entry", 0))
+        stop = float(rec.get("stop", 0))
+        t1 = float(rec.get("target1", 0))
+        if not entry or not cur:
+            return ("대기", 0)
+        pnl = (cur - entry) / entry * 100
+        if cur >= t1:
+            return ("성공", pnl)
+        if stop and cur <= stop:
+            return ("실패", pnl)
+        return ("진행중", pnl)
+    except Exception:
+        return ("대기", 0)
+
+def v41_record_pick(r, rank):
+    try:
+        score = v41_score(r) if "v41_score" in globals() else v40_score(r)
+        conf = v41_confidence(r)
+        records = v41_load_records()
+        # 10분 내 같은 심볼 중복 저장 방지
+        now = now_ts()
+        for rec in records[-20:]:
+            if rec.get("symbol") == r.sym and now - float(rec.get("ts", 0)) < 600:
+                return
+        entry = float(r.entry_low)
+        rec = {
+            "ts": now,
+            "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
+            "symbol": r.sym,
+            "rank": rank,
+            "score": score,
+            "confidence": conf,
+            "grade": v41_grade(score, conf),
+            "entry": entry,
+            "entry_high": float(r.entry_high),
+            "stop": float(r.stop),
+            "target1": float(r.target1),
+            "target2": float(r.target2),
+            "reason": v41_reason(r) if "v41_reason" in globals() else v40_reason(r),
+            "market_mode": v41_market_mode(),
+        }
+        records.append(rec)
+        v41_save_records(records)
+    except Exception as e:
+        log(f"record pick error: {e}")
+
+def v41_score(r):
+    try:
+        base = v40_score(r) if "v40_score" in globals() else v39_score(r)
+        # 시장모드에 따라 과열/저점 후보 보정
+        mode = v41_market_mode()
+        if "RISK OFF" in mode and not r.sym.startswith(("BTC", "ETH")):
+            base -= 5
+        if chase_risk(r) >= 70:
+            base = min(base, 55)
+        return round(max(0, min(100, base)), 1)
+    except Exception:
+        return round(getattr(r, "score", 0), 1)
+
+def v41_reason(r):
+    arr = []
+    try:
+        if bottom_score(r) >= 60: arr.append("매집 강함")
+        elif bottom_score(r) >= 45: arr.append("매집 관찰")
+        if breakout_score(r) >= 55: arr.append("돌파 임박")
+        elif breakout_score(r) >= 40: arr.append("저항 근접")
+        if timing_score(r) >= 55: arr.append("타이밍 양호")
+        if getattr(r, "vol_ratio", 1) >= 1.5: arr.append("거래량 증가")
+        if chase_risk(r) >= 65: arr.append("추격주의")
+    except Exception:
+        pass
+    return " / ".join(arr[:4]) if arr else "추가 확인 필요"
+
+def v41_format(r, idx):
+    score = v41_score(r)
+    conf = v41_confidence(r)
+    medal = ["🥇", "🥈", "🥉"][idx-1] if idx <= 3 else "🏅"
+    entry_j = v40_entry_judgement(r) if "v40_entry_judgement" in globals() else "관망"
+    return (
+        f"{medal} <b>{r.sym}</b> {stars(score)} {v41_grade(score, conf)}\n"
+        f"AI점수 <b>{score}%</b> | 신뢰도 <b>{conf}%</b> | 진입판단 <b>{entry_j}</b>\n"
+        f"타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 매집 {bottom_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"🔴 손절 <code>{r.stop}</code>\n"
+        f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+        f"🧠 이유: {v41_reason(r)}\n"
+        f"⚠️ 리스크: {v40_risk_note(r) if 'v40_risk_note' in globals() else '손절선 준수'}\n"
+    )
+
+async def ultimate_cmd(update, context):
+    cached = v41_cache_get("ultimate") if "v41_cache_get" in globals() else None
+    if cached:
+        await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    t0 = now_ts()
+    await update.message.reply_text("🧬 A100 v41 진화형 추천/기록 분석 중...")
+    try:
+        rows = v40_candidates(V40_LIMIT) if "v40_candidates" in globals() else v39_candidates(V40_LIMIT)
+        syms = [r[1] for r in rows] or top_usdt(V40_LIMIT)
+
+        res = v40_parallel_scan(syms) if "v40_parallel_scan" in globals() else v39_parallel_scan(syms)
+        res = sorted(res, key=lambda r: v41_score(r), reverse=True)
+        res = [r for r in res if v41_score(r) >= V41_MIN_SCORE][:V40_TOP]
+        elapsed = round(now_ts() - t0, 1)
+
+        lines = [
+            "🧬 <b>A100 v41 EVOLUTION AI</b>",
+            f"시장상태: <b>{v41_market_mode()}</b>",
+            f"후보 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초 | 추천기록 자동저장",
+            f"50점 미만 제외 | 정밀 파생수급은 /deep",
+            "────────────",
+            ""
+        ]
+        if not res:
+            lines.append("현재 50점 이상 후보 없음. 무리한 진입보다 대기.")
+        else:
+            for i, r in enumerate(res, 1):
+                lines.append(v41_format(r, i))
+                lines.append("────────────")
+                v41_record_pick(r, i)
+
+        text = "\n".join(lines)
+        try:
+            v40_cache_set("ultimate", text)
+        except Exception:
+            pass
+        await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
+    except Exception as e:
+        log(f"v41 ultimate error: {e}\n{traceback.format_exc()}")
+        await update.message.reply_text(f"ultimate 오류: {e}")
+
+async def report_cmd(update, context):
+    records = v41_load_records()
+    if not records:
+        await update.message.reply_text("📊 아직 추천 기록이 없습니다. /ultimate 실행 후 다시 확인하세요.")
+        return
+
+    recent = records[-30:]
+    done = []
+    active = []
+    for rec in recent:
+        cur = v41_price(rec.get("symbol", ""))
+        status, pnl = v41_result_status(rec, cur)
+        item = (rec, status, pnl, cur)
+        if status in ("성공", "실패"):
+            done.append(item)
+        else:
+            active.append(item)
+
+    wins = sum(1 for _, st, _, _ in done if st == "성공")
+    losses = sum(1 for _, st, _, _ in done if st == "실패")
+    avg = round(sum(p for _,_,p,_ in done) / len(done), 2) if done else 0
+    winrate = round(wins / len(done) * 100, 1) if done else 0
+
+    lines = [
+        "📊 <b>A100 v41 성과 리포트</b>",
+        f"최근 기록 {len(recent)}개 | 완료 {len(done)}개 | 진행중 {len(active)}개",
+        f"승률 {winrate}% | 성공 {wins} / 실패 {losses} | 평균손익 {avg:+.2f}%",
+        "────────────",
+        "🏆 <b>최근 완료</b>"
+    ]
+    for rec, st, pnl, cur in done[-5:]:
+        emoji = "✅" if st == "성공" else "❌"
+        lines.append(f"{emoji} {rec['symbol']} | {st} | {pnl:+.2f}% | {rec.get('grade','')}")
+    lines.append("────────────")
+    lines.append("⏳ <b>진행중</b>")
+    for rec, st, pnl, cur in active[-5:]:
+        lines.append(f"• {rec['symbol']} | 현재 {pnl:+.2f}% | 목표 {rec.get('target1')} | 손절 {rec.get('stop')}")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def history_cmd(update, context):
+    records = v41_load_records()[-15:]
+    if not records:
+        await update.message.reply_text("추천 히스토리 없음")
+        return
+    lines = ["🧾 <b>A100 추천 히스토리</b>"]
+    for rec in reversed(records):
+        cur = v41_price(rec.get("symbol",""))
+        st, pnl = v41_result_status(rec, cur)
+        lines.append(f"{rec.get('time','')} | {rec['symbol']} | {rec.get('grade','')} | {st} {pnl:+.2f}%")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def stats_cmd(update, context):
+    records = v41_load_records()
+    total = len(records)
+    if not total:
+        await update.message.reply_text("통계 데이터 없음")
+        return
+    grade_count = {}
+    reason_count = {}
+    for r in records:
+        grade_count[r.get("grade","?")] = grade_count.get(r.get("grade","?"), 0) + 1
+        for part in str(r.get("reason","")).split("/"):
+            p = part.strip()
+            if p:
+                reason_count[p] = reason_count.get(p, 0) + 1
+    top_reasons = sorted(reason_count.items(), key=lambda x: x[1], reverse=True)[:5]
+    lines = [
+        "🧠 <b>A100 v41 AI 통계</b>",
+        f"누적 추천기록: {total}개",
+        f"등급분포: " + " / ".join([f"{k}:{v}" for k,v in grade_count.items()]),
+        "────────────",
+        "가장 많이 나온 신호 TOP5"
+    ]
+    for i,(k,v) in enumerate(top_reasons,1):
+        lines.append(f"{i}. {k} {v}회")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def cache_cmd(update, context):
+    try:
+        V40_CACHE.clear()
+        KLINE_RESULT_CACHE.clear()
+        V39_CACHE.clear()
+        HYPER_CACHE.clear()
+        SPEED_CACHE.clear()
+    except Exception:
+        pass
+    await update.message.reply_text("♻️ v41 캐시 초기화 완료")
+
+# ===== A100 v41 Python 3.14 EventLoop Fix =====
 async def error_handler(update, context):
     try:
         log(f"Telegram error: {context.error}")
@@ -3581,7 +3875,10 @@ async def run_bot_async():
         ("deep", deep_cmd),
         ("cache", cache_cmd),
         ("quick", quick_cmd),
-        ("speed", speedstatus_cmd)]
+        ("speed", speedstatus_cmd),
+        ("report", report_cmd),
+        ("history", history_cmd),
+        ("stats", stats_cmd)]
 
     for name, fn in handlers:
         if fn is not None:
@@ -3607,7 +3904,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v40 Fast Quality worker running...", flush=True)
+    print("A100 v41 Evolution Tracker worker running...", flush=True)
     try:
         asyncio.run(run_bot_async())
     except Exception as e:
