@@ -13,6 +13,6 @@ services:
       - key: COINGLASS_API_KEY
         sync: false
       - key: DEFAULT_SYMBOLS
-        value: ARKM,SYN,SENT,VANRY,ALT
+        value: BTC,ETH,SOL,ARKM,SYN,SENT
       - key: SCORE_ALERT
         value: "80"
