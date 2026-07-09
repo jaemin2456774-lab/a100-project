@@ -28,6 +28,8 @@ services:
         value: "900"
       - key: NEWS_TTL
         value: "900"
+      - key: ULTIMATE_TTL
+        value: "600"
       - key: AUTO_NEWS
         value: "1"
       - key: AUTO_MARKET
