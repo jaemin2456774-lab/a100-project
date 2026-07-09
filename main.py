@@ -15,11 +15,12 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-DEFAULT_SYMBOLS = [x.strip().upper() for x in os.getenv("DEFAULT_SYMBOLS", "BTC,ETH,SOL,ARKM,SYN,SENT").split(",") if x.strip()]
+DEFAULT_SYMBOLS = [x.strip().upper() for x in os.getenv(
+    "DEFAULT_SYMBOLS",
+    "BTC,ETH,SOL,ARKM,SYN,SENT,ALT,VANRY,CELO,COTI,NFP,TIA,INJ,WLD,ZEC"
+).split(",") if x.strip()]
 SCORE_ALERT = float(os.getenv("SCORE_ALERT", "80"))
 
-# api.binance.com / fapi.binance.com are blocked on Render US region.
-# data-api.binance.vision is Binance public market-data only endpoint.
 BINANCE_MARKET = "https://data-api.binance.vision"
 
 def log(msg: str):
@@ -27,7 +28,7 @@ def log(msg: str):
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b"A100 Binance Vision worker is running"
+        body = b"A100 v9 top10 alert worker is running"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -51,18 +52,43 @@ def safe_float(x: Any, default: float = 0.0) -> float:
 def pct(new: float, old: float) -> float:
     return 0.0 if old == 0 else (new - old) / abs(old) * 100.0
 
-def grade(score: float) -> str:
-    if score >= 90: return "A+"
-    if score >= 80: return "A"
-    if score >= 70: return "B"
-    if score >= 60: return "C"
-    return "PASS"
-
 def avg(values: List[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 def sma(values: List[float], n: int) -> Optional[float]:
     return sum(values[-n:]) / n if len(values) >= n else None
+
+def rsi(closes: List[float], period: int = 14) -> float:
+    if len(closes) <= period + 1:
+        return 50.0
+    gains, losses = [], []
+    for i in range(-period, 0):
+        diff = closes[i] - closes[i-1]
+        gains.append(max(diff, 0))
+        losses.append(abs(min(diff, 0)))
+    ag, al = avg(gains), avg(losses)
+    if al == 0:
+        return 100.0
+    rs = ag / al
+    return 100 - (100 / (1 + rs))
+
+def ema(values: List[float], n: int) -> List[float]:
+    if not values:
+        return []
+    k = 2 / (n + 1)
+    out = [values[0]]
+    for v in values[1:]:
+        out.append(v * k + out[-1] * (1 - k))
+    return out
+
+def macd_hist(closes: List[float]) -> float:
+    if len(closes) < 35:
+        return 0.0
+    e12 = ema(closes, 12)
+    e26 = ema(closes, 26)
+    macd = [a - b for a, b in zip(e12[-len(e26):], e26)]
+    sig = ema(macd, 9)
+    return macd[-1] - sig[-1]
 
 def get_json(url: str, params=None):
     r = requests.get(url, params=params or {}, timeout=15)
@@ -82,6 +108,20 @@ def get_klines(pair: str, interval: str = "4h", limit: int = 120) -> List[Dict[s
         "taker_buy_quote": safe_float(r[10]),
     } for r in rows]
 
+def get_top_usdt(limit: int = 40) -> List[str]:
+    data = get_json(f"{BINANCE_MARKET}/api/v3/ticker/24hr")
+    rows = []
+    for x in data:
+        sym = x.get("symbol", "")
+        if not sym.endswith("USDT"):
+            continue
+        if any(bad in sym for bad in ["UPUSDT", "DOWNUSDT", "BULLUSDT", "BEARUSDT"]):
+            continue
+        qv = safe_float(x.get("quoteVolume"))
+        rows.append((sym.replace("USDT", ""), qv))
+    rows.sort(key=lambda x: x[1], reverse=True)
+    return [s for s, _ in rows[:limit]]
+
 @dataclass
 class Result:
     pair: str
@@ -91,10 +131,22 @@ class Result:
     trend: float
     volume: float
     buy_pressure: float
+    momentum: float
     risk: float
     vol_ratio: float
     buy_ratio: float
+    rsi14: float
+    macd: float
+    support: float
+    resistance: float
     note: str
+
+def grade(score: float) -> str:
+    if score >= 90: return "S"
+    if score >= 80: return "A"
+    if score >= 70: return "B"
+    if score >= 60: return "C"
+    return "PASS"
 
 def analyze(symbol: str, interval: str = "4h") -> Result:
     symbol = symbol.upper().replace("USDT", "")
@@ -102,10 +154,11 @@ def analyze(symbol: str, interval: str = "4h") -> Result:
     log(f"analyze start: {pair}")
 
     kl = get_klines(pair, interval, 120)
-    if len(kl) < 30:
+    if len(kl) < 60:
         raise RuntimeError(f"{pair} kline data too short: {len(kl)}")
 
     closes = [x["close"] for x in kl]
+    highs = [x["high"] for x in kl]
     lows = [x["low"] for x in kl]
     qvols = [x["quote_volume"] for x in kl]
     buyq = [x["taker_buy_quote"] for x in kl]
@@ -115,7 +168,9 @@ def analyze(symbol: str, interval: str = "4h") -> Result:
     ma20 = sma(closes, 20) or price
     ma60 = sma(closes, 60) or price
     recent_low = min(lows[-30:])
-    prev_low = min(lows[-60:-30]) if len(lows) >= 60 else recent_low
+    prev_low = min(lows[-60:-30])
+    support = min(lows[-20:])
+    resistance = max(highs[-20:])
 
     trend = 0
     if price > ma5: trend += 8
@@ -126,7 +181,7 @@ def analyze(symbol: str, interval: str = "4h") -> Result:
     trend = min(trend, 35)
 
     vol_now = avg(qvols[-3:])
-    vol_base = avg(qvols[-60:-15]) if len(qvols) >= 60 else avg(qvols[:-3])
+    vol_base = avg(qvols[-60:-15])
     vol_ratio = vol_now / vol_base if vol_base else 1.0
     volume = min(max((vol_ratio - 1) * 12, 0), 25)
 
@@ -137,23 +192,39 @@ def analyze(symbol: str, interval: str = "4h") -> Result:
     if buy_ratio > 0.56: buy_pressure += 7
     if buy_ratio > 0.60: buy_pressure += 5
 
-    chg_24 = pct(closes[-1], closes[-7]) if len(closes) >= 7 else 0
+    rsi14 = rsi(closes, 14)
+    mh = macd_hist(closes)
+    momentum = 0
+    if 45 <= rsi14 <= 68: momentum += 7
+    if rsi14 > 68: momentum += 2
+    if mh > 0: momentum += 8
+    if closes[-1] > closes[-4]: momentum += 5
+
+    chg_24 = pct(closes[-1], closes[-7])
     risk = 20
     if chg_24 > 25: risk -= 6
     if chg_24 > 45: risk -= 8
     if price < ma20: risk -= 5
     risk = max(risk, 0)
 
-    score = trend + volume + buy_pressure + risk
+    score = trend + volume + buy_pressure + momentum + risk
 
     notes = []
     if vol_ratio < 1.5: notes.append("거래량 부족")
     if buy_ratio < 0.52: notes.append("매수압 약함")
     if price < ma20: notes.append("MA20 아래")
+    if mh <= 0: notes.append("MACD 약함")
     if chg_24 > 35: notes.append("단기 급등 리스크")
-    if not notes: notes.append("구조 양호")
+    if not notes: notes.append("A100 조건 양호")
 
-    result = Result(pair, round(price, 8), round(score, 2), grade(score), round(trend, 2), round(volume, 2), round(buy_pressure, 2), round(risk, 2), round(vol_ratio, 2), round(buy_ratio, 3), " / ".join(notes))
+    result = Result(
+        pair, round(price, 8), round(score, 2), grade(score),
+        round(trend, 2), round(volume, 2), round(buy_pressure, 2),
+        round(momentum, 2), round(risk, 2), round(vol_ratio, 2),
+        round(buy_ratio, 3), round(rsi14, 2), round(mh, 8),
+        round(support, 8), round(resistance, 8),
+        " / ".join(notes)
+    )
     log(f"analyze done: {pair} score={result.score}")
     return result
 
@@ -166,7 +237,7 @@ def scan(symbols: List[str]) -> List[Result]:
         except Exception as e:
             log(f"{s} error: {e}")
             log(traceback.format_exc())
-        time.sleep(0.15)
+        time.sleep(0.12)
     return sorted(out, key=lambda x: x.score, reverse=True)
 
 def format_result(r: Result) -> str:
@@ -174,26 +245,27 @@ def format_result(r: Result) -> str:
         f"📊 <b>{r.pair}</b>\n"
         f"가격: <code>{r.price}</code>\n"
         f"점수: <b>{r.score}</b> / 등급: <b>{r.grade}</b>\n"
-        f"거래량: {r.vol_ratio}x | 매수비율: {r.buy_ratio}\n"
-        f"차트 {r.trend}/35 | 거래량 {r.volume}/25 | 매수압 {r.buy_pressure}/20 | 리스크 {r.risk}/20\n"
+        f"지지: <code>{r.support}</code> | 저항: <code>{r.resistance}</code>\n"
+        f"거래량: {r.vol_ratio}x | 매수비율: {r.buy_ratio} | RSI: {r.rsi14}\n"
+        f"차트 {r.trend}/35 | 거래량 {r.volume}/25 | 매수압 {r.buy_pressure}/20 | 모멘텀 {r.momentum}/20 | 리스크 {r.risk}/20\n"
         f"진단: {r.note}\n"
     )
 
-def build_report(symbols: List[str]) -> str:
+def build_report(symbols: List[str], top_n: int = 10) -> str:
     results = scan(symbols)
     if not results:
-        return "A100 결과 없음\n\nBinance Vision 데이터 실패. Render 로그 error 확인 필요"
-    return "🔥 <b>A100 리포트</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:10])
+        return "A100 결과 없음\n\nRender 로그 error 확인 필요"
+    return "🔥 <b>A100 리포트</b>\n\n" + "\n---\n".join(format_result(r) for r in results[:top_n])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 봇 시작\n/check\n/scan ARKM,SYN,SENT\n/myid")
+    await update.message.reply_text("A100 봇 시작\n/check\n/scan ARKM,SYN,SENT\n/top\n/myid")
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("A100 분석 중...")
-    await update.message.reply_text(build_report(DEFAULT_SYMBOLS), parse_mode="HTML")
+    await update.message.reply_text("A100 기본 리스트 분석 중...")
+    await update.message.reply_text(build_report(DEFAULT_SYMBOLS, 10), parse_mode="HTML")
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw = " ".join(context.args).strip()
@@ -202,10 +274,15 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     symbols = [x.strip().upper() for x in raw.replace(" ", "").split(",") if x.strip()]
     await update.message.reply_text("A100 분석 중...")
-    await update.message.reply_text(build_report(symbols), parse_mode="HTML")
+    await update.message.reply_text(build_report(symbols, 10), parse_mode="HTML")
+
+async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("A100 거래량 상위 USDT 40개 스캔 중...")
+    symbols = get_top_usdt(40)
+    await update.message.reply_text(build_report(symbols, 10), parse_mode="HTML")
 
 async def arkm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(build_report(["ARKM"]), parse_mode="HTML")
+    await update.message.reply_text(build_report(["ARKM"], 1), parse_mode="HTML")
 
 def send_telegram(text: str):
     if not BOT_TOKEN or not CHAT_ID:
@@ -217,7 +294,7 @@ def send_telegram(text: str):
         log(f"telegram send error: {e}")
 
 def morning_job():
-    send_telegram("🌅 <b>A100 오전 5시 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS))
+    send_telegram("🌅 <b>A100 오전 5시 자동 리포트</b>\n\n" + build_report(DEFAULT_SYMBOLS, 10))
 
 def alert_job():
     hits = [r for r in scan(DEFAULT_SYMBOLS) if r.score >= SCORE_ALERT]
@@ -245,8 +322,9 @@ def main():
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CommandHandler("scan", scan_cmd))
+    app.add_handler(CommandHandler("top", top_cmd))
     app.add_handler(CommandHandler("arkm", arkm))
-    log("A100 Binance Vision worker running...")
+    log("A100 v9 top10 alert worker running...")
     app.run_polling()
 
 if __name__ == "__main__":
