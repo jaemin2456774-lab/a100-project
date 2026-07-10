@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v48 CoinGlass Weighted Intelligence worker running...", flush=True)
+    print("A100 v49 ELITE AI worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -5206,6 +5206,219 @@ def analyze(sym,kr):
     except Exception as e: log(f"v48 result enrich {e}")
     return r
 
+
+
+# ===== A100 v49 ELITE AI / Adaptive Ranking =====
+V49_VERSION = "A100 v49 ELITE AI"
+V49_TOP = int(os.getenv("V49_TOP", "5"))
+V49_SHOW_FALLBACK = int(os.getenv("V49_SHOW_FALLBACK", "5"))
+V49_MIN_PRIMARY = float(os.getenv("V49_MIN_PRIMARY", "80"))
+V49_MIN_FALLBACK = float(os.getenv("V49_MIN_FALLBACK", "45"))
+
+def v49_grade(score, conf):
+    if score >= 95 and conf >= 80:
+        return "🟣 S"
+    if score >= 90 and conf >= 72:
+        return "🔵 A"
+    if score >= 85:
+        return "🟠 B"
+    if score >= 80:
+        return "🟡 C"
+    return "⚪ WATCH"
+
+def v49_action(r):
+    score = v43_score(r)
+    conf = v43_confidence(r)
+    chase = chase_risk(r)
+    cg = float(getattr(r, "cg", 0) or 0)
+
+    if chase >= 75:
+        return "⛔ 추격 금지"
+    if score >= 90 and conf >= 72 and cg >= 18:
+        return "🟢 BUY 후보"
+    if score >= 80 and conf >= 62:
+        return "🟡 WAIT/분할 관찰"
+    return "⚪ 관망"
+
+def v49_score(r):
+    try:
+        timing = float(timing_score(r))
+        breakout = float(breakout_score(r))
+        bottom = float(bottom_score(r))
+        win = float(win_rate_estimate(r))
+        real = float(real_signal_score(r))
+        chase = float(chase_risk(r))
+        cg35 = float(getattr(r, "cg", 0) or 0)
+        vol = float(getattr(r, "vol_ratio", 1) or 1)
+        conf0 = float(getattr(r, "confidence", 0) or 0)
+
+        chart = (
+            timing * 0.09 +
+            breakout * 0.08 +
+            bottom * 0.08 +
+            win * 0.05
+        )
+        cg_component = min(max(cg35 / 35.0, 0), 1) * 45.0
+        volume_component = min(max((vol - 0.7) / 2.3, 0), 1) * 15.0
+        pattern_component = min(max((real * 0.65 + conf0 * 0.35) / 100.0, 0), 1) * 10.0
+
+        total = chart + cg_component + volume_component + pattern_component
+
+        if chase >= 80:
+            total -= 24
+        elif chase >= 70:
+            total -= 15
+        elif chase >= 60:
+            total -= 7
+
+        if cg35 < 8:
+            total -= 10
+        elif cg35 < 14:
+            total -= 5
+
+        rr = float(getattr(r, "rr", 0) or 0)
+        if rr and rr < 1.4:
+            total -= 5
+
+        return round(clamp(total, 0, 100), 1)
+    except Exception:
+        return round(float(getattr(r, "score", 0) or 0), 1)
+
+def v43_score(r):
+    return v49_score(r)
+
+def v43_grade(score, conf):
+    return v49_grade(score, conf)
+
+def v43_action(r):
+    return v49_action(r)
+
+def v43_confidence(r):
+    try:
+        score = v49_score(r)
+        cg = float(getattr(r, "cg", 0) or 0)
+        completeness = 0
+        m = re.search(r"완성도\s+(\d+)%", str(getattr(r, "cg_text", "") or ""))
+        if m:
+            completeness = int(m.group(1))
+        c = score * 0.68 + min(cg / 35 * 100, 100) * 0.18 + completeness * 0.14
+        if chase_risk(r) >= 70:
+            c -= 12
+        return round(clamp(c, 0, 99), 1)
+    except Exception:
+        return round(clamp(v49_score(r), 0, 99), 1)
+
+def v49_reason(r):
+    arr = []
+    cg = float(getattr(r, "cg", 0) or 0)
+    if cg >= 27:
+        arr.append("파생수급 매우 강함")
+    elif cg >= 21:
+        arr.append("파생수급 강함")
+    elif cg >= 15:
+        arr.append("파생수급 양호")
+
+    if bottom_score(r) >= 60:
+        arr.append("매집 우세")
+    if breakout_score(r) >= 55:
+        arr.append("돌파 압력")
+    if timing_score(r) >= 60:
+        arr.append("타이밍 양호")
+    if float(getattr(r, "vol_ratio", 1) or 1) >= 1.5:
+        arr.append("거래량 증가")
+    if chase_risk(r) >= 65:
+        arr.append("추격주의")
+    return " / ".join(arr[:6]) if arr else "상위 상대평가 후보"
+
+def v43_reason(r):
+    return v49_reason(r)
+
+def v43_format(r, idx):
+    score = v49_score(r)
+    conf = v43_confidence(r)
+    return (
+        f"🏅 <b>{idx}. {r.sym}</b> {stars(score)} {v49_grade(score, conf)}\n"
+        f"AI <b>{score}%</b> | 신뢰도 <b>{conf}%</b> | 판단 <b>{v49_action(r)}</b>\n"
+        f"매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | 타이밍 {timing_score(r)}% | "
+        f"승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🔮 CoinGlass <b>{getattr(r,'cg',0)}/35</b>\n"
+        f"{getattr(r,'cg_text','')}\n"
+        f"💥 {getattr(r,'liq','청산데이터 없음')}\n"
+        f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"🔴 손절 <code>{r.stop}</code>\n"
+        f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+        f"🧠 이유: {v49_reason(r)}\n"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 분석 중지</b>\n"
+            f"Binance 수집 실패: {reason or st.get('err')}\n\n"
+            "정적 후보·캐시 후보·CoinGlass 단독 추천을 금지했습니다.",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🚀 A100 v49 ELITE AI 상대평가 분석 중...")
+    try:
+        rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 후보 없음.")
+            return
+
+        syms = [r[1] for r in rows[:V43_ANALYZE_LIMIT]]
+        results = a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)
+        ranked = sorted(results, key=v49_score, reverse=True)
+
+        primary = [r for r in ranked if v49_score(r) >= V49_MIN_PRIMARY][:V49_TOP]
+        fallback_mode = not primary
+        shown = primary if primary else [r for r in ranked if v49_score(r) >= V49_MIN_FALLBACK][:V49_SHOW_FALLBACK]
+
+        lines = [
+            "🚀 <b>A100 v49 ELITE AI</b>",
+            f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(shown)}",
+            "차트 30% | CoinGlass 45% | 거래량 15% | 패턴 10%",
+            "────────────",
+            ""
+        ]
+
+        if fallback_mode:
+            lines.extend([
+                "⚠️ <b>정식 통과 후보 없음</b>",
+                "아래는 자동 차순위 WATCH 후보입니다. 즉시 매수 신호가 아닙니다.",
+                ""
+            ])
+
+        if not shown:
+            lines.append("현재 데이터에서 표시 가능한 후보가 없습니다.")
+
+        for i, r in enumerate(shown, 1):
+            lines.append(v43_format(r, i))
+            lines.append("────────────")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"ultimate 오류: {e}")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v49 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"배점: 차트30 / CG45 / 거래량15 / 패턴10\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
 
 if __name__ == "__main__":
     main()
