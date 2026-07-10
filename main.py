@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v56 INSTITUTIONAL AI RANK ENGINE worker running...", flush=True)
+    print("A100 v57 PRACTICAL SIGNAL ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -8641,6 +8641,517 @@ async def datastatus_cmd(update, context):
         disable_web_page_preview=True
     )
 
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v57 PRACTICAL SIGNAL ENGINE =====
+# 실전 개선:
+# 1) SKIP TOP5 제외
+# 2) 기관35 + CoinGlass35 + 차트20 + 거래량10
+# 3) 차트 세부점수 확장
+# 4) 전체 순위/백분위 개선
+# 5) 매수타이밍 표시
+# 6) 성공확률 구성요소 표시
+# 7) 목표수익률/손익비 상세 표시
+V57_VERSION = "A100 v57 PRACTICAL SIGNAL ENGINE"
+
+V57_TOP = int(os.getenv("V57_TOP", "5"))
+V57_STRONG_BUY_MIN = float(os.getenv("V57_STRONG_BUY_MIN", "80"))
+V57_BUY_MIN = float(os.getenv("V57_BUY_MIN", "70"))
+V57_WATCH_MIN = float(os.getenv("V57_WATCH_MIN", "60"))
+V57_INCLUDE_SKIP = os.getenv("V57_INCLUDE_SKIP", "0").strip() == "1"
+
+def _v57_safe_float(v, default=0.0):
+    try:
+        return float(v)
+    except Exception:
+        return default
+
+def _v57_clip(v, lo=0.0, hi=100.0):
+    return max(lo, min(hi, _v57_safe_float(v)))
+
+def _v57_indicator_score(value, low_good=None, high_good=None, center=None, spread=None):
+    v = _v57_safe_float(value, None)
+    if v is None:
+        return 50.0
+
+    if center is not None and spread:
+        dist = abs(v - center)
+        return _v57_clip(100 - (dist / spread) * 50)
+
+    if low_good is not None and high_good is not None:
+        if low_good <= v <= high_good:
+            return 85.0
+        if v < low_good:
+            return _v57_clip(85 - (low_good - v) * 2)
+        return _v57_clip(85 - (v - high_good) * 2)
+
+    return 50.0
+
+def v57_chart_breakdown(r):
+    """가능한 필드를 최대한 활용하고, 없으면 기존 점수에서 보수적으로 추정."""
+    bottom = _v57_clip(bottom_score(r))
+    breakout = _v57_clip(breakout_score(r))
+    timing = _v57_clip(timing_score(r))
+    win = _v57_clip(win_rate_estimate(r))
+
+    rsi_raw = getattr(r, "rsi", getattr(r, "rsi14", None))
+    macd_raw = getattr(r, "macd_score", getattr(r, "macd", None))
+    ema_raw = getattr(r, "ema_score", getattr(r, "ema_trend_score", None))
+    vwap_raw = getattr(r, "vwap_score", getattr(r, "vwap_distance_score", None))
+    atr_raw = getattr(r, "atr_pct", None)
+    bb_raw = getattr(r, "bb_width", getattr(r, "bb_width_pct", None))
+    vol_raw = getattr(r, "vol_ratio", 1.0)
+
+    rsi_score = _v57_indicator_score(rsi_raw, 42, 68) if rsi_raw is not None else round((timing + win) / 2, 1)
+    macd_score = _v57_clip(macd_raw) if isinstance(macd_raw, (int, float)) and 0 <= macd_raw <= 100 else round((breakout * 0.6 + timing * 0.4), 1)
+    ema_score = _v57_clip(ema_raw) if isinstance(ema_raw, (int, float)) and 0 <= ema_raw <= 100 else round((bottom * 0.45 + breakout * 0.55), 1)
+    vwap_score = _v57_clip(vwap_raw) if isinstance(vwap_raw, (int, float)) and 0 <= vwap_raw <= 100 else round((bottom * 0.5 + timing * 0.5), 1)
+
+    atr_score = 70.0
+    if atr_raw is not None:
+        atr = _v57_safe_float(atr_raw)
+        if 1.5 <= atr <= 6:
+            atr_score = 85
+        elif atr <= 10:
+            atr_score = 65
+        else:
+            atr_score = 38
+
+    bb_score = 60.0
+    if bb_raw is not None:
+        bb = abs(_v57_safe_float(bb_raw))
+        if 2 <= bb <= 8:
+            bb_score = 82
+        elif bb <= 12:
+            bb_score = 65
+        else:
+            bb_score = 42
+
+    vol_ratio = _v57_safe_float(vol_raw, 1.0)
+    volume_spike = _v57_clip((vol_ratio - 0.5) / 2.5 * 100)
+
+    rows = [
+        ("매집", bottom),
+        ("돌파", breakout),
+        ("타이밍", timing),
+        ("RSI", round(rsi_score, 1)),
+        ("MACD", round(macd_score, 1)),
+        ("EMA", round(ema_score, 1)),
+        ("VWAP", round(vwap_score, 1)),
+        ("ATR", round(atr_score, 1)),
+        ("BB Width", round(bb_score, 1)),
+        ("Volume Spike", round(volume_spike, 1)),
+    ]
+
+    score = (
+        bottom * 0.16 +
+        breakout * 0.16 +
+        timing * 0.12 +
+        rsi_score * 0.08 +
+        macd_score * 0.12 +
+        ema_score * 0.10 +
+        vwap_score * 0.08 +
+        atr_score * 0.06 +
+        bb_score * 0.04 +
+        volume_spike * 0.08
+    )
+
+    chase = _v57_safe_float(chase_risk(r))
+    if chase >= 85:
+        score -= 20
+    elif chase >= 75:
+        score -= 12
+    elif chase >= 65:
+        score -= 6
+
+    return round(_v57_clip(score), 1), rows
+
+def v56_chart_structure_score(r):
+    score, _ = v57_chart_breakdown(r)
+    return score
+
+def v57_market_context_score(r):
+    btc_bias = _v57_safe_float(getattr(r, "market_score", 50), 50)
+    vol = v56_volume_volatility_score(r)
+    chase = _v57_safe_float(chase_risk(r))
+    score = btc_bias * 0.55 + vol * 0.45
+    if chase >= 75:
+        score -= 10
+    return round(_v57_clip(score), 1)
+
+def v57_final_score(r):
+    institution = v56_institution_strength(r)
+    cg_score, _, _ = v56_cg_breakdown(r)
+    chart = v56_chart_structure_score(r)
+    volume = v56_volume_volatility_score(r)
+
+    score = (
+        institution * 0.35 +
+        cg_score * 0.35 +
+        chart * 0.20 +
+        volume * 0.10
+    )
+
+    if chase_risk(r) >= 85:
+        score -= 10
+
+    mode = (V45_API_STATE.get("binance") or {}).get("mode") or "FUTURES"
+    if mode != "FUTURES":
+        score -= 7
+
+    return round(_v57_clip(score), 1)
+
+def v56_final_score(r):
+    return v57_final_score(r)
+
+def v57_action(r):
+    score = v57_final_score(r)
+    institution = v56_institution_strength(r)
+    mode = (V45_API_STATE.get("binance") or {}).get("mode") or "FUTURES"
+
+    if chase_risk(r) >= 85:
+        return "⛔ 추격 금지"
+
+    if mode != "FUTURES":
+        return "🟡 WATCH" if score >= V57_WATCH_MIN else "⚪ SKIP"
+
+    if score >= V57_STRONG_BUY_MIN and institution >= 80:
+        return "🟢 STRONG BUY"
+    if score >= V57_BUY_MIN and institution >= 68:
+        return "🟢 BUY"
+    if score >= V57_WATCH_MIN:
+        return "🟡 WATCH"
+    return "⚪ SKIP"
+
+def v56_action(r):
+    return v57_action(r)
+
+def v43_action(r):
+    return v57_action(r)
+
+def v57_buy_timing(r):
+    action = v57_action(r)
+    chase = _v57_safe_float(chase_risk(r))
+    timing = _v57_safe_float(timing_score(r))
+    breakout = _v57_safe_float(breakout_score(r))
+    bottom = _v57_safe_float(bottom_score(r))
+
+    if chase >= 85:
+        return "🔴 추격금지"
+    if action == "🟢 STRONG BUY" and timing >= 72 and breakout >= 68:
+        return "🔥 지금매수"
+    if action in ("🟢 STRONG BUY", "🟢 BUY") and bottom >= 62:
+        return "🟢 분할매수"
+    if action in ("🟢 BUY", "🟡 WATCH") and timing < 60:
+        return "🟡 눌림대기"
+    if action == "🟡 WATCH":
+        return "🟡 확인대기"
+    return "⚪ 관망"
+
+def v57_success_probability_parts(r):
+    institution = v56_institution_strength(r)
+    cg_score, _, coverage = v56_cg_breakdown(r)
+    chart = v56_chart_structure_score(r)
+    market = v57_market_context_score(r)
+
+    raw = (
+        institution * 0.30 +
+        cg_score * 0.35 +
+        chart * 0.25 +
+        market * 0.10
+    )
+
+    if coverage < 0.75:
+        raw -= 5
+    if chase_risk(r) >= 75:
+        raw -= 6
+
+    prob = round(_v57_clip(raw, 5, 95), 1)
+    return prob, {
+        "기관": round(institution, 1),
+        "CoinGlass": round(cg_score, 1),
+        "차트": round(chart, 1),
+        "시장": round(market, 1),
+    }
+
+def v56_success_probability(r):
+    prob, _ = v57_success_probability_parts(r)
+    return prob
+
+def v57_target_detail(r):
+    try:
+        entry = (_v57_safe_float(r.entry_low) + _v57_safe_float(r.entry_high)) / 2
+        stop = _v57_safe_float(r.stop)
+        t1 = _v57_safe_float(r.target1)
+        t2 = _v57_safe_float(r.target2)
+
+        if entry <= 0:
+            raise ValueError("invalid entry")
+
+        stop_pct = (stop / entry - 1) * 100
+        t1_pct = (t1 / entry - 1) * 100
+        t2_pct = (t2 / entry - 1) * 100
+        risk = max(1e-9, entry - stop)
+        rr1 = max(0.0, t1 - entry) / risk
+        rr2 = max(0.0, t2 - entry) / risk
+
+        return {
+            "entry": entry,
+            "stop_pct": round(stop_pct, 1),
+            "t1_pct": round(t1_pct, 1),
+            "t2_pct": round(t2_pct, 1),
+            "rr1": round(rr1, 2),
+            "rr2": round(rr2, 2),
+        }
+    except Exception:
+        return {"entry": 0, "stop_pct": 0, "t1_pct": 0, "t2_pct": 0, "rr1": 0, "rr2": 0}
+
+def v57_institution_label(score):
+    score = _v57_safe_float(score)
+    if score >= 85: return "★★★★★ 기관매집 초강세"
+    if score >= 72: return "★★★★ 기관유입 강세"
+    if score >= 58: return "★★★ 기관수급 중립"
+    if score >= 42: return "★★ 기관이탈 주의"
+    return "★ 기관매도 우세"
+
+def v56_institution_label(score):
+    return v57_institution_label(score)
+
+def v57_filter_ranked(results):
+    ranked = sorted(results, key=v57_final_score, reverse=True)
+    if V57_INCLUDE_SKIP:
+        return ranked
+
+    non_skip = [
+        r for r in ranked
+        if v57_action(r) not in ("⚪ SKIP", "⛔ 추격 금지")
+    ]
+    return non_skip
+
+def v43_score(r):
+    return v57_final_score(r)
+
+def v43_confidence(r):
+    prob, parts = v57_success_probability_parts(r)
+    _, _, coverage = v56_cg_breakdown(r)
+    conf = (
+        prob * 0.55 +
+        parts["기관"] * 0.15 +
+        parts["CoinGlass"] * 0.15 +
+        parts["차트"] * 0.10 +
+        coverage * 100 * 0.05
+    )
+    return round(_v57_clip(conf, 0, 99), 1)
+
+def v43_format(r, idx, total_universe=0):
+    final = v57_final_score(r)
+    inst = v56_institution_strength(r)
+    cg_score, cg_rows, coverage = v56_cg_breakdown(r)
+    chart, chart_rows = v57_chart_breakdown(r)
+    volume = v56_volume_volatility_score(r)
+    conf = v43_confidence(r)
+    prob, prob_parts = v57_success_probability_parts(r)
+    target = v57_target_detail(r)
+    hold = v56_holding_period(r)
+    timing_label = v57_buy_timing(r)
+
+    universe = max(1, int(total_universe or 1))
+    percentile = round(idx / universe * 100, 2)
+
+    cg_lines = []
+    for row in cg_rows:
+        icon = "✅" if row["available"] else "❌"
+        pts = f"{row['score']:.0f}" if row["score"] is not None else "-"
+        val = _v56_format_value(row["key"], row["value"])
+        cg_lines.append(f"{icon} {row['label']}: {val} | {pts}점")
+
+    chart_lines = [
+        f"• {name}: {score}"
+        for name, score in chart_rows
+    ]
+
+    sym = _v54_escape(getattr(r, "sym", "?"))
+    entry_low = _v54_escape(getattr(r, "entry_low", "-"))
+    entry_high = _v54_escape(getattr(r, "entry_high", "-"))
+    stop = _v54_escape(getattr(r, "stop", "-"))
+    target1 = _v54_escape(getattr(r, "target1", "-"))
+    target2 = _v54_escape(getattr(r, "target2", "-"))
+
+    return (
+        f"🏅 <b>{idx}. {sym}</b>\n"
+        f"<b>{v56_grade(final)}</b>\n"
+        f"판정 <b>{_v54_escape(v57_action(r))}</b> | 타이밍 <b>{_v54_escape(timing_label)}</b>\n"
+        f"종합점수 <b>{final}/100</b> | 신뢰도 <b>{conf}%</b>\n"
+        f"전체 {universe}개 중 <b>{idx}위</b> | 상위 <b>{percentile}%</b>\n"
+        f"예상 성공률 <b>{prob}%</b> | 추천기간 <b>{hold}</b>\n"
+        f"성공확률 구성: 기관 {prob_parts['기관']} / CoinGlass {prob_parts['CoinGlass']} / "
+        f"차트 {prob_parts['차트']} / 시장 {prob_parts['시장']}\n\n"
+        f"기관강도 <b>{inst}</b>  {_v54_bar(inst)}\n"
+        f"{_v54_escape(v57_institution_label(inst))}\n"
+        f"CoinGlass <b>{cg_score}</b>  {_v54_bar(cg_score)}\n"
+        f"차트구조 <b>{chart}</b>  {_v54_bar(chart)}\n"
+        f"거래량/변동성 <b>{volume}</b>  {_v54_bar(volume)}\n"
+        f"데이터 완성도 <b>{round(coverage*8)}/8</b>\n\n"
+        f"<b>CoinGlass 세부</b>\n"
+        + "\n".join(_v54_escape(x) for x in cg_lines) +
+        f"\n\n<b>차트 세부</b>\n"
+        + "\n".join(_v54_escape(x) for x in chart_lines) +
+        f"\n\n<b>매매 계획</b>\n"
+        f"🟢 진입 <code>{entry_low}~{entry_high}</code>\n"
+        f"🔴 손절 <code>{stop}</code> ({target['stop_pct']:+.1f}%)\n"
+        f"🎯 목표1 <code>{target1}</code> ({target['t1_pct']:+.1f}%) | 손익비 1:{target['rr1']}\n"
+        f"🎯 목표2 <code>{target2}</code> ({target['t2_pct']:+.1f}%) | 손익비 1:{target['rr2']}\n"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    mode = st.get("mode") or "COINGLASS_ONLY"
+
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 v57 분석 제한</b>\n"
+            f"상태: {_v54_escape(reason or '-')}\n"
+            "CoinGlass 종목별 진단은 <code>/cgtest BTC</code>로 사용할 수 있습니다.",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text(
+        f"🚀 A100 v57 PRACTICAL SIGNAL 분석 중...\n"
+        f"데이터 모드: {mode}"
+    )
+
+    try:
+        rows = v43_candidates(max(V43_LIMIT, V52_PRESELECT)) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 후보가 없습니다.")
+            return
+
+        syms = [r[1] for r in rows[:max(V43_ANALYZE_LIMIT, V52_SCAN_LIMIT)]]
+        results = []
+        scan_errors = []
+
+        try:
+            results = list(
+                (a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or []
+            )
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            try:
+                one = scan([sym])
+                if one:
+                    results.append(one[0])
+                    got.add(sym)
+                else:
+                    scan_errors.append(f"{sym}:empty")
+            except Exception as e:
+                scan_errors.append(f"{sym}:{e}")
+
+        ranked_all = sorted(results, key=v57_final_score, reverse=True)
+        ranked = v57_filter_ranked(results)
+        shown = ranked[:V57_TOP]
+        universe = len(st.get("ticker") or [])
+
+        mode_note = {
+            "FUTURES": "✅ Binance Futures 실시간",
+            "STALE_CACHE": f"🟡 Futures 캐시 {st.get('cache_age', '?')}초 전",
+            "SPOT_FALLBACK": "🟠 Binance Spot 폴백 · BUY 자동 차단",
+        }.get(mode, "🔴 제한 모드")
+
+        lines = [
+            "🚀 <b>A100 v57 PRACTICAL SIGNAL RANK</b>",
+            f"데이터: <b>{_v54_escape(mode_note)}</b>",
+            f"Gateway: <code>{_v54_escape(st.get('host') or '-')}</code>",
+            f"Binance {universe}개 → 1차 {len(rows)} → 정밀 {len(syms)} → 유효 {len(ranked)} → TOP{len(shown)}",
+            "배점: 기관35 | CoinGlass35 | 차트20 | 거래량·변동성10",
+            "SKIP/추격금지 종목은 TOP5에서 제외",
+            "────────────",
+            ""
+        ]
+
+        if not shown:
+            lines.append("⚠️ 현재 BUY/WATCH 기준을 통과한 후보가 없습니다.")
+            if ranked_all:
+                best = ranked_all[0]
+                lines.append(
+                    f"최고 후보: {_v54_escape(getattr(best, 'sym', '?'))} "
+                    f"{v57_final_score(best)}점 / {_v54_escape(v57_action(best))}"
+                )
+        else:
+            for i, r in enumerate(shown, 1):
+                lines.append(v43_format(r, i, universe))
+                lines.append("────────────")
+
+        if scan_errors:
+            lines.append(f"\n🛠 스캔오류 {len(scan_errors)}개")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+
+    await update.message.reply_text(
+        "📦 <b>A100 v57 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"사유: {_v54_escape(reason or '-')}\n"
+        f"Gateway: <code>{_v54_escape(b.get('host') or '-')}</code>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"엔진배점: 기관35 / CoinGlass35 / 차트20 / 거래량10\n"
+        f"SKIP TOP5 제외: 활성\n"
+        f"차트 세부: RSI/MACD/EMA/VWAP/ATR/BB/Volume\n"
+        f"매수 타이밍: 활성\n"
+        f"성공확률 구성표시: 활성\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+# 최신 v57 핸들러 고정
 def build_v44_application(token):
     app = Application.builder().token(token).build()
     handlers = [
