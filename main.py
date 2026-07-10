@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v50 ELITE PRO worker running...", flush=True)
+    print("A100 v50.1 FULL COINGLASS BRIDGE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -5945,6 +5945,233 @@ async def datastatus_cmd(update, context):
         f"Binance ticker: {len(b.get('ticker') or [])}개\n"
         f"Binance error: {b.get('err') or '-'}\n"
         f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"배점: CG65 / 차트20 / 거래량10 / 패턴5\n"
+        f"N/A 처리: 가용항목 정규화\n"
+        f"TOP0 방지: 활성\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+
+# ===== A100 v50.1 FULL COINGLASS BRIDGE =====
+V501_VERSION = "A100 v50.1 FULL CG BRIDGE"
+
+def _v501_walk(obj):
+    """CoinGlass 응답의 중첩 dict/list를 모두 순회한다."""
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _v501_walk(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _v501_walk(v)
+
+def _v501_num(v):
+    try:
+        if v is None or isinstance(v, bool):
+            return None
+        if isinstance(v, str):
+            s = v.strip().replace(",", "").replace("%", "")
+            if not s or s.upper() in {"N/A", "NA", "NONE", "NULL", "-"}:
+                return None
+            return float(s)
+        return float(v)
+    except Exception:
+        return None
+
+def _v501_find(obj, keys, prefer_last=True):
+    keys_l = {str(k).lower() for k in keys}
+    found = []
+    for d in _v501_walk(obj):
+        for k, v in d.items():
+            if str(k).lower() in keys_l:
+                n = _v501_num(v)
+                if n is not None:
+                    found.append(n)
+    if not found:
+        return None
+    return found[-1] if prefer_last else found[0]
+
+def _v501_ratio(obj):
+    # 직접 ratio 키
+    direct = _v501_find(obj, [
+        "longShortRatio", "long_short_ratio", "ratio",
+        "longShortRate", "long_short_rate", "accountRatio",
+        "positionRatio", "longShortAccountRatio", "longShortPositionRatio"
+    ])
+    if direct is not None:
+        return direct
+
+    # long/short 값으로 계산
+    long_v = _v501_find(obj, [
+        "longAccount", "long_account", "longRatio", "long_ratio",
+        "longPosition", "long_position", "longRate", "long_rate"
+    ])
+    short_v = _v501_find(obj, [
+        "shortAccount", "short_account", "shortRatio", "short_ratio",
+        "shortPosition", "short_position", "shortRate", "short_rate"
+    ])
+    if long_v is not None and short_v not in (None, 0):
+        return long_v / short_v
+    return None
+
+def _v501_taker_ratio(obj):
+    direct = _v501_find(obj, [
+        "buySellRatio", "buy_sell_ratio", "takerBuySellRatio",
+        "taker_buy_sell_ratio", "ratio"
+    ])
+    if direct is not None:
+        return direct
+
+    buy = _v501_find(obj, [
+        "buy", "buyVolume", "buy_volume", "takerBuyVol",
+        "takerBuyVolume", "taker_buy_volume", "buyVolUsd",
+        "buy_volume_usd"
+    ])
+    sell = _v501_find(obj, [
+        "sell", "sellVolume", "sell_volume", "takerSellVol",
+        "takerSellVolume", "taker_sell_volume", "sellVolUsd",
+        "sell_volume_usd"
+    ])
+    if buy is not None and sell not in (None, 0):
+        return buy / sell
+    return None
+
+def _v501_liq(obj):
+    long_total = 0.0
+    short_total = 0.0
+    found = False
+    for d in _v501_walk(obj):
+        lv = None
+        sv = None
+        for k, v in d.items():
+            kl = str(k).lower()
+            if kl in {
+                "longliquidation", "longliquidationusd", "long_liquidation",
+                "long_liquidation_usd", "longvolusd", "long_liquidation_volume"
+            }:
+                lv = _v501_num(v)
+            elif kl in {
+                "shortliquidation", "shortliquidationusd", "short_liquidation",
+                "short_liquidation_usd", "shortvolusd", "short_liquidation_volume"
+            }:
+                sv = _v501_num(v)
+        if lv is not None:
+            long_total += lv
+            found = True
+        if sv is not None:
+            short_total += sv
+            found = True
+
+    if not found or (long_total + short_total) <= 0:
+        return None, long_total, short_total
+    bias = (short_total - long_total) / (short_total + long_total)
+    return bias, long_total, short_total
+
+def _v501_extract(raw):
+    out = {}
+
+    oi = _v501_find(raw.get("oi"), [
+        "open_interest_change_percent_1h", "openInterestChangePercent1h",
+        "change_percent_1h", "changePercent1h", "h1Change",
+        "openInterestChange1h", "oiChange1h"
+    ])
+    out["oi"] = oi
+
+    funding = _v501_find(raw.get("funding"), [
+        "funding_rate", "fundingRate", "rate", "close", "value",
+        "currentFundingRate", "predictedFundingRate"
+    ])
+    if funding is not None and abs(funding) < 1:
+        funding *= 100
+    out["funding"] = funding
+
+    out["taker"] = _v501_taker_ratio(raw.get("taker"))
+    out["ls"] = _v501_ratio(raw.get("ls"))
+    out["top_account"] = _v501_ratio(raw.get("top_account"))
+    out["top_position"] = _v501_ratio(raw.get("top_position"))
+
+    basis = _v501_find(raw.get("basis"), [
+        "basis_rate", "basisRate", "annualized_basis_rate",
+        "annualizedBasisRate", "basis", "basisPercent",
+        "basis_percent", "annualizedRate"
+    ])
+    if basis is not None and abs(basis) < 1:
+        basis *= 100
+    out["basis"] = basis
+
+    bias, long_liq, short_liq = _v501_liq(raw.get("liquidation"))
+    out["liq_bias"] = bias
+    out["long_liq"] = long_liq
+    out["short_liq"] = short_liq
+    return out
+
+def _v501_fmt(v, signed=False, suffix=""):
+    if v is None:
+        return "N/A"
+    return (f"{v:+.4f}" if signed else f"{v:.4f}") + suffix
+
+# 기존 v50 analyze 래퍼를 다시 감싸 8종 데이터를 Result 객체에 직접 연결
+_v501_analyze_base = analyze
+def analyze(sym, kr):
+    r = _v501_analyze_base(sym, kr)
+    try:
+        coin = str(sym).upper().replace("USDT", "")
+        raw = v45_cg_coin(coin, force=False)
+        m = _v501_extract(raw)
+
+        # v50이 읽는 실제 속성명으로 연결
+        r.oi_change = m.get("oi")
+        r.funding_rate = m.get("funding")
+        r.taker_ratio = m.get("taker")
+        r.ls_ratio = m.get("ls")
+        r.top_account_ratio = m.get("top_account")
+        r.top_position_ratio = m.get("top_position")
+        r.basis_pct = m.get("basis")
+        r.liq_bias = m.get("liq_bias")
+        r.cg_raw = raw
+
+        vals = [
+            f"OI {_v501_fmt(m.get('oi'), True, '%')}",
+            f"Funding {_v501_fmt(m.get('funding'), True, '%')}",
+            f"Taker {_v501_fmt(m.get('taker'), False, 'x')}",
+            f"L/S {_v501_fmt(m.get('ls'))}",
+            f"TopAcc {_v501_fmt(m.get('top_account'))}",
+            f"TopPos {_v501_fmt(m.get('top_position'))}",
+            f"Basis {_v501_fmt(m.get('basis'), True, '%')}",
+        ]
+        available = sum(v is not None for v in [
+            m.get("oi"), m.get("funding"), m.get("taker"), m.get("ls"),
+            m.get("top_account"), m.get("top_position"), m.get("basis"),
+            m.get("liq_bias")
+        ])
+        completeness = round(available * 100 / 8)
+        r.cg_text = f"완성도 {completeness}% ({available}/8) | " + " / ".join(vals)
+
+        if m.get("liq_bias") is not None:
+            direction = (
+                "숏청산 우세" if m["liq_bias"] > 0.15
+                else "롱청산 우세" if m["liq_bias"] < -0.15
+                else "청산 중립"
+            )
+            r.liq = (
+                f"{direction} | L {m.get('long_liq', 0):.0f} / "
+                f"S {m.get('short_liq', 0):.0f}"
+            )
+    except Exception as e:
+        log(f"v50.1 cg bridge error {sym}: {e}")
+    return r
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v50.1 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"CG Bridge: OI/Funding/Taker/L-S/TopAcc/TopPos/Basis/Liquidation\n"
         f"배점: CG65 / 차트20 / 거래량10 / 패턴5\n"
         f"N/A 처리: 가용항목 정규화\n"
         f"TOP0 방지: 활성\n"
