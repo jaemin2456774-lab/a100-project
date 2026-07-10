@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v58 COMPACT EXECUTION ENGINE worker running...", flush=True)
+    print("A100 v59 INSTITUTIONAL EXECUTION ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -9688,6 +9688,678 @@ def build_v44_application(token):
             app.add_handler(CommandHandler(name, fn))
     app.add_error_handler(error_handler)
     return app
+
+
+# ===== A100 v59 INSTITUTIONAL EXECUTION ENGINE =====
+# 반영사항:
+# - CoinGlass 점수 기여도 표시
+# - 기관매집 5단계 강화
+# - WATCH A/B/C 세분화
+# - 핵심 매수 이유 3줄
+# - BTC/ETH/알트시장 상태 표시
+# - 매수 준비도 게이지
+# - 자동 알림 조건 엔진
+V59_VERSION = "A100 v59 INSTITUTIONAL EXECUTION ENGINE"
+
+V59_TOP_ACTIONABLE = int(os.getenv("V59_TOP_ACTIONABLE", "3"))
+V59_TOP_WATCH = int(os.getenv("V59_TOP_WATCH", "3"))
+V59_AUTO_ALERT = os.getenv("V59_AUTO_ALERT", "0").strip() == "1"
+V59_ALERT_INTERVAL = max(300, int(os.getenv("V59_ALERT_INTERVAL", "900")))
+V59_ALERT_COOLDOWN = max(900, int(os.getenv("V59_ALERT_COOLDOWN", "3600")))
+V59_ALERT_SCORE = float(os.getenv("V59_ALERT_SCORE", "78"))
+V59_ALERT_CG = float(os.getenv("V59_ALERT_CG", "80"))
+
+V59_ALERT_MEMORY = {}
+V59_ALERT_TASK = None
+
+def _v59_float(v, default=0.0):
+    try:
+        return float(v)
+    except Exception:
+        return default
+
+def _v59_clip(v, lo=0.0, hi=100.0):
+    return max(lo, min(hi, _v59_float(v)))
+
+def v59_bar(score, width=10):
+    score = _v59_clip(score)
+    full = int(round(score / 100 * width))
+    return "█" * full + "░" * (width - full)
+
+def v59_institution_stage(score):
+    score = _v59_float(score)
+    if score >= 85:
+        return "★★★★★ 기관 강매집"
+    if score >= 72:
+        return "★★★★☆ 기관 유입"
+    if score >= 58:
+        return "★★★☆☆ 기관 중립"
+    if score >= 42:
+        return "★★☆☆☆ 기관 이탈"
+    return "★☆☆☆☆ 기관 매도"
+
+def v59_watch_grade(r):
+    score = v57_final_score(r)
+    timing = _v59_float(timing_score(r))
+    inst = v56_institution_strength(r)
+    cg = v56_cg_breakdown(r)[0]
+
+    if score >= 66 and timing >= 62 and inst >= 65 and cg >= 60:
+        return "WATCH A", "오늘 가능성 높음"
+    if score >= 62 and timing >= 50:
+        return "WATCH B", "1~2일 관찰"
+    return "WATCH C", "관찰만"
+
+def v59_cg_contributions(r):
+    _, rows, _ = v56_cg_breakdown(r)
+    weights = {
+        "oi": 18,
+        "funding": 14,
+        "top_account": 14,
+        "top_position": 18,
+        "liq_bias": 12,
+        "basis": 8,
+        "taker": 10,
+        "ls": 6,
+    }
+
+    result = []
+    for row in rows:
+        if not row.get("available"):
+            continue
+        score = _v59_float(row.get("score"))
+        weight = weights.get(row["key"], 0)
+        contribution = ((score - 50) / 50) * weight
+        result.append({
+            "label": row["label"],
+            "contribution": round(contribution, 1),
+            "score": round(score, 1),
+            "key": row["key"],
+        })
+
+    return sorted(result, key=lambda x: abs(x["contribution"]), reverse=True)
+
+def v59_reason_lines(r):
+    reasons = []
+    inst = v56_institution_strength(r)
+    cg, rows, _ = v56_cg_breakdown(r)
+    chart, chart_rows = v57_chart_breakdown(r)
+
+    row_map = {x["key"]: x for x in rows}
+    chart_map = {name: score for name, score in chart_rows}
+
+    if inst >= 72:
+        reasons.append("기관 수급 유입")
+    elif inst >= 58:
+        reasons.append("기관 수급 중립 이상")
+
+    oi = row_map.get("oi")
+    if oi and oi.get("available") and _v59_float(oi.get("score")) >= 70:
+        reasons.append("OI 증가 흐름")
+
+    taker = row_map.get("taker")
+    if taker and taker.get("available") and _v59_float(taker.get("score")) >= 70:
+        reasons.append("Taker 매수 우위")
+
+    top_pos = row_map.get("top_position")
+    if top_pos and top_pos.get("available") and _v59_float(top_pos.get("score")) >= 70:
+        reasons.append("상위 포지션 롱 우위")
+
+    funding = row_map.get("funding")
+    if funding and funding.get("available") and _v59_float(funding.get("score")) >= 65:
+        reasons.append("Funding 과열 없음")
+
+    if chart_map.get("EMA", 0) >= 65:
+        reasons.append("EMA 추세 양호")
+
+    if chart_map.get("MACD", 0) >= 65:
+        reasons.append("MACD 모멘텀 개선")
+
+    if chart_map.get("RSI", 0) >= 58 and chart_map.get("RSI", 0) <= 80:
+        reasons.append("RSI 진입 구간")
+
+    if _v59_float(bottom_score(r)) >= 65:
+        reasons.append("눌림·매집 구조")
+
+    if _v59_float(breakout_score(r)) >= 65:
+        reasons.append("돌파 준비도 양호")
+
+    if not reasons:
+        reasons.append("상대평가 상위 후보")
+        reasons.append("수급·차트 동시 관찰")
+        reasons.append("진입 조건 확인 필요")
+
+    deduped = []
+    for item in reasons:
+        if item not in deduped:
+            deduped.append(item)
+
+    return deduped[:3]
+
+def v59_readiness(r):
+    inst = v56_institution_strength(r)
+    cg = v56_cg_breakdown(r)[0]
+    chart = v56_chart_structure_score(r)
+    volume = v56_volume_volatility_score(r)
+    market = v57_market_context_score(r)
+    chase = _v59_float(chase_risk(r))
+
+    supply = inst * 0.55 + cg * 0.45
+    risk = 100 - chase
+    total = (
+        supply * 0.35 +
+        chart * 0.30 +
+        market * 0.15 +
+        volume * 0.10 +
+        risk * 0.10
+    )
+
+    if v57_action(r) == "⛔ 추격 금지":
+        total -= 15
+
+    return round(_v59_clip(total), 1), {
+        "수급": round(_v59_clip(supply), 1),
+        "차트": round(_v59_clip(chart), 1),
+        "시장": round(_v59_clip(market), 1),
+        "리스크": round(_v59_clip(100 - chase), 1),
+    }
+
+def _v59_ticker_map():
+    st = V45_API_STATE.get("binance") or {}
+    return {x.get("symbol"): x for x in st.get("ticker", []) if x.get("symbol")}
+
+def v59_market_state():
+    ticker = _v59_ticker_map()
+
+    def chg(sym):
+        item = ticker.get(sym) or {}
+        for key in ("priceChangePercent", "changePercent", "chg24"):
+            try:
+                if item.get(key) is not None:
+                    return float(item[key])
+            except Exception:
+                pass
+        return 0.0
+
+    def trend_label(v):
+        if v >= 2:
+            return "강한 상승"
+        if v >= 0.5:
+            return "상승"
+        if v > -0.5:
+            return "중립"
+        if v > -2:
+            return "하락"
+        return "강한 하락"
+
+    btc = chg("BTCUSDT")
+    eth = chg("ETHUSDT")
+
+    alt_moves = []
+    for sym, item in ticker.items():
+        if not sym.endswith("USDT") or sym in ("BTCUSDT", "ETHUSDT"):
+            continue
+        try:
+            alt_moves.append(float(item.get("priceChangePercent", 0)))
+        except Exception:
+            pass
+
+    if alt_moves:
+        rising = sum(1 for x in alt_moves if x > 0)
+        breadth = rising / len(alt_moves) * 100
+        avg_move = sum(alt_moves) / len(alt_moves)
+    else:
+        breadth = 50.0
+        avg_move = 0.0
+
+    alt_score = _v59_clip(breadth * 0.7 + max(0, min(100, 50 + avg_move * 8)) * 0.3)
+
+    if alt_score >= 70:
+        alt_label = "알트 강세"
+    elif alt_score >= 55:
+        alt_label = "알트 우호"
+    elif alt_score >= 45:
+        alt_label = "알트 중립"
+    elif alt_score >= 30:
+        alt_label = "알트 약세"
+    else:
+        alt_label = "알트 위험"
+
+    return {
+        "btc_change": round(btc, 2),
+        "btc_label": trend_label(btc),
+        "eth_change": round(eth, 2),
+        "eth_label": trend_label(eth),
+        "alt_score": round(alt_score, 1),
+        "alt_label": alt_label,
+        "breadth": round(breadth, 1),
+    }
+
+def v59_format_cg_contrib(r):
+    rows = v59_cg_contributions(r)
+    preferred = []
+    preferred_keys = ("oi", "funding", "taker", "top_position", "top_account", "basis")
+
+    by_key = {x["key"]: x for x in rows}
+    for key in preferred_keys:
+        row = by_key.get(key)
+        if row:
+            preferred.append(row)
+
+    lines = []
+    for row in preferred[:6]:
+        sign = "+" if row["contribution"] >= 0 else ""
+        lines.append(f"• {row['label']} {sign}{row['contribution']}")
+    return lines
+
+def v59_format_candidate(r, rank, universe, section):
+    final = v57_final_score(r)
+    inst = v56_institution_strength(r)
+    cg_score, _, coverage = v56_cg_breakdown(r)
+    chart = v56_chart_structure_score(r)
+    action = v57_action(r)
+    readiness, ready_parts = v59_readiness(r)
+    plan = v58_adjusted_trade_plan(r)
+    prob, interpretation = v58_probability_interpretation(r)
+    t1_pct, t2_pct = v58_expected_upside(r)
+    timing, conditions = v58_timing_conditions(r)
+    watch_grade, watch_note = v59_watch_grade(r)
+    reasons = v59_reason_lines(r)
+    risk_grade = v58_risk_grade(r)
+
+    label = action
+    if action == "🟡 WATCH":
+        label = f"🟡 {watch_grade}"
+
+    entry_mid = (plan["low"] + plan["high"]) / 2 if plan["low"] > 0 and plan["high"] > 0 else 0
+    risk = max(1e-9, entry_mid - plan["stop"]) if entry_mid > 0 and plan["stop"] > 0 else 0
+    rr1 = max(0, plan["t1"] - entry_mid) / risk if risk > 0 else 0
+    rr2 = max(0, plan["t2"] - entry_mid) / risk if risk > 0 else 0
+
+    percentile = round(rank / max(1, universe) * 100, 2)
+    sym = _v54_escape(getattr(r, "sym", "?"))
+
+    cg_contrib = "\n".join(_v54_escape(x) for x in v59_format_cg_contrib(r))
+    reason_text = "\n".join(f"✔ {_v54_escape(x)}" for x in reasons)
+    condition_text = "\n".join(f"• {_v54_escape(x)}" for x in conditions)
+    interpretation_text = " / ".join(_v54_escape(x) for x in interpretation)
+
+    watch_line = ""
+    if action == "🟡 WATCH":
+        watch_line = f"등급 <b>{watch_grade}</b> · {_v54_escape(watch_note)}\n"
+
+    current_line = ""
+    if plan["current"] > 0:
+        current_line = f"현재가 <code>{plan['current']:.10g}</code> · {_v54_escape(plan['note'])}\n"
+
+    return (
+        f"🏅 <b>{section} {rank}. {sym}</b>\n"
+        f"판정 <b>{_v54_escape(label)}</b> | 타이밍 <b>{_v54_escape(timing)}</b>\n"
+        f"{watch_line}"
+        f"종합 <b>{final}</b> | 성공확률 <b>{prob}%</b> | 위험 <b>{_v54_escape(risk_grade)}</b>\n"
+        f"전체 {universe}개 기준 상위 <b>{percentile}%</b>\n"
+        f"예상 상승폭 <b>1차 {t1_pct:+.1f}% / 2차 {t2_pct:+.1f}%</b>\n\n"
+        f"<b>매수 준비도 {readiness}%</b>\n"
+        f"<code>{v59_bar(readiness)}</code>\n"
+        f"수급 {v59_bar(ready_parts['수급'], 8)} {ready_parts['수급']}\n"
+        f"차트 {v59_bar(ready_parts['차트'], 8)} {ready_parts['차트']}\n"
+        f"시장 {v59_bar(ready_parts['시장'], 8)} {ready_parts['시장']}\n"
+        f"리스크 {v59_bar(ready_parts['리스크'], 8)} {ready_parts['리스크']}\n\n"
+        f"<b>{_v54_escape(v59_institution_stage(inst))}</b> · {inst}점\n"
+        f"CoinGlass {cg_score} | 차트 {chart} | 데이터 {round(coverage*8)}/8\n"
+        f"{interpretation_text}\n\n"
+        f"<b>핵심 이유</b>\n{reason_text}\n\n"
+        f"<b>CoinGlass 기여도</b>\n{cg_contrib}\n\n"
+        f"<b>진입 조건</b>\n{condition_text}\n\n"
+        f"<b>매매 계획</b>\n"
+        f"{current_line}"
+        f"🟢 진입 <code>{plan['low']:.10g}~{plan['high']:.10g}</code>\n"
+        f"🔴 손절 <code>{plan['stop']:.10g}</code>\n"
+        f"🎯 목표1 <code>{plan['t1']:.10g}</code> ({t1_pct:+.1f}%) · RR {rr1:.2f} {v58_rr_grade(rr1)}\n"
+        f"🎯 목표2 <code>{plan['t2']:.10g}</code> ({t2_pct:+.1f}%) · RR {rr2:.2f} {v58_rr_grade(rr2)}\n"
+    )
+
+def v59_build_scan_results():
+    rows = v43_candidates(max(V43_LIMIT, V52_PRESELECT)) if "v43_candidates" in globals() else []
+    if not rows:
+        return [], [], []
+
+    syms = [r[1] for r in rows[:max(V43_ANALYZE_LIMIT, V52_SCAN_LIMIT)]]
+    results = []
+    errors = []
+
+    try:
+        results = list(
+            (a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or []
+        )
+    except Exception as e:
+        errors.append(f"parallel:{e}")
+
+    got = {getattr(r, "sym", None) for r in results}
+    for sym in syms:
+        if sym in got:
+            continue
+        try:
+            one = scan([sym])
+            if one:
+                results.append(one[0])
+                got.add(sym)
+            else:
+                errors.append(f"{sym}:empty")
+        except Exception as e:
+            errors.append(f"{sym}:{e}")
+
+    return rows, results, errors
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    mode = st.get("mode") or "COINGLASS_ONLY"
+
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 v59 분석 제한</b>\n"
+            f"상태: {_v54_escape(reason or '-')}\n"
+            "종목별 파생 진단은 <code>/cgtest BTC</code>로 확인할 수 있습니다.",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text(
+        f"🚀 A100 v59 INSTITUTIONAL EXECUTION 분석 중...\n데이터 모드: {mode}"
+    )
+
+    try:
+        rows, results, scan_errors = v59_build_scan_results()
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 후보가 없습니다.")
+            return
+
+        actionable = sorted(
+            [r for r in results if v57_action(r) in ("🟢 STRONG BUY", "🟢 BUY")],
+            key=v58_actionable_rank_score,
+            reverse=True
+        )[:V59_TOP_ACTIONABLE]
+
+        watch = sorted(
+            [r for r in results if v57_action(r) == "🟡 WATCH"],
+            key=lambda r: (v59_watch_grade(r)[0], v58_imminent_score(r)),
+            reverse=True
+        )[:V59_TOP_WATCH]
+
+        universe = len(st.get("ticker") or [])
+        market = v59_market_state()
+
+        mode_note = {
+            "FUTURES": "✅ Binance Futures 실시간",
+            "STALE_CACHE": f"🟡 Futures 캐시 {st.get('cache_age', '?')}초 전",
+            "SPOT_FALLBACK": "🟠 Spot 폴백 · BUY 자동 차단",
+        }.get(mode, "🔴 제한 모드")
+
+        lines = [
+            "🚀 <b>A100 v59 INSTITUTIONAL EXECUTION RANK</b>",
+            f"데이터: <b>{_v54_escape(mode_note)}</b>",
+            f"Gateway: <code>{_v54_escape(st.get('host') or '-')}</code>",
+            f"Binance {universe}개 → 1차 {len(rows)} → 정밀 {len(results)}",
+            f"실매수 추천 {len(actionable)}개 | WATCH 후보 {len(watch)}개",
+            "",
+            "<b>시장 상태</b>",
+            f"BTC: {_v54_escape(market['btc_label'])} ({market['btc_change']:+.2f}%)",
+            f"ETH: {_v54_escape(market['eth_label'])} ({market['eth_change']:+.2f}%)",
+            f"알트시장: {_v54_escape(market['alt_label'])} {market['alt_score']}점",
+            f"상승 종목 비율: {market['breadth']}%",
+            "────────────",
+            ""
+        ]
+
+        if actionable:
+            lines.append("🟢 <b>실매수 추천</b>")
+            for i, r in enumerate(actionable, 1):
+                lines.append(v59_format_candidate(r, i, universe, "추천"))
+                lines.append("────────────")
+        else:
+            lines.append("🟢 <b>실매수 추천 없음</b>\n현재 STRONG BUY/BUY 통과 종목이 없습니다.\n")
+
+        if watch:
+            lines.append("🟡 <b>WATCH 후보</b>")
+            for i, r in enumerate(watch, 1):
+                lines.append(v59_format_candidate(r, i, universe, "WATCH"))
+                lines.append("────────────")
+        else:
+            lines.append("🟡 WATCH 기준 통과 종목도 없습니다.")
+
+        if results:
+            imminent = max(results, key=v58_imminent_score)
+            pullback = max(results, key=v58_pullback_score)
+            institution = max(results, key=v56_institution_strength)
+            lines.extend([
+                "",
+                "<b>보조 랭킹</b>",
+                f"🔥 상승 임박: {_v54_escape(getattr(imminent, 'sym', '?'))}",
+                f"🟡 눌림목: {_v54_escape(getattr(pullback, 'sym', '?'))}",
+                f"🏦 기관매집: {_v54_escape(getattr(institution, 'sym', '?'))}",
+            ])
+
+        if scan_errors:
+            lines.append(f"\n🛠 스캔오류 {len(scan_errors)}개")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def alertstatus_cmd(update, context):
+    await update.message.reply_text(
+        "🔔 <b>A100 v59 자동알림 상태</b>\n"
+        f"자동알림: {'✅ 활성' if V59_AUTO_ALERT else '⛔ 비활성'}\n"
+        f"검사주기: {V59_ALERT_INTERVAL}초\n"
+        f"재알림 제한: {V59_ALERT_COOLDOWN}초\n"
+        f"최소 종합점수: {V59_ALERT_SCORE}\n"
+        f"CoinGlass 기준: {V59_ALERT_CG}\n"
+        f"Chat ID: {'등록됨' if CHAT_ID else '미등록'}\n\n"
+        "활성화 환경변수:\n"
+        "<code>V59_AUTO_ALERT=1</code>\n"
+        "<code>TELEGRAM_CHAT_ID=채팅ID</code>",
+        parse_mode="HTML"
+    )
+
+async def v59_auto_alert_loop(app):
+    await asyncio.sleep(120)
+
+    while True:
+        try:
+            if not V59_AUTO_ALERT or not CHAT_ID:
+                await asyncio.sleep(V59_ALERT_INTERVAL)
+                continue
+
+            ok, _, _ = v451_gate()
+            if not ok:
+                await asyncio.sleep(V59_ALERT_INTERVAL)
+                continue
+
+            _, results, _ = v59_build_scan_results()
+            now = time.time()
+
+            for r in results:
+                action = v57_action(r)
+                score = v57_final_score(r)
+                cg = v56_cg_breakdown(r)[0]
+                inst = v56_institution_strength(r)
+                sym = getattr(r, "sym", "?")
+
+                trigger = (
+                    action == "🟢 STRONG BUY"
+                    or (action == "🟢 BUY" and score >= V59_ALERT_SCORE)
+                    or cg >= V59_ALERT_CG
+                    or inst >= 85
+                )
+
+                if not trigger:
+                    continue
+
+                last = V59_ALERT_MEMORY.get(sym, 0)
+                if now - last < V59_ALERT_COOLDOWN:
+                    continue
+
+                readiness, _ = v59_readiness(r)
+                timing = v57_buy_timing(r)
+                reasons = " / ".join(v59_reason_lines(r))
+                text = (
+                    "🚨 <b>A100 v59 자동 신호</b>\n"
+                    f"종목: <b>{_v54_escape(sym)}</b>\n"
+                    f"판정: <b>{_v54_escape(action)}</b>\n"
+                    f"종합: {score} | CoinGlass: {cg} | 기관: {inst}\n"
+                    f"준비도: {readiness}% | 타이밍: {_v54_escape(timing)}\n"
+                    f"이유: {_v54_escape(reasons)}"
+                )
+
+                await app.bot.send_message(
+                    chat_id=CHAT_ID,
+                    text=text,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+                V59_ALERT_MEMORY[sym] = now
+
+        except Exception as e:
+            print(f"A100 v59 auto alert error: {e}", flush=True)
+
+        await asyncio.sleep(V59_ALERT_INTERVAL)
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+
+    await update.message.reply_text(
+        "📦 <b>A100 v59 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"사유: {_v54_escape(reason or '-')}\n"
+        f"Gateway: <code>{_v54_escape(b.get('host') or '-')}</code>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"WATCH A/B/C: 활성\n"
+        f"CoinGlass 기여도: 활성\n"
+        f"기관매집 5단계: 활성\n"
+        f"시장상태 BTC/ETH/알트: 활성\n"
+        f"매수 준비도 게이지: 활성\n"
+        f"자동알림: {'활성' if V59_AUTO_ALERT else '비활성'}\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+async def run_bot_async():
+    global V59_ALERT_TASK
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is missing")
+
+    retry_delay = V44_RETRY_MIN
+
+    while True:
+        app = None
+        try:
+            app = build_v44_application(token)
+
+            await app.initialize()
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            print("A100 v59: webhook deleted and pending updates dropped", flush=True)
+
+            await app.start()
+            await app.updater.start_polling(
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES,
+                poll_interval=1.0,
+                timeout=20,
+                bootstrap_retries=0,
+            )
+
+            if V59_AUTO_ALERT and CHAT_ID:
+                V59_ALERT_TASK = asyncio.create_task(v59_auto_alert_loop(app))
+                print("A100 v59: auto alert loop started", flush=True)
+
+            print("A100 v59: Telegram single polling started", flush=True)
+            retry_delay = V44_RETRY_MIN
+
+            while app.updater.running:
+                await asyncio.sleep(10)
+
+            raise RuntimeError("Telegram updater stopped unexpectedly")
+
+        except Conflict as e:
+            print(
+                f"A100 v59 Conflict: another getUpdates instance is active. "
+                f"Retrying in {retry_delay}s: {e}",
+                flush=True,
+            )
+            if V59_ALERT_TASK:
+                V59_ALERT_TASK.cancel()
+                V59_ALERT_TASK = None
+            await stop_v44_application(app)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
+
+        except (NetworkError, TimedOut) as e:
+            print(f"A100 v59 Telegram network error. Retry in {retry_delay}s: {e}", flush=True)
+            if V59_ALERT_TASK:
+                V59_ALERT_TASK.cancel()
+                V59_ALERT_TASK = None
+            await stop_v44_application(app)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
+
+        except asyncio.CancelledError:
+            if V59_ALERT_TASK:
+                V59_ALERT_TASK.cancel()
+                V59_ALERT_TASK = None
+            await stop_v44_application(app)
+            raise
+
+        except Exception as e:
+            print(f"A100 v59 polling error. Retry in {retry_delay}s: {e}", flush=True)
+            print(traceback.format_exc(), flush=True)
+            if V59_ALERT_TASK:
+                V59_ALERT_TASK.cancel()
+                V59_ALERT_TASK = None
+            await stop_v44_application(app)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
 
 if __name__ == "__main__":
     main()
