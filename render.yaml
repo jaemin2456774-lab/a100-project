@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: python -u main.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
@@ -135,3 +135,12 @@ services:
 
       - key: V43_MIN_SCORE
         value: "48"
+
+      - key: V44_RETRY_MIN
+        value: "5"
+
+      - key: V44_RETRY_MAX
+        value: "60"
+
+      - key: V44_LOCK_FILE
+        value: "/tmp/a100_telegram_polling.lock"

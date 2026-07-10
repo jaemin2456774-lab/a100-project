@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from telegram import Update
+from telegram.error import Conflict, NetworkError, TimedOut
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 load_dotenv()
@@ -39,7 +40,7 @@ def keep_alive_after_error(e):
         time.sleep(60)
 
 
-# ===== A100 v43 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
+# ===== A100 v44 안정화: API 캐시 / 레이트리밋 / 매크로 리스크 =====
 import time as _a100_time
 import re
 import html
@@ -132,7 +133,7 @@ def macro_text():
     else:
         level = "🟢 낮음"
     return (
-        f"🌎 <b>A100 v43 매크로 리스크</b>\n"
+        f"🌎 <b>A100 v44 매크로 리스크</b>\n"
         f"위험도: <b>{risk}%</b> {level}\n"
         f"FOMC D-{int(fomc) if fomc < 90 else '?'} | CPI D-{int(cpi) if cpi < 90 else '?'} | 전쟁위험 {war}%\n"
         f"메모: {note}\n"
@@ -151,7 +152,7 @@ CG_CACHE={}; KR_CACHE=(0,{})
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
-        b=b"A100 v43 Port Fix running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
+        b=b"A100 v44 Port Fix running"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self,*a): return
 def health(): HTTPServer(("0.0.0.0", int(os.getenv("PORT","10000"))), Health).serve_forever()
 def sf(x,d=0.0):
@@ -689,7 +690,7 @@ def v34_base_macro_report():
     m = v34_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v43 매크로 엔진</b>\n"
+        f"🌎 <b>A100 v44 매크로 엔진</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -973,16 +974,16 @@ def elite_sort(res):
 
 def ranktxt(res,n=10):
     ranked = elite_sort(res) if res else []
-    lines = ["⚡ <b>A100 v43 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
+    lines = ["⚡ <b>A100 v44 Adaptive Signal Rank</b>", market_header(), "추천품질·폭발확률 기준으로 재정렬\n"]
     for i, r in enumerate(ranked[:n], 1):
         lines.append(format_elite(r, i))
     return "\n".join(lines) if ranked else "A100 후보 없음"
 
 def report(symbols,n=10):
     res=scan(symbols)
-    return "A100 결과 없음" if not res else "🔥 <b>A100 v43 Port Fix</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
+    return "A100 결과 없음" if not res else "🔥 <b>A100 v44 Port Fix</b>\n폭발확률·추천품질 중심 분석\n\n"+"\n━━━━━━━━━━━━\n".join(full(r) for r in elite_sort(res)[:n])
 
-async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v43 시작\n/check\n/scan ARKM,SYN,SENT\n/ultimate\n/chart\n/fast\n/cgstatus\n/cgreset\n/macro\n/live\n/news\n/smartnews\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
+async def start(update:Update, context:ContextTypes.DEFAULT_TYPE): await update.message.reply_text("A100 v44 시작\n/check\n/scan ARKM,SYN,SENT\n/ultimate\n/chart\n/fast\n/cgstatus\n/cgreset\n/macro\n/live\n/news\n/smartnews\n/cleannews\n/translate\n/final\n/mode\n/events\n/macrohelp\n/cgstatus\n/rank\n/hot\n/sniper\n/elite\n/only\n/auto\n/god\n/real\n/scalp\n/tenx\n/breakout\n/bottom\n/timing\n/now\n/win ARKM,SYN\n/smart\n/danger\n/watch\n/risk ARKM,SYN\n/kr\n/cgtest BTC\n/myid")
 async def myid(update,context): await update.message.reply_text(f"TELEGRAM_CHAT_ID = {update.effective_chat.id}")
 async def check(update,context): await update.message.reply_text("A100 분석 중..."); await update.message.reply_text(report(DEFAULT_SYMBOLS,10),parse_mode="HTML")
 async def scan_cmd(update,context):
@@ -996,7 +997,7 @@ async def hot_cmd(update,context):
     await update.message.reply_text(ranktxt(hot,10) if hot else "HOT 후보 없음",parse_mode="HTML")
 
 async def sniper_cmd(update,context):
-    await update.message.reply_text("🎯 A100 v43 스나이퍼 단일 후보 스캔 중...")
+    await update.message.reply_text("🎯 A100 v44 스나이퍼 단일 후보 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🎯 오늘은 스나이퍼 후보 없음\n\n기준 미달이면 억지 추천하지 않습니다.\n무리하게 진입하지 않는 것이 더 좋습니다.")
@@ -1008,7 +1009,7 @@ async def sniper_cmd(update,context):
     ex = explosion_score(r)
     q = quality_score(r)
     text = (
-        "🎯 <b>A100 v43 SNIPER PICK</b>\n\n"
+        "🎯 <b>A100 v44 SNIPER PICK</b>\n\n"
         f"<b>{r.sym}</b> {stars(q)}\n"
         f"추천품질: <b>{q}%</b>\n"
         f"폭발확률: <b>{ex}%</b>\n"
@@ -1028,12 +1029,12 @@ async def sniper_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def elite_cmd(update,context):
-    await update.message.reply_text("🏆 A100 v43 Elite Pick TOP5 스캔 중...")
+    await update.message.reply_text("🏆 A100 v44 Elite Pick TOP5 스캔 중...")
     res = elite_sort(scan(top_usdt(TOP_SCAN_LIMIT)))
     if not res:
         await update.message.reply_text("🏆 A100 ELITE\n\n오늘은 Elite 후보가 없습니다.\n무리한 진입보다 기다리는 것이 유리합니다.")
         return
-    lines = ["🏆 <b>A100 v43 ELITE PICK TOP5</b>", market_header(), ""]
+    lines = ["🏆 <b>A100 v44 ELITE PICK TOP5</b>", market_header(), ""]
     for i, r in enumerate(res[:5], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1087,19 +1088,19 @@ def send(text):
     if not BOT_TOKEN or not CHAT_ID: log("TOKEN/CHAT_ID missing"); return
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",json={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=15)
     except Exception as e: log(f"telegram {e}")
-def morning(): send("🌅 <b>A100 v43 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
+def morning(): send("🌅 <b>A100 v44 오전 5시 Elite 리포트</b>\n\n"+report(DEFAULT_SYMBOLS,10))
 def alert():
     hit=[r for r in scan(DEFAULT_SYMBOLS) if strict_pass(r) and (r.score>=SCORE_ALERT or r.accumulation>=80 or r.smart>=75 or r.squeeze>=75 or timing_score(r)>=72 or god_score(r)>=70 or real_signal_score(r)>=70)]
-    if hit: send("🚨 <b>A100 v43 조건 감지</b>\n\n"+ranktxt(hit,5))
+    if hit: send("🚨 <b>A100 v44 조건 감지</b>\n\n"+ranktxt(hit,5))
 
 
 
 async def auto_cmd(update,context):
-    await update.message.reply_text("🤖 A100 v43 자동판정 스캔 중...")
+    await update.message.reply_text("🤖 A100 v44 자동판정 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🤖 <b>A100 v43 AUTO THRESHOLD</b>", v34_header(), ""]
+    lines = ["🤖 <b>A100 v44 AUTO THRESHOLD</b>", v34_header(), ""]
     if cand:
         lines.append("✅ 실전 후보")
         for i, r in enumerate(cand[:5], 1):
@@ -1111,7 +1112,7 @@ async def auto_cmd(update,context):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def god_cmd(update,context):
-    await update.message.reply_text("🔥 A100 v43 Auto GOD 실전 단일 후보 스캔 중...")
+    await update.message.reply_text("🔥 A100 v44 Auto GOD 실전 단일 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if god_v34_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), god_score(r), timing_score(r), breakout_score(r)), reverse=True)
@@ -1124,7 +1125,7 @@ async def god_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🔥 <b>A100 v43 GOD PICK</b>\n"
+        "🔥 <b>A100 v44 GOD PICK</b>\n"
         "24시간 내 실전 신호 단일 후보\n\n"
         + v34_header()
         + "\n\n"
@@ -1134,7 +1135,7 @@ async def god_cmd(update,context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def real_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v43 Auto 실전신호 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v44 Auto 실전신호 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if real_pass(r)]
     cand = sorted(cand, key=lambda r: (real_signal_score(r), timing_score(r), breakout_score(r), whale_score(r)), reverse=True)
@@ -1145,7 +1146,7 @@ async def real_cmd(update,context):
             lines.append(format_fallback(r, i))
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
-    lines = ["⚡ <b>A100 v43 REAL SIGNAL</b>", v34_header(), "24시간 내 터질 가능성 중심\n"]
+    lines = ["⚡ <b>A100 v44 REAL SIGNAL</b>", v34_header(), "24시간 내 터질 가능성 중심\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_real(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1169,14 +1170,14 @@ async def scalp_cmd(update,context):
 
 
 async def timing_cmd(update,context):
-    await update.message.reply_text("⏱ A100 v43 진입 타이밍 후보 스캔 중...")
+    await update.message.reply_text("⏱ A100 v44 진입 타이밍 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if timing_pass(r)]
     cand = sorted(cand, key=lambda r: (timing_score(r), quality_score(r), win_rate_estimate(r)), reverse=True)
     if not cand:
         await update.message.reply_text("⏱ 지금 진입 타이밍 후보 없음\n\n기준 미달이면 기다리는 것이 유리합니다.")
         return
-    lines = ["⏱ <b>A100 v43 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
+    lines = ["⏱ <b>A100 v44 TIMING AI</b>", market_header(), "지금 자리 기준 랭킹\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_elite(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -1191,7 +1192,7 @@ async def now_cmd(update,context):
         return
     r = cand[0]
     text = (
-        "🚨 <b>A100 v43 NOW ENTRY</b>\n\n"
+        "🚨 <b>A100 v44 NOW ENTRY</b>\n\n"
         f"<b>{r.sym}</b> {stars(quality_score(r))}\n"
         f"진입타이밍: <b>{timing_score(r)}%</b>\n"
         f"추천품질: <b>{quality_score(r)}%</b>\n"
@@ -1213,7 +1214,7 @@ async def win_cmd(update,context):
     await update.message.reply_text("📊 A100 예상승률 계산 중...")
     res = scan(syms)
     res = sorted(res, key=lambda r: (win_rate_estimate(r), rr_score(r), quality_score(r)), reverse=True)
-    lines = ["📊 <b>A100 v43 예상승률 TOP</b>\n"]
+    lines = ["📊 <b>A100 v44 예상승률 TOP</b>\n"]
     for i, r in enumerate(res[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b>\n"
@@ -1276,47 +1277,47 @@ async def watch_cmd(update,context):
 
 
 async def tenx_cmd(update,context):
-    await update.message.reply_text("💎 A100 v43 10X 잠재 후보 스캔 중...")
+    await update.message.reply_text("💎 A100 v44 10X 잠재 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if tenx_score(r) >= 48 and r.bubble < 70 and r.distribution < 70]
     cand = sorted(cand, key=lambda r: (tenx_score(r), bottom_score(r), whale_score(r)), reverse=True)
     if not cand:
         await update.message.reply_text("💎 10X 잠재 후보 없음")
         return
-    lines = ["💎 <b>A100 v43 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
+    lines = ["💎 <b>A100 v44 10X WATCH</b>", "초고위험 장기 잠재 후보입니다. 단타 매수신호가 아닙니다.\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def breakout_cmd(update,context):
-    await update.message.reply_text("🚀 A100 v43 돌파직전 후보 스캔 중...")
+    await update.message.reply_text("🚀 A100 v44 돌파직전 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if breakout_score(r) >= 45 and r.bubble < 75 and r.distribution < 75]
     cand = sorted(cand, key=lambda r: (breakout_score(r), timing_score(r), r.squeeze), reverse=True)
     if not cand:
         await update.message.reply_text("🚀 돌파직전 후보 없음")
         return
-    lines = ["🚀 <b>A100 v43 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
+    lines = ["🚀 <b>A100 v44 BREAKOUT WATCH</b>", "저항 근접·거래량·스퀴즈 기준\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def bottom_cmd(update,context):
-    await update.message.reply_text("🧱 A100 v43 바닥매집 후보 스캔 중...")
+    await update.message.reply_text("🧱 A100 v44 바닥매집 후보 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     cand = [r for r in res if bottom_score(r) >= 55 and r.accumulation >= 45 and r.bubble < 65]
     cand = sorted(cand, key=lambda r: (bottom_score(r), r.accumulation, r.smart), reverse=True)
     if not cand:
         await update.message.reply_text("🧱 바닥매집 후보 없음")
         return
-    lines = ["🧱 <b>A100 v43 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
+    lines = ["🧱 <b>A100 v44 BOTTOM ACCUMULATION</b>", "과열 낮고 매집 흔적 있는 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(format_god(r, i))
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 
-# ===== A100 v43 뉴스/전쟁/고래 AI =====
+# ===== A100 v44 뉴스/전쟁/고래 AI =====
 NEWS_CACHE = {}
 NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
 
@@ -1446,7 +1447,7 @@ def v34_macro_report():
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     titles = "\n".join([f"- {x}" for x in n.get("titles", [])]) or "- 주요 리스크 뉴스 없음"
     return (
-        f"🌎 <b>A100 v43 NEWS/WAR/WHALE AI</b>\n"
+        f"🌎 <b>A100 v44 NEWS/WAR/WHALE AI</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'}\n"
@@ -1489,7 +1490,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v43 자동 매크로 수집 엔진 =====
+# ===== A100 v44 자동 매크로 수집 엔진 =====
 AUTO_MACRO_CACHE = {}
 AUTO_MACRO_TTL = int(os.getenv("AUTO_MACRO_TTL", "900"))
 
@@ -1690,7 +1691,7 @@ def v34_base_macro_report():
     m = v34_base_macro_engine()
     ev = " / ".join(m["events"]) if m["events"] else "특이 이벤트 없음"
     return (
-        f"🌎 <b>A100 v43 AUTO MACRO LIVE</b>\n"
+        f"🌎 <b>A100 v44 AUTO MACRO LIVE</b>\n"
         f"모드: <b>{m['mode']}</b>\n"
         f"종합위험: <b>{m['risk']}%</b> | 추천기준 +{m['guard']}점 | 알트감점 {m['alt_penalty']}점\n\n"
         f"일정: FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'} / CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'} / PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'} / PCE D-{int(m['pce']) if m['pce'] < 90 else '?'} / NFP D-{int(m['nfp']) if m['nfp'] < 90 else '?'} / GDP D-{int(m['gdp']) if m['gdp'] < 90 else '?'}\n"
@@ -1704,7 +1705,7 @@ def v34_base_macro_report():
 async def events_cmd(update,context):
     m = v34_base_macro_engine()
     text = (
-        "📅 <b>A100 v43 주요 이벤트</b>\n"
+        "📅 <b>A100 v44 주요 이벤트</b>\n"
         f"FOMC D-{int(m['fomc']) if m['fomc'] < 90 else '?'}\n"
         f"CPI D-{int(m['cpi']) if m['cpi'] < 90 else '?'}\n"
         f"PPI D-{int(m['ppi']) if m['ppi'] < 90 else '?'}\n"
@@ -1742,7 +1743,7 @@ async def live_cmd(update,context):
     m = v34_macro_engine()
     n = m.get("news_ai", {})
     text = (
-        "📡 <b>A100 v43 LIVE DATA</b>\n"
+        "📡 <b>A100 v44 LIVE DATA</b>\n"
         f"Fear&Greed: {m['fg']} {'(자동)' if os.getenv('AUTO_FEAR_GREED','1')=='1' else '(수동)'}\n"
         f"BTC Dominance Trend: {m['btc_dom']} {'(자동)' if os.getenv('AUTO_MARKET','1')=='1' else '(수동)'}\n"
         f"News Feed: {n.get('feed_count', 0)}개 / NewsRisk {m.get('news_risk', 0)}% / War {m['war']}% / Whale {m['whale']}%\n"
@@ -1753,7 +1754,7 @@ async def live_cmd(update,context):
 
 
 
-# ===== A100 v43 한글 뉴스 요약 / 영향도 / 메타스코어 =====
+# ===== A100 v44 한글 뉴스 요약 / 영향도 / 메타스코어 =====
 SEEN_NEWS = set()
 
 def safe_html(s):
@@ -1972,7 +1973,7 @@ def v34_market_mode():
     return "🟡 Rotation"
 
 
-# ===== A100 v43 클린 한글 뉴스 AI =====
+# ===== A100 v44 클린 한글 뉴스 AI =====
 def clean_html(text):
     text = str(text or "")
     text = re.sub(r"<script.*?</script>", " ", text, flags=re.I | re.S)
@@ -2104,7 +2105,7 @@ def format_news_ko(t, idx=1):
     )
 
 
-# ===== A100 v43 Port Fix =====
+# ===== A100 v44 Port Fix =====
 def news_source_score(text):
     low = clean_html(text).lower()
     sources = {
@@ -2319,7 +2320,7 @@ async def news_cmd(update,context):
             raw = dedupe_news_list(n.get("raw_titles", [])[:5])
             items = [(news_importance_score(t), t) for t in raw]
         lines = [
-            "📰 <b>A100 v43 클린 한글 뉴스 AI</b>",
+            "📰 <b>A100 v44 클린 한글 뉴스 AI</b>",
             f"뉴스위험 {n.get('news_risk', 0)}% | 전쟁위험 {n.get('war_risk', 0)}% | 고래위험 {n.get('whale_risk', 0)}%",
             f"Feed {n.get('feed_count', 0)}개 | 신뢰도·중요도·수혜피해\n"
         ]
@@ -2332,10 +2333,10 @@ async def news_cmd(update,context):
 
 
 async def final_cmd(update,context):
-    await update.message.reply_text("🧠 A100 v43 메타 AI 점수 스캔 중...")
+    await update.message.reply_text("🧠 A100 v44 메타 AI 점수 스캔 중...")
     res = scan(top_usdt(TOP_SCAN_LIMIT))
     res = sorted(res, key=lambda r: (v34_meta_score(r), timing_score(r), breakout_score(r)), reverse=True)
-    lines = ["🧠 <b>A100 v43 META AI RANK</b>", f"시장모드: <b>{v34_market_mode()}</b> / 매크로위험 {v34_macro_engine()['risk']}%", ""]
+    lines = ["🧠 <b>A100 v44 META AI RANK</b>", f"시장모드: <b>{v34_market_mode()}</b> / 매크로위험 {v34_macro_engine()['risk']}%", ""]
     for i, r in enumerate(res[:10], 1):
         decision_fn = globals().get("v25_decision") or globals().get("v24_decision") or globals().get("v23_decision")
         decision = decision_fn(r) if decision_fn else "대기"
@@ -2349,7 +2350,7 @@ async def final_cmd(update,context):
 
 async def mode_cmd(update,context):
     await update.message.reply_text(
-        f"🧭 <b>A100 v43 시장모드</b>\n"
+        f"🧭 <b>A100 v44 시장모드</b>\n"
         f"현재: <b>{v34_market_mode()}</b>\n"
         f"매크로위험: {v34_macro_engine()['risk']}%\n"
         f"추천: {'고배율 금지 / 관망 우선' if v34_macro_engine()['risk'] >= 60 else '일반 기준 / 추격매수 금지'}",
@@ -2389,7 +2390,7 @@ async def cleannews_cmd(update,context):
 
 
 
-# ===== A100 v43 Port Fix / 429 방지 엔진 =====
+# ===== A100 v44 Port Fix / 429 방지 엔진 =====
 CG_429_UNTIL = 0.0
 CG_FAIL_COUNT = 0
 CG_HARD_TTL = int(os.getenv("CG_HARD_TTL", "900"))
@@ -2506,10 +2507,10 @@ def v34_format_pick(r, idx=1):
 
 
 async def fast_cmd(update,context):
-    await update.message.reply_text("⚡ A100 v43 FAST 차트-only 스캔 중...")
+    await update.message.reply_text("⚡ A100 v44 FAST 차트-only 스캔 중...")
     res = scan(top_usdt(FAST_SCAN_LIMIT))
     cand = v34_fast_prefilter(res, 10)
-    lines = ["⚡ <b>A100 v43 FAST FILTER</b>", "CoinGlass 호출 최소화용 1차 후보\n"]
+    lines = ["⚡ <b>A100 v44 FAST FILTER</b>", "CoinGlass 호출 최소화용 1차 후보\n"]
     for i, r in enumerate(cand[:10], 1):
         lines.append(
             f"{i}. <b>{r.sym}</b> | V34 {v34_ultimate_score(r)}% | 타이밍 {timing_score(r)}% | 돌파 {breakout_score(r)}% | 추격 {chase_risk(r)}%\n"
@@ -2537,7 +2538,7 @@ async def cgstatus_cmd(update,context):
 
 
 
-# ===== A100 v43 Binance Cache Fix =====
+# ===== A100 v44 Single Polling Fix =====
 ULTIMATE_CACHE = {}
 ULTIMATE_TTL = int(os.getenv("ULTIMATE_TTL", "600"))
 
@@ -2628,7 +2629,7 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached[1], parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("🏆 A100 v43 Ultimate AI 최종 후보 스캔 중...")
+    await update.message.reply_text("🏆 A100 v44 Ultimate AI 최종 후보 스캔 중...")
     try:
         limit = min(int(os.getenv("FAST_SCAN_LIMIT", "25")), 30)
         res = scan(top_usdt(limit))
@@ -2643,7 +2644,7 @@ async def ultimate_cmd(update, context):
         cand = sorted(cand, key=lambda r: ultimate_pick_score(r), reverse=True)
 
         lines = [
-            "🏆 <b>A100 v43 ULTIMATE AI</b>",
+            "🏆 <b>A100 v44 ULTIMATE AI</b>",
             ultimate_market_line(),
             "CoinGlass: 429 방지 캐시/쿨다운 우선",
             "",
@@ -2682,7 +2683,7 @@ async def chart_cmd(update, context):
 
 # ===== V35 Missing handler fallback =====
 
-# ===== A100 v43 Binance Cache Fix =====
+# ===== A100 v44 Single Polling Fix =====
 SPEED_CACHE = {}
 SPEED_TTL = int(os.getenv("SPEED_TTL", "300"))
 SPEED_SCAN_LIMIT = int(os.getenv("SPEED_SCAN_LIMIT", "12"))
@@ -2733,14 +2734,14 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("⚡ A100 v43 초고속 후보 스캔 중...")
+    await update.message.reply_text("⚡ A100 v44 초고속 후보 스캔 중...")
     try:
         # 기존 25~30개 대신 12개만 1차 스캔
         res = scan(top_usdt(SPEED_SCAN_LIMIT))
         cand = sorted(res, key=lambda r: speed_pick_score(r), reverse=True)[:SPEED_FINAL_LIMIT]
 
         lines = [
-            "⚡ <b>A100 v43 SPEED ULTIMATE</b>",
+            "⚡ <b>A100 v44 SPEED ULTIMATE</b>",
             f"스캔: {SPEED_SCAN_LIMIT}개 | 결과캐시 {SPEED_TTL}초 | CoinGlass 호출 최소화",
             "뉴스/매크로는 /news, 정밀분석은 /deep 사용 권장",
             "────────────",
@@ -2765,7 +2766,7 @@ async def deep_cmd(update, context):
     try:
         res = scan(top_usdt(SPEED_SCAN_LIMIT))
         cand = sorted(res, key=lambda r: ultimate_pick_score(r) if "ultimate_pick_score" in globals() else speed_pick_score(r), reverse=True)[:5]
-        lines = ["🧠 <b>A100 v43 DEEP</b>", "정밀 후보 TOP5\n"]
+        lines = ["🧠 <b>A100 v44 DEEP</b>", "정밀 후보 TOP5\n"]
         for i, r in enumerate(cand, 1):
             if "ultimate_format_one" in globals():
                 lines.append(ultimate_format_one(r, i))
@@ -2784,7 +2785,7 @@ async def cache_cmd(update, context):
     await update.message.reply_text("♻️ 추천 캐시 초기화 완료")
 
 
-# ===== A100 v43 Binance Cache Fix Engine =====
+# ===== A100 v44 Single Polling Fix Engine =====
 # 목표: /ultimate 1~3초 응답. 정밀 분석은 /deep 으로 분리.
 TICKER_CACHE = {"ts": 0, "data": []}
 TICKER_TTL = int(os.getenv("TICKER_TTL", "20"))
@@ -2890,7 +2891,7 @@ async def ultimate_cmd(update, context):
         await update.message.reply_text(cached, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    await update.message.reply_text("⚡ A100 v43 초고속 스캔 중...")
+    await update.message.reply_text("⚡ A100 v44 초고속 스캔 중...")
 
     try:
         syms = ultra_symbols(ULTRA_LIMIT)
@@ -2901,7 +2902,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "⚡ <b>A100 v43 ULTRA SPEED</b>",
+            "⚡ <b>A100 v44 ULTRA SPEED</b>",
             f"대상 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {ULTRA_TTL}초",
             "CoinGlass·뉴스 제외 초고속 모드",
             "정밀분석은 /deep",
@@ -2936,7 +2937,7 @@ async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     ultra_cached = "있음" if ultra_cache_get() else "없음"
     await update.message.reply_text(
-        f"⚡ <b>A100 v43 속도상태</b>\n"
+        f"⚡ <b>A100 v44 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"Ultimate cache: {ultra_cached}\n"
         f"ULTRA_LIMIT: {ULTRA_LIMIT} / TOP: {ULTRA_TOP}\n"
@@ -2945,7 +2946,7 @@ async def speedstatus_cmd(update, context):
     )
 
 
-# ===== A100 v43 Binance Cache Fix Engine =====
+# ===== A100 v44 Single Polling Fix Engine =====
 # 목표: /quick 1초 내외, /ultimate 3~5초 내외
 HYPER_CACHE = {}
 HYPER_TTL = int(os.getenv("HYPER_TTL", "120"))
@@ -3003,7 +3004,7 @@ def hyper_candidates(limit=None):
 def hyper_quick_text():
     rows = hyper_candidates(HYPER_FINAL_TOP)
     lines = [
-        "⚡ <b>A100 v43 QUICK 1차 후보</b>",
+        "⚡ <b>A100 v44 QUICK 1차 후보</b>",
         "OHLCV 계산 없이 24h 거래대금·거래횟수·변동률 기준",
         "정밀 진입가는 /ultimate",
         "────────────",
@@ -3066,7 +3067,7 @@ async def ultimate_cmd(update, context):
         return
 
     t0 = now_ts()
-    await update.message.reply_text("⚡ A100 v43 Binance Cache Fix 정밀 후보 5개만 계산 중...")
+    await update.message.reply_text("⚡ A100 v44 Single Polling Fix 정밀 후보 5개만 계산 중...")
     try:
         rows = hyper_candidates(HYPER_TICKER_LIMIT)
         syms = [r[1] for r in rows]
@@ -3079,7 +3080,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "⚡ <b>A100 v43 HYPER FAST</b>",
+            "⚡ <b>A100 v44 HYPER FAST</b>",
             f"24h 후보 {len(syms)}개만 정밀계산 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {HYPER_TTL}초",
             "CoinGlass·뉴스는 제외, 속도 우선",
             "정밀 파생수급은 /deep",
@@ -3102,7 +3103,7 @@ async def ultimate_cmd(update, context):
 async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     await update.message.reply_text(
-        f"⚡ <b>A100 v43 속도상태</b>\n"
+        f"⚡ <b>A100 v44 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"Hyper cache: {list(HYPER_CACHE.keys())}\n"
         f"후보수: {HYPER_TICKER_LIMIT} / 결과: {HYPER_FINAL_TOP}\n"
@@ -3120,7 +3121,7 @@ async def cache_cmd(update, context):
     await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
 
-# ===== A100 v43 Binance Cache Fix Engine =====
+# ===== A100 v44 Single Polling Fix Engine =====
 # 핵심: /ultimate 에서 5개 OHLCV를 병렬 계산하여 2~5초 목표
 PARALLEL_WORKERS = int(os.getenv("PARALLEL_WORKERS", "5"))
 V39_LIMIT = int(os.getenv("V39_LIMIT", "5"))
@@ -3241,7 +3242,7 @@ async def ultimate_cmd(update, context):
         return
 
     t0 = now_ts()
-    await update.message.reply_text("🚀 A100 v43 병렬 스캔 중...")
+    await update.message.reply_text("🚀 A100 v44 병렬 스캔 중...")
     try:
         rows = v41_candidates(V39_LIMIT)
         syms = [r[1] for r in rows]
@@ -3254,7 +3255,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🚀 <b>A100 v43 PARALLEL SPEED</b>",
+            "🚀 <b>A100 v44 PARALLEL SPEED</b>",
             f"후보 {len(syms)}개 병렬계산 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {V39_TTL}초",
             f"workers {PARALLEL_WORKERS} | CoinGlass·뉴스 제외",
             "정밀 파생수급은 /deep",
@@ -3283,7 +3284,7 @@ async def quick_cmd(update, context):
     try:
         rows = v41_candidates(5)
         lines = [
-            "⚡ <b>A100 v43 QUICK</b>",
+            "⚡ <b>A100 v44 QUICK</b>",
             "24h 티커만 사용 / 즉시 후보",
             "진입가 계산은 /ultimate",
             "────────────",
@@ -3305,7 +3306,7 @@ async def quick_cmd(update, context):
 async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     await update.message.reply_text(
-        f"🚀 <b>A100 v43 속도상태</b>\n"
+        f"🚀 <b>A100 v44 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"V39 cache: {list(V39_CACHE.keys())}\n"
         f"후보수 {V39_LIMIT} / TOP {V39_TOP} / workers {PARALLEL_WORKERS}\n"
@@ -3324,7 +3325,7 @@ async def cache_cmd(update, context):
     await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
 
-# ===== A100 v43 Binance Cache Fix Engine =====
+# ===== A100 v44 Single Polling Fix Engine =====
 KLINE_RESULT_CACHE = {}
 KLINE_RESULT_TTL = int(os.getenv("KLINE_RESULT_TTL", "60"))
 V40_TTL = int(os.getenv("V40_TTL", "120"))
@@ -3465,7 +3466,7 @@ async def ultimate_cmd(update, context):
         return
 
     t0 = now_ts()
-    await update.message.reply_text("🚀 A100 v43 빠른 추천/품질분석 중...")
+    await update.message.reply_text("🚀 A100 v44 빠른 추천/품질분석 중...")
     try:
         rows = v41_candidates(V40_LIMIT) if "v41_candidates" in globals() else v39_candidates(V40_LIMIT)
         syms = [r[1] for r in rows]
@@ -3477,7 +3478,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🚀 <b>A100 v43 FAST QUALITY</b>",
+            "🚀 <b>A100 v44 FAST QUALITY</b>",
             f"후보 {len(syms)}개 병렬계산 → TOP{len(res)} | 소요 {elapsed}초 | 캐시 {V40_TTL}초",
             f"OHLCV 캐시 {KLINE_RESULT_TTL}초 | workers {PARALLEL_WORKERS}",
             "정밀 파생수급은 /deep",
@@ -3506,7 +3507,7 @@ async def quick_cmd(update, context):
     try:
         rows = v41_candidates(5) if "v41_candidates" in globals() else v39_candidates(5)
         lines = [
-            "⚡ <b>A100 v43 QUICK</b>",
+            "⚡ <b>A100 v44 QUICK</b>",
             "24h 티커 기준 즉시 후보",
             "진입/손절은 /ultimate",
             "────────────",
@@ -3528,7 +3529,7 @@ async def quick_cmd(update, context):
 async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if TICKER_CACHE.get("ts") else 9999
     await update.message.reply_text(
-        f"🚀 <b>A100 v43 속도상태</b>\n"
+        f"🚀 <b>A100 v44 속도상태</b>\n"
         f"Ticker cache: {len(TICKER_CACHE.get('data', []))}개 / age {tick_age}초\n"
         f"OHLCV result cache: {len(KLINE_RESULT_CACHE)}개\n"
         f"V40 cache: {list(V40_CACHE.keys())}\n"
@@ -3550,7 +3551,7 @@ async def cache_cmd(update, context):
     await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
 
-# ===== A100 v43 Binance Cache Fix =====
+# ===== A100 v44 Single Polling Fix =====
 # 추천 기록 + 성과 추적 + 신뢰도/등급 + 리포트 기반
 import json
 
@@ -3719,7 +3720,7 @@ async def ultimate_cmd(update, context):
         return
 
     t0 = now_ts()
-    await update.message.reply_text("🧬 A100 v43 진화형 추천/기록 분석 중...")
+    await update.message.reply_text("🧬 A100 v44 진화형 추천/기록 분석 중...")
     try:
         rows = v40_candidates(V40_LIMIT) if "v40_candidates" in globals() else v39_candidates(V40_LIMIT)
         syms = [r[1] for r in rows] or top_usdt(V40_LIMIT)
@@ -3730,7 +3731,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🧬 <b>A100 v43 EVOLUTION AI</b>",
+            "🧬 <b>A100 v44 EVOLUTION AI</b>",
             f"시장상태: <b>{v41_market_mode()}</b>",
             f"후보 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초 | 추천기록 자동저장",
             f"50점 미만 제외 | 정밀 파생수급은 /deep",
@@ -3779,7 +3780,7 @@ async def report_cmd(update, context):
     winrate = round(wins / len(done) * 100, 1) if done else 0
 
     lines = [
-        "📊 <b>A100 v43 성과 리포트</b>",
+        "📊 <b>A100 v44 성과 리포트</b>",
         f"최근 기록 {len(recent)}개 | 완료 {len(done)}개 | 진행중 {len(active)}개",
         f"승률 {winrate}% | 성공 {wins} / 실패 {losses} | 평균손익 {avg:+.2f}%",
         "────────────",
@@ -3822,7 +3823,7 @@ async def stats_cmd(update, context):
                 reason_count[p] = reason_count.get(p, 0) + 1
     top_reasons = sorted(reason_count.items(), key=lambda x: x[1], reverse=True)[:5]
     lines = [
-        "🧠 <b>A100 v43 AI 통계</b>",
+        "🧠 <b>A100 v44 AI 통계</b>",
         f"누적 추천기록: {total}개",
         f"등급분포: " + " / ".join([f"{k}:{v}" for k,v in grade_count.items()]),
         "────────────",
@@ -3843,9 +3844,9 @@ async def cache_cmd(update, context):
         pass
     await update.message.reply_text("♻️ v41 캐시 초기화 완료")
 
-# ===== A100 v43 Python 3.14 EventLoop Fix =====
+# ===== A100 v44 Python 3.14 EventLoop Fix =====
 
-# ===== A100 v43 Stable Compatibility Patch =====
+# ===== A100 v44 Stable Compatibility Patch =====
 # v39_candidates 미정의 오류 제거용 공통 후보/스캔 엔진
 
 def a100_candidates(limit=5):
@@ -3936,7 +3937,7 @@ def v41_score(r):
 
 async def ultimate_cmd(update, context):
     t0 = now_ts()
-    await update.message.reply_text("🧬 A100 v43 안정화 추천/기록 분석 중...")
+    await update.message.reply_text("🧬 A100 v44 안정화 추천/기록 분석 중...")
     try:
         limit = int(os.getenv("V41_LIMIT", os.getenv("V40_LIMIT", "5")))
         topn = int(os.getenv("V41_TOP", os.getenv("V40_TOP", "3")))
@@ -3950,7 +3951,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🧬 <b>A100 v43 STABLE EVOLUTION</b>",
+            "🧬 <b>A100 v44 STABLE EVOLUTION</b>",
             f"시장상태: <b>{v41_market_mode()}</b>",
             f"후보 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초 | 추천기록 자동저장",
             f"{min_score}점 미만 제외 | v39/v40 의존성 제거",
@@ -3975,7 +3976,7 @@ async def quick_cmd(update, context):
     try:
         rows = a100_candidates(5)
         lines = [
-            "⚡ <b>A100 v43 QUICK</b>",
+            "⚡ <b>A100 v44 QUICK</b>",
             "24h 티커 기준 즉시 후보",
             "진입/손절은 /ultimate",
             "────────────",
@@ -3996,7 +3997,7 @@ async def speedstatus_cmd(update, context):
     tick_age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if "TICKER_CACHE" in globals() and TICKER_CACHE.get("ts") else 9999
     records = v41_load_records() if "v41_load_records" in globals() else []
     await update.message.reply_text(
-        f"🧬 <b>A100 v43 상태</b>\n"
+        f"🧬 <b>A100 v44 상태</b>\n"
         f"Ticker cache age: {tick_age}초\n"
         f"추천기록: {len(records)}개\n"
         f"후보엔진: a100_candidates 정상\n"
@@ -4005,7 +4006,7 @@ async def speedstatus_cmd(update, context):
     )
 
 
-# ===== A100 v43 Binance Cache Fix =====
+# ===== A100 v44 Single Polling Fix =====
 V42_TICKER_TTL = int(os.getenv("V42_TICKER_TTL", "20"))
 V42_LIMIT = int(os.getenv("V42_LIMIT", "20"))
 V42_ANALYZE_LIMIT = int(os.getenv("V42_ANALYZE_LIMIT", "7"))
@@ -4134,7 +4135,7 @@ def v42_format(r, idx):
 
 async def quick_cmd(update, context):
     rows = v42_candidates(5)
-    lines = ["⚡ <b>A100 v43 QUICK</b>", "24h 실시간 티커 기반 즉시 후보", "진입/손절은 /ultimate", "────────────", ""]
+    lines = ["⚡ <b>A100 v44 QUICK</b>", "24h 실시간 티커 기반 즉시 후보", "진입/손절은 /ultimate", "────────────", ""]
     if not rows:
         lines.append("후보 없음")
     for i,(score,sym,pct,qv,trades) in enumerate(rows,1):
@@ -4143,7 +4144,7 @@ async def quick_cmd(update, context):
 
 async def ultimate_cmd(update, context):
     t0 = now_ts()
-    await update.message.reply_text("🧬 A100 v43 PRO 후보 확장/성과추적 분석 중...")
+    await update.message.reply_text("🧬 A100 v44 PRO 후보 확장/성과추적 분석 중...")
     try:
         rows = v42_candidates(V42_LIMIT)
         syms = [r[1] for r in rows[:V42_ANALYZE_LIMIT]] or top_usdt(V42_ANALYZE_LIMIT)
@@ -4151,7 +4152,7 @@ async def ultimate_cmd(update, context):
         res = sorted(res, key=lambda r: v42_score(r), reverse=True)
         res = [r for r in res if v42_score(r) >= V42_MIN_SCORE][:V42_TOP]
         elapsed = round(now_ts() - t0, 1)
-        lines = ["🧬 <b>A100 v43 PRO TRACKER</b>", f"시장상태: <b>{v41_market_mode()}</b>", f"1차후보 {len(rows)}개 → 정밀 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초", "등급/신뢰도/BUY-WAIT-SKIP 적용 | 기록 자동저장", "────────────", ""]
+        lines = ["🧬 <b>A100 v44 PRO TRACKER</b>", f"시장상태: <b>{v41_market_mode()}</b>", f"1차후보 {len(rows)}개 → 정밀 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초", "등급/신뢰도/BUY-WAIT-SKIP 적용 | 기록 자동저장", "────────────", ""]
         if not res:
             lines.append("현재 기준 통과 후보 없음. 무리한 진입보다 대기.")
         for i,r in enumerate(res,1):
@@ -4167,10 +4168,10 @@ async def speedstatus_cmd(update, context):
     raw = v42_refresh_ticker()
     age = int(now_ts() - TICKER_CACHE.get("ts", 0)) if "TICKER_CACHE" in globals() and TICKER_CACHE.get("ts") else 9999
     records = v41_load_records() if "v41_load_records" in globals() else []
-    await update.message.reply_text(f"🧬 <b>A100 v43 상태</b>\nTicker cache: {len(raw)}개 / age {age}초\n추천기록: {len(records)}개\n1차후보 {V42_LIMIT} / 정밀 {V42_ANALYZE_LIMIT} / TOP {V42_TOP}\n명령: /quick /ultimate /report /history /stats", parse_mode="HTML")
+    await update.message.reply_text(f"🧬 <b>A100 v44 상태</b>\nTicker cache: {len(raw)}개 / age {age}초\n추천기록: {len(records)}개\n1차후보 {V42_LIMIT} / 정밀 {V42_ANALYZE_LIMIT} / TOP {V42_TOP}\n명령: /quick /ultimate /report /history /stats", parse_mode="HTML")
 
 
-# ===== A100 v43 Binance Cache Fix =====
+# ===== A100 v44 Single Polling Fix =====
 # 목표: Binance ticker cache 0개 문제 해결
 # - api.binance.com 실패 시 api1/api2/api3 백업
 # - User-Agent / keep-alive / 짧은 timeout
@@ -4377,7 +4378,7 @@ async def quick_cmd(update, context):
         return
 
     lines = [
-        "⚡ <b>A100 v43 QUICK</b>",
+        "⚡ <b>A100 v44 QUICK</b>",
         "Binance 실시간 티커 기반 즉시 후보",
         "진입/손절은 /ultimate",
         "────────────",
@@ -4392,7 +4393,7 @@ async def quick_cmd(update, context):
 
 async def ultimate_cmd(update, context):
     t0 = now_ts()
-    await update.message.reply_text("🧬 A100 v43 Binance 캐시 기반 분석 중...")
+    await update.message.reply_text("🧬 A100 v44 Binance 캐시 기반 분석 중...")
     try:
         rows = v43_candidates(V43_LIMIT)
         if not rows:
@@ -4411,7 +4412,7 @@ async def ultimate_cmd(update, context):
         elapsed = round(now_ts() - t0, 1)
 
         lines = [
-            "🧬 <b>A100 v43 BINANCE CACHE FIX</b>",
+            "🧬 <b>A100 v44 BINANCE CACHE FIX</b>",
             f"시장상태: <b>{v41_market_mode()}</b>",
             f"1차후보 {len(rows)}개 → 정밀 {len(syms)}개 → TOP{len(res)} | 소요 {elapsed}초",
             "Binance host failover / User-Agent / keep-alive 적용",
@@ -4439,7 +4440,7 @@ async def ticker_cmd(update, context):
     host = TICKER_CACHE.get("host", "") if "TICKER_CACHE" in globals() else ""
     err = TICKER_CACHE.get("err", "") if "TICKER_CACHE" in globals() else ""
     await update.message.reply_text(
-        f"📡 <b>A100 v43 Binance Ticker</b>\n"
+        f"📡 <b>A100 v44 Binance Ticker</b>\n"
         f"cache: {len(data)}개\n"
         f"age: {age}초\n"
         f"host: {host or '-'}\n"
@@ -4454,7 +4455,7 @@ async def speedstatus_cmd(update, context):
     host = TICKER_CACHE.get("host", "") if "TICKER_CACHE" in globals() else ""
     err = TICKER_CACHE.get("err", "") if "TICKER_CACHE" in globals() else ""
     await update.message.reply_text(
-        f"🧬 <b>A100 v43 상태</b>\n"
+        f"🧬 <b>A100 v44 상태</b>\n"
         f"Ticker cache: {len(raw)}개 / age {age}초\n"
         f"host: {host or '-'}\n"
         f"last error: {err[:120] if err else '-'}\n"
@@ -4470,11 +4471,38 @@ async def error_handler(update, context):
     except Exception:
         print(f"Telegram error: {context.error}", flush=True)
 
-async def run_bot_async():
-    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
-    if not token:
-        raise RuntimeError("TELEGRAM_BOT_TOKEN is missing")
 
+# ===== A100 v44 Single Polling / Render Restart Fix =====
+# - deleteWebhook 자동 실행
+# - drop_pending_updates 적용
+# - 같은 컨테이너 내 중복 실행 방지 lock
+# - Render 배포 중 구/신 인스턴스 중첩 시 Conflict 자동 재시도
+# - 하나의 asyncio event loop에서 Telegram polling 실행
+
+V44_RETRY_MIN = int(os.getenv("V44_RETRY_MIN", "5"))
+V44_RETRY_MAX = int(os.getenv("V44_RETRY_MAX", "60"))
+V44_LOCK_FILE = os.getenv("V44_LOCK_FILE", "/tmp/a100_telegram_polling.lock")
+_V44_LOCK_HANDLE = None
+
+def acquire_v44_process_lock():
+    """같은 컨테이너 안에서 main.py가 두 번 실행되는 것을 방지."""
+    global _V44_LOCK_HANDLE
+    try:
+        import fcntl
+        _V44_LOCK_HANDLE = open(V44_LOCK_FILE, "w", encoding="utf-8")
+        fcntl.flock(_V44_LOCK_HANDLE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _V44_LOCK_HANDLE.write(str(os.getpid()))
+        _V44_LOCK_HANDLE.flush()
+        return True
+    except BlockingIOError:
+        print("A100 v44: another polling process already owns the local lock", flush=True)
+        return False
+    except Exception as e:
+        # Render/Linux 외 환경에서는 lock 실패로 봇 전체를 막지 않음
+        print(f"A100 v44 lock warning: {e}", flush=True)
+        return True
+
+def build_v44_application(token):
     app = Application.builder().token(token).build()
 
     handlers = [
@@ -4490,48 +4518,119 @@ async def run_bot_async():
         ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
         ("cleannews", cleannews_cmd), ("translate", translate_cmd),
         ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
-        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd)
-    ,
-        ("deep", deep_cmd),
-        ("cache", cache_cmd),
-        ("quick", quick_cmd),
-        ("speed", speedstatus_cmd),
-        ("report", report_cmd),
-        ("history", history_cmd),
-        ("stats", stats_cmd),
-        ("ticker", ticker_cmd)]
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+    ]
 
     for name, fn in handlers:
         if fn is not None:
             app.add_handler(CommandHandler(name, fn))
 
     app.add_error_handler(error_handler)
+    return app
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(drop_pending_updates=True)
-    print("Telegram polling started", flush=True)
-
+async def stop_v44_application(app):
+    if app is None:
+        return
     try:
-        while True:
-            await asyncio.sleep(3600)
-    finally:
-        try:
+        if app.updater and app.updater.running:
             await app.updater.stop()
+    except Exception as e:
+        print(f"v44 updater stop warning: {e}", flush=True)
+    try:
+        if app.running:
             await app.stop()
-            await app.shutdown()
+    except Exception as e:
+        print(f"v44 app stop warning: {e}", flush=True)
+    try:
+        await app.shutdown()
+    except Exception as e:
+        print(f"v44 shutdown warning: {e}", flush=True)
+
+async def run_bot_async():
+    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is missing")
+
+    retry_delay = V44_RETRY_MIN
+
+    while True:
+        app = None
+        try:
+            app = build_v44_application(token)
+
+            # initialize 후 webhook 제거. 이전 webhook과 polling 충돌 방지.
+            await app.initialize()
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            print("A100 v44: webhook deleted and pending updates dropped", flush=True)
+
+            await app.start()
+            await app.updater.start_polling(
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES,
+                poll_interval=1.0,
+                timeout=20,
+                bootstrap_retries=0,
+            )
+
+            print("A100 v44: Telegram single polling started", flush=True)
+            retry_delay = V44_RETRY_MIN
+
+            # updater가 살아 있는 동안 동일 event loop 유지
+            while app.updater.running:
+                await asyncio.sleep(10)
+
+            raise RuntimeError("Telegram updater stopped unexpectedly")
+
+        except Conflict as e:
+            print(
+                f"A100 v44 Conflict: another getUpdates instance is still active. "
+                f"Retrying in {retry_delay}s: {e}",
+                flush=True,
+            )
+            await stop_v44_application(app)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
+
+        except (NetworkError, TimedOut) as e:
+            print(f"A100 v44 Telegram network error. Retry in {retry_delay}s: {e}", flush=True)
+            await stop_v44_application(app)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
+
+        except asyncio.CancelledError:
+            print("A100 v44 polling cancelled; shutting down", flush=True)
+            await stop_v44_application(app)
+            raise
+
         except Exception as e:
-            print(f"shutdown error: {e}", flush=True)
+            print(f"A100 v44 polling error. Retry in {retry_delay}s: {e}", flush=True)
+            print(traceback.format_exc(), flush=True)
+            await stop_v44_application(app)
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
 
 def main():
     start_health_server_once()
-    print("A100 v43 Binance Cache Fix worker running...", flush=True)
+    print("A100 v44 Single Polling Fix worker running...", flush=True)
+
+    if not acquire_v44_process_lock():
+        # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
+        while True:
+            time.sleep(60)
+
     try:
         asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        print("A100 v44 stopped by signal", flush=True)
     except Exception as e:
-        keep_alive_after_error(e)
+        print(f"A100 v44 fatal main error: {e}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        # Render가 프로세스를 재시작하도록 비정상 종료
+        raise
 
 if __name__ == "__main__":
     main()
-
 
