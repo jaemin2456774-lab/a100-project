@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v54 TELEGRAM-SAFE INSTITUTIONAL RANK worker running...", flush=True)
+    print("A100 v55 GATEWAY RECOVERY ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -7617,6 +7617,531 @@ async def datastatus_cmd(update, context):
     )
 
 # 최신 v54 핸들러를 확실히 등록한다.
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v55 GATEWAY RECOVERY ENGINE =====
+# Binance Futures 자동 게이트웨이 전환 + 영구 캐시 + Spot 시장정보 폴백
+# + CoinGlass 단독 안전모드 + 장애 시 BUY 차단
+V55_VERSION = "A100 v55 GATEWAY RECOVERY ENGINE"
+
+import json as _v55_json
+
+V55_FUTURES_HOSTS = [
+    x.strip().rstrip("/")
+    for x in os.getenv(
+        "V55_FUTURES_HOSTS",
+        "https://fapi.binance.com,https://fapi1.binance.com,https://fapi2.binance.com"
+    ).split(",")
+    if x.strip()
+]
+V55_SPOT_HOSTS = [
+    x.strip().rstrip("/")
+    for x in os.getenv(
+        "V55_SPOT_HOSTS",
+        "https://data-api.binance.vision,https://api.binance.com,https://api1.binance.com,https://api2.binance.com"
+    ).split(",")
+    if x.strip()
+]
+V55_CACHE_MAX_AGE = int(os.getenv("V55_CACHE_MAX_AGE", "21600"))
+V55_REQUEST_RETRIES = int(os.getenv("V55_REQUEST_RETRIES", "2"))
+V55_STATIC_SYMBOLS = [
+    x.strip().upper()
+    for x in os.getenv(
+        "V55_STATIC_SYMBOLS",
+        "BTCUSDT,ETHUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,BNBUSDT,ADAUSDT,LINKUSDT,AVAXUSDT,SUIUSDT"
+    ).split(",")
+    if x.strip()
+]
+
+def _v55_cache_path():
+    configured = os.getenv("V55_CACHE_FILE", "").strip()
+    if configured:
+        return configured
+    for folder in ("/data", "/mnt/data", "/tmp"):
+        try:
+            if os.path.isdir(folder) and os.access(folder, os.W_OK):
+                return os.path.join(folder, "a100_binance_cache.json")
+        except Exception:
+            pass
+    return "/tmp/a100_binance_cache.json"
+
+V55_CACHE_FILE = _v55_cache_path()
+
+def _v55_save_cache(st):
+    try:
+        payload = {
+            "ts": st.get("ts", 0),
+            "ticker": st.get("ticker") or [],
+            "exchange_info": st.get("exchange_info") or {},
+            "host": st.get("host") or "",
+            "mode": st.get("mode") or "FUTURES",
+            "source": st.get("source") or "",
+        }
+        tmp = V55_CACHE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            _v55_json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, V55_CACHE_FILE)
+    except Exception as e:
+        log(f"v55 cache save warning: {e}")
+
+def _v55_load_cache():
+    try:
+        if not os.path.exists(V55_CACHE_FILE):
+            return None
+        with open(V55_CACHE_FILE, "r", encoding="utf-8") as f:
+            payload = _v55_json.load(f)
+        if not isinstance(payload, dict):
+            return None
+        if not isinstance(payload.get("ticker"), list):
+            return None
+        age = max(0, now_ts() - float(payload.get("ts") or 0))
+        payload["cache_age"] = int(age)
+        return payload
+    except Exception as e:
+        log(f"v55 cache load warning: {e}")
+        return None
+
+def _v55_bootstrap_cache():
+    st = V45_API_STATE["binance"]
+    if st.get("ticker"):
+        return
+    cached = _v55_load_cache()
+    if not cached:
+        return
+    st.update({
+        "ts": cached.get("ts", 0),
+        "ticker": cached.get("ticker") or [],
+        "exchange_info": cached.get("exchange_info") or {},
+        "host": cached.get("host") or "disk-cache",
+        "err": "",
+        "latency_ms": None,
+        "mode": "STALE_CACHE",
+        "source": cached.get("source") or cached.get("mode") or "disk",
+        "stale": True,
+        "cache_age": cached.get("cache_age", 999999),
+    })
+    if "TICKER_CACHE" in globals():
+        TICKER_CACHE.update({
+            "ts": st.get("ts", 0),
+            "data": st.get("ticker") or [],
+            "host": st.get("host") or "disk-cache",
+            "err": "",
+        })
+
+def _v55_request_json(host, path, params=None):
+    last = None
+    for attempt in range(max(1, V55_REQUEST_RETRIES)):
+        try:
+            code, data, latency, body = v45_get_json(
+                host + path,
+                params=params,
+                timeout=V45_BINANCE_TIMEOUT
+            )
+            if code == 200:
+                return code, data, latency, body
+            last = (code, data, latency, body)
+            # 202/403/418/451/5xx는 다른 게이트웨이로 즉시 전환
+            if code in (202, 403, 418, 429, 451) or code >= 500:
+                break
+            if attempt + 1 < V55_REQUEST_RETRIES:
+                time.sleep(0.35 * (attempt + 1))
+        except Exception as e:
+            last = (None, None, None, str(e))
+            if attempt + 1 < V55_REQUEST_RETRIES:
+                time.sleep(0.35 * (attempt + 1))
+    return last or (None, None, None, "unknown")
+
+def _v55_spot_to_futures_exchange_info(exinfo):
+    symbols = []
+    for s in (exinfo or {}).get("symbols", []):
+        if (
+            s.get("quoteAsset") == "USDT"
+            and s.get("status") == "TRADING"
+            and s.get("isSpotTradingAllowed", True)
+        ):
+            c = dict(s)
+            c["contractType"] = "PERPETUAL"
+            symbols.append(c)
+    return {"timezone": (exinfo or {}).get("timezone", "UTC"), "symbols": symbols}
+
+def _v55_accept_state(st, ticker, exinfo, host, latency, mode, source):
+    st.update({
+        "ts": now_ts(),
+        "ticker": ticker,
+        "exchange_info": exinfo,
+        "host": host,
+        "err": "",
+        "latency_ms": latency,
+        "mode": mode,
+        "source": source,
+        "stale": False,
+        "cache_age": 0,
+    })
+    _v55_save_cache(st)
+    if "TICKER_CACHE" in globals():
+        TICKER_CACHE.update({
+            "ts": st["ts"],
+            "data": ticker,
+            "host": host,
+            "err": "",
+        })
+    return st
+
+def v45_binance_futures_refresh(force=False):
+    """Futures REST → 마지막 정상 캐시 → Spot 시장정보 순서의 복구형 수집기."""
+    st = V45_API_STATE["binance"]
+    if not force and st.get("ticker") and now_ts() - st.get("ts", 0) <= V45_BINANCE_TTL:
+        return st
+
+    errors = []
+
+    # 1) 공식 Futures REST 게이트웨이 순차 시도
+    for host in V55_FUTURES_HOSTS:
+        c1, ticker, l1, x1 = _v55_request_json(host, "/fapi/v1/ticker/24hr")
+        if c1 != 200 or not isinstance(ticker, list) or len(ticker) < 50:
+            errors.append(f"{host} ticker={c1} {str(x1)[:80]}")
+            continue
+
+        c2, exinfo, l2, x2 = _v55_request_json(host, "/fapi/v1/exchangeInfo")
+        if c2 == 200 and isinstance(exinfo, dict) and isinstance(exinfo.get("symbols"), list):
+            return _v55_accept_state(
+                st, ticker, exinfo, host, (l1 or 0) + (l2 or 0),
+                "FUTURES", "Binance USDS-M Futures"
+            )
+        errors.append(f"{host} exchangeInfo={c2} {str(x2)[:80]}")
+
+    # 2) 메모리/디스크 마지막 정상 Futures 캐시
+    cached = None
+    if st.get("ticker"):
+        cached = dict(st)
+        cached["cache_age"] = int(max(0, now_ts() - st.get("ts", 0)))
+    else:
+        cached = _v55_load_cache()
+
+    if cached and cached.get("ticker") and cached.get("exchange_info"):
+        cache_age = int(cached.get("cache_age", max(0, now_ts() - cached.get("ts", 0))))
+        if cache_age <= V55_CACHE_MAX_AGE:
+            st.update({
+                "ts": cached.get("ts", 0),
+                "ticker": cached.get("ticker") or [],
+                "exchange_info": cached.get("exchange_info") or {},
+                "host": cached.get("host") or "disk-cache",
+                "err": " | ".join(errors)[-700:],
+                "latency_ms": None,
+                "mode": "STALE_CACHE",
+                "source": cached.get("source") or "last-known Futures cache",
+                "stale": True,
+                "cache_age": cache_age,
+            })
+            if "TICKER_CACHE" in globals():
+                TICKER_CACHE.update({
+                    "ts": st.get("ts", 0),
+                    "data": st.get("ticker") or [],
+                    "host": st.get("host") or "disk-cache",
+                    "err": "",
+                })
+            return st
+
+    # 3) Binance 공식 Public Spot 시장정보 폴백
+    for host in V55_SPOT_HOSTS:
+        c1, ticker, l1, x1 = _v55_request_json(host, "/api/v3/ticker/24hr")
+        if c1 != 200 or not isinstance(ticker, list) or len(ticker) < 50:
+            errors.append(f"{host} spotTicker={c1} {str(x1)[:80]}")
+            continue
+        c2, exinfo, l2, x2 = _v55_request_json(host, "/api/v3/exchangeInfo")
+        if c2 == 200 and isinstance(exinfo, dict):
+            return _v55_accept_state(
+                st,
+                ticker,
+                _v55_spot_to_futures_exchange_info(exinfo),
+                host,
+                (l1 or 0) + (l2 or 0),
+                "SPOT_FALLBACK",
+                "Binance public Spot market-data fallback"
+            )
+        errors.append(f"{host} spotExchangeInfo={c2} {str(x2)[:80]}")
+
+    st.update({
+        "err": " | ".join(errors)[-1200:] or "Binance gateways unavailable",
+        "mode": "COINGLASS_ONLY",
+        "source": "CoinGlass only",
+        "stale": False,
+        "cache_age": 999999,
+    })
+    return st
+
+def v43_fetch_ticker_direct():
+    st = v45_binance_futures_refresh(force=True)
+    data = st.get("ticker") or []
+    if data:
+        return data, st.get("host") or "-", None
+    return [], "", st.get("err") or "all gateways unavailable"
+
+def v43_refresh_ticker(force=False):
+    global TICKER_CACHE
+    if "TICKER_CACHE" not in globals():
+        TICKER_CACHE = {"ts": 0, "data": [], "host": "", "err": ""}
+    st = v45_binance_futures_refresh(force=force)
+    data = st.get("ticker") or []
+    if data:
+        TICKER_CACHE.update({
+            "ts": st.get("ts", now_ts()),
+            "data": data,
+            "host": st.get("host") or "",
+            "err": "",
+        })
+        return data
+    TICKER_CACHE["err"] = st.get("err") or "unknown"
+    return TICKER_CACHE.get("data") or []
+
+def v451_gate():
+    st = v45_binance_futures_refresh(force=True)
+    mode = st.get("mode") or "FUTURES"
+    ticker = st.get("ticker") or []
+    exinfo = st.get("exchange_info") or {}
+
+    if mode == "FUTURES" and ticker and exinfo:
+        return True, "", st
+
+    if mode == "STALE_CACHE" and ticker and exinfo:
+        age = int(st.get("cache_age", 999999))
+        return True, f"마지막 정상 Futures 캐시 사용({age}초 전)", st
+
+    if mode == "SPOT_FALLBACK" and ticker and exinfo:
+        return True, "Binance Futures 장애: Spot 시장정보 폴백", st
+
+    # CoinGlass는 정상이어도 차트/거래량 우주가 없으므로 BUY 추천은 금지한다.
+    cg_ok = bool(v45_cg_headers())
+    if cg_ok:
+        return False, "Binance 전체 장애: CoinGlass 단독 진단만 가능", st
+    return False, "Binance 및 CoinGlass 데이터 없음", st
+
+def v54_action(r):
+    """폴백 데이터에서는 매수 신호를 자동으로 WATCH 이하로 제한."""
+    base = v53_final_score(r)
+    inst = v53_institutional_score(r)
+    regime = str(getattr(r, "v52_regime", ""))
+    mode = (V45_API_STATE.get("binance") or {}).get("mode") or "FUTURES"
+
+    if chase_risk(r) >= 85:
+        return "⛔ 추격 금지"
+
+    if mode != "FUTURES":
+        if base >= V54_WATCH_MIN:
+            return "🟡 WATCH"
+        return "⚪ SKIP"
+
+    if base >= V54_STRONG_BUY_MIN and inst >= 78 and "롱트랩" not in regime:
+        return "🟢 STRONG BUY"
+    if base >= V54_BUY_MIN and inst >= 70 and "약세수급" not in regime:
+        return "🟢 BUY"
+    if base >= V54_WATCH_MIN:
+        return "🟡 WATCH"
+    return "⚪ SKIP"
+
+def v43_action(r):
+    return v54_action(r)
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    mode = st.get("mode") or "COINGLASS_ONLY"
+
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 v55 분석 제한</b>\n"
+            f"상태: {_v54_escape(reason or '-')}\n"
+            "CoinGlass 종목별 진단은 <code>/cgtest BTC</code>처럼 사용할 수 있습니다.\n"
+            "전체 후보 추천은 Binance 티커 또는 마지막 정상 캐시가 필요합니다.",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text(
+        f"🚀 A100 v55 GATEWAY RECOVERY 분석 중...\n"
+        f"데이터 모드: {mode}"
+    )
+    try:
+        rows = v43_candidates(max(V43_LIMIT, V52_PRESELECT)) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text(
+                "⚠️ 실시간 후보가 없습니다.\n"
+                "게이트웨이 복구 또는 캐시 생성 후 다시 실행하세요."
+            )
+            return
+
+        syms = [r[1] for r in rows[:max(V43_ANALYZE_LIMIT, V52_SCAN_LIMIT)]]
+        results = []
+        scan_errors = []
+
+        try:
+            results = list(
+                (a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or []
+            )
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            try:
+                one = scan([sym])
+                if one:
+                    results.append(one[0])
+                    got.add(sym)
+                else:
+                    scan_errors.append(f"{sym}:empty")
+            except Exception as e:
+                scan_errors.append(f"{sym}:{e}")
+
+        ranked = sorted(results, key=v53_final_score, reverse=True)
+        shown = ranked[:V54_TOP]
+        universe = len(st.get("ticker") or [])
+
+        mode_note = {
+            "FUTURES": "✅ Binance Futures 실시간",
+            "STALE_CACHE": f"🟡 Futures 캐시 {st.get('cache_age', '?')}초 전",
+            "SPOT_FALLBACK": "🟠 Binance Spot 폴백 · BUY 자동 차단",
+        }.get(mode, "🔴 제한 모드")
+
+        lines = [
+            "🚀 <b>A100 v55 GATEWAY RECOVERY RANK</b>",
+            f"데이터: <b>{_v54_escape(mode_note)}</b>",
+            f"Gateway: <code>{_v54_escape(st.get('host') or '-')}</code>",
+            f"Binance {universe}개 → 1차 {len(rows)} → 정밀 {len(syms)} → TOP{len(shown)}",
+            "기관 70% | 차트 30%",
+            "Futures 실시간 외 모드에서는 BUY/STRONG BUY를 자동 금지합니다.",
+            "────────────",
+            ""
+        ]
+
+        if not shown:
+            lines.append("현재 표시 가능한 후보가 없습니다.")
+        else:
+            for i, r in enumerate(shown, 1):
+                lines.append(v43_format(r, i, universe))
+                lines.append("────────────")
+
+        if scan_errors:
+            lines.append(f"\n🛠 스캔오류 {len(scan_errors)}개")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+    mode_text = {
+        "FUTURES": "✅ Futures 실시간",
+        "STALE_CACHE": "🟡 마지막 정상 캐시",
+        "SPOT_FALLBACK": "🟠 Spot 시장정보 폴백",
+        "COINGLASS_ONLY": "🟣 CoinGlass 단독",
+    }.get(mode, mode)
+
+    await update.message.reply_text(
+        "📦 <b>A100 v55 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode_text)}</b>\n"
+        f"사유: {_v54_escape(reason or '-')}\n"
+        f"Gateway: <code>{_v54_escape(b.get('host') or '-')}</code>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"ExchangeInfo: {len((b.get('exchange_info') or {}).get('symbols', []))}개\n"
+        f"캐시 age: {b.get('cache_age', 0)}초\n"
+        f"Binance error: {_v54_escape(b.get('err') or '-')}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"캐시파일: <code>{_v54_escape(V55_CACHE_FILE)}</code>\n"
+        f"안전규칙: 폴백 모드 BUY 자동 차단\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+async def apicheck_cmd(update, context):
+    ok, reason, b = v451_gate()
+    c = v45_cg_supported(force=True)
+    mode = b.get("mode") or "COINGLASS_ONLY"
+    await update.message.reply_text(
+        "🧪 <b>A100 v55 API CHECK</b>\n"
+        f"전체판정: <b>{'✅ 분석 가능' if ok else '⛔ 제한'}</b>\n"
+        f"Binance mode: <b>{_v54_escape(mode)}</b>\n"
+        f"Gateway: <code>{_v54_escape(b.get('host') or '-')}</code>\n"
+        f"Ticker: {len(b.get('ticker') or [])}개\n"
+        f"ExchangeInfo: {len((b.get('exchange_info') or {}).get('symbols', []))}개\n"
+        f"Latency: {b.get('latency_ms') if b.get('latency_ms') is not None else 'N/A'}ms\n"
+        f"Stale: {'예' if b.get('stale') else '아니오'}\n"
+        f"원인: {_v54_escape(reason or b.get('err') or '-')}\n\n"
+        f"CoinGlass: {'✅ 정상' if c.get('ok') else '⚠️ 제한/오류'}\n"
+        f"Supported Coins: {len(c.get('data') or []) if c.get('ok') else 'N/A'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+async def bintest_cmd(update, context):
+    sym = (context.args[0].upper() if context.args else "BTCUSDT")
+    if not sym.endswith("USDT"):
+        sym += "USDT"
+    st = v45_binance_futures_refresh(force=True)
+    mode = st.get("mode") or "COINGLASS_ONLY"
+    market = v45_binance_market(sym) if mode == "FUTURES" else {
+        "funding": None, "oi": None, "ticker": next(
+            (x for x in st.get("ticker", []) if x.get("symbol") == sym), {}
+        ), "errors": []
+    }
+    ticker = market.get("ticker") or {}
+    await update.message.reply_text(
+        "🟡 <b>A100 v55 Binance 진단</b>\n"
+        f"Mode: <b>{_v54_escape(mode)}</b>\n"
+        f"Gateway: <code>{_v54_escape(st.get('host') or '-')}</code>\n"
+        f"Ticker 수: {len(st.get('ticker') or [])}\n"
+        f"심볼: {sym}\n"
+        f"현재가: {ticker.get('lastPrice', 'N/A')}\n"
+        f"24h 변동: {ticker.get('priceChangePercent', 'N/A')}%\n"
+        f"Funding: {market.get('funding') if market.get('funding') is not None else 'N/A'}\n"
+        f"Open Interest: {v45_fmt_num(market.get('oi'))}\n"
+        f"오류: {_v54_escape(st.get('err') or ' / '.join(market.get('errors') or []) or '-')}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+# 부팅 시 디스크 캐시를 즉시 복구한다.
+_v55_bootstrap_cache()
+
+# 최신 v55 핸들러 고정
 def build_v44_application(token):
     app = Application.builder().token(token).build()
     handlers = [
