@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v53 INSTITUTIONAL RANK ENGINE worker running...", flush=True)
+    print("A100 v54 TELEGRAM-SAFE INSTITUTIONAL RANK worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -7373,6 +7373,250 @@ async def datastatus_cmd(update, context):
     )
 
 # 최신 핸들러를 명시적으로 다시 바인딩한다.
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v54 TELEGRAM-SAFE INSTITUTIONAL RANK =====
+# Telegram HTML 파싱 오류 방지 + 최신 핸들러 고정 + 간결한 기관/차트/순위 UI
+V54_VERSION = "A100 v54 TELEGRAM-SAFE INSTITUTIONAL RANK"
+V54_TOP = int(os.getenv("V54_TOP", "5"))
+V54_STRONG_BUY_MIN = float(os.getenv("V54_STRONG_BUY_MIN", "80"))
+V54_BUY_MIN = float(os.getenv("V54_BUY_MIN", "74"))
+V54_WATCH_MIN = float(os.getenv("V54_WATCH_MIN", "66"))
+
+import html as _v54_html
+
+def _v54_escape(value):
+    return _v54_html.escape(str(value), quote=False)
+
+def _v54_bar(score, width=10):
+    score = max(0.0, min(100.0, float(score)))
+    filled = int(round(score / 100.0 * width))
+    return "█" * filled + "░" * (width - filled)
+
+def _v54_rank_text(rank, universe):
+    try:
+        rank = max(1, int(rank))
+        universe = max(rank, int(universe))
+        pct = round(rank / universe * 100, 1)
+        return f"{universe}개 중 {rank}위 · 상위 {pct}%"
+    except Exception:
+        return "전체 순위 계산 불가"
+
+def v54_action(r):
+    score = v53_final_score(r)
+    inst = v53_institutional_score(r)
+    regime = str(getattr(r, "v52_regime", ""))
+
+    if chase_risk(r) >= 85:
+        return "⛔ 추격 금지"
+    if score >= V54_STRONG_BUY_MIN and inst >= 78 and "롱트랩" not in regime:
+        return "🟢 STRONG BUY"
+    if score >= V54_BUY_MIN and inst >= 70 and "약세수급" not in regime:
+        return "🟢 BUY"
+    if score >= V54_WATCH_MIN:
+        return "🟡 WATCH"
+    return "⚪ SKIP"
+
+def v43_action(r):
+    return v54_action(r)
+
+def v43_format(r, idx, total_universe=0):
+    final = v53_final_score(r)
+    inst = v53_institutional_score(r)
+    chart = v53_chart_score(r)
+    conf = v43_confidence(r)
+    cg100, coverage, details = v50_cg_score(r)
+
+    regime = _v54_escape(getattr(r, "v52_regime", "⚪ 중립"))
+    tags = " / ".join(getattr(r, "v52_tags", [])[:5]) or "수급 근거 부족"
+    tags = _v54_escape(tags)
+
+    detail_lines = []
+    for name, value, score in details:
+        detail_lines.append(_v54_escape(_v51_label(name, value, score)))
+    detail_text = "\n".join(detail_lines) or "• CoinGlass 정규화 데이터 없음"
+
+    rank_text = _v54_rank_text(idx, total_universe) if total_universe else "정밀 분석 내 순위"
+    sym = _v54_escape(getattr(r, "sym", "?"))
+
+    entry_low = _v54_escape(getattr(r, "entry_low", "-"))
+    entry_high = _v54_escape(getattr(r, "entry_high", "-"))
+    stop = _v54_escape(getattr(r, "stop", "-"))
+    target1 = _v54_escape(getattr(r, "target1", "-"))
+    target2 = _v54_escape(getattr(r, "target2", "-"))
+
+    return (
+        f"🏅 <b>{idx}. {sym}</b> {v53_grade(final)}\n"
+        f"판정 <b>{_v54_escape(v54_action(r))}</b> | 최종 AI <b>{final}%</b> | 신뢰도 <b>{conf}%</b>\n"
+        f"순위 <b>{_v54_escape(rank_text)}</b>\n"
+        f"수급 <b>{regime}</b>\n"
+        f"기관 {inst}%  {_v54_bar(inst)}\n"
+        f"차트 {chart}%  {_v54_bar(chart)}\n"
+        f"CoinGlass {cg100}/100 | 데이터 {round(coverage*8)}/8\n"
+        f"{detail_text}\n"
+        f"근거: {tags}\n"
+        f"차트세부: 매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | "
+        f"타이밍 {timing_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🟢 진입 <code>{entry_low}~{entry_high}</code>\n"
+        f"🔴 손절 <code>{stop}</code>\n"
+        f"🎯 목표 <code>{target1}</code> / <code>{target2}</code>\n"
+    )
+
+async def cgtest_cmd(update, context):
+    coin = (context.args[0].upper() if context.args else "BTC").replace("USDT", "")
+    sup = v45_cg_supported(force=True)
+    raw = v45_cg_coin(coin, force=True)
+    m = v52_normalize_cg(raw)
+    score, details = v52_cg_score_from_metrics(m)
+    regime, bull, bear, tags = v52_flow_regime(m)
+
+    detail_text = "\n".join(
+        _v54_escape(_v51_label(n, v, s)) for n, v, s in details
+    ) or "정규화 데이터 없음"
+
+    errs = raw.get("errors") or {}
+    err_lines = "\n".join(
+        f"• {_v54_escape(k)}: {_v54_escape(str(v)[:100])}"
+        for k, v in errs.items()
+    ) or "-"
+
+    supported_count = len(sup.get("data") or []) if sup.get("ok") else "N/A"
+
+    await update.message.reply_text(
+        f"🟣 <b>A100 v54 CoinGlass 통합 진단</b>\n"
+        f"API Key: {'등록됨' if v45_cg_headers() else '없음'} | Supported Coins: {supported_count}\n"
+        f"Coin: <b>{_v54_escape(coin)}</b>\n"
+        f"정규화 완성도: <b>{m['available']}/8</b>\n"
+        f"CoinGlass Score: <b>{score}/100</b>\n"
+        f"수급판정: <b>{_v54_escape(regime)}</b>\n"
+        f"강세 {bull} | 약세 {bear}\n"
+        f"{detail_text}\n"
+        f"근거: {_v54_escape(' / '.join(tags) or '-')}\n\n"
+        f"<b>오류/플랜 제한</b>\n{err_lines}",
+        parse_mode="HTML"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 분석 중지</b>\n"
+            f"Binance 수집 실패: {_v54_escape(reason or st.get('err') or '-')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🚀 A100 v54 TELEGRAM-SAFE RANK 분석 중...")
+    try:
+        rows = v43_candidates(max(V43_LIMIT, V52_PRESELECT)) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 1차 후보가 없습니다.")
+            return
+
+        syms = [r[1] for r in rows[:max(V43_ANALYZE_LIMIT, V52_SCAN_LIMIT)]]
+        results = []
+        scan_errors = []
+
+        try:
+            results = list(
+                (a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or []
+            )
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            try:
+                one = scan([sym])
+                if one:
+                    results.append(one[0])
+                    got.add(sym)
+                else:
+                    scan_errors.append(f"{sym}:empty")
+            except Exception as e:
+                scan_errors.append(f"{sym}:{e}")
+
+        ranked = sorted(results, key=v53_final_score, reverse=True)
+        shown = ranked[:V54_TOP]
+        universe = len(st.get("ticker") or [])
+
+        lines = [
+            "🚀 <b>A100 v54 TELEGRAM-SAFE INSTITUTIONAL RANK</b>",
+            f"Binance {universe}개 → 1차 {len(rows)} → 정밀 {len(syms)} → TOP{len(shown)}",
+            "기관 70% | 차트 30%",
+            "기준: STRONG BUY 80점 이상 / BUY 74점 이상 / WATCH 66점 이상 / SKIP 66점 미만",
+            "────────────",
+            ""
+        ]
+
+        if not shown:
+            lines.append("현재 표시 가능한 후보가 없습니다.")
+        else:
+            for i, r in enumerate(shown, 1):
+                lines.append(v43_format(r, i, universe))
+                lines.append("────────────")
+
+        if scan_errors:
+            lines.append(f"\n🛠 스캔오류 {len(scan_errors)}개")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v54 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {_v54_escape(reason or '-')}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {_v54_escape(b.get('err') or '-')}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"엔진: 기관점수70 + 차트점수30\n"
+        f"Telegram HTML 안전처리: 활성\n"
+        f"판정: STRONG BUY / BUY / WATCH / SKIP\n"
+        f"전체 상대평가 백분위: 활성\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+# 최신 v54 핸들러를 확실히 등록한다.
 def build_v44_application(token):
     app = Application.builder().token(token).build()
     handlers = [
