@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v63 REALTIME ACTION DASHBOARD worker running...", flush=True)
+    print("A100 v63.1 STABLE REALTIME ACTION DASHBOARD worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -11559,7 +11559,7 @@ def build_v44_application(token):
 # - WATCH 발생 이유 4개
 # - 목표가 달성확률 + 예상시간
 # - 마지막 실전 행동 블록
-V63_VERSION = "A100 v63 REALTIME ACTION DASHBOARD"
+V63_VERSION = "A100 v63.1 STABLE REALTIME ACTION DASHBOARD"
 
 V63_TOP_ACTIONABLE = int(os.getenv("V63_TOP_ACTIONABLE", "3"))
 V63_TOP_WATCH = int(os.getenv("V63_TOP_WATCH", "3"))
@@ -11689,7 +11689,10 @@ def v63_watch_reasons(r):
         reasons.append("EMA20 눌림 또는 재돌파")
     if chart_map.get("MACD", 0) >= 65:
         reasons.append("MACD 모멘텀 개선")
-    if _v63_float(volume_score(r)) >= 60:
+    # v63.1 Stable:
+    # 기존 프로젝트에 존재하지 않는 volume_score() 대신
+    # 검증된 거래량·변동성 점수 함수를 사용한다.
+    if _v63_float(v56_volume_volatility_score(r)) >= 60:
         reasons.append("거래량 증가")
     if _v63_float(breakout_score(r)) >= 65:
         reasons.append("돌파 직전 구조")
@@ -11901,7 +11904,7 @@ async def ultimate_cmd(update, context):
         return
 
     await update.message.reply_text(
-        f"🚀 A100 v63 REALTIME ACTION DASHBOARD 분석 중...\n데이터 모드: {mode}"
+        f"🚀 A100 v63.1 STABLE REALTIME ACTION DASHBOARD 분석 중...\n데이터 모드: {mode}"
     )
 
     try:
@@ -11936,7 +11939,7 @@ async def ultimate_cmd(update, context):
         }.get(mode, "🔴 제한 모드")
 
         lines = [
-            "🚀 <b>A100 v63 REALTIME ACTION DASHBOARD</b>",
+            "🚀 <b>A100 v63.1 STABLE REALTIME ACTION DASHBOARD</b>",
             f"데이터: <b>{_v54_escape(mode_note)}</b>",
             f"Binance {universe}개 → 1차 {len(rows)} → 정밀 {len(results)}",
             "",
@@ -12002,7 +12005,7 @@ async def datastatus_cmd(update, context):
     mode = b.get("mode") or "COINGLASS_ONLY"
 
     await update.message.reply_text(
-        "📦 <b>A100 v63 데이터 상태</b>\n"
+        "📦 <b>A100 v63.1 STABLE 데이터 상태</b>\n"
         f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
         f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
         f"사유: {_v54_escape(reason or '-')}\n"
