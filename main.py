@@ -227,36 +227,93 @@ def val(r,ks):
     for k in ks:
         if k in r: return sf(r.get(k))
     return 0
+def _cg_find_number(data, keys):
+    """CoinGlass 응답(list/dict 중첩)에서 첫 유효 숫자를 안전하게 추출."""
+    if isinstance(data, dict):
+        for k in keys:
+            if k in data and data.get(k) not in (None, ""):
+                try: return float(data.get(k))
+                except Exception: pass
+        for v in data.values():
+            n=_cg_find_number(v, keys)
+            if n is not None:return n
+    elif isinstance(data, list):
+        for v in reversed(data):
+            n=_cg_find_number(v, keys)
+            if n is not None:return n
+    return None
+
+def _cg_pick_exchange(data, exchange="Binance"):
+    if not isinstance(data,list):return data
+    ex=exchange.lower()
+    return next((x for x in data if isinstance(x,dict) and str(x.get("exchange","")).lower()==ex),
+                next((x for x in data if isinstance(x,dict) and str(x.get("exchange","")).lower()=="all"),
+                     data[0] if data else None))
+
 def cg_snap(sym):
-    sym=sym.upper().replace("USDT","")
-    out={"oi":0,"oi_score":0,"fund":0,"fund_score":0,"taker":0,"taker_score":0,"ls":0,"ls_score":0,"liq_score":0,"liq":"청산데이터 없음"}
-    d=rows(cg_raw("/api/futures/open-interest/aggregated-history",{"symbol":sym,"interval":"4h","limit":30,"unit":"usd"}))
-    if len(d)>=6:
-        o=val(d[-1],["close","value","openInterest","sumOpenInterest"]); p=val(d[-6],["close","value","openInterest","sumOpenInterest"])
-        out["oi"]=round(pct(o,p),2); out["oi_score"]=min(max(out["oi"],0),15)
-    d=rows(cg_raw("/api/futures/funding-rate/oi-weight-history",{"symbol":sym,"interval":"4h","limit":10}))
-    if d:
-        f=val(d[-1],["close","rate","fundingRate","value"])
-        if abs(f)<1: f*=100
-        out["fund"]=round(f,5); out["fund_score"]=10 if -0.08<=f< -0.01 else 8 if -0.01<=f<=0.02 else 3 if f<=0.05 else 1
-    d=rows(cg_raw("/api/futures/aggregated-taker-buy-sell-volume/history",{"symbol":sym,"interval":"4h","limit":10}))
-    if d:
-        buy=val(d[-1],["buy","buyVolume","takerBuyVol","takerBuyVolume"]); sell=val(d[-1],["sell","sellVolume","takerSellVol","takerSellVolume"])
-        ratio=buy/sell if sell else 1; out["taker"]=round(ratio,3); out["taker_score"]=5 if 0.85<=ratio<=1.35 else 4 if ratio<=2 else 1
-    for path in ["/api/futures/global-long-short-account-ratio/history","/api/futures/top-long-short-account-ratio/history"]:
-        d=rows(cg_raw(path,{"symbol":sym,"interval":"4h","limit":10}))
-        if d:
-            ratio=val(d[-1],["longShortRatio","ratio","longShortRate"]); out["ls"]=round(ratio,3); out["ls_score"]=3 if ratio and 0.6<=ratio<=1.15 else 2 if ratio and ratio<=1.6 else 1; break
-    d=rows(cg_raw("/api/futures/liquidation/history",{"symbol":sym,"exchange":"Binance","interval":"4h","limit":12}))
-    if d:
-        ll=sl=0
-        for r in d[-6:]:
-            ll+=val(r,["longLiquidation","longLiquidationUsd","longVolUsd","long"]); sl+=val(r,["shortLiquidation","shortLiquidationUsd","shortVolUsd","short"])
+    """v46: 진단/추천이 동일한 CoinGlass v4 수집기와 캐시를 사용한다.
+    누락값은 None으로 유지해 실제 0과 API 실패를 구분한다.
+    """
+    coin=sym.upper().replace("USDT","")
+    out={"oi":None,"oi_score":0.0,"fund":None,"fund_score":0.0,
+         "taker":None,"taker_score":0.0,"ls":None,"ls_score":0.0,
+         "liq_score":0.0,"liq":"청산데이터 없음","cg_score":0.0,
+         "available":False,"available_fields":0,"total_fields":5,
+         "errors":{},"completeness":0}
+    try:
+        raw=v45_cg_coin(coin,force=False)
+    except Exception as e:
+        out["errors"]={"collector":str(e)}
+        return out
+    out["errors"]=raw.get("errors") or {}
+
+    oi_data=raw.get("oi")
+    oi_change=_cg_find_number(oi_data,["open_interest_change_percent_1h","openInterestChangePercent1h","change_percent_1h","changePercent1h"])
+    if oi_change is not None:
+        out["oi"]=round(oi_change,3)
+        out["oi_score"]=min(max(oi_change,0.0),15.0)
+        out["available_fields"]+=1
+
+    funding_data=_cg_pick_exchange(raw.get("funding"))
+    fund=_cg_find_number(funding_data,["funding_rate","fundingRate","rate","close","value"])
+    if fund is not None:
+        if abs(fund)<1: fund*=100
+        out["fund"]=round(fund,6)
+        out["fund_score"]=10 if -0.08<=fund< -0.01 else 8 if -0.01<=fund<=0.02 else 3 if fund<=0.05 else 1
+        out["available_fields"]+=1
+
+    taker_data=raw.get("taker")
+    buy=_cg_find_number(taker_data,["buy","buyVolume","takerBuyVol","takerBuyVolume","buy_volume"])
+    sell=_cg_find_number(taker_data,["sell","sellVolume","takerSellVol","takerSellVolume","sell_volume"])
+    if buy is not None and sell not in (None,0):
+        ratio=buy/sell
+        out["taker"]=round(ratio,3)
+        out["taker_score"]=5 if 0.85<=ratio<=1.35 else 4 if ratio<=2 else 1
+        out["available_fields"]+=1
+
+    ls=_cg_find_number(raw.get("ls"),["longShortRatio","ratio","longShortRate","long_short_ratio"])
+    if ls is not None:
+        out["ls"]=round(ls,3)
+        out["ls_score"]=3 if 0.6<=ls<=1.15 else 2 if ls<=1.6 else 1
+        out["available_fields"]+=1
+
+    liq=raw.get("liquidation")
+    liq_rows=rows(liq)
+    if liq_rows:
+        ll=sl=0.0
+        for r in liq_rows[-6:]:
+            ll+=val(r,["longLiquidation","longLiquidationUsd","longVolUsd","long","long_liquidation_usd"])
+            sl+=val(r,["shortLiquidation","shortLiquidationUsd","shortVolUsd","short","short_liquidation_usd"])
         if sl>ll*1.5 and sl>0: out["liq_score"]=5; bias="상방 숏청산 우세"
         elif ll>sl*1.5 and ll>0: out["liq_score"]=1; bias="하방 롱청산 위험"
         else: out["liq_score"]=3; bias="청산 중립"
         out["liq"]=f"{bias} L:{ll:.0f} S:{sl:.0f}"
-    out["cg_score"]=min((out["oi_score"]+out["fund_score"]+out["taker_score"]+out["ls_score"]+out["liq_score"])*35/38,35)
+        out["available_fields"]+=1
+
+    raw_score=out["oi_score"]+out["fund_score"]+out["taker_score"]+out["ls_score"]+out["liq_score"]
+    out["cg_score"]=round(min(raw_score*35/38,35),2)
+    out["completeness"]=round(out["available_fields"]*100/out["total_fields"])
+    out["available"]=out["available_fields"]>=3
     return out
 
 def kr_data():
@@ -306,30 +363,47 @@ def analyze(sym,kr):
     momentum=(2 if 45<=rr<=68 else 0)+(2 if mh>0 else 0)+(1 if c[-1]>c[-4] else 0)
     chg24=pct(c[-1],c[-7]); risk=max(0,10-(3 if chg24>25 else 0)-(4 if chg24>45 else 0)-(3 if price<ma20 else 0))
     score=round(chart+volume+ks+cg["cg_score"]+momentum+risk,2)
-    fund=cg["fund"]
-    acc=clamp(cg["oi"]*2,0,25)+(18 if -0.08<=fund<=0.02 else 8 if fund<=0.05 else 2)+clamp((vr-1)*18,0,18)+(12 if br>=0.52 else 4)+ks*1.2+(10 if price>=ma20 else 3)+(8 if mh>0 else 0); acc=round(clamp(acc),1)
-    dist=clamp(chg24*1.2,0,35)+clamp((vr-2)*12,0,25)+(20 if br<0.48 else 10 if br<0.52 else 0)+(15 if rr>75 else 8 if rr>68 else 0)+(10 if fund>0.05 else 0); dist=round(clamp(dist),1)
-    bub=clamp(chg24*1.5,0,35)+(20 if rr>75 else 10 if rr>68 else 0)+(15 if fund>0.05 else 6 if fund>0.02 else 0)+clamp((vr-3)*10,0,20)+(10 if price>ma60*1.25 else 0); bub=round(clamp(bub),1)
-    whale=round(clamp((vr-1)*25+(15 if br>0.56 else 0)+(10 if ks>=8 else 0)+(10 if cg["oi"]>=10 else 0)),1)
-    squeeze=round(clamp(cg["oi"]*2+(25 if -0.08<=fund< -0.01 else 15 if fund<=0.02 else 3)+cg["liq_score"]*5+(10 if price>=ma20 else 0)),1)
-    conf=round(clamp((18 if cg["oi_score"] else 0)+(14 if cg["fund_score"] else 0)+(10 if cg["taker_score"] else 0)+(8 if cg["liq_score"] else 0)+(10 if kv else 0)+(10 if price>=ma20 else 0)+(8 if vr>=1.2 else 0)+(8 if br>=0.52 else 0)+(7 if mh>0 else 0)+(7 if acc>dist else 0)),1)
+
+    fund=cg.get("fund"); oi=cg.get("oi") or 0.0
+    fund_acc=(18 if -0.08<=fund<=0.02 else 8 if fund<=0.05 else 2) if fund is not None else 0
+    fund_squeeze=(25 if -0.08<=fund< -0.01 else 15 if fund<=0.02 else 3) if fund is not None else 0
+    fund_dist=10 if fund is not None and fund>0.05 else 0
+    fund_bubble=15 if fund is not None and fund>0.05 else 6 if fund is not None and fund>0.02 else 0
+
+    acc=clamp(oi*2,0,25)+fund_acc+clamp((vr-1)*18,0,18)+(12 if br>=0.52 else 4)+ks*1.2+(10 if price>=ma20 else 3)+(8 if mh>0 else 0); acc=round(clamp(acc),1)
+    dist=clamp(chg24*1.2,0,35)+clamp((vr-2)*12,0,25)+(20 if br<0.48 else 10 if br<0.52 else 0)+(15 if rr>75 else 8 if rr>68 else 0)+fund_dist; dist=round(clamp(dist),1)
+    bub=clamp(chg24*1.5,0,35)+(20 if rr>75 else 10 if rr>68 else 0)+fund_bubble+clamp((vr-3)*10,0,20)+(10 if price>ma60*1.25 else 0); bub=round(clamp(bub),1)
+    whale=round(clamp((vr-1)*25+(15 if br>0.56 else 0)+(10 if ks>=8 else 0)+(10 if oi>=10 else 0)),1)
+    squeeze=round(clamp(oi*2+fund_squeeze+cg["liq_score"]*5+(10 if price>=ma20 else 0)),1)
+
+    cg_quality=cg.get("available_fields",0)
+    conf=round(clamp(cg_quality*10+(10 if kv else 0)+(10 if price>=ma20 else 0)+(8 if vr>=1.2 else 0)+(8 if br>=0.52 else 0)+(7 if mh>0 else 0)+(7 if acc>dist else 0)),1)
+    if cg_quality<3: conf=max(0,conf-20)
     smart=round(clamp(acc*.45+conf*.25+squeeze*.2+whale*.1-bub*.15-dist*.15),1)
-    base=35+acc*.3+squeeze*.2+conf*.15-bub*.2-dist*.15; p24=round(clamp(base,5,95),1); p3=round(clamp(base+(8 if acc>60 else 0),5,97),1); p7=round(clamp(base+(14 if acc>70 else 5),5,98),1)
+    base=35+acc*.3+squeeze*.2+conf*.15-bub*.2-dist*.15
+    if cg_quality<3: base-=12
+    p24=round(clamp(base,5,95),1); p3=round(clamp(base+(8 if acc>60 else 0),5,97),1); p7=round(clamp(base+(14 if acc>70 else 5),5,98),1)
     band=max((at/price if price else .03),.025); el=round(price*(1-band*.55),8); eh=round(price*(1+band*.15),8); st=round(price*(1-band*1.2),8); t1=round(price*(1+band*1.8),8); t2=round(price*(1+band*3.2),8)
-    action="데이터 부족 — 관망" if conf<35 else "추격금지" if bub>=75 or dist>=75 else "대기" if price<ma20 else "분할매수/적극검토" if score>=85 and acc>=70 else "눌림 분할매수" if score>=70 and acc>=55 else "관망"
+    action="데이터 부족 — 관망" if cg_quality<3 or conf<35 else "추격금지" if bub>=75 or dist>=75 else "대기" if price<ma20 else "분할매수/적극검토" if score>=85 and acc>=70 else "눌림 분할매수" if score>=70 and acc>=55 else "관망"
     stage="5단계 급등시작" if score>=92 and vr>=2 else "4단계 폭발직전" if acc>=80 else "3단계 수급증가" if acc>=65 else "2단계 매집관찰" if acc>=50 else "1단계 관찰"
-    warn=[] 
+    warn=[]
     if bub>=70: warn.append("과열")
     if dist>=70: warn.append("분배")
     if conf<45: warn.append("신뢰도 낮음")
+    if cg_quality<5: warn.append(f"CoinGlass {cg_quality}/5")
     if price<ma20: warn.append("MA20 아래")
     reason=[]
     if acc>=70: reason.append("매집 강함")
     if conf>=70: reason.append("신뢰도 양호")
     if ks>=8: reason.append("KR수급")
-    if cg["cg_score"]>=18: reason.append("선물수급")
+    if cg["cg_score"]>=18 and cg_quality>=3: reason.append("선물수급")
     if score<60: reason.append("점수 낮음")
-    return Result(s+"USDT",round(price,8),score,action,stage,round(min(l[-20:]),8),round(max(h[-20:]),8),el,eh,st,t1,t2,p24,p3,p7,round(vr,2),round(br,3),round(rr,2),round(ks,2),round(cg["cg_score"],2),acc,smart,whale,squeeze,conf,dist,bub,f"OI {cg['oi']}% / Funding {cg['fund']}% / Taker {cg['taker']} / L/S {cg['ls']}",cg["liq"],kt," / ".join(warn) if warn else "특이위험 낮음"," / ".join(reason) if reason else "뚜렷한 강점 부족")
+    ftxt="N/A" if fund is None else str(fund)
+    oitxt="N/A" if cg.get("oi") is None else str(cg.get("oi"))
+    takertxt="N/A" if cg.get("taker") is None else str(cg.get("taker"))
+    lstxt="N/A" if cg.get("ls") is None else str(cg.get("ls"))
+    cg_text=f"완성도 {cg.get('completeness',0)}% ({cg_quality}/5) | OI {oitxt}% / Funding {ftxt}% / Taker {takertxt} / L/S {lstxt}"
+    return Result(s+"USDT",round(price,8),score,action,stage,round(min(l[-20:]),8),round(max(h[-20:]),8),el,eh,st,t1,t2,p24,p3,p7,round(vr,2),round(br,3),round(rr,2),round(ks,2),round(cg["cg_score"],2),acc,smart,whale,squeeze,conf,dist,bub,cg_text,cg["liq"],kt," / ".join(warn) if warn else "특이위험 낮음"," / ".join(reason) if reason else "뚜렷한 강점 부족")
 
 def scan(symbols):
     kr=kr_data(); out=[]
@@ -3004,7 +3078,7 @@ def hyper_candidates(limit=None):
 def hyper_quick_text():
     rows = hyper_candidates(HYPER_FINAL_TOP)
     lines = [
-        "⚡ <b>A100 v45.1 QUICK 1차 후보</b>",
+        "⚡ <b>A100 v46 QUICK 1차 후보</b>",
         "OHLCV 계산 없이 24h 거래대금·거래횟수·변동률 기준",
         "정밀 진입가는 /ultimate",
         "────────────",
@@ -3284,7 +3358,7 @@ async def quick_cmd(update, context):
     try:
         rows = v41_candidates(5)
         lines = [
-            "⚡ <b>A100 v45.1 QUICK</b>",
+            "⚡ <b>A100 v46 QUICK</b>",
             "24h 티커만 사용 / 즉시 후보",
             "진입가 계산은 /ultimate",
             "────────────",
@@ -3507,7 +3581,7 @@ async def quick_cmd(update, context):
     try:
         rows = v41_candidates(5) if "v41_candidates" in globals() else v39_candidates(5)
         lines = [
-            "⚡ <b>A100 v45.1 QUICK</b>",
+            "⚡ <b>A100 v46 QUICK</b>",
             "24h 티커 기준 즉시 후보",
             "진입/손절은 /ultimate",
             "────────────",
@@ -3976,7 +4050,7 @@ async def quick_cmd(update, context):
     try:
         rows = a100_candidates(5)
         lines = [
-            "⚡ <b>A100 v45.1 QUICK</b>",
+            "⚡ <b>A100 v46 QUICK</b>",
             "24h 티커 기준 즉시 후보",
             "진입/손절은 /ultimate",
             "────────────",
@@ -4135,7 +4209,7 @@ def v42_format(r, idx):
 
 async def quick_cmd(update, context):
     rows = v42_candidates(5)
-    lines = ["⚡ <b>A100 v45.1 QUICK</b>", "24h 실시간 티커 기반 즉시 후보", "진입/손절은 /ultimate", "────────────", ""]
+    lines = ["⚡ <b>A100 v46 QUICK</b>", "24h 실시간 티커 기반 즉시 후보", "진입/손절은 /ultimate", "────────────", ""]
     if not rows:
         lines.append("후보 없음")
     for i,(score,sym,pct,qv,trades) in enumerate(rows,1):
@@ -4378,7 +4452,7 @@ async def quick_cmd(update, context):
         return
 
     lines = [
-        "⚡ <b>A100 v45.1 QUICK</b>",
+        "⚡ <b>A100 v46 QUICK</b>",
         "Binance 실시간 티커 기반 즉시 후보",
         "진입/손절은 /ultimate",
         "────────────",
@@ -4517,6 +4591,10 @@ V45_API_STATE={
 V45_CG_CACHE={}
 V45_SESSION=requests.Session()
 V45_SESSION.headers.update({"User-Agent":"Mozilla/5.0 A100Bot/45","Accept":"application/json,text/plain,*/*","Connection":"keep-alive"})
+V45_CG_LOCK=threading.RLock()
+V45_CG_LAST_CALL=0.0
+V45_CG_MIN_INTERVAL=float(os.getenv("V45_CG_MIN_INTERVAL","0.35"))
+
 
 def v45_get_json(url,params=None,headers=None,timeout=7):
     t0=time.time()
@@ -4570,28 +4648,40 @@ def v45_cg_headers():
     return {"CG-API-KEY":key} if key else {}
 
 def v45_cg_request(path,params=None,cache_key=None,force=False):
+    global V45_CG_LAST_CALL
     now=now_ts(); st=V45_API_STATE["coinglass"]
     if not v45_cg_headers():return {"ok":False,"status":None,"data":None,"err":"API key missing","latency_ms":None}
-    if now<st.get("cooldown_until",0):return {"ok":False,"status":429,"data":None,"err":"CoinGlass cooldown active","latency_ms":None}
     ck=cache_key or f"{path}:{sorted((params or {}).items())}"
     c=V45_CG_CACHE.get(ck)
     if c and not force and now-c["ts"]<=V45_CG_TTL:return c["value"]
+    if now<st.get("cooldown_until",0):
+        if c:return dict(c["value"],stale=True,err="CoinGlass cooldown - stale cache")
+        return {"ok":False,"status":429,"data":None,"err":"CoinGlass cooldown active","latency_ms":None}
     try:
-        code,payload,lat,text=v45_get_json("https://open-api-v4.coinglass.com"+path,params=params,headers=v45_cg_headers(),timeout=V45_CG_TIMEOUT)
+        with V45_CG_LOCK:
+            wait=V45_CG_MIN_INTERVAL-(time.time()-V45_CG_LAST_CALL)
+            if wait>0:time.sleep(wait)
+            code,payload,lat,text=v45_get_json("https://open-api-v4.coinglass.com"+path,params=params,headers=v45_cg_headers(),timeout=V45_CG_TIMEOUT)
+            V45_CG_LAST_CALL=time.time()
         pcode=str(payload.get("code")) if isinstance(payload,dict) else ""
         if code==429 or pcode=="429":
-            st["cooldown_until"]=now+V45_CG_COOLDOWN; val={"ok":False,"status":429,"data":None,"err":"Too Many Requests","latency_ms":lat}
+            st["cooldown_until"]=now+V45_CG_COOLDOWN
+            if c:val=dict(c["value"],stale=True,err="Too Many Requests - stale cache")
+            else:val={"ok":False,"status":429,"data":None,"err":"Too Many Requests","latency_ms":lat}
         elif code!=200 or not isinstance(payload,dict):
-            val={"ok":False,"status":code,"data":None,"err":text[:180],"latency_ms":lat}
+            if c:val=dict(c["value"],stale=True,err=f"HTTP {code} - stale cache")
+            else:val={"ok":False,"status":code,"data":None,"err":text[:180],"latency_ms":lat}
         elif pcode not in ("0","200"):
-            val={"ok":False,"status":code,"data":None,"err":str(payload.get("msg",payload))[:180],"latency_ms":lat}
+            if c:val=dict(c["value"],stale=True,err=str(payload.get("msg","API error"))[:100]+" - stale cache")
+            else:val={"ok":False,"status":code,"data":None,"err":str(payload.get("msg",payload))[:180],"latency_ms":lat}
         else:
-            val={"ok":True,"status":code,"data":payload.get("data"),"err":"","latency_ms":lat}
-        V45_CG_CACHE[ck]={"ts":now,"value":val}
-        st.update({"ts":now,"latency_ms":lat,"err":val["err"]})
+            val={"ok":True,"status":code,"data":payload.get("data"),"err":"","latency_ms":lat,"stale":False}
+            V45_CG_CACHE[ck]={"ts":now,"value":val}
+        st.update({"ts":now,"latency_ms":lat,"err":val.get("err","")})
         return val
     except Exception as e:
         st["err"]=str(e)
+        if c:return dict(c["value"],stale=True,err=str(e)+" - stale cache")
         return {"ok":False,"status":None,"data":None,"err":str(e),"latency_ms":None}
 
 def v45_cg_supported(force=False):
@@ -4599,10 +4689,11 @@ def v45_cg_supported(force=False):
 
 def v45_cg_coin(symbol="BTC",force=False):
     coin=symbol.upper().replace("USDT","")
-    out={"oi":None,"funding":None,"ls":None,"liquidation":None,"errors":{}}
+    out={"oi":None,"funding":None,"taker":None,"ls":None,"liquidation":None,"errors":{}}
     tests=[
       ("oi","/api/futures/open-interest/exchange-list",{"symbol":coin}),
       ("funding","/api/futures/funding-rate/exchange-list",{"symbol":coin}),
+      ("taker","/api/futures/aggregated-taker-buy-sell-volume/history",{"symbol":coin,"exchange":"Binance","interval":"1h","limit":6}),
       ("ls","/api/futures/global-long-short-account-ratio/history",{"symbol":coin,"exchange":"Binance","interval":"1h","limit":2}),
       ("liquidation","/api/futures/liquidation/history",{"symbol":coin,"exchange":"Binance","interval":"1h","limit":2})
     ]
@@ -4643,7 +4734,7 @@ async def apicheck_cmd(update,context):
     confidence=(55 if b.get("ticker") else 0)+(45 if c.get("ok") else 0)
     cooldown=max(0,int(V45_API_STATE["coinglass"].get("cooldown_until",0)-now_ts()))
     await update.message.reply_text(
-      f"🧪 <b>A100 v45.1 API CHECK</b>\nBinance Futures: {'✅ 정상' if b.get('ticker') else '❌ 오류'}\nTicker: {len(b.get('ticker') or [])}개\nExchangeInfo: {len((b.get('exchange_info') or {}).get('symbols',[]))}개\nHost: {b.get('host') or '-'}\nLatency: {b.get('latency_ms') if b.get('latency_ms') is not None else 'N/A'}ms\nBinance Error: {b.get('err') or '-'}\n\nCoinGlass: {'✅ 정상' if c.get('ok') else '⚠️ 제한/오류'}\nAPI Key: {'등록됨' if v45_cg_headers() else '없음'}\nSupported Coins: {len(c.get('data') or []) if c.get('ok') else 'N/A'}\nLatency: {c.get('latency_ms') if c.get('latency_ms') is not None else 'N/A'}ms\nCooldown: {cooldown}초\nCoinGlass Error: {c.get('err') or '-'}\n\n데이터 신뢰도: <b>{confidence}%</b>",
+      f"🧪 <b>A100 v46 API CHECK</b>\nBinance Futures: {'✅ 정상' if b.get('ticker') else '❌ 오류'}\nTicker: {len(b.get('ticker') or [])}개\nExchangeInfo: {len((b.get('exchange_info') or {}).get('symbols',[]))}개\nHost: {b.get('host') or '-'}\nLatency: {b.get('latency_ms') if b.get('latency_ms') is not None else 'N/A'}ms\nBinance Error: {b.get('err') or '-'}\n\nCoinGlass: {'✅ 정상' if c.get('ok') else '⚠️ 제한/오류'}\nAPI Key: {'등록됨' if v45_cg_headers() else '없음'}\nSupported Coins: {len(c.get('data') or []) if c.get('ok') else 'N/A'}\nLatency: {c.get('latency_ms') if c.get('latency_ms') is not None else 'N/A'}ms\nCooldown: {cooldown}초\nCoinGlass Error: {c.get('err') or '-'}\n\n데이터 신뢰도: <b>{confidence}%</b>",
       parse_mode="HTML")
 
 async def datastatus_cmd(update,context):
@@ -4672,7 +4763,7 @@ async def apicheck_cmd(update, context):
     confidence = 0 if not ok else 55 + (45 if c.get("ok") else 0)
     cooldown = max(0, int(V45_API_STATE["coinglass"].get("cooldown_until", 0) - now_ts()))
     await update.message.reply_text(
-        "🧪 <b>A100 v45.1 API CHECK</b>\n"
+        "🧪 <b>A100 v46 API CHECK</b>\n"
         f"전체판정: <b>{'✅ 분석 가능' if ok else '⛔ 분석 중지'}</b>\n\n"
         f"Binance Futures: {'✅ 정상' if ok else '⛔ 차단/오류'}\n"
         f"Ticker: {len(b.get('ticker') or [])}개\n"
@@ -4714,7 +4805,7 @@ async def quick_cmd(update, context):
     if not rows:
         await update.message.reply_text("⚠️ 실시간 후보 없음. 분석 중지.")
         return
-    lines = ["⚡ <b>A100 v45.1 QUICK</b>", "Binance 실시간 데이터 기준", "────────────", ""]
+    lines = ["⚡ <b>A100 v46 QUICK</b>", "Binance 실시간 데이터 기준", "────────────", ""]
     for i,(score,sym,pct,qv,trades) in enumerate(rows,1):
         lines.append(f"{i}. <b>{sym}</b>\n점수 {round(score,1)} | 24h {pct:+.2f}% | 거래대금 {round(qv/100000000,1)}억\n")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -4729,7 +4820,7 @@ async def ultimate_cmd(update, context):
             parse_mode="HTML"
         )
         return
-    await update.message.reply_text("🧬 A100 v45.1 정상 데이터 기반 분석 중...")
+    await update.message.reply_text("🧬 A100 v46 통합 CoinGlass 기반 분석 중...")
     try:
         rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
         if not rows:
@@ -4739,7 +4830,7 @@ async def ultimate_cmd(update, context):
         res = a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)
         res = sorted(res, key=lambda r: v43_score(r), reverse=True)
         res = [r for r in res if v43_score(r) >= V43_MIN_SCORE][:V43_TOP]
-        lines = ["🧬 <b>A100 v45.1 VERIFIED DATA</b>", f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(res)}", "────────────", ""]
+        lines = ["🧬 <b>A100 v46 VERIFIED DATA</b>", f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(res)}", "────────────", ""]
         if not res:
             lines.append("현재 기준 통과 후보 없음.")
         for i,r in enumerate(res,1):
@@ -4752,7 +4843,7 @@ async def datastatus_cmd(update, context):
     ok, reason, b = v451_gate()
     c = V45_API_STATE["coinglass"]
     await update.message.reply_text(
-        "📦 <b>A100 v45.1 데이터 상태</b>\n"
+        "📦 <b>A100 v46 데이터 상태</b>\n"
         f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
         f"차단원인: {reason or '-'}\n"
         f"Binance ticker: {len(b.get('ticker') or [])}개\n"
@@ -4876,7 +4967,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v45.1.1 Region Guard worker running...", flush=True)
+    print("A100 v46 Unified CoinGlass worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
