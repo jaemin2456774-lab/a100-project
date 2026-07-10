@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v67 SIGNAL STAGE ENGINE worker running...", flush=True)
+    print("A100 v68 LONG SHORT DUAL ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -13805,6 +13805,666 @@ def build_v44_application(token):
         ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
         ("cleannews", cleannews_cmd), ("translate", translate_cmd),
         ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v68 LONG / SHORT DUAL ENGINE =====
+# 핵심 반영
+# - LONG / SHORT 독립 점수
+# - /ultimate 통합판단, /long, /short, /position SYMBOL
+# - 행동 중심 UI
+# - BUY/SHORT까지 남은 조건을 쉬운 순서대로 정렬
+# - TP 예상시간
+# - TOP3 선정 이유
+# - 시장 위험도 4단계
+# - 급락 추격숏 및 숏스퀴즈 방지
+V68_VERSION = "A100 v68 LONG SHORT DUAL ENGINE"
+
+V68_TOP_LONG = int(os.getenv("V68_TOP_LONG", "2"))
+V68_TOP_SHORT = int(os.getenv("V68_TOP_SHORT", "2"))
+V68_TOP_WAIT = int(os.getenv("V68_TOP_WAIT", "1"))
+V68_MIN_SIGNAL = float(os.getenv("V68_MIN_SIGNAL", "62"))
+V68_STRONG_SIGNAL = float(os.getenv("V68_STRONG_SIGNAL", "78"))
+V68_MAX_RISK = float(os.getenv("V68_MAX_RISK", "72"))
+V68_SHORT_SQUEEZE_BLOCK = float(os.getenv("V68_SHORT_SQUEEZE_BLOCK", "68"))
+
+def _v68_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def _v68_clip(value, low=0.0, high=100.0):
+    return max(low, min(high, _v68_float(value)))
+
+def _v68_get(obj, *names, default=0.0):
+    for name in names:
+        try:
+            if isinstance(obj, dict) and name in obj:
+                return obj[name]
+            if hasattr(obj, name):
+                return getattr(obj, name)
+        except Exception:
+            pass
+    return default
+
+def v68_market_risk(market, results):
+    btc = _v68_float(market.get("btc_change"))
+    breadth = _v68_float(market.get("breadth"))
+    avg_risk = (
+        sum(_v68_float(v60_risk_score(r)) for r in results) / len(results)
+        if results else 100.0
+    )
+
+    raw = avg_risk * 0.55
+    raw += max(0.0, -btc) * 10.0
+    raw += max(0.0, 45.0 - breadth) * 0.65
+    score = _v68_clip(raw)
+
+    if score >= 75:
+        return "🔴 매우높음", round(score, 1)
+    if score >= 60:
+        return "🟠 높음", round(score, 1)
+    if score >= 40:
+        return "🟡 보통", round(score, 1)
+    return "🟢 낮음", round(score, 1)
+
+def v68_cg_raw(r):
+    try:
+        total, rows, coverage = v56_cg_breakdown(r)
+        values = {x.get("key"): x for x in rows}
+        def score(key, default=50.0):
+            row = values.get(key) or {}
+            return _v68_float(row.get("score"), default)
+        return {
+            "total": _v68_float(total),
+            "coverage": _v68_float(coverage),
+            "oi": score("oi"),
+            "funding": score("funding"),
+            "taker": score("taker"),
+            "top_position": score("top_position"),
+            "top_account": score("top_account"),
+            "liquidation": score("liquidation"),
+            "basis": score("basis"),
+        }
+    except Exception:
+        return {
+            "total": 50.0, "coverage": 0.0, "oi": 50.0, "funding": 50.0,
+            "taker": 50.0, "top_position": 50.0, "top_account": 50.0,
+            "liquidation": 50.0, "basis": 50.0,
+        }
+
+def v68_price_change(r):
+    for name in ("chg24", "change24", "price_change", "change", "pct24"):
+        value = _v68_get(r, name, default=None)
+        if value is not None:
+            try:
+                return float(value)
+            except Exception:
+                pass
+    return 0.0
+
+def v68_long_score(r):
+    cg = v68_cg_raw(r)
+    inst = _v68_float(v56_institution_strength(r))
+    chart = _v68_float(v56_chart_structure_score(r))
+    timing = _v68_float(v60_timing_score(r))
+    volume = _v68_float(v56_volume_volatility_score(r))
+    final = _v68_float(v57_final_score(r))
+    risk = _v68_float(v60_risk_score(r))
+
+    cg_long = (
+        cg["taker"] * 0.22 +
+        cg["top_position"] * 0.20 +
+        cg["top_account"] * 0.18 +
+        cg["liquidation"] * 0.14 +
+        cg["oi"] * 0.12 +
+        cg["funding"] * 0.08 +
+        cg["basis"] * 0.06
+    )
+
+    score = (
+        final * 0.22 +
+        inst * 0.20 +
+        chart * 0.18 +
+        timing * 0.16 +
+        volume * 0.10 +
+        cg_long * 0.14
+    ) - max(0.0, risk - 55.0) * 0.28
+
+    return round(_v68_clip(score), 1)
+
+def v68_short_score(r):
+    cg = v68_cg_raw(r)
+    chart = _v68_float(v56_chart_structure_score(r))
+    timing = _v68_float(v60_timing_score(r))
+    volume = _v68_float(v56_volume_volatility_score(r))
+    risk = _v68_float(v60_risk_score(r))
+    change = v68_price_change(r)
+
+    # 기존 롱 지표를 단순 반전하지 않고
+    # 차트 약세 + 매도수급 + 롱과밀/롱청산 조건을 별도로 조합
+    chart_bear = 100.0 - chart
+    timing_bear = 100.0 - timing
+    taker_sell = 100.0 - cg["taker"]
+    top_position_short = 100.0 - cg["top_position"]
+    top_account_short = 100.0 - cg["top_account"]
+
+    # funding/basis가 지나치게 강한 롱 과밀일수록 숏 기회 가점
+    long_crowding = max(cg["funding"], cg["basis"])
+    # liquidation 점수가 롱 기준이라면 역방향도 일부 반영
+    liquidation_short = 100.0 - cg["liquidation"]
+
+    price_down_bonus = _v68_clip((-change) * 8.0, 0.0, 20.0)
+
+    score = (
+        chart_bear * 0.24 +
+        timing_bear * 0.14 +
+        taker_sell * 0.18 +
+        top_position_short * 0.13 +
+        top_account_short * 0.11 +
+        long_crowding * 0.08 +
+        liquidation_short * 0.05 +
+        volume * 0.07 +
+        price_down_bonus
+    )
+
+    # 위험도가 너무 높으면 신규 숏도 감점
+    score -= max(0.0, risk - 70.0) * 0.22
+    return round(_v68_clip(score), 1)
+
+def v68_short_squeeze_risk(r):
+    cg = v68_cg_raw(r)
+    chart = _v68_float(v56_chart_structure_score(r))
+    timing = _v68_float(v60_timing_score(r))
+    change = v68_price_change(r)
+
+    # 숏 과밀 가능성: Funding 약세 + 가격/차트 지지 + 매수 전환
+    funding_negative = 100.0 - cg["funding"]
+    taker_buy = cg["taker"]
+    support_strength = (chart + timing) / 2.0
+    rebound_bonus = _v68_clip(max(0.0, change) * 8.0, 0.0, 20.0)
+
+    score = (
+        funding_negative * 0.30 +
+        taker_buy * 0.25 +
+        support_strength * 0.30 +
+        cg["oi"] * 0.15 +
+        rebound_bonus
+    )
+    return round(_v68_clip(score), 1)
+
+def v68_chase_short_risk(r):
+    change = v68_price_change(r)
+    volume = _v68_float(v56_volume_volatility_score(r))
+    # 이미 급락한 종목의 추격숏 차단
+    score = max(0.0, -change - 4.0) * 9.0 + max(0.0, volume - 80.0) * 0.5
+    return round(_v68_clip(score), 1)
+
+def v68_side_decision(r):
+    long_score = v68_long_score(r)
+    short_score = v68_short_score(r)
+    squeeze = v68_short_squeeze_risk(r)
+    chase_short = v68_chase_short_risk(r)
+    risk = _v68_float(v60_risk_score(r))
+    pos = v63_entry_position(r)
+
+    long_allowed = risk <= V68_MAX_RISK and pos["status"] != "🔴 추격금지"
+    short_allowed = (
+        risk <= V68_MAX_RISK
+        and squeeze < V68_SHORT_SQUEEZE_BLOCK
+        and chase_short < 60.0
+    )
+
+    if long_score >= V68_STRONG_SIGNAL and long_score - short_score >= 10 and long_allowed:
+        return "🟢 STRONG LONG", long_score, short_score
+    if long_score >= V68_MIN_SIGNAL and long_score - short_score >= 7 and long_allowed:
+        return "🔵 LONG", long_score, short_score
+    if short_score >= V68_STRONG_SIGNAL and short_score - long_score >= 10 and short_allowed:
+        return "🔴 STRONG SHORT", long_score, short_score
+    if short_score >= V68_MIN_SIGNAL and short_score - long_score >= 7 and short_allowed:
+        return "🟠 SHORT", long_score, short_score
+    if max(long_score, short_score) >= 52:
+        return "🟡 WAIT", long_score, short_score
+    return "⚫ SKIP", long_score, short_score
+
+def v68_short_plan(r):
+    plan = v58_adjusted_trade_plan(r)
+    current = _v68_float(plan.get("current"))
+    if current <= 0:
+        current = _v68_float(_v68_get(r, "price", "last", "close", default=0.0))
+
+    # 변동성 기반 숏 계획. 기존 롱 계획과 독립적으로 계산
+    atr_pct = _v68_float(_v68_get(r, "atr_pct", "atrp", default=2.2), 2.2)
+    atr_pct = max(1.0, min(6.0, atr_pct))
+
+    entry_low = current * (1.0 - 0.003)
+    entry_high = current * (1.0 + 0.006)
+    stop = current * (1.0 + max(0.018, atr_pct / 100.0 * 0.9))
+    tp1 = current * (1.0 - max(0.028, atr_pct / 100.0 * 1.25))
+    tp2 = current * (1.0 - max(0.055, atr_pct / 100.0 * 2.25))
+
+    risk_unit = max(1e-12, stop - current)
+    rr1 = (current - tp1) / risk_unit
+    rr2 = (current - tp2) / risk_unit
+
+    return {
+        "current": current,
+        "low": entry_low,
+        "high": entry_high,
+        "stop": stop,
+        "t1": tp1,
+        "t2": tp2,
+        "rr1": round(rr1, 2),
+        "rr2": round(rr2, 2),
+    }
+
+def v68_side_reasons(r, side):
+    cg = v68_cg_raw(r)
+    chart = _v68_float(v56_chart_structure_score(r))
+    timing = _v68_float(v60_timing_score(r))
+    volume = _v68_float(v56_volume_volatility_score(r))
+    reasons = []
+
+    if side == "LONG":
+        if cg["taker"] >= 62: reasons.append("Taker 매수 우세")
+        if cg["top_position"] >= 62: reasons.append("대형 포지션 롱 우세")
+        if cg["top_account"] >= 62: reasons.append("상위 계정 롱 우세")
+        if chart >= 62: reasons.append("차트 추세 양호")
+        if timing >= 62: reasons.append("진입 타이밍 양호")
+        if volume >= 65: reasons.append("거래량 증가")
+    else:
+        if cg["taker"] <= 38: reasons.append("Taker 매도 우세")
+        if cg["top_position"] <= 38: reasons.append("대형 포지션 숏 우세")
+        if cg["top_account"] <= 38: reasons.append("상위 계정 숏 우세")
+        if chart <= 42: reasons.append("차트 하락 구조")
+        if timing <= 42: reasons.append("반등 실패 가능성")
+        if max(cg["funding"], cg["basis"]) >= 65: reasons.append("롱 과밀 해소 가능성")
+        if volume >= 65: reasons.append("하락 거래량 증가")
+
+    unique = []
+    for item in reasons:
+        if item not in unique:
+            unique.append(item)
+
+    fallback = (
+        ["EMA20·VWAP 회복 확인", "손절 기준 준수", "추격매수 금지"]
+        if side == "LONG"
+        else ["지지선 이탈 확인", "급락 추격숏 금지", "숏스퀴즈 확인"]
+    )
+    for item in fallback:
+        if len(unique) >= 3:
+            break
+        if item not in unique:
+            unique.append(item)
+
+    return unique[:3]
+
+def v68_missing_conditions(r, side):
+    cg = v68_cg_raw(r)
+    chart = _v68_float(v56_chart_structure_score(r))
+    timing = _v68_float(v60_timing_score(r))
+    volume = _v68_float(v56_volume_volatility_score(r))
+
+    if side == "LONG":
+        checks = [
+            ("차트", chart, 60.0, 1),
+            ("타이밍", timing, 65.0, 2),
+            ("거래량", volume, 60.0, 3),
+            ("CoinGlass", cg["total"], 65.0, 4),
+        ]
+        missing = [
+            (name, round(threshold - value, 1), priority)
+            for name, value, threshold, priority in checks if value < threshold
+        ]
+    else:
+        checks = [
+            ("차트약세", 100.0 - chart, 60.0, 1),
+            ("매도타이밍", 100.0 - timing, 60.0, 2),
+            ("Taker매도", 100.0 - cg["taker"], 62.0, 3),
+            ("거래량", volume, 60.0, 4),
+        ]
+        missing = [
+            (name, round(threshold - value, 1), priority)
+            for name, value, threshold, priority in checks if value < threshold
+        ]
+
+    missing.sort(key=lambda x: (x[1], x[2]))
+    return missing[:3]
+
+def v68_target_eta(r, side):
+    timing = _v68_float(v60_timing_score(r))
+    volume = _v68_float(v56_volume_volatility_score(r))
+    momentum = timing * 0.55 + volume * 0.45
+
+    if momentum >= 78:
+        return "2~8시간", "8~24시간"
+    if momentum >= 65:
+        return "4~12시간", "12~36시간"
+    if momentum >= 52:
+        return "8~24시간", "1~3일"
+    return "1~3일", "3~7일"
+
+def v68_top_reason(r, side):
+    reasons = v68_side_reasons(r, side)
+    return reasons[0] if reasons else "조건 비교 필요"
+
+def v68_action_text(decision):
+    return {
+        "🟢 STRONG LONG": "✅ 지금 분할롱",
+        "🔵 LONG": "✅ 눌림목 분할롱",
+        "🔴 STRONG SHORT": "✅ 반등 시 분할숏",
+        "🟠 SHORT": "🟠 지지 이탈 확인 후 숏",
+        "🟡 WAIT": "⏳ 조건 충족까지 대기",
+        "⚫ SKIP": "❌ 오늘 신규진입 금지",
+    }.get(decision, "⏳ 대기")
+
+def v68_card(r, rank, priority):
+    sym = _v54_escape(getattr(r, "sym", "?"))
+    decision, long_score, short_score = v68_side_decision(r)
+    side = "SHORT" if "SHORT" in decision else "LONG"
+    reasons = v68_side_reasons(r, side)
+    missing = v68_missing_conditions(r, side)
+    eta1, eta2 = v68_target_eta(r, side)
+    squeeze = v68_short_squeeze_risk(r)
+    chase_short = v68_chase_short_risk(r)
+    risk = _v68_float(v60_risk_score(r))
+    grade = v67_trade_grade(r)
+    stars = v67_grade_stars(grade)
+
+    if side == "SHORT":
+        plan = v68_short_plan(r)
+        rr = plan["rr2"]
+        p1 = _v68_clip(short_score - 5)
+        p2 = _v68_clip(short_score - 20)
+    else:
+        plan = v58_adjusted_trade_plan(r)
+        rr = v60_primary_rr(r)
+        p1, p2 = v67_target_probability(r)
+
+    reason_text = "\n".join(f"✔ {_v54_escape(x)}" for x in reasons)
+    if missing:
+        missing_text = "\n".join(
+            f"{i}. ❌ {_v54_escape(name)} +{gap} 필요"
+            for i, (name, gap, _) in enumerate(missing, 1)
+        )
+    else:
+        missing_text = "✅ 핵심조건 충족"
+
+    warning_lines = []
+    if side == "SHORT":
+        if squeeze >= V68_SHORT_SQUEEZE_BLOCK:
+            warning_lines.append(f"숏스퀴즈 위험 {squeeze}%")
+        if chase_short >= 60:
+            warning_lines.append(f"급락 추격숏 위험 {chase_short}%")
+        warning_lines.append("BTC 급반등 시 숏 취소")
+    else:
+        if v63_entry_position(r)["status"] == "🔴 추격금지":
+            warning_lines.append("고점 추격매수 금지")
+        warning_lines.append("손절가 이탈 시 즉시 종료")
+
+    warning_text = "\n".join(f"⚠ {_v54_escape(x)}" for x in warning_lines)
+
+    return (
+        f"🚦 <b>{_v54_escape(decision)}</b>\n"
+        f"{stars} · 등급 <b>{grade}</b>\n"
+        f"<b>{_v54_escape(v68_action_text(decision))}</b>\n"
+        "────────────\n"
+        f"🚀 <b>{rank}. {sym}</b> · 우선순위 {priority}위\n"
+        f"LONG <code>{v64_bar(long_score, 10)}</code> {long_score}\n"
+        f"SHORT <code>{v64_bar(short_score, 10)}</code> {short_score}\n\n"
+
+        f"<b>{'숏' if side == 'SHORT' else '롱'} 매매계획</b>\n"
+        f"현재 <code>{plan['current']:.10g}</code>\n"
+        f"🟢 진입 <code>{plan['low']:.10g}~{plan['high']:.10g}</code>\n"
+        f"🔴 손절 <code>{plan['stop']:.10g}</code>\n"
+        f"🎯 TP1 <code>{plan['t1']:.10g}</code> · {p1:.1f}% · {eta1}\n"
+        f"🎯 TP2 <code>{plan['t2']:.10g}</code> · {p2:.1f}% · {eta2}\n"
+        f"RR <b>{rr}</b>\n\n"
+
+        f"<b>추천 이유</b>\n{reason_text}\n\n"
+        f"<b>남은 조건</b>\n{missing_text}\n\n"
+        f"<b>위험경고</b>\n{warning_text}\n"
+        f"전체 위험도 {risk:.1f}/100"
+    )
+
+def v68_top3_summary(candidates):
+    lines = ["🏆 <b>TOP3 포지션</b>"]
+    medals = ["🥇", "🥈", "🥉"]
+    for i, r in enumerate(candidates[:3], 1):
+        decision, long_score, short_score = v68_side_decision(r)
+        side = "SHORT" if "SHORT" in decision else "LONG"
+        sym = _v54_escape(getattr(r, "sym", "?"))
+        reason = v68_top_reason(r, side)
+        score = short_score if side == "SHORT" else long_score
+        lines.append(
+            f"\n{medals[i-1]} <b>{sym}</b>\n"
+            f"{_v54_escape(decision)} · {score}/100\n"
+            f"이유: {_v54_escape(reason)}"
+        )
+    return "\n".join(lines)
+
+def v68_find_symbol_result(symbol):
+    symbol = (symbol or "").upper().replace("/", "").replace("-", "")
+    if not symbol.endswith("USDT"):
+        symbol += "USDT"
+
+    rows, results, errors = v59_build_scan_results()
+    for r in results:
+        if str(getattr(r, "sym", "")).upper() == symbol:
+            return r, errors
+    return None, errors
+
+async def long_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(f"⛔ LONG 분석 제한: {_v54_escape(reason or '-')}", parse_mode="HTML")
+        return
+
+    await update.message.reply_text("🟢 LONG 후보 분석 중...")
+    try:
+        rows, results, errors = v59_build_scan_results()
+        ranked = sorted(results, key=v68_long_score, reverse=True)
+        selected = [r for r in ranked if v68_long_score(r) >= V68_MIN_SIGNAL][:5]
+        if not selected:
+            await update.message.reply_text("현재 LONG 기준 통과 종목이 없습니다.")
+            return
+        for i, r in enumerate(selected, 1):
+            await update.message.reply_text(v68_card(r, i, i), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"long 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def short_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(f"⛔ SHORT 분석 제한: {_v54_escape(reason or '-')}", parse_mode="HTML")
+        return
+
+    await update.message.reply_text("🔴 SHORT 후보 분석 중...")
+    try:
+        rows, results, errors = v59_build_scan_results()
+        ranked = sorted(results, key=v68_short_score, reverse=True)
+        selected = [
+            r for r in ranked
+            if v68_short_score(r) >= V68_MIN_SIGNAL
+            and v68_short_squeeze_risk(r) < V68_SHORT_SQUEEZE_BLOCK
+            and v68_chase_short_risk(r) < 60
+        ][:5]
+        if not selected:
+            await update.message.reply_text("현재 SHORT 기준 통과 종목이 없습니다.")
+            return
+        for i, r in enumerate(selected, 1):
+            await update.message.reply_text(v68_card(r, i, i), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"short 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def position_cmd(update, context):
+    symbol = context.args[0] if context.args else "BTC"
+    await update.message.reply_text(f"⚖️ {symbol.upper()} LONG/SHORT 비교 중...")
+    try:
+        result, errors = v68_find_symbol_result(symbol)
+        if result is None:
+            await update.message.reply_text(f"{symbol.upper()} 분석 결과를 찾지 못했습니다.")
+            return
+        await update.message.reply_text(v68_card(result, 1, 1), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"position 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    mode = st.get("mode") or "COINGLASS_ONLY"
+
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 v68 분석 제한</b>\n"
+            f"상태: {_v54_escape(reason or '-')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text(
+        "🚀 A100 v68 LONG SHORT DUAL ENGINE 분석 중...\n"
+        f"데이터 모드: {mode}"
+    )
+
+    try:
+        rows, results, scan_errors = v59_build_scan_results()
+        if not rows or not results:
+            await update.message.reply_text("⚠️ 분석 가능한 후보가 없습니다.")
+            return
+
+        ranked = sorted(
+            results,
+            key=lambda r: max(v68_long_score(r), v68_short_score(r)),
+            reverse=True
+        )
+        market = v59_market_state()
+        market_risk, market_risk_score = v68_market_risk(market, ranked)
+
+        longs = []
+        shorts = []
+        waits = []
+        for r in ranked:
+            decision, long_score, short_score = v68_side_decision(r)
+            if "LONG" in decision:
+                longs.append(r)
+            elif "SHORT" in decision:
+                shorts.append(r)
+            elif decision == "🟡 WAIT":
+                waits.append(r)
+
+        header = (
+            "🚀 <b>A100 v68 LONG SHORT DUAL ENGINE</b>\n"
+            f"데이터 <b>{_v54_escape(mode)}</b>\n"
+            f"LONG {len(longs)}개 · SHORT {len(shorts)}개 · WAIT {len(waits)}개\n"
+            f"시장위험 <b>{_v54_escape(market_risk)}</b> · {market_risk_score}/100\n"
+            f"BTC 영향도 <b>{_v54_escape(v64_btc_influence(market))}</b>\n\n"
+        )
+
+        if longs:
+            top_long = getattr(longs[0], "sym", "-")
+            header += f"🟢 LONG 1순위: <b>{_v54_escape(top_long)}</b>\n"
+        else:
+            header += "🟢 LONG 통과 없음\n"
+
+        if shorts:
+            top_short = getattr(shorts[0], "sym", "-")
+            header += f"🔴 SHORT 1순위: <b>{_v54_escape(top_short)}</b>\n"
+        else:
+            header += "🔴 SHORT 통과 없음\n"
+
+        await update.message.reply_text(header, parse_mode="HTML")
+
+        selected = (
+            longs[:V68_TOP_LONG] +
+            shorts[:V68_TOP_SHORT] +
+            waits[:V68_TOP_WAIT]
+        )
+
+        if not selected:
+            await update.message.reply_text(
+                "🚫 <b>오늘 결론</b>\n"
+                "LONG/SHORT 모두 기준 미달\n"
+                "신규진입보다 관망 우선",
+                parse_mode="HTML"
+            )
+        else:
+            priority_map = {
+                getattr(r, "sym", f"IDX{i}"): i
+                for i, r in enumerate(ranked, 1)
+            }
+            for i, r in enumerate(selected, 1):
+                priority = priority_map.get(getattr(r, "sym", ""), i)
+                await update.message.reply_text(
+                    v68_card(r, i, priority),
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+
+        footer = v68_top3_summary(ranked)
+        if scan_errors:
+            footer += f"\n\n🛠 스캔오류 {len(scan_errors)}개"
+
+        await update.message.reply_text(
+            footer,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+
+    await update.message.reply_text(
+        "📦 <b>A100 v68 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"LONG 독립점수: 활성\n"
+        f"SHORT 독립점수: 활성\n"
+        f"숏스퀴즈 차단: {V68_SHORT_SQUEEZE_BLOCK}\n"
+        f"급락 추격숏 차단: 활성\n"
+        f"TP 예상시간: 활성\n"
+        f"명령어: /long /short /position BTC\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("chart", chart_cmd),
         ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
         ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
         ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
