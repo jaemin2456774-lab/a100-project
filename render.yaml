@@ -144,3 +144,18 @@ services:
 
       - key: V44_LOCK_FILE
         value: "/tmp/a100_telegram_polling.lock"
+
+      - key: V45_BINANCE_TIMEOUT
+        value: "7"
+
+      - key: V45_CG_TIMEOUT
+        value: "10"
+
+      - key: V45_CG_TTL
+        value: "900"
+
+      - key: V45_BINANCE_TTL
+        value: "30"
+
+      - key: V45_CG_COOLDOWN
+        value: "900"
