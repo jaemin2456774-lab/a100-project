@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v51 INSTITUTIONAL DERIVATIVES worker running...", flush=True)
+    print("A100 v53 INSTITUTIONAL RANK ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -6616,6 +6616,790 @@ async def datastatus_cmd(update, context):
         f"추천허용: {'예' if ok else '아니오'}",
         parse_mode="HTML"
     )
+
+
+# ===== A100 v52 INSTITUTIONAL FLOW ENGINE =====
+# 8/8 CoinGlass 정규화 + 기관수급/숏스퀴즈/롱트랩 판정 + 706개 상대평가 확장
+V52_VERSION = "A100 v52 INSTITUTIONAL FLOW ENGINE"
+V52_TOP = int(os.getenv("V52_TOP", "5"))
+V52_PRESELECT = int(os.getenv("V52_PRESELECT", "30"))
+V52_SCAN_LIMIT = int(os.getenv("V52_SCAN_LIMIT", "12"))
+V52_PRIMARY_MIN = float(os.getenv("V52_PRIMARY_MIN", "72"))
+
+def _v52_records(obj):
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _v52_records(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _v52_records(v)
+
+def _v52_num(v):
+    try:
+        if v is None or isinstance(v, bool):
+            return None
+        if isinstance(v, str):
+            s = v.strip().replace(",", "").replace("%", "")
+            if not s or s.upper() in {"N/A", "NA", "NONE", "NULL", "-"}:
+                return None
+            return float(s)
+        return float(v)
+    except Exception:
+        return None
+
+def _v52_exchange_priority(record):
+    ex = str(
+        record.get("exchange")
+        or record.get("exchange_name")
+        or record.get("exchangeName")
+        or record.get("symbol")
+        or ""
+    ).lower()
+    if ex == "binance":
+        return 3
+    if ex == "all":
+        return 2
+    return 1
+
+def _v52_timestamp(record):
+    for key in ("time", "timestamp", "create_time", "createTime", "t"):
+        n = _v52_num(record.get(key))
+        if n is not None:
+            return n
+    return 0
+
+def _v52_best_record(obj):
+    records = list(_v52_records(obj))
+    if not records:
+        return None
+    return max(records, key=lambda r: (_v52_exchange_priority(r), _v52_timestamp(r)))
+
+def _v52_pick(obj, *keys):
+    keys_l = {k.lower() for k in keys}
+    best = _v52_best_record(obj)
+    if isinstance(best, dict):
+        for k, v in best.items():
+            if str(k).lower() in keys_l:
+                n = _v52_num(v)
+                if n is not None:
+                    return n
+
+    found = []
+    for d in _v52_records(obj):
+        for k, v in d.items():
+            if str(k).lower() in keys_l:
+                n = _v52_num(v)
+                if n is not None:
+                    found.append((_v52_exchange_priority(d), _v52_timestamp(d), n))
+    if not found:
+        return None
+    found.sort()
+    return found[-1][2]
+
+def _v52_ratio_from_parts(obj, ratio_keys, long_keys, short_keys):
+    ratio = _v52_pick(obj, *ratio_keys)
+    if ratio is not None:
+        return ratio
+    long_v = _v52_pick(obj, *long_keys)
+    short_v = _v52_pick(obj, *short_keys)
+    if long_v is not None and short_v not in (None, 0):
+        return long_v / short_v
+    return None
+
+def _v52_taker_ratio(obj):
+    ratio = _v52_pick(
+        obj,
+        "buy_sell_ratio", "buySellRatio",
+        "taker_buy_sell_ratio", "takerBuySellRatio",
+        "taker_buy_sell_vol_ratio", "takerBuySellVolRatio"
+    )
+    if ratio is not None:
+        return ratio
+
+    buy = _v52_pick(
+        obj,
+        "buy_volume_usd", "buyVolumeUsd",
+        "buy_volume", "buyVolume",
+        "taker_buy_volume", "takerBuyVolume",
+        "taker_buy_vol", "takerBuyVol",
+        "buy_vol_usd", "buyVolUsd"
+    )
+    sell = _v52_pick(
+        obj,
+        "sell_volume_usd", "sellVolumeUsd",
+        "sell_volume", "sellVolume",
+        "taker_sell_volume", "takerSellVolume",
+        "taker_sell_vol", "takerSellVol",
+        "sell_vol_usd", "sellVolUsd"
+    )
+    if buy is not None and sell not in (None, 0):
+        return buy / sell
+    return None
+
+def _v52_global_ls(obj):
+    return _v52_ratio_from_parts(
+        obj,
+        (
+            "long_short_ratio", "longShortRatio",
+            "long_short_account_ratio", "longShortAccountRatio",
+            "global_long_short_account_ratio", "globalLongShortAccountRatio"
+        ),
+        (
+            "long_account", "longAccount",
+            "long_account_percent", "longAccountPercent",
+            "long_percent", "longPercent",
+            "long_ratio", "longRatio"
+        ),
+        (
+            "short_account", "shortAccount",
+            "short_account_percent", "shortAccountPercent",
+            "short_percent", "shortPercent",
+            "short_ratio", "shortRatio"
+        )
+    )
+
+def v52_normalize_cg(raw):
+    m = v51_normalize_cg(raw)
+
+    # v51에서 누락되기 쉬운 4h exchange/list 응답을 별도 보강
+    if m.get("taker") is None:
+        m["taker"] = _v52_taker_ratio(raw.get("taker"))
+    if m.get("ls") is None:
+        m["ls"] = _v52_global_ls(raw.get("ls"))
+
+    # Top ratios도 exchange/list 변형 대응
+    if m.get("top_account") is None:
+        m["top_account"] = _v52_ratio_from_parts(
+            raw.get("top_account"),
+            (
+                "top_account_long_short_ratio", "topAccountLongShortRatio",
+                "long_short_ratio", "longShortRatio"
+            ),
+            (
+                "top_account_long_percent", "topAccountLongPercent",
+                "long_percent", "longPercent"
+            ),
+            (
+                "top_account_short_percent", "topAccountShortPercent",
+                "short_percent", "shortPercent"
+            )
+        )
+
+    if m.get("top_position") is None:
+        m["top_position"] = _v52_ratio_from_parts(
+            raw.get("top_position"),
+            (
+                "top_position_long_short_ratio", "topPositionLongShortRatio",
+                "long_short_ratio", "longShortRatio"
+            ),
+            (
+                "top_position_long_percent", "topPositionLongPercent",
+                "long_percent", "longPercent"
+            ),
+            (
+                "top_position_short_percent", "topPositionShortPercent",
+                "short_percent", "shortPercent"
+            )
+        )
+
+    m["available"] = sum(
+        m.get(k) is not None
+        for k in ("oi", "funding", "taker", "ls", "top_account",
+                  "top_position", "basis", "liq_bias")
+    )
+    m["coverage"] = m["available"] / 8.0
+    return m
+
+def v52_cg_score_from_metrics(m):
+    # 기관 수급 중요도 재조정
+    weights = {
+        "oi": 0.20,
+        "funding": 0.15,
+        "top_position": 0.20,
+        "top_account": 0.15,
+        "liq_bias": 0.10,
+        "taker": 0.10,
+        "ls": 0.05,
+        "basis": 0.05,
+    }
+    num = 0.0
+    den = 0.0
+    details = []
+    for name, weight in weights.items():
+        score = _v51_metric_score(name, m.get(name))
+        if score is None:
+            continue
+        num += score * weight
+        den += weight
+        details.append((name, m.get(name), score))
+    score = num / den if den else 0.0
+
+    coverage = m.get("coverage", 0)
+    if coverage < 0.25:
+        score *= 0.70
+    elif coverage < 0.50:
+        score *= 0.86
+    elif coverage < 0.75:
+        score *= 0.95
+    return round(max(0, min(100, score)), 1), details
+
+def v52_flow_regime(m):
+    oi = m.get("oi")
+    funding = m.get("funding")
+    taker = m.get("taker")
+    ls = m.get("ls")
+    top_acc = m.get("top_account")
+    top_pos = m.get("top_position")
+    liq = m.get("liq_bias")
+    basis = m.get("basis")
+
+    bullish = 0
+    bearish = 0
+    tags = []
+
+    if oi is not None:
+        if oi >= 1.5:
+            bullish += 2
+            tags.append("OI 증가")
+        elif oi < -2:
+            bearish += 2
+            tags.append("OI 감소")
+
+    if funding is not None:
+        if -0.08 <= funding <= 0.03:
+            bullish += 1
+            tags.append("Funding 건전")
+        elif funding > 0.12:
+            bearish += 2
+            tags.append("Funding 과열")
+
+    if taker is not None:
+        if taker >= 1.10:
+            bullish += 2
+            tags.append("Taker 매수 우세")
+        elif taker < 0.90:
+            bearish += 2
+            tags.append("Taker 매도 우세")
+
+    if top_pos is not None:
+        if 1.05 <= top_pos <= 1.60:
+            bullish += 2
+            tags.append("Top Position 롱 우세")
+        elif top_pos < 0.85:
+            bearish += 2
+            tags.append("Top Position 숏 우세")
+
+    if top_acc is not None:
+        if 1.05 <= top_acc <= 1.60:
+            bullish += 1
+            tags.append("Top Account 롱 우세")
+        elif top_acc < 0.85:
+            bearish += 1
+            tags.append("Top Account 숏 우세")
+
+    if liq is not None:
+        if liq >= 0.20:
+            bullish += 2
+            tags.append("숏청산 우세")
+        elif liq <= -0.20:
+            bearish += 2
+            tags.append("롱청산 우세")
+
+    if basis is not None:
+        if 0 <= basis <= 3:
+            bullish += 1
+            tags.append("Basis 건전")
+        elif basis > 8:
+            bearish += 1
+            tags.append("Basis 과열")
+
+    if ls is not None and ls > 1.8:
+        bearish += 1
+        tags.append("대중 롱 과밀")
+    elif ls is not None and 0.85 <= ls <= 1.20:
+        bullish += 1
+        tags.append("대중 포지션 균형")
+
+    if bullish >= 7 and bearish <= 2:
+        regime = "🏦 기관매집"
+    elif liq is not None and liq >= 0.25 and oi is not None and oi >= 1:
+        regime = "🚀 숏스퀴즈"
+    elif bullish >= 4 and bearish <= 3:
+        regime = "🟢 강세수급"
+    elif bearish >= 6:
+        regime = "🪤 롱트랩/분배"
+    elif bearish >= 4:
+        regime = "🔴 약세수급"
+    else:
+        regime = "⚪ 중립"
+
+    return regime, bullish, bearish, tags[:6]
+
+_v52_analyze_base = analyze
+def analyze(sym, kr):
+    r = _v52_analyze_base(sym, kr)
+    try:
+        coin = str(sym).upper().replace("USDT", "")
+        raw = v45_cg_coin(coin, force=False)
+        m = v52_normalize_cg(raw)
+        cg_score, details = v52_cg_score_from_metrics(m)
+        regime, bull, bear, tags = v52_flow_regime(m)
+
+        r.v52_cg = m
+        r.v52_cg_score = cg_score
+        r.v52_cg_details = details
+        r.v52_regime = regime
+        r.v52_bull = bull
+        r.v52_bear = bear
+        r.v52_tags = tags
+
+        # 기존 필드도 동일 값으로 동기화
+        r.oi_change = m.get("oi")
+        r.funding_rate = m.get("funding")
+        r.taker_ratio = m.get("taker")
+        r.ls_ratio = m.get("ls")
+        r.top_account_ratio = m.get("top_account")
+        r.top_position_ratio = m.get("top_position")
+        r.basis_pct = m.get("basis")
+        r.liq_bias = m.get("liq_bias")
+    except Exception as e:
+        log(f"v52 analyze error {sym}: {e}")
+    return r
+
+def v50_cg_score(r):
+    m = getattr(r, "v52_cg", None)
+    if isinstance(m, dict):
+        score, details = v52_cg_score_from_metrics(m)
+        return score, m.get("coverage", 0), details
+    return (0.0, 0.0, [])
+
+def v50_score(r):
+    cg100, coverage, _ = v50_cg_score(r)
+    chart100 = (
+        float(timing_score(r)) * 0.30 +
+        float(breakout_score(r)) * 0.25 +
+        float(bottom_score(r)) * 0.25 +
+        float(win_rate_estimate(r)) * 0.20
+    )
+    vol = float(getattr(r, "vol_ratio", 1) or 1)
+    volume100 = max(0, min(100, (vol - 0.65) / 2.0 * 100))
+    pattern100 = (
+        float(real_signal_score(r)) * 0.70 +
+        float(getattr(r, "confidence", 0) or 0) * 0.30
+    )
+
+    total = cg100 * 0.65 + chart100 * 0.20 + volume100 * 0.10 + pattern100 * 0.05
+
+    regime = str(getattr(r, "v52_regime", ""))
+    if "기관매집" in regime:
+        total += 6
+    elif "숏스퀴즈" in regime:
+        total += 5
+    elif "롱트랩" in regime or "약세수급" in regime:
+        total -= 8
+
+    chase = float(chase_risk(r))
+    if chase >= 85:
+        total -= 22
+    elif chase >= 75:
+        total -= 14
+    elif chase >= 65:
+        total -= 7
+
+    if coverage == 0:
+        total -= 12
+    return round(max(0, min(100, total)), 1)
+
+def v43_score(r):
+    return v50_score(r)
+
+def v43_format(r, idx):
+    score = v50_score(r)
+    conf = v43_confidence(r)
+    cg100, coverage, details = v50_cg_score(r)
+    detail_text = "\n".join(_v51_label(n, v, s) for n, v, s in details)
+    regime = getattr(r, "v52_regime", "⚪ 중립")
+    tags = " / ".join(getattr(r, "v52_tags", [])[:5]) or "수급 근거 부족"
+
+    return (
+        f"🏅 <b>{idx}. {r.sym}</b> {v50_grade(score, conf)}\n"
+        f"AI <b>{score}%</b> | 신뢰도 <b>{conf}%</b> | 판단 <b>{v43_action(r)}</b>\n"
+        f"수급판정 <b>{regime}</b>\n"
+        f"CoinGlass <b>{cg100}/100</b> | 데이터 <b>{round(coverage*8)}/8</b>\n"
+        f"{detail_text or '• CoinGlass 정규화 데이터 없음'}\n"
+        f"기관근거: {tags}\n"
+        f"차트: 매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | "
+        f"타이밍 {timing_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"🔴 손절 <code>{r.stop}</code>\n"
+        f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+        f"🧠 이유: {v50_reason(r)}\n"
+    )
+
+async def cgtest_cmd(update, context):
+    coin = (context.args[0].upper() if context.args else "BTC").replace("USDT", "")
+    sup = v45_cg_supported(force=True)
+    raw = v45_cg_coin(coin, force=True)
+    m = v52_normalize_cg(raw)
+    score, details = v52_cg_score_from_metrics(m)
+    regime, bull, bear, tags = v52_flow_regime(m)
+
+    detail_text = "\n".join(_v51_label(n, v, s) for n, v, s in details)
+    errs = raw.get("errors") or {}
+    err_lines = "\n".join(f"• {k}: {str(v)[:100]}" for k, v in errs.items()) or "-"
+
+    await update.message.reply_text(
+        f"🟣 <b>A100 v52 CoinGlass 통합 진단</b>\n"
+        f"API Key: {'등록됨' if v45_cg_headers() else '없음'} | "
+        f"Supported Coins: {len(sup.get('data') or []) if sup.get('ok') else 'N/A'}\n"
+        f"Coin: <b>{coin}</b>\n"
+        f"정규화 완성도: <b>{m['available']}/8</b>\n"
+        f"CoinGlass Score: <b>{score}/100</b>\n"
+        f"수급판정: <b>{regime}</b>\n"
+        f"강세 {bull} | 약세 {bear}\n"
+        f"{detail_text or '정규화 데이터 없음'}\n"
+        f"근거: {' / '.join(tags) or '-'}\n\n"
+        f"<b>오류/플랜 제한</b>\n{err_lines}",
+        parse_mode="HTML"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 분석 중지</b>\n"
+            f"Binance 수집 실패: {reason or st.get('err')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🚀 A100 v52 INSTITUTIONAL FLOW 분석 중...")
+    try:
+        rows = v43_candidates(max(V43_LIMIT, V52_PRESELECT)) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 1차 후보가 없습니다.")
+            return
+
+        # 706개 Binance 선물 → 1차 상대평가 → 정밀 스캔
+        syms = [r[1] for r in rows[:max(V43_ANALYZE_LIMIT, V52_SCAN_LIMIT)]]
+        results = []
+        scan_errors = []
+
+        try:
+            results = list((a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or [])
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            try:
+                one = scan([sym])
+                if one:
+                    results.append(one[0])
+                    got.add(sym)
+                else:
+                    scan_errors.append(f"{sym}:empty")
+            except Exception as e:
+                scan_errors.append(f"{sym}:{e}")
+
+        ranked = sorted(results, key=v50_score, reverse=True)
+        primary = [r for r in ranked if v50_score(r) >= V52_PRIMARY_MIN][:V52_TOP]
+        fallback = not primary
+        shown = primary if primary else ranked[:V52_TOP]
+
+        lines = [
+            "🚀 <b>A100 v52 INSTITUTIONAL FLOW</b>",
+            f"Binance {len(st.get('ticker') or [])}개 → 1차 {len(rows)} → 정밀 {len(syms)} → TOP{len(shown)}",
+            "CG65 | 차트20 | 거래량10 | 패턴5",
+            "OI20 / Funding15 / TopPos20 / TopAcc15 / Liq10 / Taker10 / L-S5 / Basis5",
+            "────────────",
+            ""
+        ]
+
+        if fallback:
+            lines.extend([
+                "⚠️ <b>정식 통과 후보 없음</b>",
+                "아래는 기관수급 상대평가 상위 WATCH 후보입니다.",
+                ""
+            ])
+
+        for i, r in enumerate(shown, 1):
+            lines.append(v43_format(r, i))
+            lines.append("────────────")
+
+        if scan_errors:
+            lines.append(f"\n🛠 스캔오류 {len(scan_errors)}개")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"ultimate 오류: {e}")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v52 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"CG Engine: 8종 동일 정규화\n"
+        f"수급판정: 기관매집/숏스퀴즈/강세/롱트랩/약세\n"
+        f"배점: CG65 / 차트20 / 거래량10 / 패턴5\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+
+# ===== A100 v53 INSTITUTIONAL RANK ENGINE =====
+V53_VERSION = "A100 v53 INSTITUTIONAL RANK ENGINE"
+V53_TOP = int(os.getenv("V53_TOP", "5"))
+V53_BUY_MIN = float(os.getenv("V53_BUY_MIN", "74"))
+V53_STRONG_BUY_MIN = float(os.getenv("V53_STRONG_BUY_MIN", "80"))
+V53_WATCH_MIN = float(os.getenv("V53_WATCH_MIN", "66"))
+
+def v53_institutional_score(r):
+    cg100, coverage, _ = v50_cg_score(r)
+    regime = str(getattr(r, "v52_regime", ""))
+    bonus = 0.0
+    if "기관매집" in regime:
+        bonus += 7
+    elif "숏스퀴즈" in regime:
+        bonus += 5
+    elif "강세수급" in regime:
+        bonus += 2
+    elif "롱트랩" in regime:
+        bonus -= 8
+    elif "약세수급" in regime:
+        bonus -= 4
+
+    score = cg100 * 0.90 + coverage * 10 + bonus
+    return round(max(0, min(100, score)), 1)
+
+def v53_chart_score(r):
+    score = (
+        float(bottom_score(r)) * 0.30 +
+        float(breakout_score(r)) * 0.30 +
+        float(timing_score(r)) * 0.20 +
+        float(win_rate_estimate(r)) * 0.20
+    )
+    if chase_risk(r) >= 75:
+        score -= 12
+    elif chase_risk(r) >= 65:
+        score -= 6
+    return round(max(0, min(100, score)), 1)
+
+def v53_final_score(r):
+    inst = v53_institutional_score(r)
+    chart = v53_chart_score(r)
+    vol = float(getattr(r, "vol_ratio", 1) or 1)
+    volume_bonus = max(-3, min(5, (vol - 1.0) * 3))
+    score = inst * 0.70 + chart * 0.30 + volume_bonus
+
+    if chase_risk(r) >= 85:
+        score -= 14
+    elif chase_risk(r) >= 75:
+        score -= 8
+
+    return round(max(0, min(100, score)), 1)
+
+def v53_action(r):
+    score = v53_final_score(r)
+    inst = v53_institutional_score(r)
+    regime = str(getattr(r, "v52_regime", ""))
+
+    if chase_risk(r) >= 85:
+        return "⛔ 추격 금지"
+    if score >= V53_STRONG_BUY_MIN and inst >= 78 and "롱트랩" not in regime:
+        return "🟢 STRONG BUY"
+    if score >= V53_BUY_MIN and inst >= 70 and "약세수급" not in regime:
+        return "🟢 BUY"
+    if score >= V53_WATCH_MIN:
+        return "🟡 WATCH"
+    return "⚪ SKIP"
+
+def v53_grade(score):
+    if score >= 90: return "🟣 SSS"
+    if score >= 84: return "🔵 SS"
+    if score >= 80: return "🟢 S"
+    if score >= 76: return "🟡 A+"
+    if score >= 72: return "🟡 A"
+    if score >= 66: return "🟠 B"
+    return "🔴 C"
+
+def v53_bar(score, width=10):
+    filled = int(round(max(0, min(100, score)) / 100 * width))
+    return "█" * filled + "░" * (width - filled)
+
+def v53_percentile(rank, total):
+    if total <= 0:
+        return 100.0
+    return round(rank / total * 100, 1)
+
+def v43_score(r):
+    return v53_final_score(r)
+
+def v43_confidence(r):
+    inst = v53_institutional_score(r)
+    chart = v53_chart_score(r)
+    _, coverage, _ = v50_cg_score(r)
+    conf = inst * 0.55 + chart * 0.25 + coverage * 100 * 0.20
+    if chase_risk(r) >= 75:
+        conf -= 8
+    return round(max(0, min(99, conf)), 1)
+
+def v43_action(r):
+    return v53_action(r)
+
+def v43_format(r, idx, total_universe=0):
+    final = v53_final_score(r)
+    inst = v53_institutional_score(r)
+    chart = v53_chart_score(r)
+    conf = v43_confidence(r)
+    cg100, coverage, details = v50_cg_score(r)
+    regime = getattr(r, "v52_regime", "⚪ 중립")
+    tags = " / ".join(getattr(r, "v52_tags", [])[:5]) or "수급 근거 부족"
+    detail_text = "\n".join(_v51_label(n, v, s) for n, v, s in details)
+    pct = v53_percentile(idx, total_universe) if total_universe else None
+    pct_text = f" | 전체 상위 <b>{pct}%</b>" if pct is not None else ""
+
+    return (
+        f"🏅 <b>{idx}. {r.sym}</b> {v53_grade(final)}\n"
+        f"최종 AI <b>{final}%</b> | 신뢰도 <b>{conf}%</b> | 판단 <b>{v53_action(r)}</b>{pct_text}\n"
+        f"수급판정 <b>{regime}</b>\n"
+        f"기관점수 <b>{inst}%</b>  {v53_bar(inst)}\n"
+        f"차트점수 <b>{chart}%</b>  {v53_bar(chart)}\n"
+        f"CoinGlass <b>{cg100}/100</b> | 데이터 <b>{round(coverage*8)}/8</b>\n"
+        f"{detail_text or '• CoinGlass 정규화 데이터 없음'}\n"
+        f"기관근거: {tags}\n"
+        f"차트: 매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | "
+        f"타이밍 {timing_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"🔴 손절 <code>{r.stop}</code>\n"
+        f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 분석 중지</b>\n"
+            f"Binance 수집 실패: {reason or st.get('err')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🚀 A100 v53 INSTITUTIONAL RANK 분석 중...")
+    try:
+        rows = v43_candidates(max(V43_LIMIT, V52_PRESELECT)) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 1차 후보가 없습니다.")
+            return
+
+        syms = [r[1] for r in rows[:max(V43_ANALYZE_LIMIT, V52_SCAN_LIMIT)]]
+        results = []
+        scan_errors = []
+
+        try:
+            results = list((a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or [])
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            try:
+                one = scan([sym])
+                if one:
+                    results.append(one[0])
+                    got.add(sym)
+                else:
+                    scan_errors.append(f"{sym}:empty")
+            except Exception as e:
+                scan_errors.append(f"{sym}:{e}")
+
+        ranked = sorted(results, key=v53_final_score, reverse=True)
+        shown = ranked[:V53_TOP]
+
+        lines = [
+            "🚀 <b>A100 v53 INSTITUTIONAL RANK</b>",
+            f"Binance {len(st.get('ticker') or [])}개 → 1차 {len(rows)} → 정밀 {len(syms)} → TOP{len(shown)}",
+            "기관 70% | 차트 30%",
+            "판정: STRONG BUY ≥80 / BUY ≥74 / WATCH ≥66 / SKIP <66",
+            "────────────",
+            ""
+        ]
+
+        if not shown:
+            lines.append("현재 표시 가능한 후보가 없습니다.")
+        else:
+            for i, r in enumerate(shown, 1):
+                lines.append(v43_format(r, i, len(st.get('ticker') or [])))
+                lines.append("────────────")
+
+        if scan_errors:
+            lines.append(f"\n🛠 스캔오류 {len(scan_errors)}개")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"ultimate 오류: {e}")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v53 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"엔진: 기관점수70 + 차트점수30\n"
+        f"판정: STRONG BUY/BUY/WATCH/SKIP\n"
+        f"전체 상대평가 백분위: 활성\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+# 최신 핸들러를 명시적으로 다시 바인딩한다.
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
 
 if __name__ == "__main__":
     main()
