@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v69 EXECUTION FILTER ENGINE worker running...", flush=True)
+    print("A100 v70 WATCH PROMOTION ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -14994,6 +14994,587 @@ async def datastatus_cmd(update, context):
         f"숏스퀴즈/롱과열: 활성\n"
         f"BTC→BTCUSDT 자동변환: 활성\n"
         f"WATCH 전환 감지: {'활성' if V69_ALERT_TRANSITION else '비활성'}\n"
+        f"명령어: /long /short /position BTC\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v70 WATCH PROMOTION ENGINE =====
+# 반영사항
+# - LONG/SHORT 분석 Timeout 보호 및 비동기 스캔
+# - WATCH+ 단계 추가
+# - LONG/SHORT 점수와 방향 우위 시각화
+# - 남은조건 현재값 → 목표값 표시
+# - 진입 타이머 자연어 개선
+# - /position BTC 정밀 스캔 미포함 시 즉석 분석
+# - SHORT 전용 숏스퀴즈 위험 강조
+# - 자연어 AI 판단 강화
+# - WATCH → LONG/SHORT 승격 감지
+V70_VERSION = "A100 v70 WATCH PROMOTION ENGINE"
+
+V70_SCAN_TIMEOUT = int(os.getenv("V70_SCAN_TIMEOUT", "150"))
+V70_WATCH_PLUS_SCORE = float(os.getenv("V70_WATCH_PLUS_SCORE", "58"))
+V70_WATCH_PLUS_EDGE = float(os.getenv("V70_WATCH_PLUS_EDGE", "15"))
+V70_TOP_LONG = int(os.getenv("V70_TOP_LONG", "3"))
+V70_TOP_SHORT = int(os.getenv("V70_TOP_SHORT", "3"))
+
+V70_LAST_SIGNAL = {}
+
+def _v70_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+async def v70_async_scan():
+    """동기 전체 스캔을 별도 스레드에서 실행하고 타임아웃을 보호한다."""
+    return await asyncio.wait_for(
+        asyncio.to_thread(v59_build_scan_results),
+        timeout=V70_SCAN_TIMEOUT
+    )
+
+async def v70_direct_symbol(symbol):
+    """정밀 TOP 후보에 없어도 단일 종목을 즉석 분석한다."""
+    normalized = v69_normalize_symbol(symbol)
+    base = normalized[:-4] if normalized.endswith("USDT") else normalized
+
+    try:
+        results = await asyncio.wait_for(
+            asyncio.to_thread(scan, [base]),
+            timeout=min(V70_SCAN_TIMEOUT, 90)
+        )
+        if results:
+            return results[0]
+    except Exception as e:
+        log(f"v70 direct symbol scan {normalized}: {e}")
+
+    try:
+        # 일부 버전은 analyze() 직접 호출이 더 안정적이다.
+        kr = await asyncio.to_thread(kr_data)
+        return await asyncio.wait_for(
+            asyncio.to_thread(analyze, base, kr),
+            timeout=min(V70_SCAN_TIMEOUT, 90)
+        )
+    except Exception as e:
+        log(f"v70 direct analyze {normalized}: {e}")
+        return None
+
+def v70_decision(r):
+    decision, long_score, short_score, edge = v69_decision(r)
+    high = max(long_score, short_score)
+
+    # 실행 기준에는 못 미치지만 방향 차이가 충분하면 WATCH+
+    if decision == "🟡 WAIT" and high >= V70_WATCH_PLUS_SCORE and edge >= V70_WATCH_PLUS_EDGE:
+        if long_score > short_score:
+            return "🟢 WATCH+ LONG", long_score, short_score, edge
+        return "🔴 WATCH+ SHORT", long_score, short_score, edge
+
+    return decision, long_score, short_score, edge
+
+def v70_action_text(decision):
+    return {
+        "🟢 STRONG LONG": "✅ 지금 분할롱",
+        "🔵 LONG": "✅ 눌림목 분할롱",
+        "🟢 WATCH+ LONG": "🟢 롱 조건 거의 충족",
+        "🔴 STRONG SHORT": "✅ 반등 시 분할숏",
+        "🟠 SHORT": "🟠 지지 이탈 확인 후 숏",
+        "🔴 WATCH+ SHORT": "🔴 숏 조건 거의 충족",
+        "🟡 WAIT": "⏳ 조건 충족까지 대기",
+        "⚫ SKIP": "❌ 오늘 신규진입 금지",
+    }.get(decision, "⏳ 대기")
+
+def v70_entry_timer(r, side):
+    timing = _v70_float(v60_timing_score(r))
+    volume = _v70_float(v56_volume_volatility_score(r))
+    chart = _v70_float(v56_chart_structure_score(r))
+    edge = v69_edge(v68_long_score(r), v68_short_score(r))
+
+    score = (
+        timing * 0.38 +
+        volume * 0.24 +
+        chart * 0.20 +
+        min(edge * 2.0, 30.0) * 0.18
+    )
+
+    if score >= 82:
+        return "지금~30분"
+    if score >= 72:
+        return "1~2시간"
+    if score >= 62:
+        return "3~6시간"
+    if score >= 52:
+        return "오늘 후반 재확인"
+    return "오늘 어렵고 내일 가능성"
+
+def v70_condition_rows(r, side):
+    cg = v68_cg_raw(r)
+    chart = _v70_float(v56_chart_structure_score(r))
+    timing = _v70_float(v60_timing_score(r))
+    volume = _v70_float(v56_volume_volatility_score(r))
+
+    if side == "LONG":
+        checks = [
+            ("차트", chart, 60.0),
+            ("타이밍", timing, 65.0),
+            ("거래량", volume, 60.0),
+            ("CoinGlass", cg["total"], 65.0),
+        ]
+    else:
+        checks = [
+            ("차트약세", 100.0 - chart, 60.0),
+            ("매도타이밍", 100.0 - timing, 60.0),
+            ("Taker매도", 100.0 - cg["taker"], 62.0),
+            ("거래량", volume, 60.0),
+        ]
+
+    missing = []
+    for name, current, target in checks:
+        if current < target:
+            missing.append((name, round(current, 1), round(target, 1), round(target - current, 1)))
+
+    missing.sort(key=lambda x: x[3])
+    return missing[:3]
+
+def v70_transition(sym, decision):
+    previous = V70_LAST_SIGNAL.get(sym)
+    V70_LAST_SIGNAL[sym] = decision
+
+    if previous is None or previous == decision:
+        return ""
+
+    promotion = {
+        ("🟡 WAIT", "🟢 WATCH+ LONG"): "🔔 WAIT → WATCH+ LONG",
+        ("🟡 WAIT", "🔴 WATCH+ SHORT"): "🔔 WAIT → WATCH+ SHORT",
+        ("🟢 WATCH+ LONG", "🔵 LONG"): "🚨 WATCH+ → LONG 승격",
+        ("🟢 WATCH+ LONG", "🟢 STRONG LONG"): "🚨 WATCH+ → STRONG LONG 승격",
+        ("🔴 WATCH+ SHORT", "🟠 SHORT"): "🚨 WATCH+ → SHORT 승격",
+        ("🔴 WATCH+ SHORT", "🔴 STRONG SHORT"): "🚨 WATCH+ → STRONG SHORT 승격",
+        ("🟡 WAIT", "🔵 LONG"): "🚨 WATCH → LONG 승격",
+        ("🟡 WAIT", "🟠 SHORT"): "🚨 WATCH → SHORT 승격",
+    }
+    return promotion.get((previous, decision), f"신호변경: {previous} → {decision}")
+
+def v70_ai_opinion(r, decision, side, edge):
+    cg = v68_cg_raw(r)
+    chart = _v70_float(v56_chart_structure_score(r))
+    volume = _v70_float(v56_volume_volatility_score(r))
+
+    parts = []
+    if side == "LONG":
+        if cg["top_account"] >= 60 or cg["top_position"] >= 60:
+            parts.append("기관매수 진행")
+        if cg["taker"] >= 60:
+            parts.append("Taker 매수 우세")
+        if chart < 60:
+            parts.append("차트 미완성")
+        if volume < 60:
+            parts.append("거래량 부족")
+    else:
+        if cg["top_account"] <= 40 or cg["top_position"] <= 40:
+            parts.append("기관숏 우세")
+        if cg["taker"] <= 40:
+            parts.append("Taker 매도 우세")
+        if chart > 45:
+            parts.append("하락차트 확인 필요")
+        if volume < 60:
+            parts.append("하락 거래량 부족")
+
+    if not parts:
+        parts.append("조건 혼재")
+
+    if "WATCH+" in decision:
+        conclusion = "핵심조건 1~2개만 더 충족되면 실행 신호 가능."
+    elif decision in ("🔵 LONG", "🟢 STRONG LONG"):
+        conclusion = "눌림목 분할진입 권장."
+    elif decision in ("🟠 SHORT", "🔴 STRONG SHORT"):
+        conclusion = "반등 또는 지지 이탈 확인 후 분할숏 권장."
+    elif decision == "🟡 WAIT":
+        conclusion = "방향성은 있으나 실행조건이 부족해 대기."
+    else:
+        conclusion = "현재 신규진입 비추천."
+
+    return " / ".join(parts[:3]) + f". {conclusion}"
+
+def v70_card(r, rank, priority):
+    sym_raw = str(getattr(r, "sym", "?"))
+    sym = _v54_escape(sym_raw)
+    decision, long_score, short_score, edge = v70_decision(r)
+
+    side = "SHORT" if short_score > long_score else "LONG"
+    if "SHORT" in decision:
+        side = "SHORT"
+    elif "LONG" in decision:
+        side = "LONG"
+
+    transition = v70_transition(sym_raw, decision)
+    confidence = v69_signal_confidence(r, side)
+    win_rate = v69_expected_win_rate(r, side)
+    timer = v70_entry_timer(r, side)
+    squeeze = v68_short_squeeze_risk(r)
+    long_overheat = v69_long_overheat_risk(r)
+
+    if side == "SHORT":
+        plan = v68_short_plan(r)
+        rr = plan["rr2"]
+        p1 = _v70_float(short_score - 5)
+        p2 = _v70_float(short_score - 20)
+    else:
+        plan = v58_adjusted_trade_plan(r)
+        rr = v60_primary_rr(r)
+        p1, p2 = v67_target_probability(r)
+
+    reasons = v68_side_reasons(r, side)
+    reason_text = "\n".join(f"✔ {_v54_escape(x)}" for x in reasons)
+
+    missing = v70_condition_rows(r, side)
+    if missing:
+        missing_text = "\n".join(
+            f"{i}. ❌ {_v54_escape(name)} {current:.1f}→{target:.1f} (+{gap:.1f})"
+            for i, (name, current, target, gap) in enumerate(missing, 1)
+        )
+    else:
+        missing_text = "✅ 핵심조건 충족"
+
+    if long_score > short_score:
+        lead = f"🟢 LONG +{edge}"
+    elif short_score > long_score:
+        lead = f"🔴 SHORT +{edge}"
+    else:
+        lead = "⚪ 방향 동률"
+
+    warning_lines = []
+    if side == "SHORT":
+        if squeeze >= 70:
+            squeeze_level = "🔴 매우높음"
+        elif squeeze >= 55:
+            squeeze_level = "🟠 높음"
+        elif squeeze >= 40:
+            squeeze_level = "🟡 보통"
+        else:
+            squeeze_level = "🟢 낮음"
+        warning_lines.append(f"숏스퀴즈 {squeeze_level} · {squeeze}%")
+        if v68_chase_short_risk(r) >= 60:
+            warning_lines.append("급락 추격숏 금지")
+        warning_lines.append("BTC 급반등 시 숏 취소")
+    else:
+        warning_lines.append(f"롱 과열 위험 {long_overheat}%")
+        if v63_entry_position(r)["status"] == "🔴 추격금지":
+            warning_lines.append("고점 추격매수 금지")
+        warning_lines.append("손절가 이탈 시 종료")
+
+    warning_text = "\n".join(f"⚠ {_v54_escape(x)}" for x in warning_lines)
+    transition_line = f"{_v54_escape(transition)}\n" if transition else ""
+
+    return (
+        f"🚦 <b>{_v54_escape(decision)}</b>\n"
+        f"{transition_line}"
+        f"<b>{_v54_escape(v70_action_text(decision))}</b>\n"
+        f"신뢰도 <b>{confidence}%</b> · 예상승률 <b>{win_rate}%</b>\n"
+        f"진입 타이머 <b>{_v54_escape(timer)}</b>\n"
+        "────────────\n"
+        f"🚀 <b>{rank}. {sym}</b> · 우선순위 {priority}위\n"
+        f"🟢 LONG <code>{v64_bar(long_score, 10)}</code> {long_score}\n"
+        f"🔴 SHORT <code>{v64_bar(short_score, 10)}</code> {short_score}\n"
+        f"우위 <b>{_v54_escape(lead)}</b>\n\n"
+
+        f"<b>{'숏' if side == 'SHORT' else '롱'} 매매계획</b>\n"
+        f"현재 <code>{plan['current']:.10g}</code>\n"
+        f"🟢 진입 <code>{plan['low']:.10g}~{plan['high']:.10g}</code>\n"
+        f"🔴 손절 <code>{plan['stop']:.10g}</code>\n"
+        f"🎯 TP1 <code>{plan['t1']:.10g}</code> · {max(0,p1):.1f}%\n"
+        f"🎯 TP2 <code>{plan['t2']:.10g}</code> · {max(0,p2):.1f}%\n"
+        f"RR <b>{rr}</b>\n\n"
+
+        f"<b>추천 이유</b>\n{reason_text}\n\n"
+        f"<b>남은 조건</b>\n{missing_text}\n\n"
+        f"<b>위험경고</b>\n{warning_text}\n\n"
+
+        f"<b>AI 최종판단</b>\n"
+        f"“{_v54_escape(v70_ai_opinion(r, decision, side, edge))}”"
+    )
+
+async def long_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            f"⛔ LONG 분석 제한: {_v54_escape(reason or '-')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🟢 LONG 후보 분석 중...")
+    try:
+        rows, results, errors = await v70_async_scan()
+        ranked = sorted(results, key=v68_long_score, reverse=True)
+        selected = [
+            r for r in ranked
+            if v68_long_score(r) >= V69_WATCH_SIGNAL
+            and v68_long_score(r) > v68_short_score(r)
+        ][:V70_TOP_LONG]
+
+        if not selected:
+            await update.message.reply_text("현재 LONG WATCH 기준 통과 종목이 없습니다.")
+            return
+
+        for i, r in enumerate(selected, 1):
+            await update.message.reply_text(
+                v70_card(r, i, i),
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+    except asyncio.TimeoutError:
+        await update.message.reply_text(
+            f"long 오류: 분석시간이 {V70_SCAN_TIMEOUT}초를 초과했습니다.\n잠시 후 다시 실행하세요."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"long 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def short_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            f"⛔ SHORT 분석 제한: {_v54_escape(reason or '-')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🔴 SHORT 후보 분석 중...")
+    try:
+        rows, results, errors = await v70_async_scan()
+        ranked = sorted(results, key=v68_short_score, reverse=True)
+        selected = [
+            r for r in ranked
+            if v68_short_score(r) >= V69_WATCH_SIGNAL
+            and v68_short_score(r) > v68_long_score(r)
+            and v68_short_squeeze_risk(r) < V68_SHORT_SQUEEZE_BLOCK
+            and v68_chase_short_risk(r) < 60
+        ][:V70_TOP_SHORT]
+
+        if not selected:
+            await update.message.reply_text("현재 SHORT WATCH 기준 통과 종목이 없습니다.")
+            return
+
+        for i, r in enumerate(selected, 1):
+            await update.message.reply_text(
+                v70_card(r, i, i),
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+    except asyncio.TimeoutError:
+        await update.message.reply_text(
+            f"short 오류: 분석시간이 {V70_SCAN_TIMEOUT}초를 초과했습니다.\n잠시 후 다시 실행하세요."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"short 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def position_cmd(update, context):
+    symbol = context.args[0] if context.args else "BTC"
+    normalized = v69_normalize_symbol(symbol)
+
+    await update.message.reply_text(
+        f"⚖️ {normalized} LONG/SHORT 즉석 분석 중..."
+    )
+
+    try:
+        result = None
+
+        # 먼저 기존 정밀 결과에서 탐색
+        try:
+            rows, results, errors = await v70_async_scan()
+            for row in results:
+                if v69_normalize_symbol(getattr(row, "sym", "")) == normalized:
+                    result = row
+                    break
+        except Exception:
+            result = None
+
+        # 정밀 후보에 없으면 단일 종목 즉석 분석
+        if result is None:
+            result = await v70_direct_symbol(normalized)
+
+        if result is None:
+            await update.message.reply_text(
+                f"{normalized} 즉석 분석에 실패했습니다.\n"
+                "Binance 심볼 또는 네트워크 상태를 확인하세요."
+            )
+            return
+
+        await update.message.reply_text(
+            v70_card(result, 1, 1),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except asyncio.TimeoutError:
+        await update.message.reply_text(
+            f"position 오류: {normalized} 분석시간이 초과했습니다."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"position 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    mode = st.get("mode") or "COINGLASS_ONLY"
+
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 v70 분석 제한</b>\n"
+            f"상태: {_v54_escape(reason or '-')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text(
+        "🚀 A100 v70 WATCH PROMOTION ENGINE 분석 중...\n"
+        f"데이터 모드: {mode}"
+    )
+
+    try:
+        rows, results, scan_errors = await v70_async_scan()
+        if not rows or not results:
+            await update.message.reply_text("⚠️ 분석 가능한 후보가 없습니다.")
+            return
+
+        ranked = sorted(
+            results,
+            key=lambda r: max(v68_long_score(r), v68_short_score(r)),
+            reverse=True
+        )
+
+        market = v59_market_state()
+        market_risk, market_risk_score = v68_market_risk(market, ranked)
+        market_bias, long_avg, short_avg = v69_market_bias(ranked)
+
+        longs, shorts, watch_plus, waits = [], [], [], []
+        for r in ranked:
+            decision, long_score, short_score, edge = v70_decision(r)
+            if decision in ("🟢 STRONG LONG", "🔵 LONG"):
+                longs.append(r)
+            elif decision in ("🔴 STRONG SHORT", "🟠 SHORT"):
+                shorts.append(r)
+            elif "WATCH+" in decision:
+                watch_plus.append(r)
+            elif decision == "🟡 WAIT":
+                waits.append(r)
+
+        header = (
+            "🚀 <b>A100 v70 WATCH PROMOTION ENGINE</b>\n"
+            f"데이터 <b>{_v54_escape(mode)}</b>\n"
+            f"시장방향 <b>{_v54_escape(market_bias)}</b>\n"
+            f"평균 LONG {long_avg} · SHORT {short_avg}\n"
+            f"시장위험 <b>{_v54_escape(market_risk)}</b> · {market_risk_score}/100\n"
+            f"LONG {len(longs)} · SHORT {len(shorts)} · WATCH+ {len(watch_plus)} · WAIT {len(waits)}"
+        )
+        await update.message.reply_text(
+            header,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+        selected = (
+            longs[:V70_TOP_LONG] +
+            shorts[:V70_TOP_SHORT] +
+            watch_plus[:2] +
+            waits[:1]
+        )
+
+        if not selected:
+            await update.message.reply_text(
+                "🚫 <b>오늘 결론</b>\n"
+                "LONG/SHORT 모두 실행 기준 미달\n"
+                "현재는 신규진입보다 관망 우선",
+                parse_mode="HTML"
+            )
+        else:
+            priority_map = {
+                getattr(r, "sym", f"IDX{i}"): i
+                for i, r in enumerate(ranked, 1)
+            }
+            for i, r in enumerate(selected, 1):
+                priority = priority_map.get(getattr(r, "sym", ""), i)
+                await update.message.reply_text(
+                    v70_card(r, i, priority),
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+
+        footer = v68_top3_summary(ranked)
+        if scan_errors:
+            footer += f"\n\n🛠 스캔오류 {len(scan_errors)}개"
+
+        await update.message.reply_text(
+            footer,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except asyncio.TimeoutError:
+        await update.message.reply_text(
+            f"ultimate 오류: 분석시간이 {V70_SCAN_TIMEOUT}초를 초과했습니다."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+
+    await update.message.reply_text(
+        "📦 <b>A100 v70 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"분석 Timeout: {V70_SCAN_TIMEOUT}초\n"
+        f"WATCH+ 기준: 점수 {V70_WATCH_PLUS_SCORE} / 격차 {V70_WATCH_PLUS_EDGE}\n"
+        f"LONG/SHORT 우위 시각화: 활성\n"
+        f"현재값→목표값 조건표시: 활성\n"
+        f"/position 즉석분석: 활성\n"
+        f"숏스퀴즈 강조: 활성\n"
+        f"WATCH 승격 감지: 활성\n"
         f"명령어: /long /short /position BTC\n"
         f"추천허용: {'예' if ok else '아니오'}",
         parse_mode="HTML",
