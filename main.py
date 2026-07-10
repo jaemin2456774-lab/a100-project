@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v49.1 ELITE AI TOP0 FIX worker running...", flush=True)
+    print("A100 v50 ELITE PRO worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -5551,6 +5551,402 @@ async def datastatus_cmd(update, context):
         f"Binance error: {b.get('err') or '-'}\n"
         f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
         f"배점: 차트30 / CG45 / 거래량15 / 패턴10\n"
+        f"TOP0 방지: 활성\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+
+# ===== A100 v50 ELITE PRO / Availability-Normalized CoinGlass =====
+V50_VERSION = "A100 v50 ELITE PRO"
+V50_TOP = int(os.getenv("V50_TOP", "5"))
+V50_PRIMARY_MIN = float(os.getenv("V50_PRIMARY_MIN", "72"))
+V50_STRONG_MIN = float(os.getenv("V50_STRONG_MIN", "82"))
+V50_MIN_CG_COVERAGE = float(os.getenv("V50_MIN_CG_COVERAGE", "0.25"))
+
+def _v50_float(v):
+    try:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip().replace("%", "").replace(",", "")
+            if not s or s.upper() in {"N/A", "NA", "NONE", "-"}:
+                return None
+            return float(s)
+        return float(v)
+    except Exception:
+        return None
+
+def _v50_attr(r, *names):
+    for name in names:
+        if hasattr(r, name):
+            v = getattr(r, name)
+            if v is not None:
+                return v
+    return None
+
+def _v50_parse_cg_text(r):
+    txt = str(getattr(r, "cg_text", "") or "")
+    out = {}
+
+    patterns = {
+        "oi": r"(?:OI|Open Interest)[^+\-\d]*([+\-]?\d+(?:\.\d+)?)\s*%",
+        "funding": r"Funding[^+\-\d]*([+\-]?\d+(?:\.\d+)?)\s*%",
+        "taker": r"Taker[^0-9]*([0-9]+(?:\.\d+)?)",
+        "ls": r"(?:L/S|Long/Short)[^0-9]*([0-9]+(?:\.\d+)?)",
+        "top_account": r"TopAcc(?:ount)?[^0-9]*([0-9]+(?:\.\d+)?)",
+        "top_position": r"TopPos(?:ition)?[^0-9]*([0-9]+(?:\.\d+)?)",
+        "basis": r"Basis[^+\-\d]*([+\-]?\d+(?:\.\d+)?)\s*%",
+        "coverage": r"완성도\s*(\d+)\s*%"
+    }
+    for k, p in patterns.items():
+        m = re.search(p, txt, re.I)
+        if m:
+            out[k] = float(m.group(1))
+
+    # liquidation direction from text
+    low = txt.lower()
+    if "숏청산" in txt or "short liquidation" in low:
+        out["liq_bias"] = 1.0
+    elif "롱청산" in txt or "long liquidation" in low:
+        out["liq_bias"] = -1.0
+    return out
+
+def _v50_cg_metrics(r):
+    parsed = _v50_parse_cg_text(r)
+    return {
+        "oi": _v50_float(_v50_attr(r, "oi_change", "oi_1h", "oi_pct")) if _v50_attr(r, "oi_change", "oi_1h", "oi_pct") is not None else parsed.get("oi"),
+        "funding": _v50_float(_v50_attr(r, "funding", "funding_rate")) if _v50_attr(r, "funding", "funding_rate") is not None else parsed.get("funding"),
+        "taker": _v50_float(_v50_attr(r, "taker_ratio", "taker")) if _v50_attr(r, "taker_ratio", "taker") is not None else parsed.get("taker"),
+        "ls": _v50_float(_v50_attr(r, "ls_ratio", "long_short_ratio")) if _v50_attr(r, "ls_ratio", "long_short_ratio") is not None else parsed.get("ls"),
+        "top_account": _v50_float(_v50_attr(r, "top_account_ratio", "topacc")) if _v50_attr(r, "top_account_ratio", "topacc") is not None else parsed.get("top_account"),
+        "top_position": _v50_float(_v50_attr(r, "top_position_ratio", "toppos")) if _v50_attr(r, "top_position_ratio", "toppos") is not None else parsed.get("top_position"),
+        "basis": _v50_float(_v50_attr(r, "basis", "basis_pct")) if _v50_attr(r, "basis", "basis_pct") is not None else parsed.get("basis"),
+        "liq_bias": _v50_float(_v50_attr(r, "liq_bias")) if _v50_attr(r, "liq_bias") is not None else parsed.get("liq_bias"),
+    }
+
+def _v50_metric_score(name, v):
+    # Each available metric returns 0~100. Missing values are excluded, not treated as zero.
+    if v is None:
+        return None
+
+    if name == "oi":
+        if v >= 8: return 100
+        if v >= 4: return 88
+        if v >= 1.5: return 76
+        if v >= 0: return 62
+        if v >= -2: return 42
+        return 20
+
+    if name == "funding":
+        # supports both percentage and decimal values
+        x = v * 100 if abs(v) < 0.01 else v
+        if -0.01 <= x <= 0.03: return 88
+        if -0.05 <= x < -0.01: return 76
+        if 0.03 < x <= 0.08: return 62
+        if x > 0.15: return 20
+        return 45
+
+    if name == "taker":
+        if v >= 1.25: return 100
+        if v >= 1.10: return 84
+        if v >= 1.0: return 68
+        if v >= 0.90: return 45
+        return 22
+
+    if name in {"ls", "top_account", "top_position"}:
+        # ratio near modest long bias is preferred; extreme crowding is penalized
+        if 1.05 <= v <= 1.45: return 88
+        if 0.90 <= v < 1.05: return 72
+        if 1.45 < v <= 1.80: return 60
+        if 0.75 <= v < 0.90: return 52
+        return 28
+
+    if name == "basis":
+        if 0 <= v <= 3: return 85
+        if -1 <= v < 0: return 68
+        if 3 < v <= 6: return 56
+        if v > 8: return 20
+        return 40
+
+    if name == "liq_bias":
+        if v > 0: return 86
+        if v < 0: return 35
+        return 60
+
+    return 50
+
+def v50_cg_score(r):
+    metrics = _v50_cg_metrics(r)
+    weights = {
+        "oi": 0.18,
+        "funding": 0.12,
+        "taker": 0.16,
+        "ls": 0.10,
+        "top_account": 0.14,
+        "top_position": 0.14,
+        "basis": 0.08,
+        "liq_bias": 0.08,
+    }
+
+    numerator = 0.0
+    denominator = 0.0
+    available = 0
+    detail = []
+
+    for name, weight in weights.items():
+        val = metrics.get(name)
+        score = _v50_metric_score(name, val)
+        if score is None:
+            continue
+        available += 1
+        numerator += score * weight
+        denominator += weight
+        detail.append((name, val, score))
+
+    coverage = available / len(weights)
+    normalized = numerator / denominator if denominator else 0.0
+
+    # Coverage penalty is gentle: missing Startup fields no longer collapse the score.
+    if coverage < V50_MIN_CG_COVERAGE:
+        normalized *= 0.70
+    elif coverage < 0.50:
+        normalized *= 0.86
+    elif coverage < 0.75:
+        normalized *= 0.94
+
+    return round(max(0, min(100, normalized)), 1), coverage, detail
+
+def v50_score(r):
+    cg100, coverage, _ = v50_cg_score(r)
+
+    chart100 = (
+        float(timing_score(r)) * 0.30 +
+        float(breakout_score(r)) * 0.25 +
+        float(bottom_score(r)) * 0.25 +
+        float(win_rate_estimate(r)) * 0.20
+    )
+
+    vol = float(getattr(r, "vol_ratio", 1) or 1)
+    volume100 = max(0, min(100, (vol - 0.65) / 2.0 * 100))
+
+    pattern100 = (
+        float(real_signal_score(r)) * 0.70 +
+        float(getattr(r, "confidence", 0) or 0) * 0.30
+    )
+
+    total = cg100 * 0.65 + chart100 * 0.20 + volume100 * 0.10 + pattern100 * 0.05
+
+    chase = float(chase_risk(r))
+    if chase >= 85:
+        total -= 22
+    elif chase >= 75:
+        total -= 14
+    elif chase >= 65:
+        total -= 7
+
+    rr = _v50_float(getattr(r, "rr", None))
+    if rr is not None and rr < 1.35:
+        total -= 6
+
+    # Very low CG coverage should reduce confidence, not erase candidates.
+    if coverage == 0:
+        total -= 10
+
+    return round(max(0, min(100, total)), 1)
+
+def v43_score(r):
+    return v50_score(r)
+
+def v50_grade(score, conf):
+    if score >= 94 and conf >= 82:
+        return "🟢 SSS"
+    if score >= 89 and conf >= 76:
+        return "🟢 SS"
+    if score >= 84 and conf >= 70:
+        return "🟢 S"
+    if score >= 78:
+        return "🟡 A+"
+    if score >= 72:
+        return "🟡 A"
+    if score >= 64:
+        return "🟠 B"
+    return "🔴 C"
+
+def v43_grade(score, conf):
+    return v50_grade(score, conf)
+
+def v43_confidence(r):
+    score = v50_score(r)
+    cg100, coverage, _ = v50_cg_score(r)
+    conf = score * 0.58 + cg100 * 0.25 + coverage * 100 * 0.17
+    if chase_risk(r) >= 75:
+        conf -= 10
+    return round(max(0, min(99, conf)), 1)
+
+def v43_action(r):
+    score = v50_score(r)
+    conf = v43_confidence(r)
+    cg100, coverage, _ = v50_cg_score(r)
+
+    if chase_risk(r) >= 80:
+        return "⛔ 추격 금지"
+    if score >= V50_STRONG_MIN and conf >= 70 and cg100 >= 72:
+        return "🟢 BUY 후보"
+    if score >= V50_PRIMARY_MIN:
+        return "🟡 분할 관찰"
+    return "⚪ WATCH"
+
+def _v50_metric_label(name, val, score):
+    labels = {
+        "oi": "OI",
+        "funding": "Funding",
+        "taker": "Taker",
+        "ls": "Global L/S",
+        "top_account": "Top Account",
+        "top_position": "Top Position",
+        "basis": "Basis",
+        "liq_bias": "Liquidation",
+    }
+    if name == "liq_bias":
+        value = "숏청산 우세" if val > 0 else "롱청산 우세" if val < 0 else "중립"
+    else:
+        value = f"{val:.4g}"
+    signal = "▲▲▲" if score >= 88 else "▲▲" if score >= 75 else "▲" if score >= 60 else "▼"
+    return f"{labels[name]} {value} {signal}"
+
+def v50_reason(r):
+    cg100, coverage, detail = v50_cg_score(r)
+    reasons = []
+    if cg100 >= 85:
+        reasons.append("파생수급 매우 강함")
+    elif cg100 >= 72:
+        reasons.append("파생수급 강함")
+    elif cg100 >= 60:
+        reasons.append("파생수급 양호")
+
+    if bottom_score(r) >= 60:
+        reasons.append("매집 우세")
+    if breakout_score(r) >= 58:
+        reasons.append("돌파 압력")
+    if timing_score(r) >= 60:
+        reasons.append("타이밍 양호")
+    if float(getattr(r, "vol_ratio", 1) or 1) >= 1.45:
+        reasons.append("거래량 증가")
+    if chase_risk(r) >= 65:
+        reasons.append("추격주의")
+    return " / ".join(reasons[:6]) if reasons else "상대평가 상위 후보"
+
+def v43_reason(r):
+    return v50_reason(r)
+
+def v43_format(r, idx):
+    score = v50_score(r)
+    conf = v43_confidence(r)
+    cg100, coverage, detail = v50_cg_score(r)
+    detail_lines = "\n".join("• " + _v50_metric_label(n, v, s) for n, v, s in detail[:8])
+    if not detail_lines:
+        detail_lines = "• CoinGlass 세부 데이터 없음"
+
+    return (
+        f"🏅 <b>{idx}. {r.sym}</b> {v50_grade(score, conf)}\n"
+        f"AI <b>{score}%</b> | 신뢰도 <b>{conf}%</b> | 판단 <b>{v43_action(r)}</b>\n"
+        f"CoinGlass <b>{cg100}/100</b> | 데이터 {int(round(coverage*8))}/8\n"
+        f"{detail_lines}\n"
+        f"차트: 매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | "
+        f"타이밍 {timing_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"🔴 손절 <code>{r.stop}</code>\n"
+        f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+        f"🧠 이유: {v50_reason(r)}\n"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 분석 중지</b>\n"
+            f"Binance 수집 실패: {reason or st.get('err')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🚀 A100 v50 ELITE PRO 분석 중...")
+    try:
+        rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 1차 후보가 없습니다.")
+            return
+
+        syms = [r[1] for r in rows[:V43_ANALYZE_LIMIT]]
+        results = []
+        scan_errors = []
+
+        try:
+            results = list((a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)) or [])
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            try:
+                one = scan([sym])
+                if one:
+                    results.append(one[0])
+                    got.add(sym)
+                else:
+                    scan_errors.append(f"{sym}:empty")
+            except Exception as e:
+                scan_errors.append(f"{sym}:{e}")
+
+        ranked = sorted(results, key=v50_score, reverse=True)
+        primary = [r for r in ranked if v50_score(r) >= V50_PRIMARY_MIN][:V50_TOP]
+        fallback = not primary
+        shown = primary if primary else ranked[:V50_TOP]
+
+        lines = [
+            "🚀 <b>A100 v50 ELITE PRO</b>",
+            f"후보 {len(rows)} → 정밀 {len(syms)} → 스캔성공 {len(results)} → TOP{len(shown)}",
+            "CoinGlass 65% | 차트 20% | 거래량 10% | 패턴 5%",
+            "────────────",
+            ""
+        ]
+
+        if fallback:
+            lines.extend([
+                "⚠️ <b>정식 통과 후보 없음</b>",
+                "아래는 상대평가 상위 WATCH 후보입니다. 즉시 매수 신호가 아닙니다.",
+                ""
+            ])
+
+        for i, r in enumerate(shown, 1):
+            lines.append(v43_format(r, i))
+            lines.append("────────────")
+
+        if scan_errors:
+            lines.extend(["", f"🛠 스캔오류 {len(scan_errors)}개"])
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"ultimate 오류: {e}")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v50 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"배점: CG65 / 차트20 / 거래량10 / 패턴5\n"
+        f"N/A 처리: 가용항목 정규화\n"
         f"TOP0 방지: 활성\n"
         f"추천허용: {'예' if ok else '아니오'}",
         parse_mode="HTML"
