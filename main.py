@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v71 PREDICTIVE MOMENTUM ENGINE worker running...", flush=True)
+    print("A100 v72 ADAPTIVE SIGNAL TRACKER worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -16215,6 +16215,766 @@ def build_v44_application(token):
         ("cleannews", cleannews_cmd), ("translate", translate_cmd),
         ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
         ("short", short_cmd), ("position", position_cmd), ("chart", chart_cmd),
+        ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
+        ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
+        ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
+        ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v72 ADAPTIVE SIGNAL TRACKER =====
+# 핵심 반영
+# - 카드 중복정보 축소
+# - 시장 온도계 0~100
+# - 기관 단계 1~5
+# - 승격 확률 타임라인 1H / 2H / 4H
+# - WATCH -> LONG/SHORT 자동 승격 감시
+# - TP1 / TP2 / SL 성과 추적 및 누적 승률
+# - 역할별 오늘의 추천 LONG / SHORT / WATCH
+# - 성과 데이터 JSON 저장
+V72_VERSION = "A100 v72 ADAPTIVE SIGNAL TRACKER"
+
+V72_MONITOR_ENABLED = os.getenv("V72_MONITOR_ENABLED", "1").strip() == "1"
+V72_MONITOR_INTERVAL = int(os.getenv("V72_MONITOR_INTERVAL", "900"))
+V72_PROMOTION_MIN = float(os.getenv("V72_PROMOTION_MIN", "65"))
+V72_PERF_FILE = os.getenv("V72_PERF_FILE", "/tmp/a100_v72_performance.json")
+V72_MAX_OPEN_SIGNALS = int(os.getenv("V72_MAX_OPEN_SIGNALS", "100"))
+V72_TOP_LONG = int(os.getenv("V72_TOP_LONG", "2"))
+V72_TOP_SHORT = int(os.getenv("V72_TOP_SHORT", "2"))
+V72_TOP_WATCH = int(os.getenv("V72_TOP_WATCH", "2"))
+
+V72_STATE_LOCK = threading.RLock()
+V72_SCHEDULER = None
+V72_SCHEDULER_STARTED = False
+V72_SIGNAL_STATE = {}
+V72_PERFORMANCE = {"open": {}, "closed": []}
+
+def _v72_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def _v72_clip(value, low=0.0, high=100.0):
+    return max(low, min(high, _v72_float(value)))
+
+def v72_load_performance():
+    global V72_PERFORMANCE
+    try:
+        import json
+        if os.path.exists(V72_PERF_FILE):
+            with open(V72_PERF_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                V72_PERFORMANCE = {
+                    "open": data.get("open") or {},
+                    "closed": data.get("closed") or [],
+                }
+    except Exception as e:
+        log(f"v72 performance load: {e}")
+
+def v72_save_performance():
+    try:
+        import json
+        folder = os.path.dirname(V72_PERF_FILE)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        tmp = V72_PERF_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(V72_PERFORMANCE, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, V72_PERF_FILE)
+    except Exception as e:
+        log(f"v72 performance save: {e}")
+
+v72_load_performance()
+
+def v72_market_temperature(market, results):
+    if not results:
+        return 0.0, "🔴 냉각"
+
+    bias, long_avg, short_avg = v69_market_bias(results)
+    breadth = _v72_float(market.get("breadth"), 50.0)
+    btc = _v72_float(market.get("btc_change"), 0.0)
+    alt = _v72_float(market.get("alt_score"), 50.0)
+    avg_volume = sum(_v72_float(v56_volume_volatility_score(r)) for r in results) / len(results)
+    avg_inst = sum(_v72_float(v56_institution_strength(r)) for r in results) / len(results)
+
+    directional = max(long_avg, short_avg)
+    score = (
+        breadth * 0.24 +
+        alt * 0.16 +
+        avg_volume * 0.20 +
+        avg_inst * 0.20 +
+        directional * 0.16 +
+        min(10.0, abs(btc) * 4.0)
+    )
+    score = _v72_clip(score)
+
+    if score >= 78:
+        label = "🔥 과열"
+    elif score >= 65:
+        label = "🟢 활발"
+    elif score >= 48:
+        label = "🟡 보통"
+    elif score >= 32:
+        label = "🟠 약함"
+    else:
+        label = "🔴 냉각"
+    return round(score, 1), label
+
+def v72_institution_stage(r):
+    stage, name = v67_institution_stage(r)
+    names = {
+        1: "수집",
+        2: "매집",
+        3: "흡수",
+        4: "돌파준비",
+        5: "분출",
+    }
+    return stage, names.get(stage, name)
+
+def v72_promotion_timeline(r, side):
+    now, p2, p4 = v71_entry_probabilities(r, side)
+    promotion = v71_promotion_probability(r, side)
+
+    p1 = _v72_clip(now * 0.58 + p2 * 0.42)
+    p2h = _v72_clip(p2 * 0.78 + promotion * 0.22)
+    p4h = _v72_clip(max(p4, promotion * 0.92))
+
+    return round(p1, 1), round(p2h, 1), round(p4h, 1)
+
+def v72_current_price(r):
+    try:
+        return _v72_float(v58_adjusted_trade_plan(r).get("current"))
+    except Exception:
+        return _v72_float(_v68_get(r, "price", "last", "close", default=0.0))
+
+def v72_signal_key(sym, side):
+    return f"{str(sym).upper()}:{side}"
+
+def v72_register_signal(r, decision):
+    if decision not in ("🟢 STRONG LONG", "🔵 LONG", "🔴 STRONG SHORT", "🟠 SHORT"):
+        return
+
+    sym = str(getattr(r, "sym", "?")).upper()
+    side = "SHORT" if "SHORT" in decision else "LONG"
+    key = v72_signal_key(sym, side)
+
+    with V72_STATE_LOCK:
+        if key in V72_PERFORMANCE["open"]:
+            return
+
+        if side == "SHORT":
+            plan = v68_short_plan(r)
+        else:
+            plan = v58_adjusted_trade_plan(r)
+
+        V72_PERFORMANCE["open"][key] = {
+            "symbol": sym,
+            "side": side,
+            "decision": decision,
+            "opened_at": time.time(),
+            "entry": _v72_float(plan.get("current")),
+            "stop": _v72_float(plan.get("stop")),
+            "tp1": _v72_float(plan.get("t1")),
+            "tp2": _v72_float(plan.get("t2")),
+            "tp1_hit": False,
+            "score": _v72_float(v68_long_score(r) if side == "LONG" else v68_short_score(r)),
+        }
+
+        if len(V72_PERFORMANCE["open"]) > V72_MAX_OPEN_SIGNALS:
+            oldest = sorted(
+                V72_PERFORMANCE["open"].items(),
+                key=lambda item: _v72_float(item[1].get("opened_at"))
+            )[0][0]
+            V72_PERFORMANCE["open"].pop(oldest, None)
+
+        v72_save_performance()
+
+def v72_update_performance(results):
+    result_map = {
+        str(getattr(r, "sym", "")).upper(): r
+        for r in results
+    }
+    completed = []
+
+    with V72_STATE_LOCK:
+        for key, signal in list(V72_PERFORMANCE["open"].items()):
+            sym = signal.get("symbol")
+            row = result_map.get(sym)
+            if row is None:
+                continue
+
+            price = v72_current_price(row)
+            side = signal.get("side")
+            tp1 = _v72_float(signal.get("tp1"))
+            tp2 = _v72_float(signal.get("tp2"))
+            stop = _v72_float(signal.get("stop"))
+            outcome = None
+
+            if side == "LONG":
+                if price >= tp2:
+                    outcome = "TP2"
+                elif price >= tp1:
+                    signal["tp1_hit"] = True
+                elif price <= stop:
+                    outcome = "SL_AFTER_TP1" if signal.get("tp1_hit") else "SL"
+            else:
+                if price <= tp2:
+                    outcome = "TP2"
+                elif price <= tp1:
+                    signal["tp1_hit"] = True
+                elif price >= stop:
+                    outcome = "SL_AFTER_TP1" if signal.get("tp1_hit") else "SL"
+
+            if outcome:
+                signal["outcome"] = outcome
+                signal["closed_at"] = time.time()
+                signal["close_price"] = price
+                completed.append((key, dict(signal)))
+
+        for key, signal in completed:
+            V72_PERFORMANCE["open"].pop(key, None)
+            V72_PERFORMANCE["closed"].append(signal)
+
+        if len(V72_PERFORMANCE["closed"]) > 500:
+            V72_PERFORMANCE["closed"] = V72_PERFORMANCE["closed"][-500:]
+
+        if completed:
+            v72_save_performance()
+
+    return [signal for _, signal in completed]
+
+def v72_performance_stats(symbol=None):
+    with V72_STATE_LOCK:
+        rows = list(V72_PERFORMANCE["closed"])
+
+    if symbol:
+        normalized = v69_normalize_symbol(symbol)
+        rows = [x for x in rows if v69_normalize_symbol(x.get("symbol")) == normalized]
+
+    total = len(rows)
+    wins = sum(1 for x in rows if x.get("outcome") in ("TP2", "SL_AFTER_TP1"))
+    tp2 = sum(1 for x in rows if x.get("outcome") == "TP2")
+    partial = sum(1 for x in rows if x.get("outcome") == "SL_AFTER_TP1")
+    losses = sum(1 for x in rows if x.get("outcome") == "SL")
+    win_rate = round(wins / total * 100, 1) if total else 0.0
+
+    return {
+        "total": total,
+        "wins": wins,
+        "tp2": tp2,
+        "partial": partial,
+        "losses": losses,
+        "win_rate": win_rate,
+        "open": len(V72_PERFORMANCE["open"]),
+    }
+
+def v72_role_rankings(results):
+    longs = sorted(results, key=v68_long_score, reverse=True)
+    shorts = sorted(results, key=v68_short_score, reverse=True)
+    watches = sorted(
+        results,
+        key=lambda r: max(v71_promotion_probability(r, "LONG"), v71_promotion_probability(r, "SHORT")),
+        reverse=True
+    )
+
+    top_long = longs[0] if longs else None
+    top_short = shorts[0] if shorts else None
+    top_watch = None
+    for r in watches:
+        decision, _, _, _ = v70_decision(r)
+        if decision in ("🟡 WAIT", "🟢 WATCH+ LONG", "🔴 WATCH+ SHORT"):
+            top_watch = r
+            break
+
+    return top_long, top_short, top_watch
+
+def v72_role_summary(results):
+    top_long, top_short, top_watch = v72_role_rankings(results)
+    lines = ["🏆 <b>오늘의 추천</b>"]
+
+    if top_long:
+        lines.append(
+            f"🥇 LONG · <b>{_v54_escape(getattr(top_long, 'sym', '?'))}</b> "
+            f"({v68_long_score(top_long)})"
+        )
+    if top_short:
+        lines.append(
+            f"🥈 SHORT · <b>{_v54_escape(getattr(top_short, 'sym', '?'))}</b> "
+            f"({v68_short_score(top_short)})"
+        )
+    if top_watch:
+        side = "LONG" if v68_long_score(top_watch) >= v68_short_score(top_watch) else "SHORT"
+        promotion = v71_promotion_probability(top_watch, side)
+        lines.append(
+            f"🥉 WATCH · <b>{_v54_escape(getattr(top_watch, 'sym', '?'))}</b> "
+            f"(승격 {promotion}%)"
+        )
+    return "\n".join(lines)
+
+def v72_compact_card(r, rank, priority):
+    sym_raw = str(getattr(r, "sym", "?"))
+    sym = _v54_escape(sym_raw)
+    decision, long_score, short_score, edge = v70_decision(r)
+
+    side = "SHORT" if short_score > long_score else "LONG"
+    if "SHORT" in decision:
+        side = "SHORT"
+    elif "LONG" in decision:
+        side = "LONG"
+
+    transition = v70_transition(sym_raw, decision)
+    confidence = v69_signal_confidence(r, side)
+    win_rate = v69_expected_win_rate(r, side)
+    long_share, short_share = v71_long_short_share(long_score, short_score)
+    p1h, p2h, p4h = v72_promotion_timeline(r, side)
+    breakout = v71_breakout_probability(r, side)
+    tp1_prob, tp2_prob = v71_tp_probabilities(r, side)
+    stage, stage_name = v72_institution_stage(r)
+    perf = v72_performance_stats(sym_raw)
+
+    if side == "SHORT":
+        plan = v68_short_plan(r)
+        rr = plan["rr2"]
+        risk_label, risk_score = v71_short_risk_grade(r)
+    else:
+        plan = v58_adjusted_trade_plan(r)
+        rr = v60_primary_rr(r)
+        overheat = v69_long_overheat_risk(r)
+        risk_label = "🔴 높음" if overheat >= 75 else "🟠 보통" if overheat >= 55 else "🟢 낮음"
+        risk_score = overheat
+
+    missing = v70_condition_rows(r, side)
+    if missing:
+        missing_text = "\n".join(
+            f"• {_v54_escape(name)} {current:.0f}→{target:.0f}"
+            for name, current, target, gap in missing[:2]
+        )
+    else:
+        missing_text = "• 핵심 실행조건 충족"
+
+    transition_line = f"{_v54_escape(transition)}\n" if transition else ""
+
+    v72_register_signal(r, decision)
+
+    return (
+        f"🚦 <b>{_v54_escape(decision)}</b>\n"
+        f"{transition_line}"
+        f"<b>{_v54_escape(v70_action_text(decision))}</b>\n"
+        f"신뢰도 {confidence}% · 예상승률 {win_rate}% · RR {rr}\n"
+        "────────────\n"
+        f"🚀 <b>{rank}. {sym}</b> · 우선순위 {priority}위\n"
+        f"🟢 LONG <code>{v64_bar(long_share, 10)}</code> {long_share}%\n"
+        f"🔴 SHORT <code>{v64_bar(short_share, 10)}</code> {short_share}%\n"
+        f"방향격차 <b>{edge}점</b>\n\n"
+
+        f"<b>기관 단계</b>\n"
+        f"<code>{v67_stage_bar(stage)}</code> {stage}/5 · {_v54_escape(stage_name)}\n\n"
+
+        f"<b>승격 카운트다운</b>\n"
+        f"1시간 <code>{v64_bar(p1h, 10)}</code> {p1h}%\n"
+        f"2시간 <code>{v64_bar(p2h, 10)}</code> {p2h}%\n"
+        f"4시간 <code>{v64_bar(p4h, 10)}</code> {p4h}%\n"
+        f"🔥 24H BREAKOUT <b>{breakout}%</b>\n\n"
+
+        f"<b>{'숏' if side == 'SHORT' else '롱'} 매매계획</b>\n"
+        f"현재 <code>{plan['current']:.10g}</code>\n"
+        f"진입 <code>{plan['low']:.10g}~{plan['high']:.10g}</code>\n"
+        f"손절 <code>{plan['stop']:.10g}</code>\n"
+        f"TP1 <code>{plan['t1']:.10g}</code> "
+        f"<code>{v64_bar(tp1_prob, 8)}</code> {tp1_prob}%\n"
+        f"TP2 <code>{plan['t2']:.10g}</code> "
+        f"<code>{v64_bar(tp2_prob, 8)}</code> {tp2_prob}%\n\n"
+
+        f"<b>남은 조건</b>\n{missing_text}\n\n"
+        f"<b>위험도</b> {_v54_escape(risk_label)} · {risk_score}%\n"
+        f"<b>종목 실적</b> 최근 {perf['total']}회 · 승률 {perf['win_rate']}%\n\n"
+
+        f"🧠 <b>AI 결론</b>\n"
+        f"“{_v54_escape(v71_final_one_line(r, decision, side, v71_promotion_probability(r, side), breakout))}”"
+    )
+
+def v72_send_telegram(text):
+    token = os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return False
+
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        response = requests.post(
+            url,
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+            timeout=20,
+        )
+        return response.ok
+    except Exception as e:
+        log(f"v72 telegram alert: {e}")
+        return False
+
+def v72_monitor_once():
+    try:
+        ok, reason, state = v451_gate()
+        if not ok:
+            return
+
+        rows, results, errors = v59_build_scan_results()
+        if not results:
+            return
+
+        closed = v72_update_performance(results)
+        alerts = []
+
+        for r in results:
+            sym = str(getattr(r, "sym", "?")).upper()
+            decision, long_score, short_score, edge = v70_decision(r)
+            side = "SHORT" if short_score > long_score else "LONG"
+            if "SHORT" in decision:
+                side = "SHORT"
+            elif "LONG" in decision:
+                side = "LONG"
+
+            promotion = v71_promotion_probability(r, side)
+            previous = V72_SIGNAL_STATE.get(sym)
+            current = {"decision": decision, "promotion": promotion, "time": time.time()}
+            V72_SIGNAL_STATE[sym] = current
+
+            promoted = (
+                previous
+                and previous.get("decision") in ("🟡 WAIT", "🟢 WATCH+ LONG", "🔴 WATCH+ SHORT")
+                and decision in ("🟢 STRONG LONG", "🔵 LONG", "🔴 STRONG SHORT", "🟠 SHORT")
+            )
+
+            if promoted and promotion >= V72_PROMOTION_MIN:
+                alerts.append(
+                    "🚨 <b>WATCH 승격 알림</b>\n"
+                    f"<b>{_v54_escape(sym)}</b>\n"
+                    f"{_v54_escape(previous.get('decision'))} → <b>{_v54_escape(decision)}</b>\n"
+                    f"승격확률 {promotion}% · 방향격차 {edge}점"
+                )
+
+            v72_register_signal(r, decision)
+
+        for signal in closed:
+            alerts.append(
+                "📊 <b>신호 결과 확정</b>\n"
+                f"<b>{_v54_escape(signal.get('symbol'))}</b> {signal.get('side')}\n"
+                f"결과: <b>{_v54_escape(signal.get('outcome'))}</b>\n"
+                f"진입 {signal.get('entry')} → 종료 {signal.get('close_price')}"
+            )
+
+        for alert in alerts[:8]:
+            v72_send_telegram(alert)
+
+    except Exception as e:
+        log(f"v72 monitor once: {e}")
+
+def v72_start_monitor():
+    global V72_SCHEDULER, V72_SCHEDULER_STARTED
+    if not V72_MONITOR_ENABLED or V72_SCHEDULER_STARTED:
+        return
+
+    try:
+        V72_SCHEDULER = BackgroundScheduler(daemon=True)
+        V72_SCHEDULER.add_job(
+            v72_monitor_once,
+            "interval",
+            seconds=max(300, V72_MONITOR_INTERVAL),
+            id="v72_watch_promotion_monitor",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+        V72_SCHEDULER.start()
+        V72_SCHEDULER_STARTED = True
+        log(f"v72 monitor started: {V72_MONITOR_INTERVAL}s")
+    except Exception as e:
+        log(f"v72 monitor start: {e}")
+
+async def performance_cmd(update, context):
+    symbol = context.args[0] if context.args else None
+    stats = v72_performance_stats(symbol)
+
+    title = f"{v69_normalize_symbol(symbol)} 성과" if symbol else "전체 성과"
+    await update.message.reply_text(
+        "📊 <b>A100 v72 신호 성과</b>\n"
+        f"대상: <b>{_v54_escape(title)}</b>\n"
+        f"완료 신호: {stats['total']}회\n"
+        f"성공: {stats['wins']}회\n"
+        f"TP2: {stats['tp2']}회\n"
+        f"TP1 후 보호종료: {stats['partial']}회\n"
+        f"손절: {stats['losses']}회\n"
+        f"누적 승률: <b>{stats['win_rate']}%</b>\n"
+        f"추적 중: {stats['open']}개",
+        parse_mode="HTML"
+    )
+
+async def monitorstatus_cmd(update, context):
+    await update.message.reply_text(
+        "🔔 <b>A100 v72 자동감시 상태</b>\n"
+        f"자동감시: {'✅ 활성' if V72_MONITOR_ENABLED else '⛔ 비활성'}\n"
+        f"스케줄러: {'✅ 실행중' if V72_SCHEDULER_STARTED else '⚠ 미시작'}\n"
+        f"확인주기: {V72_MONITOR_INTERVAL}초\n"
+        f"승격알림 최소확률: {V72_PROMOTION_MIN}%\n"
+        f"추적 중 신호: {len(V72_PERFORMANCE['open'])}개\n"
+        f"완료 신호: {len(V72_PERFORMANCE['closed'])}개",
+        parse_mode="HTML"
+    )
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    mode = st.get("mode") or "COINGLASS_ONLY"
+
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 v72 분석 제한</b>\n"
+            f"상태: {_v54_escape(reason or '-')}",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text(
+        "🚀 A100 v72 ADAPTIVE SIGNAL TRACKER 분석 중...\n"
+        f"데이터 모드: {mode}"
+    )
+
+    try:
+        rows, results, scan_errors = await v70_async_scan()
+        if not rows or not results:
+            await update.message.reply_text("⚠️ 분석 가능한 후보가 없습니다.")
+            return
+
+        v72_update_performance(results)
+
+        ranked = sorted(
+            results,
+            key=lambda r: max(v68_long_score(r), v68_short_score(r)),
+            reverse=True
+        )
+
+        market = v59_market_state()
+        market_bias, long_avg, short_avg = v69_market_bias(ranked)
+        temp, temp_label = v72_market_temperature(market, ranked)
+        market_risk, market_risk_score = v68_market_risk(market, ranked)
+
+        longs, shorts, watches = [], [], []
+        for r in ranked:
+            decision, long_score, short_score, edge = v70_decision(r)
+            if decision in ("🟢 STRONG LONG", "🔵 LONG"):
+                longs.append(r)
+            elif decision in ("🔴 STRONG SHORT", "🟠 SHORT"):
+                shorts.append(r)
+            else:
+                watches.append(r)
+
+        header = (
+            "🚀 <b>A100 v72 ADAPTIVE SIGNAL TRACKER</b>\n"
+            f"시장방향 <b>{_v54_escape(market_bias)}</b>\n"
+            f"시장온도 <code>{v64_bar(temp, 10)}</code> <b>{temp}/100</b> · {_v54_escape(temp_label)}\n"
+            f"시장위험 {_v54_escape(market_risk)} · {market_risk_score}/100\n"
+            f"LONG {len(longs)} · SHORT {len(shorts)} · WATCH {len(watches)}\n\n"
+            f"{v72_role_summary(ranked)}"
+        )
+        await update.message.reply_text(
+            header,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+        selected = (
+            longs[:V72_TOP_LONG] +
+            shorts[:V72_TOP_SHORT] +
+            watches[:V72_TOP_WATCH]
+        )
+
+        if not selected:
+            await update.message.reply_text(
+                "🚫 <b>오늘 결론</b>\n"
+                "실행 가능한 LONG/SHORT 신호 없음\n"
+                "현재는 관망 우선",
+                parse_mode="HTML"
+            )
+        else:
+            priority_map = {
+                getattr(r, "sym", f"IDX{i}"): i
+                for i, r in enumerate(ranked, 1)
+            }
+            for i, r in enumerate(selected, 1):
+                priority = priority_map.get(getattr(r, "sym", ""), i)
+                await update.message.reply_text(
+                    v72_compact_card(r, i, priority),
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+
+        stats = v72_performance_stats()
+        footer = (
+            "📊 <b>AI 누적 성과</b>\n"
+            f"완료 {stats['total']}회 · 성공 {stats['wins']}회 · 손절 {stats['losses']}회\n"
+            f"누적 승률 <b>{stats['win_rate']}%</b> · 추적 중 {stats['open']}개"
+        )
+
+        if scan_errors:
+            footer += f"\n🛠 스캔오류 {len(scan_errors)}개"
+
+        await update.message.reply_text(
+            footer,
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+
+    except asyncio.TimeoutError:
+        await update.message.reply_text(
+            f"ultimate 오류: 분석시간이 {V70_SCAN_TIMEOUT}초를 초과했습니다."
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"ultimate 오류: {_v54_escape(e)}",
+            parse_mode="HTML"
+        )
+
+async def long_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(f"⛔ LONG 분석 제한: {_v54_escape(reason or '-')}", parse_mode="HTML")
+        return
+
+    await update.message.reply_text("🟢 LONG 후보 분석 중...")
+    try:
+        rows, results, errors = await v70_async_scan()
+        v72_update_performance(results)
+        ranked = sorted(results, key=v68_long_score, reverse=True)
+        selected = [r for r in ranked if v68_long_score(r) >= V69_WATCH_SIGNAL and v68_long_score(r) > v68_short_score(r)][:V72_TOP_LONG]
+
+        if not selected:
+            await update.message.reply_text("현재 LONG 기준 통과 종목이 없습니다.")
+            return
+
+        for i, r in enumerate(selected, 1):
+            await update.message.reply_text(v72_compact_card(r, i, i), parse_mode="HTML", disable_web_page_preview=True)
+    except asyncio.TimeoutError:
+        await update.message.reply_text(f"long 오류: 분석시간이 {V70_SCAN_TIMEOUT}초를 초과했습니다.")
+    except Exception as e:
+        await update.message.reply_text(f"long 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def short_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(f"⛔ SHORT 분석 제한: {_v54_escape(reason or '-')}", parse_mode="HTML")
+        return
+
+    await update.message.reply_text("🔴 SHORT 후보 분석 중...")
+    try:
+        rows, results, errors = await v70_async_scan()
+        v72_update_performance(results)
+        ranked = sorted(results, key=v68_short_score, reverse=True)
+        selected = [
+            r for r in ranked
+            if v68_short_score(r) >= V69_WATCH_SIGNAL
+            and v68_short_score(r) > v68_long_score(r)
+            and v68_short_squeeze_risk(r) < V68_SHORT_SQUEEZE_BLOCK
+        ][:V72_TOP_SHORT]
+
+        if not selected:
+            await update.message.reply_text("현재 SHORT 기준 통과 종목이 없습니다.")
+            return
+
+        for i, r in enumerate(selected, 1):
+            await update.message.reply_text(v72_compact_card(r, i, i), parse_mode="HTML", disable_web_page_preview=True)
+    except asyncio.TimeoutError:
+        await update.message.reply_text(f"short 오류: 분석시간이 {V70_SCAN_TIMEOUT}초를 초과했습니다.")
+    except Exception as e:
+        await update.message.reply_text(f"short 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def position_cmd(update, context):
+    symbol = context.args[0] if context.args else "BTC"
+    normalized = v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"⚖️ {normalized} 적응형 LONG/SHORT 분석 중...")
+
+    try:
+        result = None
+        try:
+            rows, results, errors = await v70_async_scan()
+            v72_update_performance(results)
+            for row in results:
+                if v69_normalize_symbol(getattr(row, "sym", "")) == normalized:
+                    result = row
+                    break
+        except Exception:
+            result = None
+
+        if result is None:
+            result = await v70_direct_symbol(normalized)
+
+        if result is None:
+            await update.message.reply_text(f"{normalized} 즉석 분석에 실패했습니다.")
+            return
+
+        await update.message.reply_text(
+            v72_compact_card(result, 1, 1),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except asyncio.TimeoutError:
+        await update.message.reply_text(f"position 오류: {normalized} 분석시간이 초과했습니다.")
+    except Exception as e:
+        await update.message.reply_text(f"position 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+    stats = v72_performance_stats()
+
+    await update.message.reply_text(
+        "📦 <b>A100 v72 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"시장 온도계: 활성\n"
+        f"기관 단계 1~5: 활성\n"
+        f"승격 타임라인 1H/2H/4H: 활성\n"
+        f"WATCH 자동 승격감시: {'활성' if V72_MONITOR_ENABLED else '비활성'}\n"
+        f"감시 주기: {V72_MONITOR_INTERVAL}초\n"
+        f"성과 추적: 활성\n"
+        f"완료 {stats['total']}회 / 추적중 {stats['open']}개\n"
+        f"명령어: /performance /monitorstatus\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+def build_v44_application(token):
+    v72_start_monitor()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monitorstatus", monitorstatus_cmd), ("chart", chart_cmd),
         ("fast", fast_cmd), ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd),
         ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
         ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
