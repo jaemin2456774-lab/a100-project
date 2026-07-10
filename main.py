@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v72 ADAPTIVE SIGNAL TRACKER worker running...", flush=True)
+    print("A100 v73 PERSISTENT PERFORMANCE ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -16979,6 +16979,309 @@ def build_v44_application(token):
         ("deep", deep_cmd), ("cache", cache_cmd), ("quick", quick_cmd),
         ("speed", speedstatus_cmd), ("report", report_cmd), ("history", history_cmd),
         ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v73 PERSISTENT PERFORMANCE ENGINE =====
+# 핵심 반영
+# - Railway Volume 자동 감지
+# - 재배포 후에도 성과기록 유지
+# - 성과 파일 자동 백업/복구
+# - 쓰기 실패 시 대체 경로 사용
+# - 저장 경로 상태 확인 명령 추가
+V73_VERSION = "A100 v73 PERSISTENT PERFORMANCE ENGINE"
+
+V73_VOLUME_PATH = (
+    os.getenv("V73_VOLUME_PATH")
+    or os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+    or os.getenv("RAILWAY_VOLUME_PATH")
+    or "/data"
+)
+
+V73_PERF_FILE = os.getenv(
+    "V73_PERF_FILE",
+    os.path.join(V73_VOLUME_PATH, "a100_v73_performance.json")
+)
+
+V73_BACKUP_FILE = os.getenv(
+    "V73_BACKUP_FILE",
+    os.path.join(V73_VOLUME_PATH, "a100_v73_performance.backup.json")
+)
+
+V73_FALLBACK_FILE = os.getenv(
+    "V73_FALLBACK_FILE",
+    "/tmp/a100_v73_performance.json"
+)
+
+V73_AUTOBACKUP = os.getenv("V73_AUTOBACKUP", "1").strip() == "1"
+V73_SAVE_EVERY = int(os.getenv("V73_SAVE_EVERY", "1"))
+
+V73_SAVE_COUNTER = 0
+
+def v73_storage_candidates():
+    return [
+        V73_PERF_FILE,
+        V73_BACKUP_FILE,
+        V73_FALLBACK_FILE,
+    ]
+
+def v73_ensure_parent(path):
+    folder = os.path.dirname(path)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+
+def v73_is_writable(path):
+    try:
+        v73_ensure_parent(path)
+        test_path = path + ".write_test"
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(test_path)
+        return True
+    except Exception:
+        return False
+
+def v73_active_storage_path():
+    if v73_is_writable(V73_PERF_FILE):
+        return V73_PERF_FILE
+    if v73_is_writable(V73_FALLBACK_FILE):
+        return V73_FALLBACK_FILE
+    return V73_PERF_FILE
+
+def v73_load_performance():
+    global V72_PERFORMANCE
+
+    import json
+
+    for candidate in v73_storage_candidates():
+        try:
+            if not os.path.exists(candidate):
+                continue
+
+            with open(candidate, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if not isinstance(data, dict):
+                continue
+
+            V72_PERFORMANCE = {
+                "open": data.get("open") or {},
+                "closed": data.get("closed") or [],
+            }
+
+            log(f"v73 performance loaded: {candidate}")
+            return candidate
+
+        except Exception as e:
+            log(f"v73 performance load failed {candidate}: {e}")
+
+    V72_PERFORMANCE = {"open": {}, "closed": []}
+    return None
+
+def v73_atomic_write(path, data):
+    import json
+
+    v73_ensure_parent(path)
+    tmp = path + ".tmp"
+
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except Exception:
+            pass
+
+    os.replace(tmp, path)
+
+def v73_save_performance(force=False):
+    global V73_SAVE_COUNTER
+
+    V73_SAVE_COUNTER += 1
+    if not force and V73_SAVE_COUNTER % max(1, V73_SAVE_EVERY) != 0:
+        return False
+
+    path = v73_active_storage_path()
+
+    try:
+        snapshot = {
+            "open": V72_PERFORMANCE.get("open") or {},
+            "closed": V72_PERFORMANCE.get("closed") or [],
+            "meta": {
+                "version": V73_VERSION,
+                "saved_at": time.time(),
+                "storage_path": path,
+            }
+        }
+
+        v73_atomic_write(path, snapshot)
+
+        if V73_AUTOBACKUP and path == V73_PERF_FILE:
+            try:
+                v73_atomic_write(V73_BACKUP_FILE, snapshot)
+            except Exception as e:
+                log(f"v73 backup save failed: {e}")
+
+        return True
+
+    except Exception as e:
+        log(f"v73 primary save failed {path}: {e}")
+
+        try:
+            snapshot = {
+                "open": V72_PERFORMANCE.get("open") or {},
+                "closed": V72_PERFORMANCE.get("closed") or [],
+                "meta": {
+                    "version": V73_VERSION,
+                    "saved_at": time.time(),
+                    "storage_path": V73_FALLBACK_FILE,
+                    "fallback": True,
+                }
+            }
+            v73_atomic_write(V73_FALLBACK_FILE, snapshot)
+            return True
+        except Exception as fallback_error:
+            log(f"v73 fallback save failed: {fallback_error}")
+            return False
+
+def v73_migrate_v72_file():
+    import json
+
+    old_path = os.getenv("V72_PERF_FILE", "/tmp/a100_v72_performance.json")
+
+    if os.path.exists(V73_PERF_FILE):
+        return False
+
+    if not os.path.exists(old_path):
+        return False
+
+    try:
+        with open(old_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if isinstance(data, dict):
+            v73_atomic_write(V73_PERF_FILE, data)
+            log(f"v73 migrated old performance file: {old_path} -> {V73_PERF_FILE}")
+            return True
+
+    except Exception as e:
+        log(f"v73 migration failed: {e}")
+
+    return False
+
+# 기존 V72 저장 함수를 영구 저장 방식으로 교체
+def v72_load_performance():
+    v73_migrate_v72_file()
+    return v73_load_performance()
+
+def v72_save_performance():
+    return v73_save_performance()
+
+# 모듈 로드 시 영구 저장소에서 불러오기
+v72_load_performance()
+
+async def storagestatus_cmd(update, context):
+    active = v73_active_storage_path()
+    exists = os.path.exists(active)
+    writable = v73_is_writable(active)
+    size = os.path.getsize(active) if exists else 0
+    stats = v72_performance_stats()
+
+    await update.message.reply_text(
+        "💾 <b>A100 v73 저장소 상태</b>\n"
+        f"활성 경로: <code>{_v54_escape(active)}</code>\n"
+        f"파일 존재: {'✅ 예' if exists else '⚠ 아니오'}\n"
+        f"쓰기 가능: {'✅ 예' if writable else '⛔ 아니오'}\n"
+        f"파일 크기: {size:,} bytes\n"
+        f"백업 파일: <code>{_v54_escape(V73_BACKUP_FILE)}</code>\n"
+        f"자동 백업: {'✅ 활성' if V73_AUTOBACKUP else '⛔ 비활성'}\n"
+        f"완료 신호: {stats['total']}회\n"
+        f"추적 중: {stats['open']}개\n"
+        f"재배포 유지: {'✅ 가능' if active != V73_FALLBACK_FILE else '⚠ Volume 미연결'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+async def saveperformance_cmd(update, context):
+    ok = v73_save_performance(force=True)
+    active = v73_active_storage_path()
+
+    await update.message.reply_text(
+        "💾 <b>성과기록 수동 저장</b>\n"
+        f"결과: {'✅ 성공' if ok else '⛔ 실패'}\n"
+        f"경로: <code>{_v54_escape(active)}</code>",
+        parse_mode="HTML"
+    )
+
+async def restoreperformance_cmd(update, context):
+    loaded = v73_load_performance()
+    stats = v72_performance_stats()
+
+    await update.message.reply_text(
+        "♻️ <b>성과기록 복구</b>\n"
+        f"불러온 파일: <code>{_v54_escape(loaded or '-')}</code>\n"
+        f"완료 신호: {stats['total']}회\n"
+        f"추적 중: {stats['open']}개",
+        parse_mode="HTML"
+    )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+    stats = v72_performance_stats()
+    active = v73_active_storage_path()
+
+    await update.message.reply_text(
+        "📦 <b>A100 v73 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"시장 온도계: 활성\n"
+        f"기관 단계 1~5: 활성\n"
+        f"승격 타임라인 1H/2H/4H: 활성\n"
+        f"WATCH 자동 승격감시: {'활성' if V72_MONITOR_ENABLED else '비활성'}\n"
+        f"성과 추적: 활성\n"
+        f"영구 저장 경로: <code>{_v54_escape(active)}</code>\n"
+        f"Volume 저장: {'✅ 활성' if active != V73_FALLBACK_FILE else '⚠ 미연결'}\n"
+        f"자동 백업: {'활성' if V73_AUTOBACKUP else '비활성'}\n"
+        f"완료 {stats['total']}회 / 추적중 {stats['open']}개\n"
+        f"명령어: /performance /storagestatus /saveperformance /restoreperformance\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+def build_v44_application(token):
+    v72_start_monitor()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monitorstatus", monitorstatus_cmd), ("storagestatus", storagestatus_cmd),
+        ("saveperformance", saveperformance_cmd), ("restoreperformance", restoreperformance_cmd),
+        ("chart", chart_cmd), ("fast", fast_cmd), ("cgstatus", cgstatus_cmd),
+        ("cgreset", cgreset_cmd), ("deep", deep_cmd), ("cache", cache_cmd),
+        ("quick", quick_cmd), ("speed", speedstatus_cmd), ("report", report_cmd),
+        ("history", history_cmd), ("stats", stats_cmd), ("ticker", ticker_cmd),
         ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
         ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
     ]
