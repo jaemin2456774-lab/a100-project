@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v50.1 FULL COINGLASS BRIDGE worker running...", flush=True)
+    print("A100 v51 INSTITUTIONAL DERIVATIVES worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -5871,7 +5871,7 @@ async def ultimate_cmd(update, context):
         )
         return
 
-    await update.message.reply_text("🚀 A100 v50 ELITE PRO 분석 중...")
+    await update.message.reply_text("🚀 A100 v51 INSTITUTIONAL DERIVATIVES 분석 중...")
     try:
         rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
         if not rows:
@@ -6175,6 +6175,444 @@ async def datastatus_cmd(update, context):
         f"배점: CG65 / 차트20 / 거래량10 / 패턴5\n"
         f"N/A 처리: 가용항목 정규화\n"
         f"TOP0 방지: 활성\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+
+# ===== A100 v51 INSTITUTIONAL DERIVATIVES ENGINE =====
+# CoinGlass 원본 응답을 진단용/추천용으로 분리하지 않고 동일 정규화 객체로 사용한다.
+V51_VERSION = "A100 v51 INSTITUTIONAL DERIVATIVES"
+V51_TOP = int(os.getenv("V51_TOP", "5"))
+V51_PRIMARY_MIN = float(os.getenv("V51_PRIMARY_MIN", "72"))
+
+def _v51_n(v):
+    try:
+        if v is None or isinstance(v, bool):
+            return None
+        if isinstance(v, str):
+            s = v.strip().replace(",", "").replace("%", "")
+            if not s or s.upper() in {"N/A", "NA", "NONE", "NULL", "-"}:
+                return None
+            return float(s)
+        return float(v)
+    except Exception:
+        return None
+
+def _v51_latest(data):
+    """history/list 응답에서 가장 최근 레코드를 반환한다."""
+    if isinstance(data, dict):
+        # CoinGlass exchange-list의 All 또는 Binance 우선
+        for key in ("data", "list", "rows", "result"):
+            if isinstance(data.get(key), (list, dict)):
+                return _v51_latest(data.get(key))
+        return data
+    if isinstance(data, list):
+        if not data:
+            return None
+        dicts = [x for x in data if isinstance(x, dict)]
+        if not dicts:
+            return data[-1]
+        for target in ("all", "binance"):
+            for x in dicts:
+                ex = str(x.get("exchange") or x.get("exchange_name") or "").lower()
+                if ex == target:
+                    return x
+        def ts(x):
+            return _v51_n(
+                x.get("time") or x.get("timestamp") or x.get("create_time")
+                or x.get("t") or 0
+            ) or 0
+        return max(dicts, key=ts)
+    return None
+
+def _v51_deep_records(obj):
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _v51_deep_records(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _v51_deep_records(v)
+
+def _v51_pick(obj, *keys):
+    keys_l = {k.lower() for k in keys}
+    latest = _v51_latest(obj)
+    if isinstance(latest, dict):
+        for k, v in latest.items():
+            if str(k).lower() in keys_l:
+                n = _v51_n(v)
+                if n is not None:
+                    return n
+    # fallback for nested response
+    values = []
+    for d in _v51_deep_records(obj):
+        for k, v in d.items():
+            if str(k).lower() in keys_l:
+                n = _v51_n(v)
+                if n is not None:
+                    values.append(n)
+    return values[-1] if values else None
+
+def _v51_ratio(obj, ratio_keys, long_keys, short_keys):
+    r = _v51_pick(obj, *ratio_keys)
+    if r is not None:
+        return r
+    long_v = _v51_pick(obj, *long_keys)
+    short_v = _v51_pick(obj, *short_keys)
+    if long_v is not None and short_v not in (None, 0):
+        return long_v / short_v
+    return None
+
+def _v51_taker(obj):
+    ratio = _v51_pick(
+        obj, "buy_sell_ratio", "buySellRatio", "taker_buy_sell_ratio",
+        "takerBuySellRatio", "long_short_ratio", "longShortRatio"
+    )
+    if ratio is not None:
+        return ratio
+    buy = _v51_pick(
+        obj, "buy_volume_usd", "buyVolumeUsd", "buy_volume",
+        "buyVolume", "taker_buy_volume", "takerBuyVolume",
+        "taker_buy_vol", "takerBuyVol"
+    )
+    sell = _v51_pick(
+        obj, "sell_volume_usd", "sellVolumeUsd", "sell_volume",
+        "sellVolume", "taker_sell_volume", "takerSellVolume",
+        "taker_sell_vol", "takerSellVol"
+    )
+    if buy is not None and sell not in (None, 0):
+        return buy / sell
+    return None
+
+def _v51_liquidation(obj):
+    long_total = 0.0
+    short_total = 0.0
+    seen = False
+    for d in _v51_deep_records(obj):
+        for k, v in d.items():
+            kl = str(k).lower()
+            n = _v51_n(v)
+            if n is None:
+                continue
+            if kl in {
+                "long_liquidation_usd", "longliquidationusd",
+                "long_liquidation_volume_usd", "longliquidationvolumeusd",
+                "long_liquidation", "longliquidation"
+            }:
+                long_total += n
+                seen = True
+            elif kl in {
+                "short_liquidation_usd", "shortliquidationusd",
+                "short_liquidation_volume_usd", "shortliquidationvolumeusd",
+                "short_liquidation", "shortliquidation"
+            }:
+                short_total += n
+                seen = True
+    if not seen or long_total + short_total <= 0:
+        return None, long_total, short_total
+    return (short_total - long_total) / (short_total + long_total), long_total, short_total
+
+def v51_normalize_cg(raw):
+    """CoinGlass v4의 공식 필드명을 우선 사용해 8종 지표를 정규화한다."""
+    oi = _v51_pick(
+        raw.get("oi"),
+        "open_interest_change_percent_1h", "openInterestChangePercent1h",
+        "open_interest_change_1h", "openInterestChange1h",
+        "change_percent_1h", "changePercent1h"
+    )
+
+    funding = _v51_pick(
+        raw.get("funding"),
+        "funding_rate", "fundingRate", "current_funding_rate",
+        "currentFundingRate", "predicted_funding_rate",
+        "predictedFundingRate"
+    )
+    if funding is not None and abs(funding) < 1:
+        funding *= 100
+
+    taker = _v51_taker(raw.get("taker"))
+
+    global_ls = _v51_ratio(
+        raw.get("ls"),
+        ("long_short_ratio", "longShortRatio", "long_short_account_ratio",
+         "longShortAccountRatio"),
+        ("long_account_percent", "longAccountPercent", "long_percent", "longPercent"),
+        ("short_account_percent", "shortAccountPercent", "short_percent", "shortPercent")
+    )
+
+    top_account = _v51_ratio(
+        raw.get("top_account"),
+        ("top_account_long_short_ratio", "topAccountLongShortRatio",
+         "long_short_ratio", "longShortRatio"),
+        ("top_account_long_percent", "topAccountLongPercent", "long_percent", "longPercent"),
+        ("top_account_short_percent", "topAccountShortPercent", "short_percent", "shortPercent")
+    )
+
+    top_position = _v51_ratio(
+        raw.get("top_position"),
+        ("top_position_long_short_ratio", "topPositionLongShortRatio",
+         "long_short_ratio", "longShortRatio"),
+        ("top_position_long_percent", "topPositionLongPercent", "long_percent", "longPercent"),
+        ("top_position_short_percent", "topPositionShortPercent", "short_percent", "shortPercent")
+    )
+
+    basis = _v51_pick(
+        raw.get("basis"),
+        "close_basis_rate", "closeBasisRate", "basis_rate", "basisRate",
+        "annualized_basis_rate", "annualizedBasisRate",
+        "close_basis", "closeBasis"
+    )
+    if basis is not None and abs(basis) < 1:
+        basis *= 100
+
+    liq_bias, long_liq, short_liq = _v51_liquidation(raw.get("liquidation"))
+
+    metrics = {
+        "oi": oi,
+        "funding": funding,
+        "taker": taker,
+        "ls": global_ls,
+        "top_account": top_account,
+        "top_position": top_position,
+        "basis": basis,
+        "liq_bias": liq_bias,
+        "long_liq": long_liq,
+        "short_liq": short_liq,
+    }
+    metrics["available"] = sum(
+        metrics[k] is not None
+        for k in ("oi", "funding", "taker", "ls", "top_account",
+                  "top_position", "basis", "liq_bias")
+    )
+    metrics["coverage"] = metrics["available"] / 8.0
+    return metrics
+
+def _v51_metric_score(name, v):
+    if v is None:
+        return None
+    if name == "oi":
+        if v >= 8: return 100
+        if v >= 4: return 90
+        if v >= 1.5: return 78
+        if v >= 0: return 64
+        if v >= -2: return 43
+        return 18
+    if name == "funding":
+        if -0.02 <= v <= 0.03: return 90
+        if -0.08 <= v < -0.02: return 78
+        if 0.03 < v <= 0.08: return 62
+        if v > 0.15: return 18
+        return 42
+    if name == "taker":
+        if v >= 1.25: return 100
+        if v >= 1.10: return 86
+        if v >= 1.00: return 70
+        if v >= 0.90: return 46
+        return 20
+    if name in {"ls", "top_account", "top_position"}:
+        if 1.05 <= v <= 1.45: return 90
+        if 0.90 <= v < 1.05: return 74
+        if 1.45 < v <= 1.80: return 60
+        if 0.75 <= v < 0.90: return 52
+        return 25
+    if name == "basis":
+        if 0 <= v <= 3: return 86
+        if -1 <= v < 0: return 68
+        if 3 < v <= 6: return 55
+        if v > 8: return 18
+        return 38
+    if name == "liq_bias":
+        if v >= 0.20: return 92
+        if v > 0: return 78
+        if v > -0.20: return 58
+        return 30
+    return 50
+
+def v51_cg_score_from_metrics(m):
+    weights = {
+        "oi": 0.18, "funding": 0.12, "taker": 0.16, "ls": 0.10,
+        "top_account": 0.14, "top_position": 0.14,
+        "basis": 0.08, "liq_bias": 0.08,
+    }
+    num = 0.0
+    den = 0.0
+    details = []
+    for name, w in weights.items():
+        s = _v51_metric_score(name, m.get(name))
+        if s is None:
+            continue
+        num += s * w
+        den += w
+        details.append((name, m.get(name), s))
+    score = num / den if den else 0.0
+
+    # 데이터 누락은 0점이 아니라 신뢰도만 낮춘다.
+    coverage = m.get("coverage", 0)
+    if coverage < 0.25:
+        score *= 0.72
+    elif coverage < 0.50:
+        score *= 0.88
+    elif coverage < 0.75:
+        score *= 0.96
+    return round(max(0, min(100, score)), 1), details
+
+# v50.1 analyze를 감싸되, 최종 점수는 Result 필드가 아니라 동일 정규화 객체를 직접 참조한다.
+_v51_analyze_base = analyze
+def analyze(sym, kr):
+    r = _v51_analyze_base(sym, kr)
+    try:
+        coin = str(sym).upper().replace("USDT", "")
+        raw = v45_cg_coin(coin, force=False)
+        m = v51_normalize_cg(raw)
+        cg_score, details = v51_cg_score_from_metrics(m)
+
+        r.v51_cg_raw = raw
+        r.v51_cg = m
+        r.v51_cg_score = cg_score
+        r.v51_cg_details = details
+
+        # 이전 출력/호환 코드도 동일 값을 읽게 한다.
+        r.oi_change = m["oi"]
+        r.funding_rate = m["funding"]
+        r.taker_ratio = m["taker"]
+        r.ls_ratio = m["ls"]
+        r.top_account_ratio = m["top_account"]
+        r.top_position_ratio = m["top_position"]
+        r.basis_pct = m["basis"]
+        r.liq_bias = m["liq_bias"]
+
+        r.cg_text = (
+            f"완성도 {round(m['coverage']*100)}% ({m['available']}/8) | "
+            f"OI {_v501_fmt(m['oi'], True, '%')} / "
+            f"Funding {_v501_fmt(m['funding'], True, '%')} / "
+            f"Taker {_v501_fmt(m['taker'], False, 'x')} / "
+            f"L/S {_v501_fmt(m['ls'])} / "
+            f"TopAcc {_v501_fmt(m['top_account'])} / "
+            f"TopPos {_v501_fmt(m['top_position'])} / "
+            f"Basis {_v501_fmt(m['basis'], True, '%')}"
+        )
+        if m["liq_bias"] is not None:
+            direction = (
+                "숏청산 우세" if m["liq_bias"] > 0.15
+                else "롱청산 우세" if m["liq_bias"] < -0.15
+                else "청산 중립"
+            )
+            r.liq = f"{direction} | L {m['long_liq']:.0f} / S {m['short_liq']:.0f}"
+    except Exception as e:
+        log(f"v51 normalize error {sym}: {e}")
+    return r
+
+def v50_cg_score(r):
+    m = getattr(r, "v51_cg", None)
+    if isinstance(m, dict):
+        score, details = v51_cg_score_from_metrics(m)
+        return score, m.get("coverage", 0), details
+    return (0.0, 0.0, [])
+
+def v50_score(r):
+    cg100, coverage, _ = v50_cg_score(r)
+    chart100 = (
+        float(timing_score(r)) * 0.30 +
+        float(breakout_score(r)) * 0.25 +
+        float(bottom_score(r)) * 0.25 +
+        float(win_rate_estimate(r)) * 0.20
+    )
+    vol = float(getattr(r, "vol_ratio", 1) or 1)
+    volume100 = max(0, min(100, (vol - 0.65) / 2.0 * 100))
+    pattern100 = (
+        float(real_signal_score(r)) * 0.70 +
+        float(getattr(r, "confidence", 0) or 0) * 0.30
+    )
+    total = cg100 * 0.65 + chart100 * 0.20 + volume100 * 0.10 + pattern100 * 0.05
+
+    chase = float(chase_risk(r))
+    if chase >= 85: total -= 22
+    elif chase >= 75: total -= 14
+    elif chase >= 65: total -= 7
+    if coverage == 0:
+        total -= 12
+    return round(max(0, min(100, total)), 1)
+
+def v43_score(r):
+    return v50_score(r)
+
+def _v51_label(name, value, score):
+    labels = {
+        "oi": "OI", "funding": "Funding", "taker": "Taker",
+        "ls": "Global L/S", "top_account": "Top Account",
+        "top_position": "Top Position", "basis": "Basis",
+        "liq_bias": "Liquidation"
+    }
+    if name == "liq_bias":
+        val = "숏청산 우세" if value > 0.15 else "롱청산 우세" if value < -0.15 else "중립"
+    elif name in {"oi", "funding", "basis"}:
+        val = f"{value:+.4f}%"
+    elif name == "taker":
+        val = f"{value:.3f}x"
+    else:
+        val = f"{value:.3f}"
+    arrow = "▲▲▲" if score >= 88 else "▲▲" if score >= 74 else "▲" if score >= 58 else "▼"
+    return f"• {labels[name]} {val} {arrow}"
+
+def v43_format(r, idx):
+    score = v50_score(r)
+    conf = v43_confidence(r)
+    cg100, coverage, details = v50_cg_score(r)
+    detail_text = "\n".join(_v51_label(n, v, s) for n, v, s in details)
+    if not detail_text:
+        detail_text = "• CoinGlass 정규화 데이터 없음"
+
+    return (
+        f"🏅 <b>{idx}. {r.sym}</b> {v50_grade(score, conf)}\n"
+        f"AI <b>{score}%</b> | 신뢰도 <b>{conf}%</b> | 판단 <b>{v43_action(r)}</b>\n"
+        f"CoinGlass <b>{cg100}/100</b> | 데이터 <b>{round(coverage*8)}/8</b>\n"
+        f"{detail_text}\n"
+        f"차트: 매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | "
+        f"타이밍 {timing_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+        f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n"
+        f"🔴 손절 <code>{r.stop}</code>\n"
+        f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n"
+        f"🧠 이유: {v50_reason(r)}\n"
+    )
+
+async def cgtest_cmd(update, context):
+    """진단도 추천 엔진과 동일한 v51 정규화기를 사용한다."""
+    coin = (context.args[0].upper() if context.args else "BTC").replace("USDT", "")
+    sup = v45_cg_supported(force=True)
+    raw = v45_cg_coin(coin, force=True)
+    m = v51_normalize_cg(raw)
+    score, details = v51_cg_score_from_metrics(m)
+
+    detail_text = "\n".join(_v51_label(n, v, s) for n, v, s in details)
+    errs = raw.get("errors") or {}
+    err_lines = "\n".join(f"• {k}: {v[:100]}" for k, v in errs.items()) or "-"
+
+    await update.message.reply_text(
+        f"🟣 <b>A100 v51 CoinGlass 통합 진단</b>\n"
+        f"API Key: {'등록됨' if v45_cg_headers() else '없음'} | "
+        f"Supported Coins: {len(sup.get('data') or []) if sup.get('ok') else 'N/A'}\n"
+        f"Coin: <b>{coin}</b>\n"
+        f"정규화 완성도: <b>{m['available']}/8</b>\n"
+        f"CoinGlass Score: <b>{score}/100</b>\n"
+        f"{detail_text or '정규화 데이터 없음'}\n\n"
+        f"<b>오류/플랜 제한</b>\n{err_lines}",
+        parse_mode="HTML"
+    )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v51 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"CG Engine: 동일 정규화기(진단=추천)\n"
+        f"항목: OI/Funding/Taker/GlobalLS/TopAcc/TopPos/Basis/Liquidation\n"
+        f"배점: CG65 / 차트20 / 거래량10 / 패턴5\n"
+        f"N/A 처리: 가용항목 정규화\n"
         f"추천허용: {'예' if ok else '아니오'}",
         parse_mode="HTML"
     )
