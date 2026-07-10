@@ -4881,7 +4881,7 @@ async def ultimate_cmd(update, context):
             parse_mode="HTML"
         )
         return
-    await update.message.reply_text("🧬 A100 v47 CoinGlass Startup 기반 분석 중...")
+    await update.message.reply_text("🧬 A100 v48 CoinGlass 가중치 정밀 분석 중...")
     try:
         rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
         if not rows:
@@ -4891,7 +4891,7 @@ async def ultimate_cmd(update, context):
         res = a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)
         res = sorted(res, key=lambda r: v43_score(r), reverse=True)
         res = [r for r in res if v43_score(r) >= V43_MIN_SCORE][:V43_TOP]
-        lines = ["🧬 <b>A100 v47 STARTUP VERIFIED DATA</b>", f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(res)}", "────────────", ""]
+        lines = ["🧬 <b>A100 v48 DERIVATIVES INTELLIGENCE</b>", f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(res)}", "────────────", ""]
         if not res:
             lines.append("현재 기준 통과 후보 없음.")
         for i,r in enumerate(res,1):
@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v46 Unified CoinGlass worker running...", flush=True)
+    print("A100 v48 CoinGlass Weighted Intelligence worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -5044,6 +5044,168 @@ def main():
         print(traceback.format_exc(), flush=True)
         # Render가 프로세스를 재시작하도록 비정상 종료
         raise
+
+
+# ===== A100 v48 CoinGlass Weighted Intelligence =====
+V48_VERSION = "A100 v48 CoinGlass Weighted Intelligence"
+
+def _v48_last_number(data, keys):
+    return _cg_find_number(data, keys)
+
+def _v48_ratio(data):
+    return _v48_last_number(data,["longShortRatio","ratio","longShortRate","long_short_ratio","longAccount","long_ratio"])
+
+def _v48_liq_bias(data):
+    ll=sl=0.0
+    for r in rows(data)[-12:]:
+        ll += val(r,["longLiquidation","longLiquidationUsd","longVolUsd","long","long_liquidation_usd"])
+        sl += val(r,["shortLiquidation","shortLiquidationUsd","shortVolUsd","short","short_liquidation_usd"])
+    total=ll+sl
+    if total<=0:return None,ll,sl
+    return (sl-ll)/total,ll,sl
+
+def cg_snap(sym):
+    """v48: Startup 8종 파생데이터를 0~35점으로 정규화한다."""
+    coin=sym.upper().replace("USDT","")
+    out={"oi":None,"fund":None,"taker":None,"ls":None,"top_account":None,
+         "top_position":None,"basis":None,"liq_bias":None,"liq_score":0.0,
+         "liq":"청산데이터 없음","cg_score":0.0,"available":False,
+         "available_fields":0,"total_fields":8,"errors":{},"completeness":0,
+         "signals":[]}
+    try: raw=v45_cg_coin(coin,force=False)
+    except Exception as e:
+        out["errors"]={"collector":str(e)}; return out
+    out["errors"]=raw.get("errors") or {}
+    score=0.0
+
+    oi=_v48_last_number(raw.get("oi"),["open_interest_change_percent_1h","openInterestChangePercent1h","change_percent_1h","changePercent1h"])
+    if oi is not None:
+        out["oi"]=round(oi,3); out["available_fields"]+=1
+        pts=12 if oi>=8 else 9 if oi>=4 else 6 if oi>=1 else 3 if oi>=-2 else 0
+        score+=pts
+        out["signals"].append(f"OI {oi:+.2f}%")
+
+    fd=_cg_pick_exchange(raw.get("funding")); fund=_v48_last_number(fd,["funding_rate","fundingRate","rate","close","value"])
+    if fund is not None:
+        if abs(fund)<1: fund*=100
+        out["fund"]=round(fund,5); out["available_fields"]+=1
+        pts=6 if -0.02<=fund<=0.02 else 5 if -0.08<=fund< -0.02 else 3 if fund<=0.05 else 0
+        score+=pts
+        out["signals"].append(f"Funding {fund:+.4f}%")
+
+    tak=raw.get("taker")
+    buy=_v48_last_number(tak,["buy","buyVolume","takerBuyVol","takerBuyVolume","buy_volume"])
+    sell=_v48_last_number(tak,["sell","sellVolume","takerSellVol","takerSellVolume","sell_volume"])
+    if buy is not None and sell not in (None,0):
+        ratio=buy/sell; out["taker"]=round(ratio,3); out["available_fields"]+=1
+        pts=6 if 1.12<=ratio<=1.8 else 4 if ratio>=1.03 else 2 if ratio>=0.92 else 0
+        score+=pts; out["signals"].append(f"Taker {ratio:.2f}x")
+
+    ls=_v48_ratio(raw.get("ls"))
+    if ls is not None:
+        out["ls"]=round(ls,3); out["available_fields"]+=1
+        pts=4 if 0.75<=ls<=1.25 else 3 if 0.55<=ls<=1.55 else 0
+        score+=pts; out["signals"].append(f"L/S {ls:.2f}")
+
+    ta=_v48_ratio(raw.get("top_account"))
+    if ta is not None:
+        out["top_account"]=round(ta,3); out["available_fields"]+=1
+        pts=4 if 1.03<=ta<=1.8 else 2 if 0.85<=ta<1.03 else 0
+        score+=pts; out["signals"].append(f"TopAcc {ta:.2f}")
+
+    tp=_v48_ratio(raw.get("top_position"))
+    if tp is not None:
+        out["top_position"]=round(tp,3); out["available_fields"]+=1
+        pts=4 if 1.03<=tp<=1.8 else 2 if 0.85<=tp<1.03 else 0
+        score+=pts; out["signals"].append(f"TopPos {tp:.2f}")
+
+    basis=_v48_last_number(raw.get("basis"),["basis_rate","basisRate","annualized_basis_rate","annualizedBasisRate","basis"])
+    if basis is not None:
+        if abs(basis)<1:basis*=100
+        out["basis"]=round(basis,4); out["available_fields"]+=1
+        pts=3 if 0<=basis<=8 else 2 if -3<=basis<0 else 0
+        score+=pts; out["signals"].append(f"Basis {basis:+.2f}%")
+
+    bias,ll,sl=_v48_liq_bias(raw.get("liquidation"))
+    if bias is not None:
+        out["liq_bias"]=round(bias,3); out["available_fields"]+=1
+        pts=5 if bias>=0.35 else 3 if bias>=-0.15 else 0
+        score+=pts; out["liq_score"]=pts
+        out["liq"]=("숏청산 우세" if bias>0.15 else "롱청산 우세" if bias< -0.15 else "청산 중립")+f" L:{ll:.0f} S:{sl:.0f}"
+        out["signals"].append(f"LiqBias {bias:+.2f}")
+
+    # 최대 44점을 35점으로 환산. 데이터 완성도에 따라 보수적으로 감산.
+    completeness=round(out["available_fields"]*100/out["total_fields"])
+    quality_factor=0.72+0.28*(out["available_fields"]/out["total_fields"])
+    out["cg_score"]=round(min(35,score*35/44*quality_factor),2)
+    out["completeness"]=completeness
+    out["available"]=out["available_fields"]>=4
+    return out
+
+def _v48_cg_from_result(r):
+    txt=str(getattr(r,"cg_text","") or "")
+    import re as _re
+    def f(p):
+        m=_re.search(p,txt); return float(m.group(1)) if m else None
+    return {"oi":f(r"OI ([+\-0-9.]+)%"),"fund":f(r"Funding ([+\-0-9.]+)%"),
+            "taker":f(r"Taker ([0-9.]+)"),"ls":f(r"L/S ([0-9.]+)"),
+            "top_account":f(r"TopAcc ([0-9.]+)"),"top_position":f(r"TopPos ([0-9.]+)"),
+            "basis":f(r"Basis ([+\-0-9.]+)%")}
+
+def v43_score(r):
+    try:
+        base=(timing_score(r)*.22+breakout_score(r)*.19+bottom_score(r)*.18+
+              real_signal_score(r)*.11+win_rate_estimate(r)*.09-chase_risk(r)*.09)
+        cg=float(getattr(r,"cg",0) or 0)
+        base += cg*0.72
+        base += min(max(float(getattr(r,"vol_ratio",1)),0),4)*3.0
+        if cg<10: base-=5
+        if chase_risk(r)>=75: base=min(base,54)
+        return round(clamp(base,0,100),1)
+    except Exception:return round(getattr(r,"score",0),1)
+
+def v43_confidence(r):
+    c=v43_score(r)+min(float(getattr(r,"cg",0) or 0)*.45,15)
+    if getattr(r,"confidence",0)>=60:c+=5
+    if chase_risk(r)>=65:c-=10
+    return round(clamp(c,0,99),1)
+
+def v43_reason(r):
+    arr=[]
+    if bottom_score(r)>=55:arr.append("매집 우세")
+    if breakout_score(r)>=50:arr.append("돌파 압력")
+    if getattr(r,"cg",0)>=22:arr.append("파생수급 강함")
+    elif getattr(r,"cg",0)>=14:arr.append("파생수급 양호")
+    if getattr(r,"vol_ratio",1)>=1.5:arr.append("거래량 증가")
+    if chase_risk(r)>=65:arr.append("추격주의")
+    return " / ".join(arr[:5]) if arr else "추가 확인 필요"
+
+def v43_format(r,idx):
+    score=v43_score(r); conf=v43_confidence(r)
+    return (f"🏅 <b>{idx}. {r.sym}</b> {stars(score)} {v43_grade(score,conf)}\n"
+            f"AI <b>{score}%</b> | 신뢰도 <b>{conf}%</b> | 판단 <b>{v43_action(r)}</b>\n"
+            f"매집 {bottom_score(r)}% | 돌파 {breakout_score(r)}% | 타이밍 {timing_score(r)}% | 승률 {win_rate_estimate(r)}% | 추격 {chase_risk(r)}%\n"
+            f"🔮 CoinGlass <b>{getattr(r,'cg',0)}/35</b> | {r.cg_text}\n"
+            f"💥 {r.liq}\n"
+            f"🟢 진입 <code>{r.entry_low}~{r.entry_high}</code>\n🔴 손절 <code>{r.stop}</code>\n"
+            f"🎯 목표 <code>{r.target1}</code> / <code>{r.target2}</code>\n🧠 이유: {v43_reason(r)}\n")
+
+# analyze 원본을 감싸서 v48 8종 상세문구를 결과에 삽입
+_v48_analyze_base=analyze
+def analyze(sym,kr):
+    r=_v48_analyze_base(sym,kr)
+    try:
+        cg=cg_snap(sym)
+        vals=[]
+        for k,label,suffix in [("oi","OI","%"),("fund","Funding","%"),("taker","Taker","x"),("ls","L/S",""),("top_account","TopAcc",""),("top_position","TopPos",""),("basis","Basis","%")]:
+            v=cg.get(k)
+            vals.append(f"{label} {v:+.3f}{suffix}" if v is not None and k in ("oi","fund","basis") else f"{label} {v:.3f}{suffix}" if v is not None else f"{label} N/A")
+        r.cg=round(cg.get("cg_score",0),2)
+        r.cg_text=f"완성도 {cg.get('completeness',0)}% ({cg.get('available_fields',0)}/8) | "+" / ".join(vals)
+        r.liq=cg.get("liq","청산데이터 없음")
+    except Exception as e: log(f"v48 result enrich {e}")
+    return r
+
 
 if __name__ == "__main__":
     main()
