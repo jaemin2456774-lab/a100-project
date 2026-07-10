@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v49 ELITE AI worker running...", flush=True)
+    print("A100 v49.1 ELITE AI TOP0 FIX worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -5416,6 +5416,142 @@ async def datastatus_cmd(update, context):
         f"Binance error: {b.get('err') or '-'}\n"
         f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
         f"배점: 차트30 / CG45 / 거래량15 / 패턴10\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML"
+    )
+
+
+# ===== A100 v49.1 TOP0 FIX / Guaranteed Fallback =====
+V491_VERSION = "A100 v49.1 ELITE AI FIX"
+
+def _v491_safe_scan_one(sym):
+    try:
+        rows = scan([sym])
+        if rows:
+            return rows[0], None
+        return None, "scan empty"
+    except Exception as e:
+        return None, str(e)
+
+async def ultimate_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            "⛔ <b>A100 분석 중지</b>\n"
+            f"Binance 수집 실패: {reason or st.get('err')}\n\n"
+            "정적 후보·캐시 후보·CoinGlass 단독 추천을 금지했습니다.",
+            parse_mode="HTML"
+        )
+        return
+
+    await update.message.reply_text("🚀 A100 v49.1 ELITE AI 분석 중...")
+    try:
+        rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
+        if not rows:
+            await update.message.reply_text("⚠️ 실시간 1차 후보가 없습니다.")
+            return
+
+        syms = [r[1] for r in rows[:V43_ANALYZE_LIMIT]]
+        results = []
+        scan_errors = []
+
+        # 1차: 병렬 스캔
+        try:
+            results = a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)
+            results = list(results or [])
+        except Exception as e:
+            scan_errors.append(f"parallel:{e}")
+            results = []
+
+        # 2차: 병렬 결과가 부족하면 개별 스캔으로 복구
+        got = {getattr(r, "sym", None) for r in results}
+        for sym in syms:
+            if sym in got:
+                continue
+            r, err = _v491_safe_scan_one(sym)
+            if r is not None:
+                results.append(r)
+                got.add(sym)
+            elif err:
+                scan_errors.append(f"{sym}:{err}")
+
+        # 점수 계산 실패 종목은 제외하지 않고 0점으로 유지
+        scored = []
+        score_errors = []
+        for r in results:
+            try:
+                scored.append((float(v49_score(r)), r))
+            except Exception as e:
+                score_errors.append(f"{getattr(r,'sym','?')}:{e}")
+                scored.append((0.0, r))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        ranked = [r for _, r in scored]
+
+        primary = [r for r in ranked if v49_score(r) >= V49_MIN_PRIMARY][:V49_TOP]
+        fallback_mode = not primary
+
+        # 핵심 수정: 임계값과 무관하게 차순위는 반드시 최대 5개 표시
+        shown = primary if primary else ranked[:V49_SHOW_FALLBACK]
+
+        lines = [
+            "🚀 <b>A100 v49.1 ELITE AI</b>",
+            f"후보 {len(rows)} → 정밀 {len(syms)} → 스캔성공 {len(results)} → TOP{len(shown)}",
+            "차트 30% | CoinGlass 45% | 거래량 15% | 패턴 10%",
+            "────────────",
+            ""
+        ]
+
+        if fallback_mode:
+            lines.extend([
+                "⚠️ <b>정식 통과 후보 없음</b>",
+                "아래는 점수순 차순위 WATCH 후보입니다. 즉시 매수 신호가 아닙니다.",
+                ""
+            ])
+
+        if not shown:
+            lines.extend([
+                "❌ 분석 결과 객체가 0개입니다.",
+                f"스캔오류 {len(scan_errors)}개 | 점수오류 {len(score_errors)}개",
+            ])
+            if scan_errors:
+                lines.append("최근 오류: " + " | ".join(scan_errors[:3]))
+        else:
+            for i, r in enumerate(shown, 1):
+                lines.append(v43_format(r, i))
+                lines.append("────────────")
+
+        # 내부 진단 요약
+        if scan_errors or score_errors:
+            lines.extend([
+                "",
+                "🛠 <b>진단</b>",
+                f"스캔오류 {len(scan_errors)}개 | 점수오류 {len(score_errors)}개"
+            ])
+            if scan_errors:
+                lines.append("스캔: " + " | ".join(scan_errors[:2]))
+            if score_errors:
+                lines.append("점수: " + " | ".join(score_errors[:2]))
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"ultimate 오류: {e}")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    await update.message.reply_text(
+        "📦 <b>A100 v49.1 데이터 상태</b>\n"
+        f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
+        f"차단원인: {reason or '-'}\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"Binance error: {b.get('err') or '-'}\n"
+        f"CoinGlass cache: {len(V45_CG_CACHE)}개\n"
+        f"배점: 차트30 / CG45 / 거래량15 / 패턴10\n"
+        f"TOP0 방지: 활성\n"
         f"추천허용: {'예' if ok else '아니오'}",
         parse_mode="HTML"
     )
