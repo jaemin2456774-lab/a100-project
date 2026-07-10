@@ -4687,20 +4687,68 @@ def v45_cg_request(path,params=None,cache_key=None,force=False):
 def v45_cg_supported(force=False):
     return v45_cg_request("/api/futures/supported-coins",cache_key="supported",force=force)
 
+def _cg_request_variants(name, coin, variants, force=False):
+    """Startup 플랜 호환 파라미터를 순차 시도한다.
+    플랜/interval 제한은 다음 후보로 자동 폴백하며 성공한 조합을 캐시한다.
+    """
+    errors=[]
+    for idx,(path,params) in enumerate(variants):
+        key=f"v47:{name}:{coin}:{idx}:{sorted(params.items())}"
+        r=v45_cg_request(path,params=params,cache_key=key,force=force)
+        if r.get("ok") and r.get("data") not in (None,[],{}):
+            return r.get("data"), {"ok":True,"path":path,"params":params,"stale":r.get("stale",False)}
+        errors.append(r.get("err") or f"HTTP {r.get('status')}")
+    return None, {"ok":False,"errors":errors}
+
 def v45_cg_coin(symbol="BTC",force=False):
+    """A100 v47 CoinGlass Startup collector.
+
+    History endpoint의 interval 제한에 의존하지 않고, 우선 exchange-list/range
+    엔드포인트를 사용한다. History가 필요한 항목은 4h→1h→1d 순으로 폴백한다.
+    """
     coin=symbol.upper().replace("USDT","")
-    out={"oi":None,"funding":None,"taker":None,"ls":None,"liquidation":None,"errors":{}}
-    tests=[
-      ("oi","/api/futures/open-interest/exchange-list",{"symbol":coin}),
-      ("funding","/api/futures/funding-rate/exchange-list",{"symbol":coin}),
-      ("taker","/api/futures/aggregated-taker-buy-sell-volume/history",{"symbol":coin,"exchange":"Binance","interval":"1h","limit":6}),
-      ("ls","/api/futures/global-long-short-account-ratio/history",{"symbol":coin,"exchange":"Binance","interval":"1h","limit":2}),
-      ("liquidation","/api/futures/liquidation/history",{"symbol":coin,"exchange":"Binance","interval":"1h","limit":2})
-    ]
-    for name,path,params in tests:
-        r=v45_cg_request(path,params=params,cache_key=f"{name}:{coin}",force=force)
-        if r["ok"]:out[name]=r["data"]
-        else:out["errors"][name]=r["err"]
+    pair=coin+"USDT"
+    out={"oi":None,"funding":None,"taker":None,"ls":None,"liquidation":None,
+         "top_account":None,"top_position":None,"basis":None,
+         "errors":{},"meta":{}}
+
+    specs={
+      "oi":[
+        ("/api/futures/open-interest/exchange-list",{"symbol":coin}),
+      ],
+      "funding":[
+        ("/api/futures/funding-rate/exchange-list",{"symbol":coin}),
+      ],
+      "taker":[
+        ("/api/futures/taker-buy-sell-volume/exchange-list",{"symbol":coin,"range":"4h"}),
+        ("/api/futures/taker-buy-sell-volume/exchange-list",{"symbol":coin,"range":"1h"}),
+        ("/api/futures/aggregated-taker-buy-sell-volume/history",{"symbol":coin,"interval":"4h","limit":6}),
+      ],
+      "ls":[
+        ("/api/futures/global-long-short-account-ratio/history",{"exchange":"Binance","symbol":pair,"interval":"4h","limit":6}),
+        ("/api/futures/global-long-short-account-ratio/history",{"exchange":"Binance","symbol":pair,"interval":"1h","limit":6}),
+        ("/api/futures/global-long-short-account-ratio/history",{"exchange":"Binance","symbol":pair,"interval":"1d","limit":3}),
+      ],
+      "liquidation":[
+        ("/api/futures/liquidation/exchange-list",{"symbol":coin}),
+        ("/api/futures/liquidation/aggregated-history",{"symbol":coin,"interval":"4h","limit":6}),
+        ("/api/futures/liquidation/history",{"exchange":"Binance","symbol":pair,"interval":"4h","limit":6}),
+      ],
+      "top_account":[
+        ("/api/futures/top-long-short-account-ratio/history",{"exchange":"Binance","symbol":pair,"interval":"4h","limit":6}),
+      ],
+      "top_position":[
+        ("/api/futures/top-long-short-position-ratio/history",{"exchange":"Binance","symbol":pair,"interval":"4h","limit":6}),
+      ],
+      "basis":[
+        ("/api/futures/basis/history",{"exchange":"Binance","symbol":pair,"interval":"4h","limit":6}),
+      ],
+    }
+    for name,variants in specs.items():
+        data,meta=_cg_request_variants(name,coin,variants,force=force)
+        out[name]=data; out["meta"][name]=meta
+        if not meta.get("ok"):out["errors"][name]=" | ".join(meta.get("errors",[]))[:260]
+
     if isinstance(out["oi"],list):
         out["oi"]=next((x for x in out["oi"] if str(x.get("exchange","")).lower()=="all"),out["oi"][0] if out["oi"] else None)
     return out
@@ -4723,18 +4771,31 @@ async def bintest_cmd(update,context):
       parse_mode="HTML")
 
 async def cgtest_cmd(update,context):
-    coin=(context.args[0].upper() if context.args else "BTC")
+    coin=(context.args[0].upper() if context.args else "BTC").replace("USDT","")
     sup=v45_cg_supported(force=True); data=v45_cg_coin(coin,force=True); oi=data.get("oi") or {}
+    def stat(k):
+        m=(data.get("meta") or {}).get(k,{})
+        if m.get("ok"):
+            p=m.get("params") or {}; hint=p.get("interval") or p.get("range") or "realtime"
+            return f"✅ {hint}"
+        return "❌ N/A"
+    errs=data.get("errors") or {}
+    err_lines="\n".join(f"• {k}: {v[:120]}" for k,v in errs.items()) or "-"
     await update.message.reply_text(
-      f"🟣 <b>CoinGlass API 진단</b>\nAPI Key: {'등록됨' if v45_cg_headers() else '없음'}\nSupported Coins: {len(sup.get('data') or []) if sup.get('ok') else 'N/A'}\nCoin: {coin.replace('USDT','')}\nOI USD: {v45_fmt_num(oi.get('open_interest_usd')) if oi else 'N/A'}\nOI 1h 변화: {oi.get('open_interest_change_percent_1h','N/A') if oi else 'N/A'}\nFunding: {'정상' if data.get('funding') is not None else 'N/A'}\nLong/Short: {'정상' if data.get('ls') is not None else 'N/A'}\nLiquidation: {'정상' if data.get('liquidation') is not None else 'N/A'}\n오류: {data.get('errors') or (sup.get('err') if not sup.get('ok') else '-')}",
-      parse_mode="HTML")
+      f"🟣 <b>A100 v47 CoinGlass Startup 진단</b>\n"
+      f"API Key: {'등록됨' if v45_cg_headers() else '없음'} | Supported Coins: {len(sup.get('data') or []) if sup.get('ok') else 'N/A'}\n"
+      f"Coin: <b>{coin}</b>\n"
+      f"OI: {stat('oi')} | USD {v45_fmt_num(oi.get('open_interest_usd')) if oi else 'N/A'} | 1h {oi.get('open_interest_change_percent_1h','N/A') if oi else 'N/A'}%\n"
+      f"Funding: {stat('funding')}\nTaker: {stat('taker')}\nGlobal L/S: {stat('ls')}\nLiquidation: {stat('liquidation')}\n"
+      f"Top Account: {stat('top_account')}\nTop Position: {stat('top_position')}\nBasis: {stat('basis')}\n\n"
+      f"<b>오류/플랜 제한</b>\n{err_lines}", parse_mode="HTML")
 
 async def apicheck_cmd(update,context):
     b=v45_binance_futures_refresh(force=True); c=v45_cg_supported(force=True)
     confidence=(55 if b.get("ticker") else 0)+(45 if c.get("ok") else 0)
     cooldown=max(0,int(V45_API_STATE["coinglass"].get("cooldown_until",0)-now_ts()))
     await update.message.reply_text(
-      f"🧪 <b>A100 v46 API CHECK</b>\nBinance Futures: {'✅ 정상' if b.get('ticker') else '❌ 오류'}\nTicker: {len(b.get('ticker') or [])}개\nExchangeInfo: {len((b.get('exchange_info') or {}).get('symbols',[]))}개\nHost: {b.get('host') or '-'}\nLatency: {b.get('latency_ms') if b.get('latency_ms') is not None else 'N/A'}ms\nBinance Error: {b.get('err') or '-'}\n\nCoinGlass: {'✅ 정상' if c.get('ok') else '⚠️ 제한/오류'}\nAPI Key: {'등록됨' if v45_cg_headers() else '없음'}\nSupported Coins: {len(c.get('data') or []) if c.get('ok') else 'N/A'}\nLatency: {c.get('latency_ms') if c.get('latency_ms') is not None else 'N/A'}ms\nCooldown: {cooldown}초\nCoinGlass Error: {c.get('err') or '-'}\n\n데이터 신뢰도: <b>{confidence}%</b>",
+      f"🧪 <b>A100 v47 API CHECK</b>\nBinance Futures: {'✅ 정상' if b.get('ticker') else '❌ 오류'}\nTicker: {len(b.get('ticker') or [])}개\nExchangeInfo: {len((b.get('exchange_info') or {}).get('symbols',[]))}개\nHost: {b.get('host') or '-'}\nLatency: {b.get('latency_ms') if b.get('latency_ms') is not None else 'N/A'}ms\nBinance Error: {b.get('err') or '-'}\n\nCoinGlass: {'✅ 정상' if c.get('ok') else '⚠️ 제한/오류'}\nAPI Key: {'등록됨' if v45_cg_headers() else '없음'}\nSupported Coins: {len(c.get('data') or []) if c.get('ok') else 'N/A'}\nLatency: {c.get('latency_ms') if c.get('latency_ms') is not None else 'N/A'}ms\nCooldown: {cooldown}초\nCoinGlass Error: {c.get('err') or '-'}\n\n데이터 신뢰도: <b>{confidence}%</b>",
       parse_mode="HTML")
 
 async def datastatus_cmd(update,context):
@@ -4763,7 +4824,7 @@ async def apicheck_cmd(update, context):
     confidence = 0 if not ok else 55 + (45 if c.get("ok") else 0)
     cooldown = max(0, int(V45_API_STATE["coinglass"].get("cooldown_until", 0) - now_ts()))
     await update.message.reply_text(
-        "🧪 <b>A100 v46 API CHECK</b>\n"
+        "🧪 <b>A100 v47 API CHECK</b>\n"
         f"전체판정: <b>{'✅ 분석 가능' if ok else '⛔ 분석 중지'}</b>\n\n"
         f"Binance Futures: {'✅ 정상' if ok else '⛔ 차단/오류'}\n"
         f"Ticker: {len(b.get('ticker') or [])}개\n"
@@ -4820,7 +4881,7 @@ async def ultimate_cmd(update, context):
             parse_mode="HTML"
         )
         return
-    await update.message.reply_text("🧬 A100 v46 통합 CoinGlass 기반 분석 중...")
+    await update.message.reply_text("🧬 A100 v47 CoinGlass Startup 기반 분석 중...")
     try:
         rows = v43_candidates(V43_LIMIT) if "v43_candidates" in globals() else []
         if not rows:
@@ -4830,7 +4891,7 @@ async def ultimate_cmd(update, context):
         res = a100_parallel_scan(syms) if "a100_parallel_scan" in globals() else scan(syms)
         res = sorted(res, key=lambda r: v43_score(r), reverse=True)
         res = [r for r in res if v43_score(r) >= V43_MIN_SCORE][:V43_TOP]
-        lines = ["🧬 <b>A100 v46 VERIFIED DATA</b>", f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(res)}", "────────────", ""]
+        lines = ["🧬 <b>A100 v47 STARTUP VERIFIED DATA</b>", f"후보 {len(rows)} → 정밀 {len(syms)} → TOP{len(res)}", "────────────", ""]
         if not res:
             lines.append("현재 기준 통과 후보 없음.")
         for i,r in enumerate(res,1):
@@ -4843,7 +4904,7 @@ async def datastatus_cmd(update, context):
     ok, reason, b = v451_gate()
     c = V45_API_STATE["coinglass"]
     await update.message.reply_text(
-        "📦 <b>A100 v46 데이터 상태</b>\n"
+        "📦 <b>A100 v47 데이터 상태</b>\n"
         f"안전모드: {'✅ 해제' if ok else '⛔ 활성'}\n"
         f"차단원인: {reason or '-'}\n"
         f"Binance ticker: {len(b.get('ticker') or [])}개\n"
