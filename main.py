@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v73 PERSISTENT PERFORMANCE ENGINE worker running...", flush=True)
+    print("A100 v75 HYBRID LEARNING ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -17284,6 +17284,1210 @@ def build_v44_application(token):
         ("history", history_cmd), ("stats", stats_cmd), ("ticker", ticker_cmd),
         ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
         ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd)
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v74 POSTGRES PERFORMANCE ENGINE =====
+# 핵심 반영
+# - Railway PostgreSQL DATABASE_URL 자동 감지
+# - 재배포/재시작 후 성과, 진행 중 신호, 승격 이벤트 영구 보존
+# - 기존 JSON/Volume 기록을 PostgreSQL로 자동 마이그레이션
+# - PostgreSQL 장애 시 V73 JSON 저장소로 자동 폴백
+# - /dbstatus /dbtest /dbsync 명령 추가
+V74_VERSION = "A100 v74 POSTGRES PERFORMANCE ENGINE"
+
+V74_DATABASE_URL = (
+    os.getenv("DATABASE_URL")
+    or os.getenv("POSTGRES_URL")
+    or os.getenv("DATABASE_PUBLIC_URL")
+    or os.getenv("POSTGRES_PRIVATE_URL")
+    or ""
+).strip()
+
+V74_DB_ENABLED = os.getenv("V74_DB_ENABLED", "1").strip() == "1"
+V74_DB_CONNECT_TIMEOUT = int(os.getenv("V74_DB_CONNECT_TIMEOUT", "12"))
+V74_DB_SSLMODE = os.getenv("V74_DB_SSLMODE", "").strip()
+V74_DB_SCHEMA = os.getenv("V74_DB_SCHEMA", "public").strip() or "public"
+V74_DB_SNAPSHOT_KEY = os.getenv("V74_DB_SNAPSHOT_KEY", "a100_v74_performance").strip()
+V74_DB_EVENT_LIMIT = int(os.getenv("V74_DB_EVENT_LIMIT", "5000"))
+V74_DB_AUTO_MIGRATE = os.getenv("V74_DB_AUTO_MIGRATE", "1").strip() == "1"
+
+V74_DB_LOCK = threading.RLock()
+V74_DB_READY = False
+V74_DB_DRIVER = "-"
+V74_DB_LAST_ERROR = ""
+V74_DB_LAST_SAVE = 0.0
+V74_DB_LAST_LOAD = 0.0
+
+def _v74_set_error(error):
+    global V74_DB_LAST_ERROR
+    V74_DB_LAST_ERROR = str(error)[:500]
+    log(f"v74 postgres: {V74_DB_LAST_ERROR}")
+
+def v74_database_configured():
+    return bool(V74_DB_ENABLED and V74_DATABASE_URL)
+
+def v74_safe_identifier(value):
+    value = "".join(ch for ch in str(value) if ch.isalnum() or ch == "_")
+    return value or "public"
+
+def v74_connection_url():
+    if not V74_DATABASE_URL:
+        return ""
+    url = V74_DATABASE_URL
+    if V74_DB_SSLMODE and "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode={V74_DB_SSLMODE}"
+    return url
+
+def v74_get_driver():
+    global V74_DB_DRIVER
+
+    try:
+        import psycopg
+        V74_DB_DRIVER = "psycopg3"
+        return "psycopg3", psycopg
+    except Exception:
+        pass
+
+    try:
+        import psycopg2
+        V74_DB_DRIVER = "psycopg2"
+        return "psycopg2", psycopg2
+    except Exception as error:
+        V74_DB_DRIVER = "missing"
+        raise RuntimeError(
+            "PostgreSQL 드라이버가 없습니다. requirements.txt에 "
+            "psycopg[binary]>=3.1 을 추가하세요."
+        ) from error
+
+def v74_connect():
+    driver_name, driver = v74_get_driver()
+    url = v74_connection_url()
+    if not url:
+        raise RuntimeError("DATABASE_URL이 등록되지 않았습니다.")
+
+    if driver_name == "psycopg3":
+        return driver.connect(
+            url,
+            connect_timeout=V74_DB_CONNECT_TIMEOUT,
+            autocommit=False,
+        )
+
+    return driver.connect(
+        url,
+        connect_timeout=V74_DB_CONNECT_TIMEOUT,
+    )
+
+def v74_db_execute(connection, sql, params=None, fetchone=False, fetchall=False):
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params or ())
+        if fetchone:
+            return cursor.fetchone()
+        if fetchall:
+            return cursor.fetchall()
+    return None
+
+def v74_initialize_database():
+    global V74_DB_READY
+
+    if not v74_database_configured():
+        V74_DB_READY = False
+        return False
+
+    schema = v74_safe_identifier(V74_DB_SCHEMA)
+
+    try:
+        with V74_DB_LOCK:
+            connection = v74_connect()
+            try:
+                v74_db_execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+
+                v74_db_execute(
+                    connection,
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {schema}.a100_state (
+                        state_key TEXT PRIMARY KEY,
+                        payload JSONB NOT NULL,
+                        version TEXT NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+
+                v74_db_execute(
+                    connection,
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {schema}.a100_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        event_type TEXT NOT NULL,
+                        symbol TEXT,
+                        side TEXT,
+                        payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+
+                v74_db_execute(
+                    connection,
+                    f"""
+                    CREATE INDEX IF NOT EXISTS idx_a100_events_created_at
+                    ON {schema}.a100_events (created_at DESC)
+                    """
+                )
+
+                v74_db_execute(
+                    connection,
+                    f"""
+                    CREATE INDEX IF NOT EXISTS idx_a100_events_symbol
+                    ON {schema}.a100_events (symbol, created_at DESC)
+                    """
+                )
+
+                connection.commit()
+                V74_DB_READY = True
+                return True
+            finally:
+                connection.close()
+
+    except Exception as error:
+        V74_DB_READY = False
+        _v74_set_error(error)
+        return False
+
+def v74_snapshot_payload():
+    return {
+        "open": V72_PERFORMANCE.get("open") or {},
+        "closed": V72_PERFORMANCE.get("closed") or [],
+        "signal_state": V72_SIGNAL_STATE,
+        "meta": {
+            "version": V74_VERSION,
+            "saved_at": time.time(),
+            "source": "postgres",
+        },
+    }
+
+def v74_save_postgres(force=False):
+    global V74_DB_LAST_SAVE
+
+    if not v74_database_configured():
+        return False
+
+    if not V74_DB_READY and not v74_initialize_database():
+        return False
+
+    import json
+
+    schema = v74_safe_identifier(V74_DB_SCHEMA)
+    payload = json.dumps(v74_snapshot_payload(), ensure_ascii=False)
+
+    try:
+        with V74_DB_LOCK:
+            connection = v74_connect()
+            try:
+                v74_db_execute(
+                    connection,
+                    f"""
+                    INSERT INTO {schema}.a100_state
+                        (state_key, payload, version, updated_at)
+                    VALUES (%s, %s::jsonb, %s, NOW())
+                    ON CONFLICT (state_key)
+                    DO UPDATE SET
+                        payload = EXCLUDED.payload,
+                        version = EXCLUDED.version,
+                        updated_at = NOW()
+                    """,
+                    (V74_DB_SNAPSHOT_KEY, payload, V74_VERSION),
+                )
+                connection.commit()
+                V74_DB_LAST_SAVE = time.time()
+                return True
+            finally:
+                connection.close()
+
+    except Exception as error:
+        _v74_set_error(error)
+        return False
+
+def v74_load_postgres():
+    global V72_PERFORMANCE, V72_SIGNAL_STATE, V74_DB_LAST_LOAD
+
+    if not v74_database_configured():
+        return False
+
+    if not V74_DB_READY and not v74_initialize_database():
+        return False
+
+    schema = v74_safe_identifier(V74_DB_SCHEMA)
+
+    try:
+        with V74_DB_LOCK:
+            connection = v74_connect()
+            try:
+                row = v74_db_execute(
+                    connection,
+                    f"""
+                    SELECT payload
+                    FROM {schema}.a100_state
+                    WHERE state_key = %s
+                    """,
+                    (V74_DB_SNAPSHOT_KEY,),
+                    fetchone=True,
+                )
+            finally:
+                connection.close()
+
+        if not row:
+            return False
+
+        payload = row[0]
+        if isinstance(payload, str):
+            import json
+            payload = json.loads(payload)
+
+        if not isinstance(payload, dict):
+            return False
+
+        V72_PERFORMANCE = {
+            "open": payload.get("open") or {},
+            "closed": payload.get("closed") or [],
+        }
+        V72_SIGNAL_STATE = payload.get("signal_state") or {}
+        V74_DB_LAST_LOAD = time.time()
+        return True
+
+    except Exception as error:
+        _v74_set_error(error)
+        return False
+
+def v74_record_event(event_type, symbol="", side="", payload=None):
+    if not v74_database_configured():
+        return False
+
+    if not V74_DB_READY and not v74_initialize_database():
+        return False
+
+    import json
+
+    schema = v74_safe_identifier(V74_DB_SCHEMA)
+    data = json.dumps(payload or {}, ensure_ascii=False)
+
+    try:
+        with V74_DB_LOCK:
+            connection = v74_connect()
+            try:
+                v74_db_execute(
+                    connection,
+                    f"""
+                    INSERT INTO {schema}.a100_events
+                        (event_type, symbol, side, payload)
+                    VALUES (%s, %s, %s, %s::jsonb)
+                    """,
+                    (str(event_type), str(symbol), str(side), data),
+                )
+
+                # 이벤트 테이블 무한 증가 방지
+                v74_db_execute(
+                    connection,
+                    f"""
+                    DELETE FROM {schema}.a100_events
+                    WHERE id IN (
+                        SELECT id
+                        FROM {schema}.a100_events
+                        ORDER BY created_at DESC
+                        OFFSET %s
+                    )
+                    """,
+                    (max(100, V74_DB_EVENT_LIMIT),),
+                )
+
+                connection.commit()
+                return True
+            finally:
+                connection.close()
+
+    except Exception as error:
+        _v74_set_error(error)
+        return False
+
+def v74_migrate_json_to_postgres():
+    if not V74_DB_AUTO_MIGRATE or not v74_database_configured():
+        return False
+
+    if not v74_initialize_database():
+        return False
+
+    # DB에 기존 스냅샷이 있으면 덮어쓰지 않는다.
+    if v74_load_postgres():
+        return True
+
+    # V73 JSON/Volume 데이터를 메모리에 불러온 뒤 DB로 최초 저장
+    try:
+        loaded = v73_load_performance()
+        if loaded:
+            ok = v74_save_postgres(force=True)
+            if ok:
+                v74_record_event(
+                    "MIGRATION",
+                    payload={
+                        "from": loaded,
+                        "to": "postgres",
+                        "version": V74_VERSION,
+                    },
+                )
+            return ok
+    except Exception as error:
+        _v74_set_error(error)
+
+    return False
+
+# 기존 성과 저장 인터페이스를 PostgreSQL 우선 방식으로 교체
+def v72_save_performance():
+    if v74_save_postgres():
+        return True
+    return v73_save_performance(force=True)
+
+def v72_load_performance():
+    if v74_load_postgres():
+        return "postgres"
+    return v73_load_performance()
+
+def v74_performance_event_from_closed(signal):
+    try:
+        return v74_record_event(
+            "SIGNAL_CLOSED",
+            symbol=signal.get("symbol", ""),
+            side=signal.get("side", ""),
+            payload=signal,
+        )
+    except Exception:
+        return False
+
+# 기존 성과 업데이트를 감싸 종료 이벤트까지 DB에 저장
+_v74_original_update_performance = v72_update_performance
+
+def v72_update_performance(results):
+    closed = _v74_original_update_performance(results)
+    for signal in closed:
+        v74_performance_event_from_closed(signal)
+    if closed:
+        v72_save_performance()
+    return closed
+
+# 기존 신호 등록을 감싸 신규 진입 이벤트 저장
+_v74_original_register_signal = v72_register_signal
+
+def v72_register_signal(r, decision):
+    sym = str(getattr(r, "sym", "?")).upper()
+    side = "SHORT" if "SHORT" in str(decision) else "LONG"
+    key = v72_signal_key(sym, side)
+    existed = key in V72_PERFORMANCE.get("open", {})
+
+    _v74_original_register_signal(r, decision)
+
+    created = not existed and key in V72_PERFORMANCE.get("open", {})
+    if created:
+        v74_record_event(
+            "SIGNAL_OPENED",
+            symbol=sym,
+            side=side,
+            payload=V72_PERFORMANCE["open"].get(key) or {},
+        )
+        v72_save_performance()
+
+# WATCH 승격 모니터에서 발생한 상태도 이벤트로 영구 저장
+_v74_original_monitor_once = v72_monitor_once
+
+def v72_monitor_once():
+    before = {
+        symbol: dict(value)
+        for symbol, value in V72_SIGNAL_STATE.items()
+    }
+
+    _v74_original_monitor_once()
+
+    for symbol, current in V72_SIGNAL_STATE.items():
+        previous = before.get(symbol)
+        if not previous:
+            continue
+
+        previous_decision = previous.get("decision")
+        current_decision = current.get("decision")
+
+        promoted = (
+            previous_decision in ("🟡 WAIT", "🟢 WATCH+ LONG", "🔴 WATCH+ SHORT")
+            and current_decision in (
+                "🟢 STRONG LONG", "🔵 LONG",
+                "🔴 STRONG SHORT", "🟠 SHORT",
+            )
+        )
+
+        if promoted:
+            side = "SHORT" if "SHORT" in current_decision else "LONG"
+            v74_record_event(
+                "WATCH_PROMOTED",
+                symbol=symbol,
+                side=side,
+                payload={
+                    "previous": previous,
+                    "current": current,
+                },
+            )
+
+    v72_save_performance()
+
+def v74_mask_database_url():
+    url = V74_DATABASE_URL
+    if not url:
+        return "-"
+    try:
+        from urllib.parse import urlsplit
+        parsed = urlsplit(url)
+        host = parsed.hostname or "-"
+        port = f":{parsed.port}" if parsed.port else ""
+        database = parsed.path or ""
+        return f"{parsed.scheme}://***@{host}{port}{database}"
+    except Exception:
+        return "configured"
+
+def v74_database_stats():
+    if not v74_database_configured():
+        return {"state": 0, "events": 0}
+
+    if not V74_DB_READY and not v74_initialize_database():
+        return {"state": 0, "events": 0}
+
+    schema = v74_safe_identifier(V74_DB_SCHEMA)
+
+    try:
+        connection = v74_connect()
+        try:
+            state_row = v74_db_execute(
+                connection,
+                f"SELECT COUNT(*) FROM {schema}.a100_state",
+                fetchone=True,
+            )
+            event_row = v74_db_execute(
+                connection,
+                f"SELECT COUNT(*) FROM {schema}.a100_events",
+                fetchone=True,
+            )
+            return {
+                "state": int(state_row[0]) if state_row else 0,
+                "events": int(event_row[0]) if event_row else 0,
+            }
+        finally:
+            connection.close()
+    except Exception as error:
+        _v74_set_error(error)
+        return {"state": 0, "events": 0}
+
+async def dbstatus_cmd(update, context):
+    configured = v74_database_configured()
+    ready = v74_initialize_database() if configured else False
+    stats = v74_database_stats() if ready else {"state": 0, "events": 0}
+    perf = v72_performance_stats()
+
+    await update.message.reply_text(
+        "🗄 <b>A100 v74 PostgreSQL 상태</b>\n"
+        f"DATABASE_URL: {'✅ 등록' if V74_DATABASE_URL else '⛔ 미등록'}\n"
+        f"DB 사용: {'✅ 활성' if V74_DB_ENABLED else '⛔ 비활성'}\n"
+        f"연결상태: {'✅ 정상' if ready else '⛔ 실패'}\n"
+        f"드라이버: <b>{_v54_escape(V74_DB_DRIVER)}</b>\n"
+        f"주소: <code>{_v54_escape(v74_mask_database_url())}</code>\n"
+        f"스키마: <code>{_v54_escape(V74_DB_SCHEMA)}</code>\n"
+        f"스냅샷: {stats['state']}개\n"
+        f"이벤트: {stats['events']}개\n"
+        f"완료신호: {perf['total']}회 / 추적중: {perf['open']}개\n"
+        f"마지막 저장: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(V74_DB_LAST_SAVE)) if V74_DB_LAST_SAVE else '-'}\n"
+        f"최근 오류: <code>{_v54_escape(V74_DB_LAST_ERROR or '-')}</code>\n"
+        f"재배포 유지: {'✅ PostgreSQL' if ready else '⚠ JSON 폴백'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+async def dbtest_cmd(update, context):
+    started = time.time()
+    ready = v74_initialize_database()
+    elapsed = int((time.time() - started) * 1000)
+
+    if ready:
+        await update.message.reply_text(
+            "✅ <b>PostgreSQL 연결 성공</b>\n"
+            f"응답시간: {elapsed}ms\n"
+            f"드라이버: {_v54_escape(V74_DB_DRIVER)}\n"
+            f"스키마: {_v54_escape(V74_DB_SCHEMA)}",
+            parse_mode="HTML",
+        )
+    else:
+        await update.message.reply_text(
+            "⛔ <b>PostgreSQL 연결 실패</b>\n"
+            f"오류: <code>{_v54_escape(V74_DB_LAST_ERROR or 'DATABASE_URL 확인 필요')}</code>",
+            parse_mode="HTML",
+        )
+
+async def dbsync_cmd(update, context):
+    if not v74_database_configured():
+        await update.message.reply_text(
+            "⛔ DATABASE_URL이 없습니다.\nRailway에서 PostgreSQL 서비스를 먼저 추가하세요."
+        )
+        return
+
+    saved = v74_save_postgres(force=True)
+    loaded = v74_load_postgres() if saved else False
+    stats = v72_performance_stats()
+
+    await update.message.reply_text(
+        "🔄 <b>PostgreSQL 동기화</b>\n"
+        f"저장: {'✅ 성공' if saved else '⛔ 실패'}\n"
+        f"재확인: {'✅ 성공' if loaded else '⛔ 실패'}\n"
+        f"완료신호: {stats['total']}회\n"
+        f"추적중: {stats['open']}개\n"
+        f"오류: <code>{_v54_escape(V74_DB_LAST_ERROR or '-')}</code>",
+        parse_mode="HTML",
+    )
+
+async def dbevents_cmd(update, context):
+    limit = 10
+    if context.args:
+        try:
+            limit = max(1, min(30, int(context.args[0])))
+        except Exception:
+            pass
+
+    if not v74_database_configured() or not v74_initialize_database():
+        await update.message.reply_text("PostgreSQL 연결이 필요합니다.")
+        return
+
+    schema = v74_safe_identifier(V74_DB_SCHEMA)
+
+    try:
+        connection = v74_connect()
+        try:
+            rows = v74_db_execute(
+                connection,
+                f"""
+                SELECT event_type, symbol, side, created_at
+                FROM {schema}.a100_events
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+                fetchall=True,
+            )
+        finally:
+            connection.close()
+
+        lines = ["📚 <b>최근 DB 이벤트</b>"]
+        for event_type, symbol, side, created_at in rows or []:
+            lines.append(
+                f"• {_v54_escape(event_type)} · "
+                f"{_v54_escape(symbol or '-')} · {_v54_escape(side or '-')} · "
+                f"{_v54_escape(str(created_at)[:19])}"
+            )
+
+        if not rows:
+            lines.append("기록 없음")
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+        )
+    except Exception as error:
+        await update.message.reply_text(
+            f"dbevents 오류: {_v54_escape(error)}",
+            parse_mode="HTML",
+        )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    mode = b.get("mode") or "COINGLASS_ONLY"
+    perf = v72_performance_stats()
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+
+    await update.message.reply_text(
+        "📦 <b>A100 v74 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"데이터 모드: <b>{_v54_escape(mode)}</b>\n"
+        f"Binance ticker: {len(b.get('ticker') or [])}개\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ JSON 폴백'}\n"
+        f"DB 드라이버: {_v54_escape(V74_DB_DRIVER)}\n"
+        f"성과 영구저장: {'✅ 활성' if db_ready else '⚠ 폴백 저장'}\n"
+        f"승격 이벤트 영구저장: {'✅ 활성' if db_ready else '⛔ 비활성'}\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        f"자동 승격감시: {'활성' if V72_MONITOR_ENABLED else '비활성'}\n"
+        f"명령어: /dbstatus /dbtest /dbsync /dbevents\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+def v74_startup_database():
+    if not v74_database_configured():
+        log("v74 DATABASE_URL missing; using JSON fallback")
+        return False
+
+    if V74_DB_AUTO_MIGRATE:
+        migrated = v74_migrate_json_to_postgres()
+        if migrated:
+            log("v74 postgres loaded/migrated")
+            return True
+
+    if v74_initialize_database():
+        v74_load_postgres()
+        return True
+
+    return False
+
+def build_v44_application(token):
+    v74_startup_database()
+    v72_start_monitor()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monitorstatus", monitorstatus_cmd), ("storagestatus", storagestatus_cmd),
+        ("saveperformance", saveperformance_cmd), ("restoreperformance", restoreperformance_cmd),
+        ("dbstatus", dbstatus_cmd), ("dbtest", dbtest_cmd), ("dbsync", dbsync_cmd),
+        ("dbevents", dbevents_cmd), ("chart", chart_cmd), ("fast", fast_cmd),
+        ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd), ("deep", deep_cmd),
+        ("cache", cache_cmd), ("quick", quick_cmd), ("speed", speedstatus_cmd),
+        ("report", report_cmd), ("history", history_cmd), ("stats", stats_cmd),
+        ("ticker", ticker_cmd), ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v75 HYBRID LEARNING ENGINE =====
+# 핵심 반영
+# - PostgreSQL + Railway Volume 이중 저장
+# - DB 저장 실패 시 /data 자동 백업, DB 복구 시 자동 재동기화
+# - 월간 LONG/SHORT 성과
+# - TP1/TP2/SL/RR/연승/최대연패 통계
+# - 성공/실패 패턴 기반 적응형 가중치
+# - 최근 성과 기반 LONG/SHORT 보정점수
+# - /monthly /learning /hybridstatus /resync 명령 추가
+V75_VERSION = "A100 v75 HYBRID LEARNING ENGINE"
+
+V75_DATA_DIR = os.getenv("V75_DATA_DIR", "/data")
+V75_BACKUP_FILE = os.getenv(
+    "V75_BACKUP_FILE",
+    os.path.join(V75_DATA_DIR, "a100_v75_hybrid_backup.json"),
+)
+V75_LEARNING_FILE = os.getenv(
+    "V75_LEARNING_FILE",
+    os.path.join(V75_DATA_DIR, "a100_v75_learning.json"),
+)
+V75_AUTO_RESYNC = os.getenv("V75_AUTO_RESYNC", "1").strip() == "1"
+V75_LEARNING_ENABLED = os.getenv("V75_LEARNING_ENABLED", "1").strip() == "1"
+V75_MIN_LEARNING_SAMPLES = int(os.getenv("V75_MIN_LEARNING_SAMPLES", "8"))
+V75_MAX_BONUS = float(os.getenv("V75_MAX_BONUS", "6"))
+V75_WEIGHT_STEP = float(os.getenv("V75_WEIGHT_STEP", "0.35"))
+
+V75_LOCK = threading.RLock()
+V75_LEARNING = {
+    "LONG": {"samples": 0, "wins": 0, "losses": 0, "bonus": 0.0},
+    "SHORT": {"samples": 0, "wins": 0, "losses": 0, "bonus": 0.0},
+}
+V75_LAST_RESYNC = 0.0
+
+def _v75_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def v75_ensure_data_dir():
+    try:
+        os.makedirs(V75_DATA_DIR, exist_ok=True)
+        return True
+    except Exception as e:
+        log(f"v75 data dir: {e}")
+        return False
+
+def v75_atomic_json_write(path, data):
+    import json
+    folder = os.path.dirname(path)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except Exception:
+            pass
+    os.replace(tmp, path)
+
+def v75_save_learning():
+    try:
+        with V75_LOCK:
+            v75_atomic_json_write(V75_LEARNING_FILE, {
+                "version": V75_VERSION,
+                "saved_at": time.time(),
+                "learning": V75_LEARNING,
+            })
+        return True
+    except Exception as e:
+        log(f"v75 save learning: {e}")
+        return False
+
+def v75_load_learning():
+    import json
+    global V75_LEARNING
+    try:
+        if not os.path.exists(V75_LEARNING_FILE):
+            return False
+        with open(V75_LEARNING_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        learning = data.get("learning") if isinstance(data, dict) else None
+        if isinstance(learning, dict):
+            for side in ("LONG", "SHORT"):
+                if side in learning and isinstance(learning[side], dict):
+                    V75_LEARNING[side].update(learning[side])
+            return True
+    except Exception as e:
+        log(f"v75 load learning: {e}")
+    return False
+
+def v75_hybrid_snapshot():
+    return {
+        "version": V75_VERSION,
+        "saved_at": time.time(),
+        "performance": {
+            "open": V72_PERFORMANCE.get("open") or {},
+            "closed": V72_PERFORMANCE.get("closed") or [],
+        },
+        "signal_state": V72_SIGNAL_STATE,
+        "learning": V75_LEARNING,
+    }
+
+def v75_save_volume_backup():
+    try:
+        v75_ensure_data_dir()
+        v75_atomic_json_write(V75_BACKUP_FILE, v75_hybrid_snapshot())
+        return True
+    except Exception as e:
+        log(f"v75 volume backup save: {e}")
+        return False
+
+def v75_load_volume_backup():
+    import json
+    global V72_PERFORMANCE, V72_SIGNAL_STATE, V75_LEARNING
+    try:
+        if not os.path.exists(V75_BACKUP_FILE):
+            return False
+        with open(V75_BACKUP_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        perf = data.get("performance") or {}
+        V72_PERFORMANCE = {
+            "open": perf.get("open") or {},
+            "closed": perf.get("closed") or [],
+        }
+        V72_SIGNAL_STATE = data.get("signal_state") or {}
+        learning = data.get("learning")
+        if isinstance(learning, dict):
+            for side in ("LONG", "SHORT"):
+                if isinstance(learning.get(side), dict):
+                    V75_LEARNING[side].update(learning[side])
+        return True
+    except Exception as e:
+        log(f"v75 volume backup load: {e}")
+        return False
+
+def v75_save_hybrid(force=False):
+    volume_ok = v75_save_volume_backup()
+    db_ok = v74_save_postgres(force=force)
+    if V75_LEARNING_ENABLED:
+        v75_save_learning()
+    return db_ok or volume_ok
+
+def v75_load_hybrid():
+    db_ok = v74_load_postgres()
+    if db_ok:
+        v75_load_learning()
+        v75_save_volume_backup()
+        return "postgres"
+
+    if v75_load_volume_backup():
+        return "volume"
+
+    if v73_load_performance():
+        v75_save_volume_backup()
+        return "legacy-json"
+
+    return "empty"
+
+def v75_outcome_is_win(outcome):
+    return str(outcome) in ("TP2", "SL_AFTER_TP1")
+
+def v75_rebuild_learning():
+    global V75_LEARNING
+    result = {
+        "LONG": {"samples": 0, "wins": 0, "losses": 0, "bonus": 0.0},
+        "SHORT": {"samples": 0, "wins": 0, "losses": 0, "bonus": 0.0},
+    }
+
+    for row in V72_PERFORMANCE.get("closed") or []:
+        side = str(row.get("side") or "").upper()
+        if side not in result:
+            continue
+        result[side]["samples"] += 1
+        if v75_outcome_is_win(row.get("outcome")):
+            result[side]["wins"] += 1
+        else:
+            result[side]["losses"] += 1
+
+    for side in ("LONG", "SHORT"):
+        samples = result[side]["samples"]
+        if samples >= V75_MIN_LEARNING_SAMPLES:
+            win_rate = result[side]["wins"] / max(1, samples)
+            bonus = (win_rate - 0.5) * 2.0 * V75_MAX_BONUS
+            result[side]["bonus"] = round(max(-V75_MAX_BONUS, min(V75_MAX_BONUS, bonus)), 2)
+
+    V75_LEARNING = result
+    v75_save_learning()
+    return result
+
+def v75_learning_bonus(side):
+    if not V75_LEARNING_ENABLED:
+        return 0.0
+    side = str(side).upper()
+    return _v75_float((V75_LEARNING.get(side) or {}).get("bonus"))
+
+def v75_adjusted_long_score(r):
+    return round(_v72_clip(v68_long_score(r) + v75_learning_bonus("LONG")), 1)
+
+def v75_adjusted_short_score(r):
+    return round(_v72_clip(v68_short_score(r) + v75_learning_bonus("SHORT")), 1)
+
+def v75_adjusted_decision(r):
+    long_score = v75_adjusted_long_score(r)
+    short_score = v75_adjusted_short_score(r)
+    edge = round(abs(long_score - short_score), 1)
+
+    # 기존 안전필터 유지
+    squeeze = v68_short_squeeze_risk(r)
+    chase_short = v68_chase_short_risk(r)
+    long_overheat = v69_long_overheat_risk(r)
+    risk = _v75_float(v60_risk_score(r))
+    long_pos = v63_entry_position(r)
+
+    if max(long_score, short_score) >= V69_WATCH_SIGNAL and edge < V69_MIN_EDGE:
+        return "🟡 WAIT", long_score, short_score, edge
+
+    long_allowed = (
+        risk <= V68_MAX_RISK
+        and long_pos["status"] != "🔴 추격금지"
+        and long_overheat < 78
+    )
+    short_allowed = (
+        risk <= V68_MAX_RISK
+        and squeeze < V68_SHORT_SQUEEZE_BLOCK
+        and chase_short < 60
+    )
+
+    if long_score >= V69_STRONG_SIGNAL and edge >= V69_STRONG_EDGE and long_allowed:
+        return "🟢 STRONG LONG", long_score, short_score, edge
+    if short_score >= V69_STRONG_SIGNAL and edge >= V69_STRONG_EDGE and short_allowed:
+        return "🔴 STRONG SHORT", long_score, short_score, edge
+    if long_score >= V69_BUY_SIGNAL and edge >= V69_MIN_EDGE and long_allowed:
+        return "🔵 LONG", long_score, short_score, edge
+    if short_score >= V69_BUY_SIGNAL and edge >= V69_MIN_EDGE and short_allowed:
+        return "🟠 SHORT", long_score, short_score, edge
+    if max(long_score, short_score) >= V70_WATCH_PLUS_SCORE and edge >= V70_WATCH_PLUS_EDGE:
+        if long_score > short_score:
+            return "🟢 WATCH+ LONG", long_score, short_score, edge
+        return "🔴 WATCH+ SHORT", long_score, short_score, edge
+    if max(long_score, short_score) >= V69_WATCH_SIGNAL:
+        return "🟡 WAIT", long_score, short_score, edge
+    return "⚫ SKIP", long_score, short_score, edge
+
+def v75_monthly_rows(year=None, month=None):
+    now = time.localtime()
+    year = int(year or now.tm_year)
+    month = int(month or now.tm_mon)
+    rows = []
+
+    for row in V72_PERFORMANCE.get("closed") or []:
+        ts = _v75_float(row.get("closed_at") or row.get("opened_at"))
+        if ts <= 0:
+            continue
+        dt = time.localtime(ts)
+        if dt.tm_year == year and dt.tm_mon == month:
+            rows.append(row)
+
+    return year, month, rows
+
+def v75_monthly_stats(year=None, month=None):
+    year, month, rows = v75_monthly_rows(year, month)
+
+    def side_stats(side):
+        subset = [r for r in rows if str(r.get("side")).upper() == side]
+        total = len(subset)
+        wins = sum(1 for r in subset if v75_outcome_is_win(r.get("outcome")))
+        losses = total - wins
+        tp2 = sum(1 for r in subset if r.get("outcome") == "TP2")
+        partial = sum(1 for r in subset if r.get("outcome") == "SL_AFTER_TP1")
+        win_rate = round(wins / total * 100, 1) if total else 0.0
+        return {
+            "total": total, "wins": wins, "losses": losses,
+            "tp2": tp2, "partial": partial, "win_rate": win_rate,
+        }
+
+    overall = side_stats("LONG")
+    short = side_stats("SHORT")
+    all_total = len(rows)
+    all_wins = sum(1 for r in rows if v75_outcome_is_win(r.get("outcome")))
+    all_losses = all_total - all_wins
+    all_rate = round(all_wins / all_total * 100, 1) if all_total else 0.0
+
+    streak = 0
+    best_streak = 0
+    loss_streak = 0
+    worst_loss_streak = 0
+    for row in sorted(rows, key=lambda r: _v75_float(r.get("closed_at"))):
+        if v75_outcome_is_win(row.get("outcome")):
+            streak += 1
+            loss_streak = 0
+        else:
+            loss_streak += 1
+            streak = 0
+        best_streak = max(best_streak, streak)
+        worst_loss_streak = max(worst_loss_streak, loss_streak)
+
+    rr_values = []
+    for row in rows:
+        entry = _v75_float(row.get("entry"))
+        stop = _v75_float(row.get("stop"))
+        tp2 = _v75_float(row.get("tp2"))
+        side = str(row.get("side")).upper()
+        risk = abs(entry - stop)
+        reward = abs(tp2 - entry)
+        if risk > 0:
+            rr_values.append(reward / risk)
+
+    avg_rr = round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0
+
+    return {
+        "year": year,
+        "month": month,
+        "long": overall,
+        "short": short,
+        "total": all_total,
+        "wins": all_wins,
+        "losses": all_losses,
+        "win_rate": all_rate,
+        "avg_rr": avg_rr,
+        "best_streak": best_streak,
+        "worst_loss_streak": worst_loss_streak,
+    }
+
+def v75_sync_volume_to_db():
+    global V75_LAST_RESYNC
+    if not v75_load_volume_backup():
+        return False
+    ok = v74_save_postgres(force=True)
+    if ok:
+        V75_LAST_RESYNC = time.time()
+        v74_record_event("HYBRID_RESYNC", payload={"source": "volume", "version": V75_VERSION})
+    return ok
+
+# 기존 저장 인터페이스를 하이브리드 저장으로 교체
+def v72_save_performance():
+    return v75_save_hybrid(force=True)
+
+def v72_load_performance():
+    return v75_load_hybrid()
+
+# 성과 종료 시 학습값 재계산
+_v75_original_update_performance = v72_update_performance
+
+def v72_update_performance(results):
+    closed = _v75_original_update_performance(results)
+    if closed:
+        v75_rebuild_learning()
+        v75_save_hybrid(force=True)
+    return closed
+
+async def monthly_cmd(update, context):
+    year = None
+    month = None
+
+    if context.args:
+        token = context.args[0]
+        try:
+            if "-" in token:
+                y, m = token.split("-", 1)
+                year, month = int(y), int(m)
+            else:
+                month = int(token)
+        except Exception:
+            pass
+
+    stats = v75_monthly_stats(year, month)
+
+    await update.message.reply_text(
+        "📅 <b>A100 월간 성과</b>\n"
+        f"기간: <b>{stats['year']}년 {stats['month']}월</b>\n\n"
+        f"🟢 LONG\n"
+        f"거래 {stats['long']['total']}회 · 승률 <b>{stats['long']['win_rate']}%</b>\n"
+        f"성공 {stats['long']['wins']} · 실패 {stats['long']['losses']}\n\n"
+        f"🔴 SHORT\n"
+        f"거래 {stats['short']['total']}회 · 승률 <b>{stats['short']['win_rate']}%</b>\n"
+        f"성공 {stats['short']['wins']} · 실패 {stats['short']['losses']}\n\n"
+        f"📊 전체\n"
+        f"거래 {stats['total']}회 · 승률 <b>{stats['win_rate']}%</b>\n"
+        f"평균 RR <b>{stats['avg_rr']}</b>\n"
+        f"최고 연승 <b>{stats['best_streak']}</b>\n"
+        f"최대 연패 <b>{stats['worst_loss_streak']}</b>",
+        parse_mode="HTML"
+    )
+
+async def learning_cmd(update, context):
+    data = v75_rebuild_learning()
+
+    await update.message.reply_text(
+        "🧠 <b>A100 적응형 학습 상태</b>\n"
+        f"학습기능: {'✅ 활성' if V75_LEARNING_ENABLED else '⛔ 비활성'}\n"
+        f"최소 표본: {V75_MIN_LEARNING_SAMPLES}회\n\n"
+        f"🟢 LONG\n"
+        f"표본 {data['LONG']['samples']} · 성공 {data['LONG']['wins']} · 실패 {data['LONG']['losses']}\n"
+        f"보정점수 <b>{data['LONG']['bonus']:+.2f}</b>\n\n"
+        f"🔴 SHORT\n"
+        f"표본 {data['SHORT']['samples']} · 성공 {data['SHORT']['wins']} · 실패 {data['SHORT']['losses']}\n"
+        f"보정점수 <b>{data['SHORT']['bonus']:+.2f}</b>\n\n"
+        f"설명: 최근 실제 성과에 따라 LONG/SHORT 점수에 최대 ±{V75_MAX_BONUS}점 보정",
+        parse_mode="HTML"
+    )
+
+async def hybridstatus_cmd(update, context):
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+    volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+    backup_exists = os.path.exists(V75_BACKUP_FILE)
+    backup_size = os.path.getsize(V75_BACKUP_FILE) if backup_exists else 0
+    perf = v72_performance_stats()
+
+    await update.message.reply_text(
+        "🔐 <b>A100 v75 하이브리드 저장상태</b>\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 비활성/실패'}\n"
+        f"Railway Volume: {'✅ 쓰기 가능' if volume_ok else '⛔ 쓰기 불가'}\n"
+        f"백업파일: <code>{_v54_escape(V75_BACKUP_FILE)}</code>\n"
+        f"백업존재: {'✅ 예' if backup_exists else '⚠ 아니오'}\n"
+        f"백업크기: {backup_size:,} bytes\n"
+        f"완료신호: {perf['total']}회\n"
+        f"추적중: {perf['open']}개\n"
+        f"자동 재동기화: {'✅ 활성' if V75_AUTO_RESYNC else '⛔ 비활성'}\n"
+        f"마지막 재동기화: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(V75_LAST_RESYNC)) if V75_LAST_RESYNC else '-'}\n"
+        f"보존 방식: {'DB + Volume 이중저장' if db_ready and volume_ok else 'Volume 우선 폴백'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+async def resync_cmd(update, context):
+    if not os.path.exists(V75_BACKUP_FILE):
+        await update.message.reply_text("Volume 백업파일이 없습니다.")
+        return
+
+    if not v74_database_configured():
+        await update.message.reply_text("DATABASE_URL이 등록되지 않았습니다.")
+        return
+
+    ok = v75_sync_volume_to_db()
+    await update.message.reply_text(
+        "🔄 <b>Volume → PostgreSQL 재동기화</b>\n"
+        f"결과: {'✅ 성공' if ok else '⛔ 실패'}\n"
+        f"오류: <code>{_v54_escape(V74_DB_LAST_ERROR or '-')}</code>",
+        parse_mode="HTML"
+    )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    perf = v72_performance_stats()
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+    volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+
+    await update.message.reply_text(
+        "📦 <b>A100 v75 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"하이브리드 저장: {'✅ 활성' if volume_ok else '⚠ 제한'}\n"
+        f"적응형 학습: {'✅ 활성' if V75_LEARNING_ENABLED else '⛔ 비활성'}\n"
+        f"LONG 보정: {v75_learning_bonus('LONG'):+.2f}\n"
+        f"SHORT 보정: {v75_learning_bonus('SHORT'):+.2f}\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        f"명령어: /monthly /learning /hybridstatus /resync\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+def v75_startup():
+    v75_ensure_data_dir()
+    source = v75_load_hybrid()
+    v75_rebuild_learning()
+
+    if V75_AUTO_RESYNC and source == "volume" and v74_database_configured():
+        v75_sync_volume_to_db()
+
+    log(f"v75 startup source: {source}")
+    return source
+
+def build_v44_application(token):
+    v75_startup()
+    v72_start_monitor()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monthly", monthly_cmd), ("learning", learning_cmd), ("hybridstatus", hybridstatus_cmd),
+        ("resync", resync_cmd), ("monitorstatus", monitorstatus_cmd),
+        ("storagestatus", storagestatus_cmd), ("saveperformance", saveperformance_cmd),
+        ("restoreperformance", restoreperformance_cmd), ("dbstatus", dbstatus_cmd),
+        ("dbtest", dbtest_cmd), ("dbsync", dbsync_cmd), ("dbevents", dbevents_cmd),
+        ("chart", chart_cmd), ("fast", fast_cmd), ("cgstatus", cgstatus_cmd),
+        ("cgreset", cgreset_cmd), ("deep", deep_cmd), ("cache", cache_cmd),
+        ("quick", quick_cmd), ("speed", speedstatus_cmd), ("report", report_cmd),
+        ("history", history_cmd), ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
     ]
     for name, fn in handlers:
         if fn is not None:
