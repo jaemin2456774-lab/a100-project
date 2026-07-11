@@ -1,0 +1,18 @@
+A100 V90.1 변경사항
+
+[무응답 원인 재발 방지]
+- 다수 CommandHandler 대신 단일 디스패처 사용
+- 명령 레지스트리 검증 실패 시 봇 시작 차단
+- 여러 줄 명령 입력 지원
+- 명령 하나의 예외가 polling loop를 중단하지 않도록 격리
+- 명령 처리 180초 타임아웃
+- Telegram 재시작/재연결 시 pending updates 보존
+- drop_pending_updates=False 적용
+- /health /selfcheck /legacycheck 독립 경량화
+
+[기존 기능 유지]
+- V90에 포함된 전체 명령 레지스트리 유지
+- PostgreSQL, Railway Volume, CoinGlass, Upbit 유지
+- 자동 알림, 학습, 성과 기록 유지
+- Quality, Pulse, Risk, Whale87, AlertPlan 유지
+- V90/V89/V88 호환 명령 유지

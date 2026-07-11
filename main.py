@@ -23302,5 +23302,342 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+# ============================================================================
+# A100 V90.1 COMMAND RELIABILITY HOTFIX
+#
+# 실제 문제 방지 설계
+# 1. 104개의 CommandHandler를 각각 등록하지 않고 단일 디스패처로 통합
+# 2. 여러 줄로 붙여 넣은 명령도 줄별로 인식
+# 3. 명령 콜백 하나가 실패해도 다음 명령과 봇 전체는 계속 작동
+# 4. Telegram 재연결 시 대기 중인 명령을 삭제하지 않음
+# 5. /health /selfcheck /legacycheck는 외부 API와 무관하게 즉시 응답
+# 6. 모든 명령은 V90_COMMAND_REGISTRY 하나에서만 조회
+# ============================================================================
+
+import inspect
+import shlex
+
+V90_1_VERSION = "A100 V90.1 COMMAND RELIABILITY ENGINE"
+V90_1_STARTED_AT = time.time()
+V90_1_DISPATCH_COUNT = 0
+V90_1_DISPATCH_ERRORS = 0
+V90_1_LAST_COMMAND = "-"
+V90_1_LAST_COMMAND_AT = 0.0
+
+def v90_1_parse_command_lines(text):
+    """한 메시지에 포함된 /명령 줄을 안전하게 분리한다."""
+    commands = []
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("/"):
+            continue
+        try:
+            parts = shlex.split(line)
+        except Exception:
+            parts = line.split()
+        if not parts:
+            continue
+        command = parts[0][1:].split("@", 1)[0].strip().lower()
+        if not command:
+            continue
+        commands.append((command, parts[1:]))
+    return commands
+
+async def v90_1_safe_reply(update, text, **kwargs):
+    message = getattr(update, "effective_message", None) or getattr(update, "message", None)
+    if message is None:
+        return
+    try:
+        await message.reply_text(text, **kwargs)
+    except Exception as error:
+        # HTML 파싱 문제까지 흡수해 평문으로 한 번 더 전송
+        try:
+            await message.reply_text(str(text))
+        except Exception:
+            v88_record_error("v90.1-safe-reply", error)
+
+async def v90_1_dispatch(update, context):
+    """모든 텔레그램 명령을 단일 경로로 처리한다."""
+    global V90_1_DISPATCH_COUNT, V90_1_DISPATCH_ERRORS
+    global V90_1_LAST_COMMAND, V90_1_LAST_COMMAND_AT
+
+    message = getattr(update, "effective_message", None) or getattr(update, "message", None)
+    text = getattr(message, "text", "") if message else ""
+    parsed = v90_1_parse_command_lines(text)
+
+    if not parsed:
+        return
+
+    # 너무 많은 명령을 한 번에 보내 서버가 장시간 점유되는 것을 방지
+    if len(parsed) > 15:
+        await v90_1_safe_reply(
+            update,
+            f"⚠️ 한 메시지에서 {len(parsed)}개 명령이 감지됐습니다.\n"
+            "안정성을 위해 앞의 15개만 순서대로 실행합니다."
+        )
+        parsed = parsed[:15]
+
+    if len(parsed) > 1:
+        await v90_1_safe_reply(
+            update,
+            f"📋 {len(parsed)}개 명령을 확인했습니다. 순서대로 실행합니다."
+        )
+
+    original_args = list(getattr(context, "args", []) or [])
+
+    for command, args in parsed:
+        V90_1_DISPATCH_COUNT += 1
+        V90_1_LAST_COMMAND = command
+        V90_1_LAST_COMMAND_AT = time.time()
+
+        callback = V90_COMMAND_REGISTRY.get(command)
+        if callback is None:
+            await v90_1_safe_reply(
+                update,
+                f"지원하지 않는 명령입니다: /{command}\n"
+                "/commands에서 전체 명령을 확인하세요."
+            )
+            continue
+
+        try:
+            context.args = list(args)
+            result = callback(update, context)
+            if inspect.isawaitable(result):
+                # 무한 대기 방지. 장시간 분석도 충분하도록 180초 허용.
+                await asyncio.wait_for(result, timeout=180)
+        except asyncio.TimeoutError:
+            V90_1_DISPATCH_ERRORS += 1
+            v88_record_error(
+                f"v90.1-timeout:/{command}",
+                RuntimeError("command timeout after 180 seconds")
+            )
+            await v90_1_safe_reply(
+                update,
+                f"⚠️ /{command} 처리 시간이 180초를 초과했습니다.\n"
+                "봇은 계속 작동합니다. 잠시 후 다시 실행하세요."
+            )
+        except Exception as error:
+            V90_1_DISPATCH_ERRORS += 1
+            v88_record_error(f"v90.1-command:/{command}", error)
+            await v90_1_safe_reply(
+                update,
+                f"⚠️ /{command} 오류: {type(error).__name__}\n"
+                "/errors에서 상세 기록을 확인하세요."
+            )
+        finally:
+            context.args = list(original_args)
+
+async def health90_1_cmd(update, context):
+    audit = v90_registry_audit()
+    await v90_1_safe_reply(
+        update,
+        "\n".join([
+            "✅ A100 V90.1 COMMAND RELIABILITY ENGINE",
+            f"가동시간: {int(time.time() - V90_1_STARTED_AT)}초",
+            f"등록 명령: {audit['expected']}개",
+            f"콜백 누락: {len(audit['missing_callbacks']) + len(audit['non_callable'])}개",
+            f"처리 명령: {V90_1_DISPATCH_COUNT}회",
+            f"명령 오류: {V90_1_DISPATCH_ERRORS}회",
+            f"마지막 명령: /{V90_1_LAST_COMMAND}",
+            "단일 디스패처: 활성",
+            "다중 줄 명령 처리: 활성",
+            "재연결 명령 보존: 활성",
+        ])
+    )
+
+async def selfcheck90_1_cmd(update, context):
+    audit = v90_registry_audit()
+    parser_test = v90_1_parse_command_lines(
+        "/health\n/selfcheck\n/quality BTC"
+    ) == [
+        ("health", []),
+        ("selfcheck", []),
+        ("quality", ["BTC"]),
+    ]
+    checks = [
+        ("명령 레지스트리", not audit["missing_callbacks"] and not audit["non_callable"]),
+        ("통합 명령 100개 이상", audit["expected"] >= 100),
+        ("단일 디스패처", callable(globals().get("v90_1_dispatch"))),
+        ("여러 줄 명령 파서", parser_test),
+        ("Result.get 호환", bool("Result" in globals() and hasattr(Result, "get"))),
+        ("math import", "math" in globals()),
+        ("Telegram token", bool(os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN"))),
+        ("Chat ID", bool(CHAT_ID)),
+        ("CoinGlass key", bool(CG_KEY)),
+        ("PostgreSQL 설정", bool(v74_database_configured())),
+        ("Railway Volume", bool(os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK))),
+        ("Binance 심볼목록", bool(globals().get("V78_VALID_SYMBOLS"))),
+        ("V89 안전 collector", callable(globals().get("_v89_collect"))),
+    ]
+    passed = sum(1 for _, status in checks if status)
+    lines = [
+        "🩺 A100 V90.1 SELF CHECK",
+        f"결과: {passed}/{len(checks)}",
+        f"통합 명령: {audit['expected']}개",
+        "",
+        *[f"{'✅' if status else '⚠️'} {name}" for name, status in checks],
+        "",
+        f"처리 명령: {V90_1_DISPATCH_COUNT}회",
+        f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines))
+
+async def legacycheck90_1_cmd(update, context):
+    audit = v90_registry_audit()
+    required = {
+        "scan", "rank", "news", "macro", "events", "long", "short",
+        "performance", "learning", "dbstatus", "quality", "pending",
+        "pulse", "whale87", "alertplan", "v90", "commands",
+    }
+    missing_required = sorted(required - set(V90_COMMAND_REGISTRY))
+    lines = [
+        "🧾 A100 V90.1 기존 기능 감사",
+        f"등록 대상: {audit['expected']}개",
+        f"콜백 누락: {len(audit['missing_callbacks'])}개",
+        f"실행 불가 콜백: {len(audit['non_callable'])}개",
+        f"핵심 기능 누락: {len(missing_required)}개",
+        "판정: " + (
+            "✅ 통과"
+            if not audit["missing_callbacks"]
+            and not audit["non_callable"]
+            and not missing_required
+            else "❌ 점검 필요"
+        ),
+    ]
+    if missing_required:
+        lines.append("누락: " + ", ".join(missing_required))
+    await v90_1_safe_reply(update, "\n".join(lines))
+
+# V90 레지스트리에서 상태 명령을 외부 API와 무관한 V90.1 버전으로 교체
+V90_COMMAND_REGISTRY["health"] = health90_1_cmd
+V90_COMMAND_REGISTRY["selfcheck"] = selfcheck90_1_cmd
+V90_COMMAND_REGISTRY["legacycheck"] = legacycheck90_1_cmd
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+def build_v44_application(token):
+    """
+    명령 누락을 막기 위해 CommandHandler 104개를 따로 등록하지 않는다.
+    모든 /명령은 단 하나의 MessageHandler가 레지스트리를 통해 처리한다.
+    """
+    audit = v90_registry_audit()
+    invalid = audit["missing_callbacks"] + audit["non_callable"]
+    if invalid:
+        raise RuntimeError(
+            "V90.1 registry validation failed: " + ",".join(invalid)
+        )
+
+    app = Application.builder().token(token).build()
+
+    # 단 하나의 명령 처리 경로
+    app.add_handler(
+        MessageHandler(filters.COMMAND, v90_1_dispatch),
+        group=0,
+    )
+    app.add_error_handler(v88_error_handler)
+
+    print(f"A100 V90.1 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V90.1 dispatcher count: 1", flush=True)
+    print("A100 V90.1 registry validation: OK", flush=True)
+    return app
+
+async def run_bot_async():
+    """
+    기존 버전은 재연결 때마다 drop_pending_updates=True를 사용해
+    재시작 또는 네트워크 복구 구간에 들어온 명령이 사라질 수 있었다.
+    V90.1은 대기 명령을 보존한다.
+    """
+    global V59_ALERT_TASK
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is missing")
+
+    retry_delay = V44_RETRY_MIN
+    first_start = True
+
+    while True:
+        app = None
+        try:
+            app = build_v44_application(token)
+
+            await app.initialize()
+
+            # webhook만 해제하고 사용자의 대기 명령은 삭제하지 않는다.
+            await app.bot.delete_webhook(drop_pending_updates=False)
+            print("A100 V90.1: webhook deleted, pending updates preserved", flush=True)
+
+            await app.start()
+            await app.updater.start_polling(
+                drop_pending_updates=False,
+                allowed_updates=Update.ALL_TYPES,
+                poll_interval=0.5,
+                timeout=20,
+                bootstrap_retries=3,
+            )
+
+            if V59_AUTO_ALERT and CHAT_ID:
+                V59_ALERT_TASK = asyncio.create_task(v59_auto_alert_loop(app))
+                print("A100 V90.1: auto alert loop started", flush=True)
+
+            print("A100 V90.1: Telegram single polling started", flush=True)
+            retry_delay = V44_RETRY_MIN
+            first_start = False
+
+            while app.updater.running:
+                await asyncio.sleep(5)
+
+            raise RuntimeError("Telegram updater stopped unexpectedly")
+
+        except Conflict as error:
+            print(
+                f"A100 V90.1 Conflict: another getUpdates instance is active. "
+                f"Retrying in {retry_delay}s: {error}",
+                flush=True,
+            )
+        except (NetworkError, TimedOut) as error:
+            print(
+                f"A100 V90.1 Telegram network error. "
+                f"Retry in {retry_delay}s: {error}",
+                flush=True,
+            )
+        except asyncio.CancelledError:
+            if V59_ALERT_TASK:
+                V59_ALERT_TASK.cancel()
+                V59_ALERT_TASK = None
+            await stop_v44_application(app)
+            raise
+        except Exception as error:
+            v88_record_error("v90.1-polling-loop", error)
+            print(
+                f"A100 V90.1 polling error. Retry in {retry_delay}s: "
+                f"{type(error).__name__}: {error}",
+                flush=True,
+            )
+
+        if V59_ALERT_TASK:
+            V59_ALERT_TASK.cancel()
+            V59_ALERT_TASK = None
+        await stop_v44_application(app)
+        await asyncio.sleep(retry_delay)
+        retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
+
+def main():
+    start_health_server_once()
+    print("A100 V90.1 COMMAND RELIABILITY ENGINE worker running...", flush=True)
+
+    if not acquire_v44_process_lock():
+        print("A100 V90.1 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        print("A100 V90.1 stopped by signal", flush=True)
+    except Exception as error:
+        v88_record_error("v90.1-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
 if __name__ == "__main__":
     main()
