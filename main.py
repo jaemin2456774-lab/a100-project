@@ -149,6 +149,67 @@ TOP_SCAN_LIMIT=int(os.getenv("TOP_SCAN_LIMIT","25"))
 BINANCE="https://data-api.binance.vision"; UPBIT="https://api.upbit.com"; BITHUMB="https://api.bithumb.com"; CG="https://open-api-v4.coinglass.com"
 CG_CACHE={}; KR_CACHE=(0,{})
 
+# ===== A100 v78: Binance symbol guard + API rate-limit protection =====
+class InvalidSymbolError(RuntimeError):
+    pass
+
+_HTTP_LAST_CALL = {}
+_HTTP_LOCK = threading.Lock()
+_BINANCE_SYMBOL_CACHE = {"ts": 0.0, "symbols": set()}
+_BINANCE_SYMBOL_TTL = int(os.getenv("BINANCE_SYMBOL_TTL", "3600"))
+_UPBIT_MIN_INTERVAL = float(os.getenv("UPBIT_MIN_INTERVAL", "0.18"))
+_BINANCE_MIN_INTERVAL = float(os.getenv("BINANCE_MIN_INTERVAL", "0.03"))
+
+def _host_min_interval(url):
+    if "api.upbit.com" in url:
+        return _UPBIT_MIN_INTERVAL
+    if "binance" in url:
+        return _BINANCE_MIN_INTERVAL
+    return 0.0
+
+def _throttle_http(url):
+    interval = _host_min_interval(url)
+    if interval <= 0:
+        return
+    host = url.split("/", 3)[2] if "://" in url else url
+    with _HTTP_LOCK:
+        now = time.time()
+        wait = interval - (now - _HTTP_LAST_CALL.get(host, 0.0))
+        if wait > 0:
+            time.sleep(wait)
+        _HTTP_LAST_CALL[host] = time.time()
+
+def normalize_usdt_symbol(sym):
+    raw = str(sym or "").upper().strip().replace("/", "").replace("-", "")
+    if raw.endswith("USDT"):
+        return raw
+    return raw + "USDT"
+
+def binance_spot_symbols(force=False):
+    now = time.time()
+    cached = _BINANCE_SYMBOL_CACHE.get("symbols") or set()
+    if cached and not force and now - _BINANCE_SYMBOL_CACHE.get("ts", 0) < _BINANCE_SYMBOL_TTL:
+        return cached
+    try:
+        data = http(f"{BINANCE}/api/v3/exchangeInfo")
+        symbols = {
+            x.get("symbol", "").upper()
+            for x in data.get("symbols", [])
+            if x.get("status") == "TRADING" and x.get("quoteAsset") == "USDT"
+        }
+        if symbols:
+            _BINANCE_SYMBOL_CACHE.update({"ts": now, "symbols": symbols})
+            log(f"v78 Binance valid symbols loaded: {len(symbols)}")
+            return symbols
+    except Exception as e:
+        log(f"v78 exchangeInfo refresh failed: {e}")
+    return cached
+
+def is_valid_binance_symbol(sym):
+    pair = normalize_usdt_symbol(sym)
+    symbols = binance_spot_symbols()
+    return True if not symbols else pair in symbols
+
 def log(x): print(x, flush=True)
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -163,9 +224,39 @@ def pct(a,b): return 0.0 if b==0 else (a-b)/abs(b)*100
 def clamp(x,a=0,b=100): return max(a,min(b,x))
 def sma(v,n): return avg(v[-n:]) if len(v)>=n else (v[-1] if v else 0)
 def http(url,params=None,headers=None):
-    r=requests.get(url,params=params or {},headers=headers or {},timeout=15)
-    if r.status_code>=400: raise RuntimeError(f"HTTP {r.status_code} {url} {r.text[:120]}")
-    return r.json()
+    last_error = None
+    for attempt in range(4):
+        _throttle_http(url)
+        try:
+            r=requests.get(url,params=params or {},headers=headers or {},timeout=15)
+        except requests.RequestException as e:
+            last_error = e
+            if attempt < 3:
+                time.sleep(min(8.0, 0.7 * (2 ** attempt)))
+                continue
+            raise RuntimeError(f"HTTP request failed {url}: {e}") from e
+
+        if r.status_code == 429:
+            retry_after = r.headers.get("Retry-After")
+            try:
+                wait = float(retry_after) if retry_after else min(10.0, 1.0 * (2 ** attempt))
+            except Exception:
+                wait = min(10.0, 1.0 * (2 ** attempt))
+            last_error = RuntimeError(f"HTTP 429 {url} {r.text[:120]}")
+            if attempt < 3:
+                time.sleep(wait)
+                continue
+
+        if r.status_code>=400:
+            text = r.text[:120]
+            if r.status_code == 400 and ('Invalid symbol' in text or '"code":-1121' in text):
+                raise InvalidSymbolError(f"{params.get('symbol') if params else ''} invalid on Binance")
+            raise RuntimeError(f"HTTP {r.status_code} {url} {text}")
+        try:
+            return r.json()
+        except ValueError as e:
+            raise RuntimeError(f"Invalid JSON response {url}: {r.text[:120]}") from e
+    raise last_error or RuntimeError(f"HTTP failed {url}")
 def rsi(c,n=14):
     if len(c)<=n+1: return 50
     g=[]; l=[]
@@ -193,8 +284,12 @@ def grade(v):
     return "S" if v>=92 else "A+" if v>=85 else "A" if v>=78 else "B" if v>=70 else "C" if v>=60 else "PASS"
 
 def klines(sym):
-    pair=sym.upper().replace("USDT","")+"USDT"
+    pair=normalize_usdt_symbol(sym)
+    if not is_valid_binance_symbol(pair):
+        raise InvalidSymbolError(f"{pair} is not a Binance USDT trading symbol")
     rows=http(f"{BINANCE}/api/v3/klines",{"symbol":pair,"interval":"4h","limit":120})
+    if not isinstance(rows, list) or len(rows) < 20:
+        raise RuntimeError(f"{pair} insufficient kline data: {len(rows) if isinstance(rows,list) else 0}")
     return [{"h":sf(r[2]),"l":sf(r[3]),"c":sf(r[4]),"qv":sf(r[7]),"tbq":sf(r[10])} for r in rows]
 def top_usdt(n=25):
     data=http(f"{BINANCE}/api/v3/ticker/24hr")
@@ -324,12 +419,18 @@ def kr_data():
     try:
         mk=http(f"{UPBIT}/v1/market/all",{"isDetails":"false"})
         krw=[x["market"] for x in mk if x.get("market","").startswith("KRW-")]
-        for i in range(0,len(krw),100):
-            d=http(f"{UPBIT}/v1/ticker",{"markets":",".join(krw[i:i+100])})
-            for x in d:
+        # Upbit ticker는 묶음 호출 + 전역 throttle + 429 exponential backoff 적용
+        batch_size = int(os.getenv("UPBIT_BATCH_SIZE", "80"))
+        for i in range(0,len(krw),batch_size):
+            batch = krw[i:i+batch_size]
+            try:
+                d=http(f"{UPBIT}/v1/ticker",{"markets":",".join(batch)})
+            except Exception as e:
+                log(f"upbit ticker batch skipped {i//batch_size+1}: {e}")
+                continue
+            for x in d if isinstance(d,list) else []:
                 s=x["market"].replace("KRW-",""); res.setdefault(s,{})
                 res[s]["uv"]=sf(x.get("acc_trade_price_24h")); res[s]["uc"]=sf(x.get("signed_change_rate"))*100
-            time.sleep(0.05)
     except Exception as e: log(f"upbit {e}")
     try:
         d=http(f"{BITHUMB}/public/ticker/ALL_KRW").get("data",{})
@@ -407,10 +508,31 @@ def analyze(sym,kr):
 
 def scan(symbols):
     kr=kr_data(); out=[]
+    valid_set = binance_spot_symbols()
+    seen = set()
+    skipped_invalid = 0
+    failed = 0
     for s in symbols:
-        try: out.append(analyze(s,kr))
-        except Exception as e: log(f"{s} error {e}"); log(traceback.format_exc())
-        time.sleep(.08)
+        pair = normalize_usdt_symbol(s)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        if valid_set and pair not in valid_set:
+            skipped_invalid += 1
+            continue
+        try:
+            result = analyze(pair,kr)
+            if result is not None:
+                out.append(result)
+        except InvalidSymbolError:
+            skipped_invalid += 1
+        except Exception as e:
+            failed += 1
+            # 예상 가능한 개별 종목 오류는 1줄만 기록하여 로그 폭주 방지
+            log(f"scan error {pair}: {type(e).__name__}: {e}")
+        time.sleep(.05)
+    if skipped_invalid or failed:
+        log(f"v78 scan summary: requested={len(symbols)} valid={len(out)} invalid_skipped={skipped_invalid} failed={failed}")
     return sorted(out,key=lambda r:(r.smart,r.score),reverse=True)
 def full(r):
     return (f"🟢 <b>{r.sym}</b> {stars(r.score)}\n<b>A100 SCORE</b> {r.score}점 / {grade(r.score)}\nAI결론: <b>{r.action}</b>\n현재단계: <b>{r.stage}</b>\n핵심이유: {r.reason}\n\n"
@@ -5028,7 +5150,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v77 SELF LEARNING STRATEGY ENGINE worker running...", flush=True)
+    print("A100 v78 SYMBOL GUARD & RATE LIMIT ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
