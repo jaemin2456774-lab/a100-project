@@ -1,33 +1,25 @@
-A100 v83 AI TRADING ASSISTANT ENGINE
+A100 v84 PRO TRADING SYSTEM
 
 교체 파일
 - main.py
 - requirements.txt
 
-v83 핵심 기능
-- 최종등급 A+ / A / B / C / D
-- LONG/SHORT 퍼센트 게이지
-- 현재 단계 1~5 시각화
-- 진입 제한 사유 우선순위
-- 자동 체크리스트
-- 추천 행동 및 예상 재검증 시간
-- 점수 변화 추적: 1시간 / 4시간 / 24시간
-- PostgreSQL + Railway Volume 이중 저장
-- 재배포/재시작 후 점수 이력 유지
-- 신규 명령어 /scorehistory BTC
-
-확인 명령어
+Railway 재배포 후 확인
 /health
 /datastatus
 /quality BTC
 /why BTC
+/flow BTC
 /scorehistory BTC
 
-정상 상태
-- PostgreSQL: 정상
-- Railway Volume: 정상
-- 점수 이력: 활성
+v84 추가 기능
+- LONG/SHORT 비율과 매수/매도 압력 프록시
+- Delta/CVD 프록시
+- 과열, 쏠림, 스퀴즈, 돌파 준비 자동 경고
+- 점수 변화 화살표
+- AI 한 줄 결론
+- 방향별 손절/TP 참고값
+- 실행 체크리스트
 
 주의
-확률, 예상 손익비, 대기시간, 성공 참고값은 실측 수익이나 승률 보장값이 아닙니다.
-주문 실행 기준으로 단독 사용하지 마세요.
+Delta/CVD와 확률, 목표가, 손절가는 현재 수집 데이터 기반 참고값이며 실제 체결원장 전체나 수익을 보장하지 않습니다.

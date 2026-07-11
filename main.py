@@ -20986,6 +20986,267 @@ def build_v44_application(token):
 _v83_load_history()
 _v83_init_db()
 
+
+# ============================================================
+# A100 v84 PRO TRADING SYSTEM
+# - 주문흐름 프록시(매수/매도압력, Delta/CVD 프록시)
+# - 자동 위험/돌파/스퀴즈 경고
+# - 한 줄 AI 결론, 점수 변화 화살표, 실행 체크리스트
+# - v83 점수 이력 및 PostgreSQL/Volume 저장 기능 유지
+# ============================================================
+
+V84_VERSION = "A100 v84 PRO TRADING SYSTEM"
+
+
+def _v84_arrow(delta):
+    if delta is None:
+        return "· 축적 중"
+    d=_v79_float(delta)
+    if d>=8: return f"🚀 ▲▲ {d:+.1f}"
+    if d>=2: return f"▲ {d:+.1f}"
+    if d<=-8: return f"🚨 ▼▼ {d:+.1f}"
+    if d<=-2: return f"▼ {d:+.1f}"
+    return f"→ {d:+.1f}"
+
+
+def _v84_flow_metrics(r, long_score, short_score):
+    # 실제 거래소 체결원장 전체가 아닌 현재 엔진의 taker/캔들 데이터를 이용한 프록시입니다.
+    buy_ratio=max(0.0,min(1.0,_v79_float(getattr(r,"buy_ratio",0.5),0.5)))
+    buy_pct=round(buy_ratio*100,1)
+    sell_pct=round(100-buy_pct,1)
+    delta_pct=round((buy_ratio-0.5)*200,1)
+    try:
+        cg=v68_cg_raw(r)
+    except Exception:
+        cg={}
+    taker=_v79_float(cg.get("taker"),50)
+    oi=_v79_float(cg.get("oi"),0)
+    funding=_v79_float(cg.get("funding"),50)
+    # CVD 방향 프록시: taker와 캔들 매수 비중을 합성
+    cvd_score=(buy_pct-50)*0.65+(taker-50)*0.35
+    cvd="↗ 상승" if cvd_score>=5 else "↘ 하락" if cvd_score<=-5 else "→ 중립"
+    lp,sp=_v83_direction_ratios(long_score,short_score)
+    return {
+        "buy_pct":buy_pct,"sell_pct":sell_pct,"delta_pct":delta_pct,
+        "cvd":cvd,"cvd_score":round(cvd_score,1),"oi":oi,"funding":funding,
+        "taker":taker,"long_pct":lp,"short_pct":sp,
+    }
+
+
+def _v84_alerts(r, report, m, flow):
+    alerts=[]
+    quality=_v79_float(report.get("quality"))
+    confidence=_v79_float(m.get("confidence"))
+    edge=_v79_float(m.get("edge"))
+    funding=flow["funding"]; oi=flow["oi"]; delta=flow["delta_pct"]
+    bubble=_v79_float(getattr(r,"bubble",0)); distribution=_v79_float(getattr(r,"distribution",0))
+    squeeze=_v79_float(getattr(r,"squeeze",0)); vr=_v79_float(getattr(r,"vol_ratio",1),1)
+    if bubble>=75 or distribution>=75:
+        alerts.append(("🚨","과열/분배 위험","추격 진입 금지"))
+    if flow["long_pct"]>=78 and funding>=65:
+        alerts.append(("🚨","롱 쏠림 위험","롱 청산 변동성 주의"))
+    if flow["short_pct"]>=78 and funding<=35:
+        alerts.append(("⚡","숏 쏠림","숏스퀴즈 가능성 점검"))
+    if squeeze>=65 and oi>=55 and abs(delta)>=8:
+        alerts.append(("💥","스퀴즈 조건 강화","OI·체결 방향 동시 확인"))
+    if quality>=72 and confidence>=60 and edge>=10 and vr>=1.2:
+        alerts.append(("🔥","돌파 준비도 상승","마감 캔들 재확인"))
+    if not alerts:
+        alerts.append(("ℹ️","특별 경고 없음","조건 축적 관찰"))
+    return alerts[:4]
+
+
+def _v84_one_line(m, blockers, alerts):
+    side=str(m.get("side","중립")); stage=int(m.get("stage",1)); wait=str(m.get("wait","재검증 필요"))
+    if any("과열" in a[1] or "쏠림 위험" in a[1] for a in alerts):
+        return f"현재 {side} 우세지만 과열 위험 때문에 진입보다 리스크 관리가 우선입니다."
+    if stage>=5 and not blockers:
+        return f"{side} 조건이 대부분 충족됐습니다. 최신 캔들과 손절 기준 확인 후 분할 진입 검토 단계입니다."
+    if blockers:
+        return f"{side} 우세지만 {blockers[0][1]} 조건이 부족합니다. {wait} 후 재확인이 적절합니다."
+    return f"{side} 방향을 관찰하되 {wait} 후 재검증이 필요합니다."
+
+
+def _v84_targets(r, m):
+    side=str(m.get("side","LONG"))
+    price=_v79_float(getattr(r,"price",0))
+    support=_v79_float(getattr(r,"support",0))
+    resistance=_v79_float(getattr(r,"resistance",0))
+    stop=_v79_float(getattr(r,"stop",0))
+    t1=_v79_float(getattr(r,"target1",0))
+    t2=_v79_float(getattr(r,"target2",0))
+    if side=="SHORT" and price>0:
+        # 기존 Result가 LONG 기준 목표를 갖고 있으므로 SHORT는 지지/변동폭으로 보수 추정
+        risk=max(abs(resistance-price),price*0.02)
+        stop=price+risk*0.65
+        t1=max(0,price-risk*1.2)
+        t2=max(0,price-risk*2.0)
+    return side,price,stop,t1,t2
+
+
+async def quality_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"🔎 {normalized} v84 PRO 분석 중...")
+    try:
+        result=await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+        report=v79_quality_report(result); breakdown=v81_quality_breakdown(result,report); regime=v76_market_regime()
+        long_score,short_score,_=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        blockers=_v83_priority_blockers(result,report,long_score,short_score)
+        checklist=_v83_checklist(result,report,long_score,short_score)
+        _v83_record(report["symbol"],report,long_score,short_score,m,regime)
+        d1=_v83_delta(report["symbol"],report["quality"],3600); d4=_v83_delta(report["symbol"],report["quality"],14400); d24=_v83_delta(report["symbol"],report["quality"],86400)
+        flow=_v84_flow_metrics(result,long_score,short_score)
+        alerts=_v84_alerts(result,report,m,flow)
+        action=_v83_action(m,blockers)
+        conclusion=_v84_one_line(m,blockers,alerts)
+        side,price,stop,t1,t2=_v84_targets(result,m)
+        stage_bar="🟩"*m["stage"]+"⬜"*(5-m["stage"])
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} A100 v84 PRO</b>",
+            f"최종등급: <b>{_v83_grade(report['quality'])}</b> · 품질 <b>{report['quality']:.1f}/100</b>",
+            f"현재단계: {stage_bar} <b>{m['stage']}/5 · {m['stage_name']}</b>",
+            f"추천 행동: <b>{action}</b>",
+            "", "<b>AI 한 줄 결론</b>", _v54_escape(conclusion),
+            "", "<b>방향·주문흐름 프록시</b>",
+            f"LONG  {_v83_ratio_bar(flow['long_pct'])} <b>{flow['long_pct']:.1f}%</b>",
+            f"SHORT {_v83_ratio_bar(flow['short_pct'])} <b>{flow['short_pct']:.1f}%</b>",
+            f"매수압 {_v83_ratio_bar(flow['buy_pct'])} {flow['buy_pct']:.1f}%",
+            f"매도압 {_v83_ratio_bar(flow['sell_pct'])} {flow['sell_pct']:.1f}%",
+            f"Delta 프록시: <b>{flow['delta_pct']:+.1f}%</b> · CVD 프록시 {flow['cvd']}",
+            "", "<b>점수 변화</b>",
+            f"1시간 {_v84_arrow(d1)}",
+            f"4시간 {_v84_arrow(d4)}",
+            f"24시간 {_v84_arrow(d24)}",
+            "", "<b>AI 경고</b>",
+        ]
+        for icon,title,detail in alerts:
+            lines.append(f"{icon} <b>{_v54_escape(title)}</b> · {_v54_escape(detail)}")
+        lines.extend(["", "<b>참고 지표</b>",
+            f"신뢰도 {m['confidence']}% · 진입 가능성 {m['entry_ref']}%",
+            f"예상 성공 참고값 {m['expected_ref']}% · RR {m['rr']}:1",
+            f"예상 재검증 <b>{m['wait']}</b>",
+            "", "<b>가격 계획(참고)</b>",
+            f"방향: <b>{side}</b> · 현재 <code>{price:.8g}</code>",
+            f"손절 참고 <code>{stop:.8g}</code>",
+            f"TP1 <code>{t1:.8g}</code> · TP2 <code>{t2:.8g}</code>",
+            "", "<b>진입 제한 사유</b>",
+        ])
+        if blockers:
+            for i,(_,name,detail) in enumerate(blockers[:4],1): lines.append(f"{i}. {_v54_escape(name)} · {_v54_escape(detail)}")
+        else: lines.append("✅ 핵심 병목 없음")
+        lines.extend(["", "<b>실행 체크리스트</b>"])
+        for ok,name in checklist: lines.append(f"{'☑' if ok else '☐'} {_v54_escape(name)}")
+        lines.extend(["☐ 최신 캔들 마감 확인","☐ 손절 주문 가능 여부 확인","☐ 포지션 크기 제한 확인"])
+        lines.extend(["", "<b>점수 산출 내역</b>"])
+        for name,contribution in breakdown["contributions"].items():
+            raw=breakdown["raw"][name]; weight=int(breakdown["weights"][name]*100)
+            lines.append(f"• {name}: {raw:.1f} × {weight}% = <b>+{contribution:.1f}</b>")
+        lines.extend(["", "<i>Delta·CVD는 현재 수집 데이터 기반 프록시이며, 모든 확률·목표가는 보장값이 아닙니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def why_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    try:
+        result=await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+        regime=v76_market_regime(); long_score,short_score,report=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        blockers=_v83_priority_blockers(result,report,long_score,short_score)
+        checklist=_v83_checklist(result,report,long_score,short_score)
+        _v83_record(report["symbol"],report,long_score,short_score,m,regime)
+        flow=_v84_flow_metrics(result,long_score,short_score); alerts=_v84_alerts(result,report,m,flow)
+        conclusion=_v84_one_line(m,blockers,alerts); action=_v83_action(m,blockers)
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} v84 판단 이유</b>",
+            f"AI 결론: <b>{_v54_escape(conclusion)}</b>",
+            f"최종 행동: <b>{action}</b>",
+            f"단계: {'🟩'*m['stage']+'⬜'*(5-m['stage'])} {m['stage']}/5 · {m['stage_name']}",
+            f"LONG {_v83_ratio_bar(flow['long_pct'])} {flow['long_pct']:.1f}%",
+            f"SHORT {_v83_ratio_bar(flow['short_pct'])} {flow['short_pct']:.1f}%",
+            f"Delta 프록시 {flow['delta_pct']:+.1f}% · CVD 프록시 {flow['cvd']}",
+            f"신뢰도 {m['confidence']}% · 진입 가능성 {m['entry_ref']}% · RR {m['rr']}:1",
+            "", "<b>핵심 경고</b>",
+        ]
+        lines.extend(f"{i} { _v54_escape(title)} · {_v54_escape(detail)}" for i,title,detail in alerts)
+        lines.extend(["", "<b>지금 기다려야 하는 조건</b>"])
+        if blockers:
+            lines.extend(f"{i}. {_v54_escape(name)} · {_v54_escape(detail)}" for i,(_,name,detail) in enumerate(blockers[:4],1))
+        else: lines.append("✅ 핵심 조건 충족")
+        lines.extend(["", "<b>추천 행동</b>"])
+        if m["stage"]<5:
+            lines.extend(["✅ 관찰 유지",f"✅ {m['wait']} 후 재검증","❌ 조건 충족 전 진입 금지"])
+        else:
+            lines.extend(["✅ 최신 캔들 마감 재확인","✅ 손절 기준 선설정","⚠ 단독 신호로 주문하지 않기"])
+        lines.extend(["", "<b>체크리스트</b>"])
+        lines.extend(f"{'☑' if ok else '☐'} {_v54_escape(name)}" for ok,name in checklist)
+        lines.extend(["", "<i>주문흐름 수치는 수집 데이터 기반 프록시이며 실측 체결원장 전체를 뜻하지 않습니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"why 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def flow_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        result=await v70_direct_symbol(symbol)
+        if result is None:
+            await update.message.reply_text(f"{symbol} 데이터 없음")
+            return
+        regime=v76_market_regime(); long_score,short_score,report=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        flow=_v84_flow_metrics(result,long_score,short_score); alerts=_v84_alerts(result,report,m,flow)
+        lines=[f"🌊 <b>{_v54_escape(report['symbol'])} v84 주문흐름</b>",
+               f"매수압 {_v83_ratio_bar(flow['buy_pct'])} {flow['buy_pct']:.1f}%",
+               f"매도압 {_v83_ratio_bar(flow['sell_pct'])} {flow['sell_pct']:.1f}%",
+               f"Delta 프록시 <b>{flow['delta_pct']:+.1f}%</b>",
+               f"CVD 프록시 <b>{flow['cvd']}</b>",
+               f"OI 점수 {flow['oi']:.1f} · Funding 안정도 {flow['funding']:.1f} · Taker {flow['taker']:.1f}",
+               "", "<b>경고</b>"]
+        lines.extend(f"{i} {_v54_escape(t)} · {_v54_escape(d)}" for i,t,d in alerts)
+        lines.extend(["", "<i>프록시 지표이며 실제 거래소 전체 체결원장과 다를 수 있습니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"flow 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate(); perf=v72_performance_stats(); db_ready=v74_initialize_database() if v74_database_configured() else False
+    volume_ok=os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR,os.W_OK); regime=v76_market_regime()
+    await update.message.reply_text(
+        "📦 <b>A100 v84 PRO 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"점수 이력: ✅ 활성 ({sum(len(v) for v in V83_HISTORY.values())}건)\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        "AI PRO 엔진: ✅ 활성 (주문흐름·경고·목표/손절)\n"
+        f"재검증 엔진: ✅ 활성 ({len(V79_PENDING)}대기)\n"
+        f"확정 신호: {len(V79_CONFIRMED)}개\n"
+        f"자동 격리: ✅ 활성 ({len(V79_QUARANTINE)}종목)\n"
+        "자가학습: ✅ 활성\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        "명령어: /health /quality /why /flow /scorehistory /datastatus\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",disable_web_page_preview=True)
+
+
+_v84_base_builder = build_v44_application
+def build_v44_application(token):
+    app=_v84_base_builder(token)
+    app.add_handler(CommandHandler("flow",flow_cmd))
+    return app
+
+
 if __name__ == "__main__":
     main()
-
