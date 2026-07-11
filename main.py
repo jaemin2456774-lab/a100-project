@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v75 HYBRID LEARNING ENGINE worker running...", flush=True)
+    print("A100 v76 ULTIMATE ADVISOR ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -18487,6 +18487,517 @@ def build_v44_application(token):
         ("quick", quick_cmd), ("speed", speedstatus_cmd), ("report", report_cmd),
         ("history", history_cmd), ("stats", stats_cmd), ("ticker", ticker_cmd),
         ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v76 ULTIMATE ADVISOR ENGINE =====
+# 핵심 반영
+# - 거래 종료 시 자동 복기 및 성공/실패 원인 저장
+# - 시장 국면: 추세장 / 횡보장 / 급락장 / 과열장 자동 인식
+# - 시장 국면에 따른 LONG/SHORT 점수 자동 보정
+# - 실제 성과 기반 예상 승률 보정
+# - /advisor 하루 전략 브리핑
+# - /review 최근 거래 복기
+# - /regime 시장 국면 확인
+V76_VERSION = "A100 v76 ULTIMATE ADVISOR ENGINE"
+
+V76_REVIEW_FILE = os.getenv(
+    "V76_REVIEW_FILE",
+    os.path.join(V75_DATA_DIR, "a100_v76_trade_reviews.json"),
+)
+V76_MAX_REVIEWS = int(os.getenv("V76_MAX_REVIEWS", "500"))
+V76_REGIME_BONUS = float(os.getenv("V76_REGIME_BONUS", "4.0"))
+V76_WINRATE_BLEND = float(os.getenv("V76_WINRATE_BLEND", "0.35"))
+V76_ADVISOR_TOP = int(os.getenv("V76_ADVISOR_TOP", "3"))
+
+V76_LOCK = threading.RLock()
+V76_REVIEWS = []
+
+def _v76_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def _v76_clip(value, low=0.0, high=100.0):
+    return max(low, min(high, _v76_float(value)))
+
+def v76_load_reviews():
+    import json
+    global V76_REVIEWS
+    try:
+        if not os.path.exists(V76_REVIEW_FILE):
+            return False
+        with open(V76_REVIEW_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            rows = data.get("reviews") or []
+        elif isinstance(data, list):
+            rows = data
+        else:
+            rows = []
+        if isinstance(rows, list):
+            V76_REVIEWS = rows[-V76_MAX_REVIEWS:]
+            return True
+    except Exception as e:
+        log(f"v76 load reviews: {e}")
+    return False
+
+def v76_save_reviews():
+    try:
+        with V76_LOCK:
+            v75_atomic_json_write(
+                V76_REVIEW_FILE,
+                {
+                    "version": V76_VERSION,
+                    "saved_at": time.time(),
+                    "reviews": V76_REVIEWS[-V76_MAX_REVIEWS:],
+                },
+            )
+        return True
+    except Exception as e:
+        log(f"v76 save reviews: {e}")
+        return False
+
+def v76_market_regime(market=None, results=None):
+    market = market or v59_market_state()
+    results = results or []
+
+    btc = _v76_float(market.get("btc_change"), 0.0)
+    breadth = _v76_float(market.get("breadth"), 50.0)
+    alt = _v76_float(market.get("alt_score"), 50.0)
+
+    if results:
+        avg_chart = sum(_v76_float(v56_chart_structure_score(r)) for r in results) / len(results)
+        avg_volume = sum(_v76_float(v56_volume_volatility_score(r)) for r in results) / len(results)
+        avg_timing = sum(_v76_float(v60_timing_score(r)) for r in results) / len(results)
+    else:
+        avg_chart = 50.0
+        avg_volume = 50.0
+        avg_timing = 50.0
+
+    trend_strength = (
+        abs(btc) * 10.0 +
+        abs(breadth - 50.0) * 0.7 +
+        abs(alt - 50.0) * 0.5 +
+        abs(avg_chart - 50.0) * 0.6
+    )
+
+    heat = (avg_volume * 0.45 + avg_timing * 0.30 + max(0.0, btc) * 12.0)
+
+    if btc <= -3.0 or (breadth <= 25 and alt <= 35):
+        return {
+            "code": "CRASH",
+            "label": "🔴 급락장",
+            "long_bonus": -V76_REGIME_BONUS,
+            "short_bonus": V76_REGIME_BONUS,
+            "reason": "BTC 약세와 시장 폭 하락",
+        }
+
+    if heat >= 82 and breadth >= 68:
+        return {
+            "code": "OVERHEAT",
+            "label": "🔥 과열장",
+            "long_bonus": -V76_REGIME_BONUS * 0.5,
+            "short_bonus": V76_REGIME_BONUS * 0.5,
+            "reason": "거래량·타이밍 과열",
+        }
+
+    if trend_strength >= 26 and (breadth >= 62 or breadth <= 38):
+        bullish = btc >= 0 and breadth >= 50
+        return {
+            "code": "TREND_UP" if bullish else "TREND_DOWN",
+            "label": "🟢 상승 추세장" if bullish else "🟠 하락 추세장",
+            "long_bonus": V76_REGIME_BONUS if bullish else -V76_REGIME_BONUS,
+            "short_bonus": -V76_REGIME_BONUS if bullish else V76_REGIME_BONUS,
+            "reason": "방향성·시장 폭 동조",
+        }
+
+    return {
+        "code": "RANGE",
+        "label": "🟡 횡보장",
+        "long_bonus": -1.0,
+        "short_bonus": -1.0,
+        "reason": "방향성 부족",
+    }
+
+def v76_regime_adjusted_scores(r, regime=None):
+    regime = regime or v76_market_regime()
+    long_score = v75_adjusted_long_score(r) + _v76_float(regime.get("long_bonus"))
+    short_score = v75_adjusted_short_score(r) + _v76_float(regime.get("short_bonus"))
+    return round(_v76_clip(long_score), 1), round(_v76_clip(short_score), 1)
+
+def v76_expected_win_rate(r, side, regime=None):
+    regime = regime or v76_market_regime()
+    base = v69_expected_win_rate(r, side)
+
+    side = str(side).upper()
+    perf = V75_LEARNING.get(side) or {}
+    samples = int(perf.get("samples") or 0)
+    wins = int(perf.get("wins") or 0)
+    historical = (wins / samples * 100.0) if samples else 50.0
+
+    regime_bonus = (
+        _v76_float(regime.get("long_bonus"))
+        if side == "LONG"
+        else _v76_float(regime.get("short_bonus"))
+    ) * 1.6
+
+    if samples >= V75_MIN_LEARNING_SAMPLES:
+        blended = base * (1.0 - V76_WINRATE_BLEND) + historical * V76_WINRATE_BLEND
+    else:
+        blended = base
+
+    return round(_v76_clip(blended + regime_bonus, 5.0, 92.0), 1)
+
+def v76_feature_snapshot(r):
+    cg = v68_cg_raw(r)
+    return {
+        "chart": round(_v76_float(v56_chart_structure_score(r)), 1),
+        "volume": round(_v76_float(v56_volume_volatility_score(r)), 1),
+        "timing": round(_v76_float(v60_timing_score(r)), 1),
+        "institution": round(_v76_float(v56_institution_strength(r)), 1),
+        "coinglass": round(_v76_float(cg.get("total")), 1),
+        "funding": round(_v76_float(cg.get("funding")), 1),
+        "oi": round(_v76_float(cg.get("oi")), 1),
+        "taker": round(_v76_float(cg.get("taker")), 1),
+        "top_position": round(_v76_float(cg.get("top_position")), 1),
+        "top_account": round(_v76_float(cg.get("top_account")), 1),
+        "basis": round(_v76_float(cg.get("basis")), 1),
+    }
+
+def v76_review_reasons(signal, row=None):
+    side = str(signal.get("side") or "").upper()
+    outcome = str(signal.get("outcome") or "")
+    features = signal.get("features") or {}
+    if row is not None:
+        features = v76_feature_snapshot(row)
+
+    positive = []
+    negative = []
+
+    for name, key in [
+        ("기관", "institution"),
+        ("CoinGlass", "coinglass"),
+        ("차트", "chart"),
+        ("거래량", "volume"),
+        ("타이밍", "timing"),
+        ("Taker", "taker"),
+    ]:
+        val = _v76_float(features.get(key), 50.0)
+        if side == "LONG":
+            if val >= 62:
+                positive.append(f"{name} 우수")
+            elif val <= 42:
+                negative.append(f"{name} 약함")
+        else:
+            if name in ("차트", "타이밍", "Taker"):
+                if val <= 38:
+                    positive.append(f"{name} 약세")
+                elif val >= 62:
+                    negative.append(f"{name} 반대")
+            else:
+                if val >= 62:
+                    positive.append(f"{name} 우수")
+                elif val <= 42:
+                    negative.append(f"{name} 약함")
+
+    if outcome in ("TP2", "SL_AFTER_TP1"):
+        reason = positive[:4] or ["핵심 조건 동조"]
+    else:
+        reason = negative[:4] or ["시장 반전 또는 타이밍 실패"]
+
+    return reason
+
+def v76_add_review(signal, row=None):
+    review = {
+        "symbol": signal.get("symbol"),
+        "side": signal.get("side"),
+        "outcome": signal.get("outcome"),
+        "opened_at": signal.get("opened_at"),
+        "closed_at": signal.get("closed_at"),
+        "entry": signal.get("entry"),
+        "close_price": signal.get("close_price"),
+        "score": signal.get("score"),
+        "features": signal.get("features") or (v76_feature_snapshot(row) if row else {}),
+        "reasons": v76_review_reasons(signal, row),
+        "success": v75_outcome_is_win(signal.get("outcome")),
+    }
+    V76_REVIEWS.append(review)
+    if len(V76_REVIEWS) > V76_MAX_REVIEWS:
+        del V76_REVIEWS[:-V76_MAX_REVIEWS]
+    v76_save_reviews()
+    return review
+
+# 신규 신호 생성 시 당시 특징값 저장
+_v76_original_register_signal = v72_register_signal
+
+def v72_register_signal(r, decision):
+    before_keys = set((V72_PERFORMANCE.get("open") or {}).keys())
+    _v76_original_register_signal(r, decision)
+    after = V72_PERFORMANCE.get("open") or {}
+
+    for key in set(after.keys()) - before_keys:
+        after[key]["features"] = v76_feature_snapshot(r)
+        after[key]["regime"] = v76_market_regime().get("code")
+    v75_save_hybrid(force=True)
+
+# 거래 종료 후 자동 복기
+_v76_original_update_performance = v72_update_performance
+
+def v72_update_performance(results):
+    before_closed = len(V72_PERFORMANCE.get("closed") or [])
+    closed = _v76_original_update_performance(results)
+    result_map = {
+        str(getattr(r, "sym", "")).upper(): r
+        for r in results
+    }
+
+    if closed:
+        for signal in closed:
+            row = result_map.get(str(signal.get("symbol") or "").upper())
+            review = v76_add_review(signal, row)
+            v74_record_event(
+                "AUTO_REVIEW",
+                symbol=signal.get("symbol", ""),
+                side=signal.get("side", ""),
+                payload=review,
+            )
+        v75_rebuild_learning()
+        v75_save_hybrid(force=True)
+
+    return closed
+
+def v76_advisor_summary(results, market):
+    regime = v76_market_regime(market, results)
+
+    ranked_long = sorted(
+        results,
+        key=lambda r: v76_regime_adjusted_scores(r, regime)[0],
+        reverse=True,
+    )
+    ranked_short = sorted(
+        results,
+        key=lambda r: v76_regime_adjusted_scores(r, regime)[1],
+        reverse=True,
+    )
+
+    if regime["code"] in ("TREND_UP",):
+        strategy = "LONG 우선"
+        selected = ranked_long[:V76_ADVISOR_TOP]
+        side = "LONG"
+    elif regime["code"] in ("CRASH", "TREND_DOWN"):
+        strategy = "SHORT 우선"
+        selected = ranked_short[:V76_ADVISOR_TOP]
+        side = "SHORT"
+    elif regime["code"] == "OVERHEAT":
+        strategy = "신규진입 축소"
+        selected = ranked_short[:1] + ranked_long[:1]
+        side = "MIXED"
+    else:
+        strategy = "관망·돌파 확인"
+        selected = sorted(
+            results,
+            key=lambda r: max(v75_adjusted_long_score(r), v75_adjusted_short_score(r)),
+            reverse=True,
+        )[:V76_ADVISOR_TOP]
+        side = "MIXED"
+
+    return regime, strategy, selected, side
+
+async def advisor_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            f"⛔ Advisor 제한: {_v54_escape(reason or '-')}",
+            parse_mode="HTML",
+        )
+        return
+
+    await update.message.reply_text("🤖 오늘의 전략 브리핑 생성 중...")
+
+    try:
+        rows, results, errors = await v70_async_scan()
+        if not results:
+            await update.message.reply_text("분석 가능한 후보가 없습니다.")
+            return
+
+        market = v59_market_state()
+        regime, strategy, selected, side = v76_advisor_summary(results, market)
+
+        lines = [
+            "🤖 <b>A100 v76 DAILY ADVISOR</b>",
+            f"시장 국면: <b>{_v54_escape(regime['label'])}</b>",
+            f"오늘 전략: <b>{_v54_escape(strategy)}</b>",
+            f"근거: {_v54_escape(regime['reason'])}",
+            "",
+            "<b>추천 후보</b>",
+        ]
+
+        for i, r in enumerate(selected, 1):
+            long_score, short_score = v76_regime_adjusted_scores(r, regime)
+            chosen_side = "LONG" if long_score >= short_score else "SHORT"
+            win_rate = v76_expected_win_rate(r, chosen_side, regime)
+            lines.append(
+                f"{i}. <b>{_v54_escape(getattr(r, 'sym', '?'))}</b> "
+                f"{chosen_side} · 점수 {max(long_score, short_score):.1f} · 승률 {win_rate}%"
+            )
+
+        lines.extend([
+            "",
+            "<b>실전 지침</b>",
+            "• 추격진입 금지",
+            "• 진입은 분할",
+            "• 손절가 이탈 시 즉시 종료",
+        ])
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
+    except asyncio.TimeoutError:
+        await update.message.reply_text("advisor 오류: 분석 시간이 초과했습니다.")
+    except Exception as e:
+        await update.message.reply_text(
+            f"advisor 오류: {_v54_escape(e)}",
+            parse_mode="HTML",
+        )
+
+async def review_cmd(update, context):
+    limit = 5
+    if context.args:
+        try:
+            limit = max(1, min(20, int(context.args[0])))
+        except Exception:
+            pass
+
+    if not V76_REVIEWS:
+        await update.message.reply_text("아직 자동 복기 기록이 없습니다.")
+        return
+
+    rows = V76_REVIEWS[-limit:][::-1]
+    lines = ["🧠 <b>A100 최근 자동 복기</b>"]
+
+    for row in rows:
+        icon = "✅" if row.get("success") else "❌"
+        reasons = ", ".join(row.get("reasons") or [])
+        lines.append(
+            f"\n{icon} <b>{_v54_escape(row.get('symbol') or '-')}</b> "
+            f"{_v54_escape(row.get('side') or '-')} · {_v54_escape(row.get('outcome') or '-')}\n"
+            f"원인: {_v54_escape(reasons or '-')}"
+        )
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+    )
+
+async def regime_cmd(update, context):
+    try:
+        rows, results, errors = await v70_async_scan()
+        market = v59_market_state()
+        regime = v76_market_regime(market, results)
+
+        await update.message.reply_text(
+            "📈 <b>A100 시장 국면</b>\n"
+            f"현재: <b>{_v54_escape(regime['label'])}</b>\n"
+            f"근거: {_v54_escape(regime['reason'])}\n"
+            f"LONG 보정: {regime['long_bonus']:+.1f}\n"
+            f"SHORT 보정: {regime['short_bonus']:+.1f}",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"regime 오류: {_v54_escape(e)}",
+            parse_mode="HTML",
+        )
+
+async def learning_cmd(update, context):
+    data = v75_rebuild_learning()
+    regime = v76_market_regime()
+
+    await update.message.reply_text(
+        "🧠 <b>A100 v76 학습 상태</b>\n"
+        f"자동 복기: ✅ 활성\n"
+        f"복기 기록: {len(V76_REVIEWS)}건\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n\n"
+        f"🟢 LONG\n"
+        f"표본 {data['LONG']['samples']} · 성공 {data['LONG']['wins']} · 실패 {data['LONG']['losses']}\n"
+        f"성과 보정 {data['LONG']['bonus']:+.2f} · 국면 보정 {regime['long_bonus']:+.1f}\n\n"
+        f"🔴 SHORT\n"
+        f"표본 {data['SHORT']['samples']} · 성공 {data['SHORT']['wins']} · 실패 {data['SHORT']['losses']}\n"
+        f"성과 보정 {data['SHORT']['bonus']:+.2f} · 국면 보정 {regime['short_bonus']:+.1f}",
+        parse_mode="HTML",
+    )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    perf = v72_performance_stats()
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+    volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+    regime = v76_market_regime()
+
+    await update.message.reply_text(
+        "📦 <b>A100 v76 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        f"자동 복기: ✅ 활성\n"
+        f"복기 기록: {len(V76_REVIEWS)}건\n"
+        f"승률 예측 보정: ✅ 활성\n"
+        f"Daily Advisor: ✅ 활성\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        f"명령어: /advisor /review /regime /learning\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+def v76_startup():
+    v75_startup()
+    v76_load_reviews()
+    log(f"v76 reviews loaded: {len(V76_REVIEWS)}")
+    return True
+
+def build_v44_application(token):
+    v76_startup()
+    v72_start_monitor()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monthly", monthly_cmd), ("learning", learning_cmd), ("advisor", advisor_cmd),
+        ("review", review_cmd), ("regime", regime_cmd),
+        ("hybridstatus", hybridstatus_cmd), ("resync", resync_cmd),
+        ("monitorstatus", monitorstatus_cmd), ("storagestatus", storagestatus_cmd),
+        ("saveperformance", saveperformance_cmd), ("restoreperformance", restoreperformance_cmd),
+        ("dbstatus", dbstatus_cmd), ("dbtest", dbtest_cmd), ("dbsync", dbsync_cmd),
+        ("dbevents", dbevents_cmd), ("chart", chart_cmd), ("fast", fast_cmd),
+        ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd), ("deep", deep_cmd),
+        ("cache", cache_cmd), ("quick", quick_cmd), ("speed", speedstatus_cmd),
+        ("report", report_cmd), ("history", history_cmd), ("stats", stats_cmd),
+        ("ticker", ticker_cmd), ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
         ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
     ]
     for name, fn in handlers:
