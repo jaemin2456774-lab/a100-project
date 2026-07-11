@@ -23843,5 +23843,196 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+
+# ============================================================================
+# A100 V90.4 ULTIMATE STABLE — REGRESSION GUARD / STARTUP PREFLIGHT
+# 목표: V90.3 기능을 보존하면서 과거 재발 오류를 시작 전에 차단한다.
+# ============================================================================
+V90_4_VERSION = "A100 V90.4 ULTIMATE STABLE"
+V90_4_STARTED_AT = time.time()
+V90_4_PREFLIGHT_LAST = {}
+
+# 과거 V88 오류: Result 객체를 dict처럼 .get()으로 접근하면서 발생한 장애.
+# 클래스 정의 직후 패치가 이미 있어도, 최종 통합 단계에서 다시 보증한다.
+def _v90_4_result_get(self, key, default=None):
+    return getattr(self, key, default)
+
+def _v90_4_result_items(self):
+    fields = getattr(self, "__dataclass_fields__", {})
+    return [(name, getattr(self, name, None)) for name in fields]
+
+def _v90_4_result_to_dict(self):
+    return dict(_v90_4_result_items(self))
+
+if "Result" in globals():
+    if not callable(getattr(Result, "get", None)):
+        Result.get = _v90_4_result_get
+    if not callable(getattr(Result, "items", None)):
+        Result.items = _v90_4_result_items
+    if not callable(getattr(Result, "to_dict", None)):
+        Result.to_dict = _v90_4_result_to_dict
+
+# NaN/Inf가 점수·알림 문자열로 전파되는 것을 방지한다.
+def v90_4_finite(value, default=0.0):
+    try:
+        number = float(value)
+        return number if math.isfinite(number) else float(default)
+    except (TypeError, ValueError, OverflowError):
+        return float(default)
+
+# 시작 전에 확인 가능한 회귀 오류를 일괄 검사한다.
+def v90_4_preflight():
+    audit = v90_registry_audit()
+    critical_commands = {
+        "commands", "health", "selfcheck", "legacycheck", "errors",
+        "v88", "v89", "v90", "pulse", "risk", "whale87", "alertplan",
+        "decision", "setup", "conviction", "watchlist", "quality",
+        "scan", "fast", "rank", "news", "macro", "dbstatus",
+    }
+    registry = globals().get("V90_COMMAND_REGISTRY", {})
+    missing_critical = sorted(critical_commands - set(registry))
+    non_callable_critical = sorted(
+        name for name in critical_commands
+        if name in registry and not callable(registry.get(name))
+    )
+    checks = {
+        "registry_count": len(registry) >= 100,
+        "registry_callbacks": not audit.get("missing_callbacks") and not audit.get("non_callable"),
+        "critical_commands": not missing_critical and not non_callable_critical,
+        "result_get": bool("Result" in globals() and callable(getattr(Result, "get", None))),
+        "math": bool("math" in globals() and callable(getattr(math, "isfinite", None))),
+        "single_dispatch": callable(globals().get("v90_1_dispatch")),
+        "symbol_guard": callable(globals().get("v90_3_refresh_symbols")),
+        "shared_cache": isinstance(globals().get("V90_3_ANALYSIS_CACHE"), dict),
+        "polling_lock": callable(globals().get("acquire_v44_process_lock")),
+        "health_server": callable(globals().get("start_health_server_once")),
+    }
+    result = {
+        "ok": all(checks.values()),
+        "checks": checks,
+        "command_count": len(registry),
+        "missing_critical": missing_critical,
+        "non_callable_critical": non_callable_critical,
+        "audit": audit,
+    }
+    V90_4_PREFLIGHT_LAST.clear()
+    V90_4_PREFLIGHT_LAST.update(result)
+    return result
+
+async def health90_4_cmd(update, context):
+    pre = v90_4_preflight()
+    cache_total = V90_3_CACHE_HITS + V90_3_CACHE_MISSES
+    hit_rate = (V90_3_CACHE_HITS * 100.0 / cache_total) if cache_total else 0.0
+    lines = [
+        "✅ <b>A100 V90.4 ULTIMATE STABLE</b>",
+        f"가동시간: {int(time.time() - V90_4_STARTED_AT)}초",
+        f"전체 명령: {pre['command_count']}개",
+        f"시작 전 검사: {'✅ 통과' if pre['ok'] else '❌ 점검 필요'}",
+        f"Binance 심볼: {len(globals().get('V78_VALID_SYMBOLS') or [])}개",
+        f"공통 분석 캐시: {len(V90_3_ANALYSIS_CACHE)}개 / 적중률 {hit_rate:.1f}%",
+        f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+        f"심볼 갱신 오류: {_v54_escape(V90_3_SYMBOL_REFRESH_ERROR or '-')}",
+        "단일 Telegram 디스패처: 활성",
+        "중복 Polling 방지 잠금: 활성",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+async def selfcheck90_4_cmd(update, context):
+    pre = v90_4_preflight()
+    runtime_checks = [
+        ("Telegram token", bool(os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN"))),
+        ("Chat ID", bool(CHAT_ID)),
+        ("CoinGlass key", bool(CG_KEY)),
+        ("PostgreSQL 설정", bool(v74_database_configured())),
+        ("Railway Volume", bool(os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK))),
+        ("Binance 심볼목록", bool(v90_3_symbol_ready())),
+        ("V87 collector", callable(globals().get("_v87_collect"))),
+        ("V89 안전 collector", callable(globals().get("_v89_collect"))),
+    ]
+    static_checks = [(name, ok) for name, ok in pre["checks"].items()]
+    checks = static_checks + runtime_checks
+    passed = sum(1 for _, ok in checks if ok)
+    lines = [
+        "🩺 <b>A100 V90.4 SELF CHECK</b>",
+        f"결과: <b>{passed}/{len(checks)}</b>",
+        f"통합 명령: <b>{pre['command_count']}개</b>",
+        "",
+        *[f"{'✅' if ok else '⚠️'} {_v54_escape(name)}" for name, ok in checks],
+        "",
+        f"심볼 갱신 오류: {_v54_escape(V90_3_SYMBOL_REFRESH_ERROR or '-')}",
+        f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+async def legacycheck90_4_cmd(update, context):
+    pre = v90_4_preflight()
+    lines = [
+        "🧾 <b>A100 V90.4 회귀 방지 감사</b>",
+        f"등록 명령: <b>{pre['command_count']}개</b>",
+        f"레지스트리 콜백: <b>{'정상' if pre['checks']['registry_callbacks'] else '오류'}</b>",
+        f"핵심 명령 누락: <b>{len(pre['missing_critical'])}개</b>",
+        f"핵심 콜백 오류: <b>{len(pre['non_callable_critical'])}개</b>",
+        f"Result.get 호환: <b>{'정상' if pre['checks']['result_get'] else '오류'}</b>",
+        f"심볼 가드: <b>{'정상' if pre['checks']['symbol_guard'] else '오류'}</b>",
+        f"공통 캐시: <b>{'정상' if pre['checks']['shared_cache'] else '오류'}</b>",
+        f"최종 판정: <b>{'✅ 통과' if pre['ok'] else '❌ 점검 필요'}</b>",
+    ]
+    if pre["missing_critical"]:
+        lines.append("누락: " + ", ".join(pre["missing_critical"]))
+    if pre["non_callable_critical"]:
+        lines.append("실행 불가: " + ", ".join(pre["non_callable_critical"]))
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+# 기존 100개 이상 명령은 보존하고 상태/감사 명령만 V90.4로 교체한다.
+V90_COMMAND_REGISTRY["health"] = health90_4_cmd
+V90_COMMAND_REGISTRY["selfcheck"] = selfcheck90_4_cmd
+V90_COMMAND_REGISTRY["legacycheck"] = legacycheck90_4_cmd
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+# 빌드 시점에도 회귀 검사를 강제한다. 정의되지 않은 콜백은 배포 전에 즉시 드러난다.
+def build_v44_application(token):
+    pre = v90_4_preflight()
+    if not pre["ok"]:
+        reasons = []
+        for name, ok in pre["checks"].items():
+            if not ok:
+                reasons.append(name)
+        if pre["missing_critical"]:
+            reasons.append("missing=" + ",".join(pre["missing_critical"]))
+        if pre["non_callable_critical"]:
+            reasons.append("non_callable=" + ",".join(pre["non_callable_critical"]))
+        raise RuntimeError("V90.4 preflight failed: " + "; ".join(reasons))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V90.4 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V90.4 dispatcher count: 1", flush=True)
+    print("A100 V90.4 preflight: OK", flush=True)
+    return app
+
+def main():
+    start_health_server_once()
+    v90_3_start_background_once()
+    pre = v90_4_preflight()
+    print(f"{V90_4_VERSION} worker running...", flush=True)
+    print(f"A100 V90.4 startup commands: {pre['command_count']}", flush=True)
+    if not pre["ok"]:
+        print("A100 V90.4 startup preflight failed", flush=True)
+        print(json.dumps(pre, ensure_ascii=False, default=str), flush=True)
+        raise RuntimeError("A100 V90.4 startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V90.4 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        print("A100 V90.4 stopped by signal", flush=True)
+    except Exception as error:
+        v88_record_error("v90.4-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
 if __name__ == "__main__":
     main()
