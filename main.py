@@ -5150,7 +5150,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v80 REAL LIQUIDITY QUALITY ENGINE worker running...", flush=True)
+    print("A100 v81 SCORE BREAKDOWN QUALITY ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -20055,7 +20055,7 @@ def v79_update_pending(r, regime=None):
             V79_CONFIRMED[key] = confirmed
             V79_PENDING.pop(key, None)
             v74_record_event(
-                "SIGNAL_CONFIRMED_V80",
+                "SIGNAL_CONFIRMED_V81",
                 symbol=signal["symbol"],
                 side=signal["side"],
                 payload=confirmed,
@@ -20156,7 +20156,7 @@ def v79_api_health_snapshot():
 
 async def health_cmd(update, context):
     health = v79_api_health_snapshot()
-    lines = ["🩺 <b>A100 v80 API 상태</b>"]
+    lines = ["🩺 <b>A100 v81 API 상태</b>"]
     for name in ("Binance", "CoinGlass", "Upbit", "PostgreSQL", "Volume"):
         row = health.get(name) or {}
         icon = "✅" if row.get("ok") else "⚠️"
@@ -20171,7 +20171,7 @@ async def scanstatus_cmd(update, context):
         if s.get("finished_at") else "-"
     )
     await update.message.reply_text(
-        "📡 <b>A100 v80 스캔 상태</b>\n"
+        "📡 <b>A100 v81 스캔 상태</b>\n"
         f"마지막 완료: {last}\n"
         f"전체 후보: {s.get('requested', 0)}\n"
         f"품질 통과: {s.get('valid', 0)}\n"
@@ -20185,33 +20185,106 @@ async def scanstatus_cmd(update, context):
         parse_mode="HTML",
     )
 
-async def quality_cmd(update, context):
-    symbol = context.args[0] if context.args else "BTC"
-    normalized = v69_normalize_symbol(symbol)
+def v81_quality_breakdown(r, report=None):
+    """v80 품질 공식의 각 항목 기여도와 감점을 사용자에게 그대로 공개한다."""
+    report = report or v79_quality_report(r)
+    metrics = report.get("metrics") or v79_market_metrics(r)
+    cg = v68_cg_raw(r)
+    raw = {
+        "차트 구조": _v79_float(v56_chart_structure_score(r)),
+        "실제 유동성": _v79_float(metrics.get("liquidity_score")),
+        "거래량·변동성": _v79_float(v56_volume_volatility_score(r)),
+        "진입 타이밍": _v79_float(v60_timing_score(r)),
+        "기관 수급": _v79_float(v56_institution_strength(r)),
+        "CoinGlass": _v79_float(cg.get("total")),
+        "위험 안정성": max(0.0, 100.0 - _v79_float(v60_risk_score(r))),
+    }
+    weights = {
+        "차트 구조": 0.16, "실제 유동성": 0.22, "거래량·변동성": 0.08,
+        "진입 타이밍": 0.13, "기관 수급": 0.13, "CoinGlass": 0.14,
+        "위험 안정성": 0.14,
+    }
+    contributions = {k: round(raw[k] * weights[k], 1) for k in raw}
+    penalty_map = {"심볼":45.0,"캔들":18.0,"유동성":20.0,"스프레드":12.0,"신규상장":12.0,"CoinGlass":10.0}
+    penalties = [(name, penalty_map.get(name,0.0), detail) for name,ok,detail in report.get("checks",[]) if not ok]
+    return {
+        "raw": raw, "weights": weights, "contributions": contributions,
+        "core": round(sum(contributions.values()),1), "penalties": penalties,
+        "penalty_total": round(sum(x[1] for x in penalties),1),
+        "final": report.get("quality",0.0),
+    }
 
-    await update.message.reply_text(f"🔍 {normalized} 데이터 품질 분석 중...")
+
+def v81_entry_probability(long_score, short_score, report, regime):
+    """실제 통계 승률이 아닌 신호 강도 기반 참고값."""
+    best=max(_v79_float(long_score),_v79_float(short_score))
+    edge=abs(_v79_float(long_score)-_v79_float(short_score))
+    quality=_v79_float(report.get("quality"))
+    regime_bonus=max(_v79_float(regime.get("long_bonus")),_v79_float(regime.get("short_bonus")))
+    return round(_v79_clip(best*0.52+quality*0.33+min(edge,30.0)*0.35+regime_bonus*0.20),1)
+
+
+def v81_needed_conditions(r, report, long_score, short_score):
+    needed=[]
+    best=max(_v79_float(long_score),_v79_float(short_score))
+    quality=_v79_float(report.get("quality"))
+    if quality < V79_MIN_QUALITY: needed.append(f"품질 +{max(0.0,V79_MIN_QUALITY-quality):.1f}점")
+    if best < V79_SCORE_CONFIRM: needed.append(f"신호점수 +{max(0.0,V79_SCORE_CONFIRM-best):.1f}점")
+    for name,ok,detail in report.get("checks",[]):
+        if not ok: needed.append(f"{name} 개선 ({detail})")
     try:
-        result = await v70_direct_symbol(normalized)
+        cg=v68_cg_raw(r)
+        if _v79_float(cg.get("oi")) < 50: needed.append("OI 수급 강화")
+        if _v79_float(cg.get("funding")) < 45: needed.append("Funding 조건 안정")
+        if _v79_float(cg.get("taker")) < 50: needed.append("Taker 방향성 강화")
+    except Exception: pass
+    unique=[]
+    for item in needed:
+        if item not in unique: unique.append(item)
+    return unique[:6] or ["핵심 조건 충족 · 재검증 유지"]
+
+
+async def quality_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"🔍 {normalized} 데이터 품질·점수 내역 분석 중...")
+    try:
+        result=await v70_direct_symbol(normalized)
         if result is None:
             await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
             return
-
-        report = v79_quality_report(result)
-        lines = [
+        report=v79_quality_report(result)
+        breakdown=v81_quality_breakdown(result,report)
+        regime=v76_market_regime()
+        long_score,short_score,_=v79_final_scores(result,regime)
+        probability=v81_entry_probability(long_score,short_score,report,regime)
+        needed=v81_needed_conditions(result,report,long_score,short_score)
+        lines=[
             f"🧪 <b>{_v54_escape(report['symbol'])} 품질 보고서</b>",
-            f"등급: <b>{report['grade']}</b>",
-            f"품질: <b>{report['quality']}/100</b>",
-            f"판정: {_v54_escape(report['status'])}",
-            "",
+            f"등급: <b>{report['grade']}</b>", f"품질: <b>{report['quality']}/100</b>",
+            f"판정: {_v54_escape(report['status'])}", f"진입 가능성(참고): <b>{probability}%</b>",
+            "", "<b>점수 산출 내역</b>",
         ]
-        for name, ok, detail in report["checks"]:
+        for name,contribution in breakdown["contributions"].items():
+            raw=breakdown["raw"][name]; weight=int(breakdown["weights"][name]*100)
+            lines.append(f"• {name}: {raw:.1f} × {weight}% = <b>+{contribution:.1f}</b>")
+        lines.append(f"• 가중합: <b>{breakdown['core']:.1f}</b>")
+        if breakdown["penalties"]:
+            lines.extend(["", "<b>감점 내역</b>"])
+            for name,penalty,detail in breakdown["penalties"]:
+                lines.append(f"• {name}: <b>-{penalty:.1f}</b> · {_v54_escape(detail)}")
+        lines.extend(["", "<b>데이터 점검</b>"])
+        for name,ok,detail in report["checks"]:
             lines.append(f"{'✅' if ok else '⚠️'} {name}: {_v54_escape(detail)}")
+        lines.extend(["", "<b>통과까지 필요한 조건</b>"])
+        lines.extend(f"• {_v54_escape(x)}" for x in needed)
+        lines.extend(["", "<i>진입 가능성은 실측 승률이 아닌 현재 신호 강도 참고값입니다.</i>"])
         if v79_is_quarantined(report["symbol"]):
-            q = V79_QUARANTINE.get(report["symbol"]) or {}
-            lines.append(f"\n🚫 격리: {_v54_escape(q.get('reason') or '-')}")
-        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+            q=V79_QUARANTINE.get(report["symbol"]) or {}
+            lines.extend(["", f"🚫 격리: {_v54_escape(q.get('reason') or '-')}"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
     except Exception as e:
-        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}", parse_mode="HTML")
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
 
 async def pending_cmd(update, context):
     v79_cleanup_quarantine()
@@ -20225,7 +20298,7 @@ async def pending_cmd(update, context):
         key=lambda x: _v79_float(x.get("score")),
         reverse=True,
     )[:20]
-    lines = ["⏳ <b>A100 v80 재검증 대기</b>"]
+    lines = ["⏳ <b>A100 v81 재검증 대기</b>"]
     for row in rows:
         remain = max(
             0,
@@ -20239,34 +20312,40 @@ async def pending_cmd(update, context):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 async def why_cmd(update, context):
-    symbol = context.args[0] if context.args else "BTC"
-    normalized = v69_normalize_symbol(symbol)
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
     try:
-        result = await v70_direct_symbol(normalized)
+        result=await v70_direct_symbol(normalized)
         if result is None:
             await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
             return
-
-        regime = v76_market_regime()
-        long_score, short_score, report = v79_final_scores(result, regime)
-        side = "LONG" if long_score >= short_score else "SHORT"
-        decision = "추천 가능" if report["eligible"] and max(long_score, short_score) >= V79_SCORE_CONFIRM else "대기/제외"
-
-        reasons = report["reasons"] or ["핵심 품질조건 충족"]
-        await update.message.reply_text(
-            f"🧠 <b>{_v54_escape(report['symbol'])} 판단 이유</b>\n"
-            f"결론: <b>{decision}</b>\n"
-            f"우세방향: <b>{side}</b>\n"
-            f"LONG 최종점수: {long_score}\n"
-            f"SHORT 최종점수: {short_score}\n"
-            f"데이터 품질: {report['quality']}/100 · {report['grade']}급\n"
-            f"시장국면: {_v54_escape(regime.get('label'))}\n\n"
-            f"<b>판정 근거</b>\n" +
-            "\n".join(f"• {_v54_escape(x)}" for x in reasons),
-            parse_mode="HTML",
-        )
+        regime=v76_market_regime()
+        long_score,short_score,report=v79_final_scores(result,regime)
+        side="LONG" if long_score>=short_score else "SHORT"
+        best=max(long_score,short_score)
+        decision="추천 가능" if report["eligible"] and best>=V79_SCORE_CONFIRM else "대기/제외"
+        probability=v81_entry_probability(long_score,short_score,report,regime)
+        needed=v81_needed_conditions(result,report,long_score,short_score)
+        breakdown=v81_quality_breakdown(result,report)
+        reasons=report["reasons"] or ["필수 데이터 점검 통과"]
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} 판단 이유</b>", f"결론: <b>{decision}</b>",
+            f"우세방향: <b>{side}</b>", f"LONG 최종점수: {long_score}", f"SHORT 최종점수: {short_score}",
+            f"방향 격차: {abs(long_score-short_score):.1f}",
+            f"데이터 품질: {report['quality']}/100 · {report['grade']}급",
+            f"진입 가능성(참고): <b>{probability}%</b>", f"시장국면: {_v54_escape(regime.get('label'))}",
+            "", "<b>품질 핵심 기여</b>",
+        ]
+        top=sorted(breakdown["contributions"].items(),key=lambda x:x[1],reverse=True)
+        lines.extend(f"• {k}: +{v:.1f}" for k,v in top[:4])
+        lines.extend(["", "<b>판정 근거</b>"])
+        lines.extend(f"• {_v54_escape(x)}" for x in reasons)
+        lines.extend(["", "<b>통과까지 필요한 조건</b>"])
+        lines.extend(f"• {_v54_escape(x)}" for x in needed)
+        lines.extend(["", "<i>참고 확률은 실측 승률이 아니며 주문 실행 기준으로 단독 사용하지 않습니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
     except Exception as e:
-        await update.message.reply_text(f"why 오류: {_v54_escape(e)}", parse_mode="HTML")
+        await update.message.reply_text(f"why 오류: {_v54_escape(e)}",parse_mode="HTML")
 
 async def quarantine_cmd(update, context):
     v79_cleanup_quarantine()
@@ -20274,7 +20353,7 @@ async def quarantine_cmd(update, context):
         await update.message.reply_text("🚫 현재 격리 중인 종목이 없습니다.")
         return
     now = time.time()
-    lines = ["🚫 <b>A100 v80 종목 격리</b>"]
+    lines = ["🚫 <b>A100 v81 종목 격리</b>"]
     for symbol, row in sorted(V79_QUARANTINE.items()):
         remain = max(0, int(_v79_float(row.get("until")) - now))
         lines.append(
@@ -20292,12 +20371,12 @@ async def datastatus_cmd(update, context):
     regime = v76_market_regime()
 
     await update.message.reply_text(
-        "📦 <b>A100 v80 데이터 상태</b>\n"
+        "📦 <b>A100 v81 데이터 상태</b>\n"
         f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
         f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
         f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
         f"시장 국면: {_v54_escape(regime['label'])}\n"
-        f"데이터 품질 엔진: ✅ 활성\n"
+        f"데이터 품질 엔진: ✅ 활성 (v81 점수내역)\n"
         f"재검증 엔진: ✅ 활성 ({len(V79_PENDING)}대기)\n"
         f"확정 신호: {len(V79_CONFIRMED)}개\n"
         f"자동 격리: ✅ 활성 ({len(V79_QUARANTINE)}종목)\n"
