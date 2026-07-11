@@ -21248,5 +21248,818 @@ def build_v44_application(token):
     return app
 
 
+# ============================================================
+# A100 v85 ULTIMATE REGIME / WHALE / BREAKOUT / CONFIDENCE
+# ============================================================
+V85_VERSION = "v85 ULTIMATE"
+V85_ALERT_MIN_CONFIDENCE = float(os.getenv("V85_ALERT_MIN_CONFIDENCE", "76"))
+V85_ALERT_MIN_BREAKOUT = float(os.getenv("V85_ALERT_MIN_BREAKOUT", "72"))
+V85_ALERT_COOLDOWN = int(os.getenv("V85_ALERT_COOLDOWN", "21600"))
+V85_ALERT_MEMORY = {}
+
+
+def _v85_clip(x, lo=0.0, hi=100.0):
+    try:
+        return max(lo, min(hi, float(x)))
+    except Exception:
+        return lo
+
+
+def _v85_market_regime(r=None):
+    base = v76_market_regime()
+    market = v59_market_state()
+    btc = _v79_float(market.get("btc_change"), 0.0)
+    breadth = _v79_float(market.get("breadth"), 50.0)
+    alt = _v79_float(market.get("alt_score"), 50.0)
+    vol = _v79_float(getattr(r, "vol_ratio", 1.0), 1.0) if r is not None else 1.0
+    squeeze = _v79_float(getattr(r, "squeeze", 0.0)) if r is not None else 0.0
+
+    if btc <= -4.5 or (breadth <= 18 and alt <= 28):
+        return {"code":"LIQUIDATION","label":"⚫ 청산구간","long_bonus":-10.0,"short_bonus":4.0,
+                "reason":"BTC 급락·시장 폭 붕괴", "threshold_shift":8.0}
+    if btc <= -2.5 or (breadth <= 28 and alt <= 35):
+        return {"code":"CRASH","label":"🔴 급락장","long_bonus":-8.0,"short_bonus":6.0,
+                "reason":"시장 전반 약세와 변동성 확대", "threshold_shift":5.0}
+    if base.get("code") == "TREND_DOWN" or (btc < -0.8 and breadth < 42):
+        return {"code":"DOWN","label":"🟠 하락장","long_bonus":-5.0,"short_bonus":4.0,
+                "reason":"BTC·시장 폭 하락 동조", "threshold_shift":3.0}
+    if btc >= 3.2 and breadth >= 72 and alt >= 65:
+        return {"code":"STRONG_UP","label":"🟢 강한 상승장","long_bonus":6.0,"short_bonus":-7.0,
+                "reason":"BTC 강세와 시장 폭 확산", "threshold_shift":-3.0}
+    if base.get("code") == "TREND_UP" or (btc > 0.8 and breadth > 58):
+        return {"code":"UP","label":"🟢 상승장","long_bonus":4.0,"short_bonus":-4.0,
+                "reason":"상승 방향과 시장 폭 동조", "threshold_shift":-2.0}
+    if squeeze >= 75 and vol >= 1.8:
+        return {"code":"LIQUIDATION","label":"⚫ 청산구간","long_bonus":-3.0,"short_bonus":-3.0,
+                "reason":"스퀴즈·거래량 급증", "threshold_shift":6.0}
+    return {"code":"RANGE","label":"🟡 박스권","long_bonus":-1.0,"short_bonus":-1.0,
+            "reason":"방향성 부족", "threshold_shift":4.0}
+
+
+def _v85_whale_metrics(r, flow, regime):
+    try:
+        cg = v68_cg_raw(r)
+    except Exception:
+        cg = {}
+    oi = _v79_float(cg.get("oi"), flow.get("oi", 0))
+    funding = _v79_float(cg.get("funding"), flow.get("funding", 50))
+    taker = _v79_float(cg.get("taker"), flow.get("taker", 50))
+    institution = _v79_float(v56_institution_strength(r), 50)
+    chart = _v79_float(v56_chart_structure_score(r), 50)
+    volume = _v79_float(v56_volume_volatility_score(r), 50)
+    delta = _v79_float(flow.get("delta_pct"), 0)
+    distribution = _v79_float(getattr(r, "distribution", 0))
+    bubble = _v79_float(getattr(r, "bubble", 0))
+
+    # Funding 중립(50 인근), OI·기관·체결 우위, 과열 억제를 매집 근거로 사용합니다.
+    funding_neutral = _v85_clip(100 - abs(funding - 50) * 2.0)
+    accumulation = _v85_clip(
+        oi * 0.22 + institution * 0.24 + taker * 0.16 + chart * 0.14 +
+        funding_neutral * 0.12 + _v85_clip(50 + delta) * 0.12 -
+        distribution * 0.18 - bubble * 0.10
+    )
+    distribution_score = _v85_clip(
+        distribution * 0.34 + bubble * 0.20 + _v85_clip(50 - delta) * 0.16 +
+        _v85_clip(100 - taker) * 0.12 + volume * 0.08 +
+        (100 - funding_neutral) * 0.10
+    )
+    if accumulation >= distribution_score + 8:
+        label, icon, score = "세력 매집 가능성", "🐋", accumulation
+    elif distribution_score >= accumulation + 8:
+        label, icon, score = "세력 분산 가능성", "⚠️", distribution_score
+    else:
+        label, icon, score = "세력 방향 불명확", "➖", max(accumulation, distribution_score)
+    return {
+        "label": label, "icon": icon, "score": round(score,1),
+        "accumulation": round(accumulation,1), "distribution": round(distribution_score,1),
+        "oi": round(oi,1), "funding": round(funding,1), "taker": round(taker,1),
+        "institution": round(institution,1), "chart": round(chart,1), "volume": round(volume,1),
+    }
+
+
+def _v85_breakout_metrics(r, report, m, flow, whale, regime):
+    quality = _v79_float(report.get("quality"))
+    edge = _v79_float(m.get("edge"))
+    confidence = _v79_float(m.get("confidence"))
+    vol_ratio = _v79_float(getattr(r, "vol_ratio", 1.0), 1.0)
+    squeeze = _v79_float(getattr(r, "squeeze", 0.0))
+    chart = _v79_float(v56_chart_structure_score(r), 50)
+    oi = _v79_float(flow.get("oi"), 0)
+    delta = abs(_v79_float(flow.get("delta_pct"), 0))
+    regime_bonus = {"STRONG_UP":8,"UP":5,"RANGE":0,"DOWN":-4,"CRASH":-8,"LIQUIDATION":-12}.get(regime.get("code"),0)
+    score = _v85_clip(
+        quality*0.19 + confidence*0.16 + chart*0.15 + oi*0.13 +
+        whale.get("accumulation",50)*0.13 + _v85_clip(vol_ratio*35)*0.10 +
+        _v85_clip(squeeze)*0.08 + _v85_clip(delta*3)*0.06 + regime_bonus
+    )
+    # 확률이 아니라 조건 충족도입니다. 출력에서 명확히 구분합니다.
+    if score >= 82: eta = "1~6시간 재검증"
+    elif score >= 72: eta = "6~12시간 재검증"
+    elif score >= 62: eta = "12~24시간 재검증"
+    else: eta = "24시간 이상 또는 조건 재설정"
+    direction = "상방" if m.get("side") == "LONG" else "하방"
+    return {"score":round(score,1), "eta":eta, "direction":direction,
+            "ready": score >= V85_ALERT_MIN_BREAKOUT and quality >= 65 and edge >= 8}
+
+
+def _v85_confidence(report, m, whale, breakout, regime):
+    quality = _v79_float(report.get("quality"))
+    base = _v79_float(m.get("confidence"))
+    edge = _v79_float(m.get("edge"))
+    regime_alignment = 50.0
+    if (m.get("side") == "LONG" and regime.get("long_bonus",0) > 0) or (m.get("side") == "SHORT" and regime.get("short_bonus",0) > 0):
+        regime_alignment = 82.0
+    elif regime.get("code") in ("RANGE","LIQUIDATION"):
+        regime_alignment = 38.0
+    score = _v85_clip(base*0.34 + quality*0.24 + breakout["score"]*0.18 +
+                      whale["score"]*0.12 + _v85_clip(edge*4)*0.07 + regime_alignment*0.05)
+    stars = max(1, min(5, int(round(score/20))))
+    return {"score":round(score,1), "stars":"★"*stars + "☆"*(5-stars)}
+
+
+def _v85_history_validation(symbol, side):
+    rows = list(V83_HISTORY.get(symbol, []))
+    side = str(side).upper()
+    relevant = [x for x in rows if str(x.get("side","")).upper() == side]
+    # V83_HISTORY는 점수 이력이며 체결 결과가 아니므로 실제 승률로 표현하지 않습니다.
+    if len(relevant) < 6:
+        return {"samples":len(relevant),"status":"기록 축적 중","stability":None,"avg_quality":None}
+    qualities = [_v79_float(x.get("quality")) for x in relevant]
+    avg = sum(qualities)/len(qualities)
+    stable = sum(1 for q in qualities if q >= V79_MIN_QUALITY)/len(qualities)*100
+    return {"samples":len(relevant),"status":"이력 검증 가능","stability":round(stable,1),"avg_quality":round(avg,1)}
+
+
+def _v85_summary(m, confidence, breakout, whale, regime, blockers):
+    side = m.get("side","중립")
+    if regime.get("code") == "LIQUIDATION":
+        return "청산 변동성 구간입니다. 방향 신호보다 포지션 축소와 재검증이 우선입니다."
+    if breakout["ready"] and confidence["score"] >= V85_ALERT_MIN_CONFIDENCE and not blockers:
+        return f"{side} 조건이 강화됐습니다. 최신 마감 캔들·손절 기준 확인 후 분할 진입 검토 단계입니다."
+    if whale["label"] == "세력 분산 가능성":
+        return f"{side} 점수보다 분산 위험이 큽니다. 추격 진입을 피하고 재검증하세요."
+    if blockers:
+        return f"{side} 우세지만 {blockers[0][1]} 조건이 부족합니다. 아직 대기 단계입니다."
+    return f"{side} 우세를 관찰 중이며 {breakout['eta']}이 필요합니다."
+
+
+async def regime_cmd(update, context):
+    symbol = v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        r = await v70_direct_symbol(symbol)
+        regime = _v85_market_regime(r)
+        await update.message.reply_text(
+            f"🌐 <b>{_v54_escape(symbol)} 시장 국면</b>\n"
+            f"현재: <b>{_v54_escape(regime['label'])}</b>\n"
+            f"근거: {_v54_escape(regime['reason'])}\n"
+            f"LONG 보정 {regime['long_bonus']:+.1f} · SHORT 보정 {regime['short_bonus']:+.1f}\n"
+            f"진입 기준 조정 {regime['threshold_shift']:+.1f}점\n\n"
+            "<i>국면은 BTC 변화·시장 폭·알트 강도·변동성을 합성한 휴리스틱입니다.</i>", parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"regime 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+
+async def whale_cmd(update, context):
+    symbol = v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        r = await v70_direct_symbol(symbol)
+        report=v79_quality_report(r); regime=_v85_market_regime(r)
+        ls,ss,_=v79_final_scores(r,regime); flow=_v84_flow_metrics(r,ls,ss)
+        whale=_v85_whale_metrics(r,flow,regime)
+        await update.message.reply_text(
+            f"{whale['icon']} <b>{_v54_escape(symbol)} 세력 흔적</b>\n"
+            f"판정: <b>{_v54_escape(whale['label'])}</b> · {whale['score']:.1f}/100\n"
+            f"매집 점수 {_v83_ratio_bar(whale['accumulation'])} {whale['accumulation']:.1f}%\n"
+            f"분산 점수 {_v83_ratio_bar(whale['distribution'])} {whale['distribution']:.1f}%\n\n"
+            f"OI {whale['oi']:.1f} · Funding 안정 {whale['funding']:.1f}\n"
+            f"Taker {whale['taker']:.1f} · 기관 {whale['institution']:.1f}\n"
+            f"차트 {whale['chart']:.1f} · 거래량 {whale['volume']:.1f}\n\n"
+            "<i>세력 점수는 OI·Funding·Taker·기관·차트 프록시의 합성값이며 실제 지갑 추적 결과가 아닙니다.</i>", parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"whale 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+
+async def breakout85_cmd(update, context):
+    symbol = v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        r=await v70_direct_symbol(symbol); report=v79_quality_report(r); regime=_v85_market_regime(r)
+        ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+        flow=_v84_flow_metrics(r,ls,ss); whale=_v85_whale_metrics(r,flow,regime)
+        bo=_v85_breakout_metrics(r,report,m,flow,whale,regime)
+        await update.message.reply_text(
+            f"💥 <b>{_v54_escape(symbol)} 돌파 준비도</b>\n"
+            f"방향: <b>{bo['direction']}</b>\n"
+            f"조건 충족도 {_v83_ratio_bar(bo['score'])} <b>{bo['score']:.1f}/100</b>\n"
+            f"예상 재검증: <b>{_v54_escape(bo['eta'])}</b>\n"
+            f"자동알림 후보: {'✅ 예' if bo['ready'] else '⏳ 아니오'}\n\n"
+            "<i>폭발 확률이 아니라 현재 데이터 기준 돌파 조건 충족도입니다.</i>", parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"breakout85 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+
+async def confidence_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        r=await v70_direct_symbol(symbol); report=v79_quality_report(r); regime=_v85_market_regime(r)
+        ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+        flow=_v84_flow_metrics(r,ls,ss); whale=_v85_whale_metrics(r,flow,regime)
+        bo=_v85_breakout_metrics(r,report,m,flow,whale,regime); conf=_v85_confidence(report,m,whale,bo,regime)
+        hist=_v85_history_validation(report['symbol'],m['side'])
+        lines=[f"🎯 <b>{_v54_escape(symbol)} AI 확신도</b>",f"{conf['stars']} <b>{conf['score']:.1f}%</b>",
+               f"방향: {m['side']} · 국면: {_v54_escape(regime['label'])}",
+               f"돌파 조건 {bo['score']:.1f} · 세력 흔적 {whale['score']:.1f}",
+               "", "<b>저장 이력 검증</b>", f"표본 {hist['samples']}건 · {hist['status']}"]
+        if hist['stability'] is not None:
+            lines.extend([f"품질 기준 유지율 {hist['stability']:.1f}%",f"평균 품질 {hist['avg_quality']:.1f}"])
+        lines.extend(["", "<i>확신도는 모델 내부 조건 일치도이며 실제 승률이 아닙니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"confidence 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def quality_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"🔎 {normalized} v85 ULTIMATE 분석 중...")
+    try:
+        r=await v70_direct_symbol(normalized)
+        if r is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다."); return
+        report=v79_quality_report(r); regime=_v85_market_regime(r)
+        ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+        blockers=_v83_priority_blockers(r,report,ls,ss); checklist=_v83_checklist(r,report,ls,ss)
+        flow=_v84_flow_metrics(r,ls,ss); whale=_v85_whale_metrics(r,flow,regime)
+        bo=_v85_breakout_metrics(r,report,m,flow,whale,regime); conf=_v85_confidence(report,m,whale,bo,regime)
+        summary=_v85_summary(m,conf,bo,whale,regime,blockers); hist=_v85_history_validation(report['symbol'],m['side'])
+        _v83_record(report['symbol'],report,ls,ss,m,regime)
+        action=_v83_action(m,blockers); stage_bar="🟩"*m['stage']+"⬜"*(5-m['stage'])
+        lines=[f"🧠 <b>{_v54_escape(report['symbol'])} A100 v85 ULTIMATE</b>",
+               f"등급 <b>{_v83_grade(report['quality'])}</b> · 품질 {report['quality']:.1f}/100",
+               f"국면 <b>{_v54_escape(regime['label'])}</b> · {stage_bar} {m['stage']}/5",
+               f"추천 행동 <b>{action}</b>","", "<b>AI 최종 결론</b>",_v54_escape(summary),"",
+               "<b>AI 확신도</b>",f"{conf['stars']} <b>{conf['score']:.1f}%</b> <i>(조건 일치도)</i>","",
+               "<b>세력 흔적</b>",f"{whale['icon']} {_v54_escape(whale['label'])} <b>{whale['score']:.1f}</b>",
+               f"매집 {whale['accumulation']:.1f} · 분산 {whale['distribution']:.1f}","",
+               "<b>돌파 엔진</b>",f"{bo['direction']} 조건 충족도 {_v83_ratio_bar(bo['score'])} <b>{bo['score']:.1f}</b>",
+               f"재검증 {bo['eta']} · 자동알림 {'후보' if bo['ready'] else '대기'}","",
+               "<b>방향·주문흐름</b>",
+               f"LONG  {_v83_ratio_bar(flow['long_pct'])} {flow['long_pct']:.1f}%",
+               f"SHORT {_v83_ratio_bar(flow['short_pct'])} {flow['short_pct']:.1f}%",
+               f"매수압 {flow['buy_pct']:.1f}% · 매도압 {flow['sell_pct']:.1f}%",
+               f"Delta {flow['delta_pct']:+.1f}% · CVD {flow['cvd']}","",
+               "<b>저장 이력 검증</b>",f"표본 {hist['samples']}건 · {hist['status']}"]
+        if hist['stability'] is not None:
+            lines.extend([f"품질 기준 유지율 {hist['stability']:.1f}% · 평균 품질 {hist['avg_quality']:.1f}"])
+        lines.extend(["", "<b>진입 제한 사유</b>"])
+        if blockers:
+            lines.extend(f"{i}. {_v54_escape(name)} · {_v54_escape(detail)}" for i,(_,name,detail) in enumerate(blockers[:4],1))
+        else: lines.append("✅ 핵심 병목 없음")
+        lines.extend(["", "<b>실행 체크리스트</b>"])
+        lines.extend(f"{'☑' if ok else '☐'} {_v54_escape(name)}" for ok,name in checklist)
+        lines.extend(["☐ 최신 캔들 마감 확인","☐ 손절 주문 선설정","☐ 포지션 크기 제한 확인","",
+                      "<i>확신도·세력·돌파 수치는 보장된 승률이 아닌 휴리스틱 조건 점수입니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def datastatus_cmd(update, context):
+    ok, reason, b=v451_gate(); perf=v72_performance_stats(); db_ready=v74_initialize_database() if v74_database_configured() else False
+    volume_ok=os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR,os.W_OK)
+    await update.message.reply_text(
+        "📦 <b>A100 v85 ULTIMATE 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        "시장 국면 엔진: ✅ 6단계\n세력 흔적 엔진: ✅ 활성\n돌파 준비도 엔진: ✅ 활성\nAI 확신도 엔진: ✅ 활성\n"
+        f"자동알림: {'✅ 활성' if V59_AUTO_ALERT and CHAT_ID else '⚠ 비활성'}\n"
+        f"점수 이력: ✅ {sum(len(v) for v in V83_HISTORY.values())}건\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        "명령어: /quality /why /flow /regime /whale /breakout85 /confidence /scorehistory\n"
+        f"추천허용: {'예' if ok else '아니오'}", parse_mode="HTML")
+
+
+async def v59_auto_alert_loop(app):
+    await asyncio.sleep(120)
+    while True:
+        try:
+            if not V59_AUTO_ALERT or not CHAT_ID:
+                await asyncio.sleep(V59_ALERT_INTERVAL); continue
+            ok,_,_=v451_gate()
+            if not ok:
+                await asyncio.sleep(V59_ALERT_INTERVAL); continue
+            _,results,_=v59_build_scan_results(); now=time.time()
+            for r in results[:30]:
+                try:
+                    report=v79_quality_report(r); regime=_v85_market_regime(r)
+                    ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+                    blockers=_v83_priority_blockers(r,report,ls,ss); flow=_v84_flow_metrics(r,ls,ss)
+                    whale=_v85_whale_metrics(r,flow,regime); bo=_v85_breakout_metrics(r,report,m,flow,whale,regime)
+                    conf=_v85_confidence(report,m,whale,bo,regime); sym=report.get('symbol',getattr(r,'sym','?'))
+                    trigger=bo['ready'] and conf['score']>=V85_ALERT_MIN_CONFIDENCE and m['stage']>=4 and len(blockers)<=1
+                    if not trigger: continue
+                    key=f"{sym}:{m['side']}"; last=V85_ALERT_MEMORY.get(key,0)
+                    if now-last<V85_ALERT_COOLDOWN: continue
+                    text=(f"🚨 <b>A100 v85 자동 조건 알림</b>\n종목: <b>{_v54_escape(sym)}</b>\n"
+                          f"방향: <b>{m['side']}</b> · 국면 {_v54_escape(regime['label'])}\n"
+                          f"AI 확신도 {conf['score']:.1f}% · 돌파 조건 {bo['score']:.1f}\n"
+                          f"{whale['icon']} {_v54_escape(whale['label'])} {whale['score']:.1f}\n"
+                          f"판정: 최신 캔들·손절 기준 재확인 후 분할 진입 검토\n\n"
+                          "<i>자동 주문이 아닌 조건 알림입니다.</i>")
+                    await app.bot.send_message(chat_id=CHAT_ID,text=text,parse_mode="HTML",disable_web_page_preview=True)
+                    V85_ALERT_MEMORY[key]=now
+                except Exception as inner:
+                    print(f"A100 v85 alert row error: {inner}",flush=True)
+        except Exception as e:
+            print(f"A100 v85 auto alert error: {e}",flush=True)
+        await asyncio.sleep(V59_ALERT_INTERVAL)
+
+
+_v85_base_builder = build_v44_application
+def build_v44_application(token):
+    app=_v85_base_builder(token)
+    app.add_handler(CommandHandler("regime",regime_cmd))
+    app.add_handler(CommandHandler("whale",whale_cmd))
+    app.add_handler(CommandHandler("breakout85",breakout85_cmd))
+    app.add_handler(CommandHandler("confidence",confidence_cmd))
+    return app
+
+
+
+# ============================================================================
+# A100 v86 ENTRY READINESS & COUNTDOWN ENGINE
+# - 결론 최상단 배치
+# - 진입 준비도 게이지
+# - 목표/부족 점수 표시
+# - 병목 우선순위 및 재평가 예상 시간
+# - /readiness 명령어
+# ============================================================================
+V86_CONF_TARGET = float(os.getenv("V86_CONF_TARGET", str(V85_ALERT_MIN_CONFIDENCE)))
+V86_BREAKOUT_TARGET = float(os.getenv("V86_BREAKOUT_TARGET", str(V85_ALERT_MIN_BREAKOUT)))
+V86_QUALITY_TARGET = float(os.getenv("V86_QUALITY_TARGET", "65"))
+V86_STAGE_TARGET = int(os.getenv("V86_STAGE_TARGET", "4"))
+
+
+def _v86_clip(v, lo=0.0, hi=100.0):
+    try:
+        return max(lo, min(hi, float(v)))
+    except Exception:
+        return lo
+
+
+def _v86_progress_bar(value, width=10):
+    value = _v86_clip(value)
+    full = int(round(value / 100 * width))
+    return "█" * full + "░" * (width - full)
+
+
+def _v86_regime_icon(regime):
+    return {
+        "STRONG_UP":"🟢", "UP":"🟢", "RANGE":"🟡",
+        "DOWN":"🟠", "CRASH":"🔴", "LIQUIDATION":"⚫"
+    }.get(regime.get("code"), "⚪")
+
+
+def _v86_eta_hours(eta):
+    s = str(eta)
+    if "1~6" in s: return 3
+    if "6~12" in s: return 9
+    if "12~24" in s: return 18
+    return 24
+
+
+def _v86_recheck_text(eta):
+    hours = _v86_eta_hours(eta)
+    try:
+        from datetime import datetime, timedelta, timezone
+        kst = timezone(timedelta(hours=9))
+        due = datetime.now(kst) + timedelta(hours=hours)
+        return f"약 {hours}시간 후 · {due:%m/%d %H:%M} KST"
+    except Exception:
+        return f"약 {hours}시간 후"
+
+
+def _v86_readiness(report, m, conf, bo, blockers):
+    quality = _v79_float(report.get("quality"))
+    confidence = _v79_float(conf.get("score"))
+    breakout = _v79_float(bo.get("score"))
+    stage = int(m.get("stage", 0) or 0)
+
+    q_ratio = _v86_clip(quality / max(V86_QUALITY_TARGET, 1) * 100)
+    c_ratio = _v86_clip(confidence / max(V86_CONF_TARGET, 1) * 100)
+    b_ratio = _v86_clip(breakout / max(V86_BREAKOUT_TARGET, 1) * 100)
+    s_ratio = _v86_clip(stage / max(V86_STAGE_TARGET, 1) * 100)
+    blocker_penalty = min(24.0, len(blockers) * 6.0)
+    score = _v86_clip(q_ratio*0.25 + c_ratio*0.30 + b_ratio*0.30 + s_ratio*0.15 - blocker_penalty)
+
+    gaps = [
+        (max(0.0, V86_CONF_TARGET-confidence), "AI 확신도", f"{confidence:.1f} → {V86_CONF_TARGET:.1f}"),
+        (max(0.0, V86_BREAKOUT_TARGET-breakout), "돌파 조건", f"{breakout:.1f} → {V86_BREAKOUT_TARGET:.1f}"),
+        (max(0.0, V86_QUALITY_TARGET-quality), "데이터 품질", f"{quality:.1f} → {V86_QUALITY_TARGET:.1f}"),
+        (max(0.0, (V86_STAGE_TARGET-stage)*10.0), "판단 단계", f"{stage}/5 → {V86_STAGE_TARGET}/5"),
+    ]
+    gaps = sorted([g for g in gaps if g[0] > 0], reverse=True)
+    ready = score >= 92 and not blockers and bo.get("ready", False)
+    return {"score":round(score,1), "ready":ready, "gaps":gaps}
+
+
+def _v86_action_label(m, readiness, blockers):
+    if readiness["ready"]:
+        return "🟢 분할 진입 검토"
+    if m.get("stage",0) >= 3 and readiness["score"] >= 70:
+        return "🟡 조건부 대기"
+    return "🔴 진입 금지"
+
+
+def _v86_blocker_lines(blockers, readiness):
+    rows=[]
+    for i, (_, name, detail) in enumerate(blockers[:3], 1):
+        rows.append(f"{i}. <b>{_v54_escape(name)}</b> · {_v54_escape(detail)}")
+    existing={str(x[1]) for x in blockers}
+    for gap, name, detail in readiness["gaps"]:
+        if name in existing or len(rows)>=3:
+            continue
+        rows.append(f"{len(rows)+1}. <b>{_v54_escape(name)}</b> · {_v54_escape(detail)} · 부족 {gap:.1f}")
+    return rows or ["✅ 핵심 병목 없음"]
+
+
+async def readiness_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    await update.message.reply_text(f"🎯 {symbol} 진입 준비도 계산 중...")
+    try:
+        r=await v70_direct_symbol(symbol)
+        report=v79_quality_report(r); regime=_v85_market_regime(r)
+        ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+        blockers=_v83_priority_blockers(r,report,ls,ss)
+        flow=_v84_flow_metrics(r,ls,ss); whale=_v85_whale_metrics(r,flow,regime)
+        bo=_v85_breakout_metrics(r,report,m,flow,whale,regime)
+        conf=_v85_confidence(report,m,whale,bo,regime)
+        rd=_v86_readiness(report,m,conf,bo,blockers)
+        action=_v86_action_label(m,rd,blockers)
+        lines=[
+            f"🎯 <b>{_v54_escape(report['symbol'])} 진입 준비도</b>",
+            f"{_v86_progress_bar(rd['score'])} <b>{rd['score']:.1f}%</b>",
+            f"판정: <b>{action}</b>",
+            f"방향: <b>{m['side']}</b> · {_v86_regime_icon(regime)} {_v54_escape(regime['label'])}",
+            "",
+            "<b>목표 대비</b>",
+            f"AI 확신도 {conf['score']:.1f}/{V86_CONF_TARGET:.1f}",
+            f"돌파 조건 {bo['score']:.1f}/{V86_BREAKOUT_TARGET:.1f}",
+            f"데이터 품질 {report['quality']:.1f}/{V86_QUALITY_TARGET:.1f}",
+            f"판단 단계 {m['stage']}/{V86_STAGE_TARGET}",
+            "",
+            "<b>진입 막는 원인</b>",
+            *_v86_blocker_lines(blockers,rd),
+            "",
+            f"⏳ 다음 재평가: <b>{_v86_recheck_text(bo['eta'])}</b>",
+            "<i>예상 시간은 현재 조건 기준 재검증 시점이며 진입 보장이 아닙니다.</i>"
+        ]
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"readiness 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def quality_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"🔎 {normalized} v86 ENTRY READINESS 분석 중...")
+    try:
+        r=await v70_direct_symbol(normalized)
+        if r is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다."); return
+        report=v79_quality_report(r); regime=_v85_market_regime(r)
+        ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+        blockers=_v83_priority_blockers(r,report,ls,ss); checklist=_v83_checklist(r,report,ls,ss)
+        flow=_v84_flow_metrics(r,ls,ss); whale=_v85_whale_metrics(r,flow,regime)
+        bo=_v85_breakout_metrics(r,report,m,flow,whale,regime)
+        conf=_v85_confidence(report,m,whale,bo,regime)
+        rd=_v86_readiness(report,m,conf,bo,blockers)
+        hist=_v85_history_validation(report['symbol'],m['side'])
+        _v83_record(report['symbol'],report,ls,ss,m,regime)
+        action=_v86_action_label(m,rd,blockers)
+        regime_icon=_v86_regime_icon(regime)
+        stage_bar="🟩"*m['stage']+"⬜"*(5-m['stage'])
+
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} A100 v86</b>",
+            f"판정: <b>{action}</b>",
+            f"🎯 준비도 {_v86_progress_bar(rd['score'])} <b>{rd['score']:.1f}%</b>",
+            f"{regime_icon} 국면 <b>{_v54_escape(regime['label'])}</b> · 전략 <b>{m['side']} 우위</b>",
+            f"AI 확신도 {conf['stars']} <b>{conf['score']:.1f}%</b> · R:R {m.get('rr',0):.2f}:1",
+            f"⏳ 재평가 <b>{_v86_recheck_text(bo['eta'])}</b>",
+            "",
+            "<b>🚨 진입 막는 원인</b>",
+            *_v86_blocker_lines(blockers,rd),
+            "",
+            "<b>목표 대비</b>",
+            f"확신도 {conf['score']:.1f} → {V86_CONF_TARGET:.1f} · 부족 {max(0,V86_CONF_TARGET-conf['score']):.1f}",
+            f"돌파 {bo['score']:.1f} → {V86_BREAKOUT_TARGET:.1f} · 부족 {max(0,V86_BREAKOUT_TARGET-bo['score']):.1f}",
+            f"품질 {report['quality']:.1f} → {V86_QUALITY_TARGET:.1f} · 부족 {max(0,V86_QUALITY_TARGET-report['quality']):.1f}",
+            "",
+            "<b>방향·주문흐름</b>",
+            f"🟢 LONG  {_v83_ratio_bar(flow['long_pct'])} {flow['long_pct']:.1f}%",
+            f"🔴 SHORT {_v83_ratio_bar(flow['short_pct'])} {flow['short_pct']:.1f}%",
+            f"매수압 {flow['buy_pct']:.1f}% · 매도압 {flow['sell_pct']:.1f}%",
+            f"Delta {flow['delta_pct']:+.1f}% · CVD {flow['cvd']}",
+            "",
+            "<b>세력·돌파</b>",
+            f"{whale['icon']} {_v54_escape(whale['label'])} {whale['score']:.1f}",
+            f"{bo['direction']} 돌파 조건 {_v86_progress_bar(bo['score'])} {bo['score']:.1f}",
+            "",
+            f"<b>판단 단계</b> {stage_bar} {m['stage']}/5",
+            f"<b>저장 이력</b> 표본 {hist['samples']}건 · {hist['status']}",
+            "",
+            "<b>실행 체크리스트</b>"
+        ]
+        lines.extend(f"{'☑' if ok else '☐'} {_v54_escape(name)}" for ok,name in checklist)
+        lines.extend(["☐ 최신 캔들 마감 확인","☐ 손절 주문 선설정","☐ 포지션 크기 제한 확인","",
+                      "<i>준비도·확신도·세력·돌파 수치는 조건 충족도이며 실제 승률이나 수익을 보장하지 않습니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def datastatus_cmd(update, context):
+    ok, reason, b=v451_gate(); perf=v72_performance_stats(); db_ready=v74_initialize_database() if v74_database_configured() else False
+    volume_ok=os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR,os.W_OK)
+    await update.message.reply_text(
+        "📦 <b>A100 v86 ENTRY READINESS 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        "진입 준비도 엔진: ✅ 활성\n목표·부족 조건 엔진: ✅ 활성\n재평가 시간 엔진: ✅ 활성\n"
+        "시장 국면·세력·돌파·확신도: ✅ 활성\n"
+        f"자동알림: {'✅ 활성' if V59_AUTO_ALERT and CHAT_ID else '⚠ 비활성'}\n"
+        f"점수 이력: ✅ {sum(len(v) for v in V83_HISTORY.values())}건\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        "명령어: /quality /readiness /why /flow /regime /whale /breakout85 /confidence /scorehistory\n"
+        f"추천허용: {'예' if ok else '아니오'}", parse_mode="HTML")
+
+
+_v86_base_builder = build_v44_application
+def build_v44_application(token):
+    app=_v86_base_builder(token)
+    app.add_handler(CommandHandler("readiness", readiness_cmd))
+    return app
+
+
+if __name__ == "__main__":
+    main()
+
+# ============================================================================
+# A100 v87 SIGNAL PULSE & RISK ENGINE
+# - 결론 카드 강화 / 신호 게이지
+# - 기간별 급등 조건 충족도(확률 아님)
+# - 세력 매집/분산 점수 상세화
+# - AI 확신도 추세 및 종합 SCORE 카드
+# - 위험도·자동알림 예정 조건
+# - /pulse /risk /alertplan /whale87
+# ============================================================================
+V87_ALERT_CONF = float(os.getenv("V87_ALERT_CONF", "70"))
+V87_ALERT_BREAKOUT = float(os.getenv("V87_ALERT_BREAKOUT", "72"))
+V87_RISK_HIGH = float(os.getenv("V87_RISK_HIGH", "68"))
+
+
+def _v87_grade(score):
+    score=_v86_clip(score)
+    if score >= 85: return "S"
+    if score >= 75: return "A"
+    if score >= 65: return "B"
+    if score >= 50: return "C"
+    return "D"
+
+
+def _v87_risk_metrics(r, report, m, flow, whale, bo, regime):
+    vol=_v79_float(r.get("volatility", r.get("atr_pct", 0)))
+    spread=_v79_float(report.get("spread_pct"))
+    liq=_v79_float(r.get("liquidation_score", r.get("liq_score", 0)))
+    funding_abs=abs(_v79_float(r.get("funding", r.get("funding_rate", 0))))
+    data_pen=max(0.0, 70.0-_v79_float(report.get("quality")))
+    regime_pen={"CRASH":35,"LIQUIDATION":32,"DOWN":18,"RANGE":7,"UP":3,"STRONG_UP":5}.get(regime.get("code"),10)
+    score=_v86_clip(
+        min(30, vol*2.4) + min(16, spread*40) + min(18, liq*0.18) +
+        min(12, funding_abs*2500) + data_pen*0.25 + regime_pen -
+        max(0, whale.get("score",0)-60)*0.10
+    )
+    if score >= V87_RISK_HIGH: label="HIGH"; icon="🔴"
+    elif score >= 42: label="MEDIUM"; icon="🟠"
+    else: label="LOW"; icon="🟢"
+    return {"score":round(score,1),"label":label,"icon":icon,
+            "parts":{"변동성":round(min(30,vol*2.4),1),"스프레드":round(min(16,spread*40),1),
+                     "청산압력":round(min(18,liq*0.18),1),"펀딩쏠림":round(min(12,funding_abs*2500),1)}}
+
+
+def _v87_horizon_scores(rd, bo, conf, whale, flow, regime):
+    base=rd["score"]*0.24+bo["score"]*0.31+conf["score"]*0.20+whale["score"]*0.15
+    momentum=max(-12,min(12,(flow.get("long_pct",50)-50)*0.55))
+    regime_adj={"STRONG_UP":8,"UP":5,"RANGE":0,"DOWN":-7,"CRASH":-14,"LIQUIDATION":-11}.get(regime.get("code"),0)
+    h24=_v86_clip(base+momentum+regime_adj)
+    h72=_v86_clip(h24*0.84+bo["score"]*0.10+whale["score"]*0.06)
+    d7=_v86_clip(h24*0.62+conf["score"]*0.18+whale["score"]*0.20)
+    return {"24h":round(h24,1),"72h":round(h72,1),"7d":round(d7,1)}
+
+
+def _v87_conf_trend(symbol, current):
+    vals=[]
+    try:
+        history=V83_HISTORY.get(symbol,[])
+        for item in history[-4:]:
+            v=item.get("confidence", item.get("final_score", item.get("score")))
+            if v is not None: vals.append(round(float(v),1))
+    except Exception:
+        vals=[]
+    if not vals or abs(vals[-1]-current)>0.1: vals.append(round(float(current),1))
+    vals=vals[-4:]
+    arrow="↗" if len(vals)>1 and vals[-1]>vals[0]+1 else "↘" if len(vals)>1 and vals[-1]<vals[0]-1 else "→"
+    return vals,arrow
+
+
+def _v87_score_card(report, conf, bo, whale, risk, flow):
+    data=_v86_clip(_v79_float(report.get("quality")))
+    liquidity=_v86_clip(_v79_float(report.get("liquidity_score", report.get("liquidity", 70))))
+    funding=_v86_clip(_v79_float(report.get("funding_score", 50)))
+    technical=_v86_clip((conf["score"]+bo["score"])/2)
+    orderflow=_v86_clip((flow.get("long_pct",50)+flow.get("buy_pct",50))/2)
+    total=_v86_clip(data*.20+liquidity*.16+funding*.12+whale["score"]*.18+technical*.22+orderflow*.12-risk["score"]*.12)
+    return {"total":round(total,1),"grade":_v87_grade(total),"data":round(data,1),"liquidity":round(liquidity,1),
+            "funding":round(funding,1),"whale":round(whale["score"],1),"technical":round(technical,1),"flow":round(orderflow,1)}
+
+
+def _v87_alert_conditions(conf, bo, flow, whale, risk):
+    return [
+        (conf["score"] >= V87_ALERT_CONF, f"AI 확신도 {V87_ALERT_CONF:.0f} 돌파"),
+        (bo["score"] >= V87_ALERT_BREAKOUT, f"돌파 조건 {V87_ALERT_BREAKOUT:.0f} 돌파"),
+        (flow.get("delta_pct",0) > 0, "Delta 양전환"),
+        ("상승" in str(flow.get("cvd","")) or flow.get("buy_pct",0)>=53, "CVD/매수압 개선"),
+        (whale.get("score",0)>=70, "세력 점수 70 이상"),
+        (risk.get("label") != "HIGH", "위험도 HIGH 해제"),
+    ]
+
+
+def _v87_whale_detail(whale, flow, r):
+    oi=_v86_clip(_v79_float(r.get("oi_score", r.get("open_interest_score",50))))
+    funding=_v86_clip(_v79_float(r.get("funding_score",50)))
+    liquidation=_v86_clip(_v79_float(r.get("liquidation_score",50)))
+    cvd=_v86_clip(50+_v79_float(flow.get("delta_pct"))*2.0)
+    return {"score":round(whale["score"],1),"label":whale["label"],"icon":whale["icon"],
+            "oi":round(oi,1),"funding":round(funding,1),"liquidation":round(liquidation,1),"cvd":round(cvd,1)}
+
+
+async def _v87_collect(symbol):
+    r=await v70_direct_symbol(symbol)
+    report=v79_quality_report(r); regime=_v85_market_regime(r)
+    ls,ss,_=v79_final_scores(r,regime); m=_v82_decision_metrics(r,report,ls,ss,regime)
+    blockers=_v83_priority_blockers(r,report,ls,ss)
+    flow=_v84_flow_metrics(r,ls,ss); whale=_v85_whale_metrics(r,flow,regime)
+    bo=_v85_breakout_metrics(r,report,m,flow,whale,regime)
+    conf=_v85_confidence(report,m,whale,bo,regime)
+    rd=_v86_readiness(report,m,conf,bo,blockers)
+    risk=_v87_risk_metrics(r,report,m,flow,whale,bo,regime)
+    horizon=_v87_horizon_scores(rd,bo,conf,whale,flow,regime)
+    score=_v87_score_card(report,conf,bo,whale,risk,flow)
+    wdetail=_v87_whale_detail(whale,flow,r)
+    return r,report,regime,ls,ss,m,blockers,flow,whale,bo,conf,rd,risk,horizon,score,wdetail
+
+
+async def pulse_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    await update.message.reply_text(f"💓 {symbol} v87 SIGNAL PULSE 계산 중...")
+    try:
+        r,report,regime,ls,ss,m,blockers,flow,whale,bo,conf,rd,risk,horizon,score,wd=await _v87_collect(symbol)
+        action=_v86_action_label(m,rd,blockers)
+        vals,arrow=_v87_conf_trend(report['symbol'],conf['score'])
+        alerts=_v87_alert_conditions(conf,bo,flow,whale,risk)
+        lines=[
+            f"💓 <b>{_v54_escape(report['symbol'])} A100 v87 SIGNAL PULSE</b>",
+            f"<b>{action}</b> · AI SCORE <b>{score['total']:.1f} ({score['grade']})</b>",
+            f"신호 게이지 {_v86_progress_bar(rd['score'])} <b>{rd['score']:.1f}%</b>",
+            f"확신도 {conf['stars']} {conf['score']:.1f}% · 추세 {arrow} {' → '.join(map(str,vals))}",
+            f"위험도 {risk['icon']} <b>{risk['label']} {risk['score']:.1f}</b>",
+            "",
+            "<b>🚀 급등 조건 충족도</b>",
+            f"24시간 {_v86_progress_bar(horizon['24h'])} {horizon['24h']:.1f}",
+            f"72시간 {_v86_progress_bar(horizon['72h'])} {horizon['72h']:.1f}",
+            f"7일    {_v86_progress_bar(horizon['7d'])} {horizon['7d']:.1f}",
+            "",
+            f"<b>🐋 세력 흐름</b> {wd['icon']} {_v54_escape(wd['label'])} <b>{wd['score']:.1f}</b>",
+            f"OI {wd['oi']:.1f} · Funding {wd['funding']:.1f} · CVD {wd['cvd']:.1f} · 청산 {wd['liquidation']:.1f}",
+            "",
+            "<b>AI SCORE 구성</b>",
+            f"데이터 {score['data']:.1f} · 유동성 {score['liquidity']:.1f} · Funding {score['funding']:.1f}",
+            f"세력 {score['whale']:.1f} · 기술 {score['technical']:.1f} · 주문흐름 {score['flow']:.1f}",
+            "",
+            "<b>🔔 자동 알림 예정 조건</b>",
+            *[f"{'☑' if ok else '☐'} {_v54_escape(name)}" for ok,name in alerts],
+            "",
+            "<i>급등 조건 충족도와 AI SCORE는 모델 조건 점수이며 실제 확률·승률·수익률이 아닙니다.</i>"
+        ]
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"pulse 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def risk_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        *_,risk,horizon,score,wd=await _v87_collect(symbol)
+        lines=[f"⚠️ <b>{symbol} 위험도 보고서</b>",f"{risk['icon']} <b>{risk['label']} {risk['score']:.1f}/100</b>",
+               f"{_v86_progress_bar(risk['score'])}",""]
+        lines += [f"{k}: {v:.1f}" for k,v in risk['parts'].items()]
+        lines += ["","<i>위험도는 변동성·스프레드·청산압력·펀딩쏠림·데이터 품질을 종합한 상대 점수입니다.</i>"]
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"risk 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def alertplan_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        r,report,regime,ls,ss,m,blockers,flow,whale,bo,conf,rd,risk,horizon,score,wd=await _v87_collect(symbol)
+        alerts=_v87_alert_conditions(conf,bo,flow,whale,risk)
+        await update.message.reply_text("\n".join([
+            f"🔔 <b>{symbol} 자동 알림 계획</b>",
+            *[f"{'☑ 충족' if ok else '☐ 대기'} · {_v54_escape(name)}" for ok,name in alerts],
+            "",f"현재 충족 {sum(1 for ok,_ in alerts if ok)}/{len(alerts)}",
+            f"기본 쿨다운: {int(V85_ALERT_COOLDOWN/3600)}시간",
+            "<i>모든 조건 충족은 알림 후보이며 주문 실행을 의미하지 않습니다.</i>"
+        ]),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"alertplan 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def whale87_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    try:
+        r,report,regime,ls,ss,m,blockers,flow,whale,bo,conf,rd,risk,horizon,score,wd=await _v87_collect(symbol)
+        await update.message.reply_text("\n".join([
+            f"🐋 <b>{symbol} 세력 흐름 v87</b>",
+            f"{wd['icon']} {_v54_escape(wd['label'])} <b>{wd['score']:.1f}/100</b>",
+            f"{_v86_progress_bar(wd['score'])}","",
+            f"OI 점수 {wd['oi']:.1f}",f"Funding 점수 {wd['funding']:.1f}",
+            f"CVD/Delta 점수 {wd['cvd']:.1f}",f"청산 구조 점수 {wd['liquidation']:.1f}",
+            "","<i>세력 점수는 공개 시장데이터 기반 정황 점수이며 실제 특정 주체의 매집을 확정하지 않습니다.</i>"
+        ]),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"whale87 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def quality_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    await update.message.reply_text(f"🔎 {symbol} v87 SIGNAL PULSE 분석 중...")
+    try:
+        r,report,regime,ls,ss,m,blockers,flow,whale,bo,conf,rd,risk,horizon,score,wd=await _v87_collect(symbol)
+        action=_v86_action_label(m,rd,blockers); vals,arrow=_v87_conf_trend(report['symbol'],conf['score'])
+        alerts=_v87_alert_conditions(conf,bo,flow,whale,risk)
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} A100 v87</b>",
+            f"<b>{action}</b>",
+            f"AI SCORE {_v86_progress_bar(score['total'])} <b>{score['total']:.1f} · {score['grade']}등급</b>",
+            f"준비도 {_v86_progress_bar(rd['score'])} {rd['score']:.1f}% · 위험도 {risk['icon']} {risk['label']} {risk['score']:.1f}",
+            f"확신도 {conf['stars']} {conf['score']:.1f}% · 추세 {arrow} {' → '.join(map(str,vals))}",
+            f"{_v86_regime_icon(regime)} {_v54_escape(regime['label'])} · {m['side']} 우위 · R:R {m.get('rr',0):.2f}:1",
+            f"⏳ 재평가 {_v86_recheck_text(bo['eta'])}","",
+            "<b>🚀 급등 조건 충족도</b>",
+            f"24h {horizon['24h']:.1f} · 72h {horizon['72h']:.1f} · 7d {horizon['7d']:.1f}",
+            f"🐋 {_v54_escape(wd['label'])} {wd['score']:.1f} · 돌파 {bo['score']:.1f}","",
+            "<b>🚨 진입 막는 원인</b>",*_v86_blocker_lines(blockers,rd),"",
+            "<b>방향·주문흐름</b>",
+            f"🟢 LONG  {_v83_ratio_bar(flow['long_pct'])} {flow['long_pct']:.1f}%",
+            f"🔴 SHORT {_v83_ratio_bar(flow['short_pct'])} {flow['short_pct']:.1f}%",
+            f"매수압 {flow['buy_pct']:.1f}% · 매도압 {flow['sell_pct']:.1f}% · Delta {flow['delta_pct']:+.1f}%", "",
+            "<b>🔔 자동 알림 조건</b>",
+            *[f"{'☑' if ok else '☐'} {_v54_escape(name)}" for ok,name in alerts],"",
+            "<i>모든 수치는 조건 점수이며 실제 확률·승률·수익 보장이 아닙니다.</i>"
+        ]
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def datastatus_cmd(update, context):
+    ok, reason, b=v451_gate(); perf=v72_performance_stats(); db_ready=v74_initialize_database() if v74_database_configured() else False
+    volume_ok=os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR,os.W_OK)
+    await update.message.reply_text(
+        "📦 <b>A100 v87 SIGNAL PULSE 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        "신호 게이지·AI SCORE: ✅ 활성\n기간별 조건 충족도: ✅ 활성\n"
+        "세력 상세·위험도 엔진: ✅ 활성\n확신도 추세·알림 계획: ✅ 활성\n"
+        f"자동알림: {'✅ 활성' if V59_AUTO_ALERT and CHAT_ID else '⚠ 비활성'}\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        "명령어: /quality /pulse /risk /alertplan /whale87 /readiness /why /flow /scorehistory\n"
+        f"추천허용: {'예' if ok else '아니오'}", parse_mode="HTML")
+
+
+_v87_base_builder = build_v44_application
+def build_v44_application(token):
+    app=_v87_base_builder(token)
+    app.add_handler(CommandHandler("pulse", pulse_cmd))
+    app.add_handler(CommandHandler("risk", risk_cmd))
+    app.add_handler(CommandHandler("alertplan", alertplan_cmd))
+    app.add_handler(CommandHandler("whale87", whale87_cmd))
+    return app
+
+
 if __name__ == "__main__":
     main()
