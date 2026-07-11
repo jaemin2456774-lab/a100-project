@@ -20643,6 +20643,349 @@ async def datastatus_cmd(update, context):
 
 # 기존 빌더가 새 명령 함수를 참조하도록 런타임 전역을 유지합니다.
 
+
+# ============================================================
+# A100 v83 AI TRADING ASSISTANT ENGINE
+# - 점수 변화 추적(1h/4h/24h), LONG/SHORT 비율 게이지
+# - 우선순위 병목, 자동 체크리스트, 추천 행동
+# - PostgreSQL + Railway Volume 이중 저장
+# ============================================================
+
+V83_VERSION = "A100 v83 AI TRADING ASSISTANT ENGINE"
+V83_HISTORY_FILE = os.path.join(V75_DATA_DIR, "a100_v83_score_history.json")
+V83_HISTORY_LIMIT = int(os.getenv("V83_HISTORY_LIMIT", "3000"))
+V83_HISTORY = {}
+V83_HISTORY_LOCK = threading.RLock()
+V83_DB_READY = False
+V83_DB_LAST_ERROR = ""
+
+
+def _v83_grade(score):
+    score=_v79_float(score)
+    if score>=85: return "A+"
+    if score>=78: return "A"
+    if score>=68: return "B"
+    if score>=58: return "C"
+    return "D"
+
+
+def _v83_ratio_bar(value, width=10):
+    value=max(0.0,min(100.0,_v79_float(value)))
+    filled=int(round(value/100.0*width))
+    return "█"*filled+"░"*(width-filled)
+
+
+def _v83_load_history():
+    global V83_HISTORY
+    try:
+        import json
+        if os.path.exists(V83_HISTORY_FILE):
+            with open(V83_HISTORY_FILE,"r",encoding="utf-8") as f:
+                data=json.load(f)
+            if isinstance(data,dict):
+                V83_HISTORY=data
+                return True
+    except Exception as e:
+        print(f"v83 history load error: {e}",flush=True)
+    V83_HISTORY={}
+    return False
+
+
+def _v83_save_history():
+    try:
+        import json
+        os.makedirs(V75_DATA_DIR,exist_ok=True)
+        tmp=V83_HISTORY_FILE+".tmp"
+        with open(tmp,"w",encoding="utf-8") as f:
+            json.dump(V83_HISTORY,f,ensure_ascii=False,separators=(",",":"))
+        os.replace(tmp,V83_HISTORY_FILE)
+        return True
+    except Exception as e:
+        print(f"v83 history save error: {e}",flush=True)
+        return False
+
+
+def _v83_init_db():
+    global V83_DB_READY,V83_DB_LAST_ERROR
+    if not v74_database_configured():
+        V83_DB_READY=False
+        return False
+    schema=v74_safe_identifier(V74_DB_SCHEMA)
+    try:
+        conn=v74_connect()
+        try:
+            v74_db_execute(conn,f"""
+                CREATE TABLE IF NOT EXISTS {schema}.a100_score_history (
+                    id BIGSERIAL PRIMARY KEY,
+                    symbol TEXT NOT NULL,
+                    quality DOUBLE PRECISION NOT NULL,
+                    long_score DOUBLE PRECISION NOT NULL,
+                    short_score DOUBLE PRECISION NOT NULL,
+                    confidence DOUBLE PRECISION NOT NULL,
+                    entry_ref DOUBLE PRECISION NOT NULL,
+                    stage INTEGER NOT NULL,
+                    regime TEXT,
+                    payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            v74_db_execute(conn,f"CREATE INDEX IF NOT EXISTS idx_a100_score_history_symbol_time ON {schema}.a100_score_history(symbol,created_at DESC)")
+            conn.commit()
+            V83_DB_READY=True; V83_DB_LAST_ERROR=""
+            return True
+        finally:
+            conn.close()
+    except Exception as e:
+        V83_DB_READY=False; V83_DB_LAST_ERROR=str(e)[:300]
+        print(f"v83 postgres init error: {V83_DB_LAST_ERROR}",flush=True)
+        return False
+
+
+def _v83_record(symbol, report, long_score, short_score, metrics, regime):
+    import json
+    symbol=str(symbol).upper()
+    row={
+        "ts":time.time(),"quality":round(_v79_float(report.get("quality")),2),
+        "long":round(_v79_float(long_score),2),"short":round(_v79_float(short_score),2),
+        "confidence":round(_v79_float(metrics.get("confidence")),2),
+        "entry":round(_v79_float(metrics.get("entry_ref")),2),
+        "stage":int(metrics.get("stage",1)),"regime":str(regime.get("label","-")),
+    }
+    with V83_HISTORY_LOCK:
+        arr=V83_HISTORY.setdefault(symbol,[])
+        # 같은 5분 구간의 중복 기록은 최신값으로 갱신
+        if arr and row["ts"]-float(arr[-1].get("ts",0))<300:
+            arr[-1]=row
+        else:
+            arr.append(row)
+        V83_HISTORY[symbol]=arr[-V83_HISTORY_LIMIT:]
+        _v83_save_history()
+    if V83_DB_READY or _v83_init_db():
+        schema=v74_safe_identifier(V74_DB_SCHEMA)
+        try:
+            conn=v74_connect()
+            try:
+                v74_db_execute(conn,f"""
+                    INSERT INTO {schema}.a100_score_history
+                    (symbol,quality,long_score,short_score,confidence,entry_ref,stage,regime,payload)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+                """,(symbol,row["quality"],row["long"],row["short"],row["confidence"],row["entry"],row["stage"],row["regime"],json.dumps(row)))
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"v83 postgres record fallback: {e}",flush=True)
+    return row
+
+
+def _v83_delta(symbol, current, seconds):
+    arr=V83_HISTORY.get(str(symbol).upper(),[])
+    if not arr: return None
+    target=time.time()-seconds
+    candidate=None
+    for row in reversed(arr):
+        if float(row.get("ts",0))<=target:
+            candidate=row; break
+    if candidate is None: return None
+    return round(_v79_float(current)-_v79_float(candidate.get("quality")),1)
+
+
+def _v83_priority_blockers(r, report, long_score, short_score):
+    items=[]
+    quality=_v79_float(report.get("quality")); best=max(_v79_float(long_score),_v79_float(short_score)); edge=abs(_v79_float(long_score)-_v79_float(short_score))
+    if quality<V79_MIN_QUALITY: items.append((V79_MIN_QUALITY-quality,"데이터 품질",f"+{V79_MIN_QUALITY-quality:.1f}점 필요"))
+    if best<V79_SCORE_CONFIRM: items.append((V79_SCORE_CONFIRM-best,"신호 점수",f"+{V79_SCORE_CONFIRM-best:.1f}점 필요"))
+    if edge<8: items.append((8-edge,"방향 분리도",f"격차 +{8-edge:.1f} 필요"))
+    try:
+        cg=v68_cg_raw(r)
+        oi=_v79_float(cg.get("oi")); funding=_v79_float(cg.get("funding")); taker=_v79_float(cg.get("taker"))
+        if oi<50: items.append((50-oi,"OI 증가",f"+{50-oi:.1f} 필요"))
+        if funding<45: items.append((45-funding,"Funding 안정",f"+{45-funding:.1f} 필요"))
+        if taker<50: items.append((50-taker,"Taker 방향성",f"+{50-taker:.1f} 필요"))
+    except Exception:
+        pass
+    for name,ok,detail in report.get("checks",[]):
+        if not ok: items.append((20.0,str(name),str(detail)))
+    items.sort(key=lambda x:x[0],reverse=True)
+    return items[:5]
+
+
+def _v83_checklist(r, report, long_score, short_score):
+    out=[]
+    best=max(_v79_float(long_score),_v79_float(short_score)); edge=abs(_v79_float(long_score)-_v79_float(short_score))
+    out.append((report.get("quality",0)>=V79_MIN_QUALITY,"데이터 품질"))
+    out.append((best>=V79_SCORE_CONFIRM,"신호 점수"))
+    out.append((edge>=8,"방향 분리"))
+    try:
+        cg=v68_cg_raw(r)
+        out.extend([
+            (_v79_float(cg.get("oi"))>=50,"OI 증가"),
+            (_v79_float(cg.get("funding"))>=45,"Funding 안정"),
+            (_v79_float(cg.get("taker"))>=50,"Taker 우위"),
+        ])
+    except Exception:
+        out.extend([(False,"OI 증가"),(False,"Funding 안정"),(False,"Taker 우위")])
+    return out
+
+
+def _v83_direction_ratios(long_score,short_score):
+    l=max(0.0,_v79_float(long_score)); s=max(0.0,_v79_float(short_score)); total=l+s
+    if total<=0: return 50.0,50.0
+    return round(l/total*100,1),round(s/total*100,1)
+
+
+def _v83_action(metrics, blockers):
+    stage=int(metrics.get("stage",1)); confidence=_v79_float(metrics.get("confidence")); entry=_v79_float(metrics.get("entry_ref"))
+    if stage>=5 and confidence>=72 and entry>=58: return "🟢 진입 검토"
+    if stage>=4: return "🟡 방향 확인 후 대기"
+    if stage==3: return "🟡 관찰 유지"
+    return "🔴 진입 금지"
+
+
+async def quality_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"🔍 {normalized} v83 AI 매매 비서 분석 중...")
+    try:
+        result=await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+        report=v79_quality_report(result); breakdown=v81_quality_breakdown(result,report); regime=v76_market_regime()
+        long_score,short_score,_=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        blockers=_v83_priority_blockers(result,report,long_score,short_score)
+        checklist=_v83_checklist(result,report,long_score,short_score)
+        _v83_record(report["symbol"],report,long_score,short_score,m,regime)
+        d1=_v83_delta(report["symbol"],report["quality"],3600); d4=_v83_delta(report["symbol"],report["quality"],14400); d24=_v83_delta(report["symbol"],report["quality"],86400)
+        lp,sp=_v83_direction_ratios(long_score,short_score)
+        stage_bar="🟩"*m["stage"]+"⬜"*(5-m["stage"])
+        action=_v83_action(m,blockers)
+        lines=[
+            f"🤖 <b>{_v54_escape(report['symbol'])} A100 v83 AI 매매 비서</b>",
+            f"최종등급: <b>{_v83_grade(report['quality'])}</b> · 품질 <b>{report['quality']}/100</b>",
+            f"현재단계: {stage_bar} <b>{m['stage']}/5 · {m['stage_name']}</b>",
+            f"추천 행동: <b>{action}</b>",
+            "", "<b>방향 비율</b>",
+            f"LONG  {_v83_ratio_bar(lp)} <b>{lp:.1f}%</b>",
+            f"SHORT {_v83_ratio_bar(sp)} <b>{sp:.1f}%</b>",
+            f"우세: <b>{m['side']}</b> · 원점수 격차 {m['edge']}",
+            "", "<b>점수 변화</b>",
+            f"현재: <b>{report['quality']:.1f}</b>",
+            f"1시간: {'기록 축적 중' if d1 is None else f'{d1:+.1f}'}",
+            f"4시간: {'기록 축적 중' if d4 is None else f'{d4:+.1f}'}",
+            f"24시간: {'기록 축적 중' if d24 is None else f'{d24:+.1f}'}",
+            "", "<b>참고 지표</b>",
+            f"신뢰도: <b>{m['confidence']}%</b> · 진입 가능성 {m['entry_ref']}%",
+            f"예상 성공 참고값: {m['expected_ref']}% · RR {m['rr']}:1",
+            f"예상 재검증: <b>{m['wait']}</b>",
+            "", "<b>진입 제한 사유 우선순위</b>",
+        ]
+        if blockers:
+            for i,(_,name,detail) in enumerate(blockers[:3],1): lines.append(f"{i}. {_v54_escape(name)} · {_v54_escape(detail)}")
+        else: lines.append("✅ 핵심 병목 없음")
+        lines.extend(["", "<b>자동 체크리스트</b>"])
+        for ok,name in checklist: lines.append(f"{'☑' if ok else '☐'} {_v54_escape(name)}")
+        lines.extend(["", "<b>점수 산출 내역</b>"])
+        for name,contribution in breakdown["contributions"].items():
+            raw=breakdown["raw"][name]; weight=int(breakdown["weights"][name]*100)
+            lines.append(f"• {name}: {raw:.1f} × {weight}% = <b>+{contribution:.1f}</b>")
+        lines.extend(["", "<i>확률·손익비·대기시간은 실측 보장값이 아닌 현재 데이터 기반 참고값입니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def why_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    try:
+        result=await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+        regime=v76_market_regime(); long_score,short_score,report=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        blockers=_v83_priority_blockers(result,report,long_score,short_score); checklist=_v83_checklist(result,report,long_score,short_score)
+        _v83_record(report["symbol"],report,long_score,short_score,m,regime)
+        lp,sp=_v83_direction_ratios(long_score,short_score); action=_v83_action(m,blockers)
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} v83 판단 이유</b>",
+            f"최종 행동: <b>{action}</b>",
+            f"단계: {'🟩'*m['stage']+'⬜'*(5-m['stage'])} {m['stage']}/5 · {m['stage_name']}",
+            f"LONG {_v83_ratio_bar(lp)} {lp:.1f}%",
+            f"SHORT {_v83_ratio_bar(sp)} {sp:.1f}%",
+            f"신뢰도 {m['confidence']}% · 진입 가능성 {m['entry_ref']}% · RR {m['rr']}:1",
+            "", "<b>지금 기다려야 하는 조건</b>",
+        ]
+        if blockers:
+            lines.extend(f"{i}. {_v54_escape(name)} · {_v54_escape(detail)}" for i,(_,name,detail) in enumerate(blockers[:4],1))
+        else: lines.append("✅ 핵심 조건 충족")
+        lines.extend(["", "<b>추천 행동</b>"])
+        if m["stage"]<5:
+            lines.extend(["✅ 관찰 유지",f"✅ {m['wait']} 후 재검증","❌ 조건 충족 전 진입 금지"])
+        else:
+            lines.extend(["✅ 최신 캔들 재확인","✅ 손절 기준 확인","⚠ 단독 신호로 주문하지 않기"])
+        lines.extend(["", "<b>체크리스트</b>"])
+        lines.extend(f"{'☑' if ok else '☐'} {_v54_escape(name)}" for ok,name in checklist)
+        lines.extend(["", "<i>참고 수치는 실측 승률이나 수익 보장이 아닙니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"why 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def scorehistory_cmd(update, context):
+    symbol=v69_normalize_symbol(context.args[0] if context.args else "BTC")
+    arr=V83_HISTORY.get(symbol,[]) or V83_HISTORY.get(symbol.replace("USDT","")+"USDT",[])
+    if not arr:
+        await update.message.reply_text(f"{symbol} 점수 이력이 없습니다. /quality {symbol.replace('USDT','')} 실행 후 축적됩니다.")
+        return
+    latest=arr[-1]
+    d1=_v83_delta(symbol,latest.get("quality",0),3600); d4=_v83_delta(symbol,latest.get("quality",0),14400); d24=_v83_delta(symbol,latest.get("quality",0),86400)
+    recent=arr[-12:]
+    spark=" → ".join(f"{_v79_float(x.get('quality')):.0f}" for x in recent)
+    await update.message.reply_text(
+        f"📈 <b>{_v54_escape(symbol)} v83 점수 이력</b>\n"
+        f"현재: <b>{_v79_float(latest.get('quality')):.1f}</b>\n"
+        f"1시간: {'축적 중' if d1 is None else f'{d1:+.1f}'}\n"
+        f"4시간: {'축적 중' if d4 is None else f'{d4:+.1f}'}\n"
+        f"24시간: {'축적 중' if d24 is None else f'{d24:+.1f}'}\n"
+        f"최근 흐름: <code>{spark}</code>\n"
+        f"저장: {'PostgreSQL+Volume' if V83_DB_READY else 'Volume'}",
+        parse_mode="HTML")
+
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate(); perf=v72_performance_stats(); db_ready=v74_initialize_database() if v74_database_configured() else False
+    volume_ok=os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR,os.W_OK); regime=v76_market_regime()
+    await update.message.reply_text(
+        "📦 <b>A100 v83 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"점수 이력: ✅ 활성 ({sum(len(v) for v in V83_HISTORY.values())}건)\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        "AI 매매 비서: ✅ 활성 (등급·변화·체크리스트)\n"
+        f"재검증 엔진: ✅ 활성 ({len(V79_PENDING)}대기)\n"
+        f"확정 신호: {len(V79_CONFIRMED)}개\n"
+        f"자동 격리: ✅ 활성 ({len(V79_QUARANTINE)}종목)\n"
+        "자가학습: ✅ 활성\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        "명령어: /health /quality /why /scorehistory /datastatus\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",disable_web_page_preview=True)
+
+
+_v83_base_builder = build_v44_application
+def build_v44_application(token):
+    app=_v83_base_builder(token)
+    app.add_handler(CommandHandler("scorehistory",scorehistory_cmd))
+    return app
+
+
+_v83_load_history()
+_v83_init_db()
+
 if __name__ == "__main__":
     main()
 
