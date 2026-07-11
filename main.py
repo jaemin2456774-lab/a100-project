@@ -5028,7 +5028,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v76 ULTIMATE ADVISOR ENGINE worker running...", flush=True)
+    print("A100 v77 SELF LEARNING STRATEGY ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -18998,6 +18998,536 @@ def build_v44_application(token):
         ("cache", cache_cmd), ("quick", quick_cmd), ("speed", speedstatus_cmd),
         ("report", report_cmd), ("history", history_cmd), ("stats", stats_cmd),
         ("ticker", ticker_cmd), ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v77 SELF LEARNING STRATEGY ENGINE =====
+# 핵심 반영
+# - 자동 복기 강화: 성공/실패 조건별 학습
+# - 종목별 LONG/SHORT 승률
+# - 조건별 승률 분석
+# - 자동 블랙리스트
+# - 최고 전략 조합 자동 추출
+# - 신호 점수에 종목/조건/블랙리스트 보정 반영
+# - /coin /conditionstats /blacklist /topstrategy 명령 추가
+V77_VERSION = "A100 v77 SELF LEARNING STRATEGY ENGINE"
+
+V77_MIN_COIN_SAMPLES = int(os.getenv("V77_MIN_COIN_SAMPLES", "8"))
+V77_BLACKLIST_SAMPLES = int(os.getenv("V77_BLACKLIST_SAMPLES", "12"))
+V77_BLACKLIST_WINRATE = float(os.getenv("V77_BLACKLIST_WINRATE", "30"))
+V77_BLACKLIST_PENALTY = float(os.getenv("V77_BLACKLIST_PENALTY", "12"))
+V77_COIN_BONUS_MAX = float(os.getenv("V77_COIN_BONUS_MAX", "5"))
+V77_CONDITION_MIN_SAMPLES = int(os.getenv("V77_CONDITION_MIN_SAMPLES", "6"))
+V77_CONDITION_BONUS_MAX = float(os.getenv("V77_CONDITION_BONUS_MAX", "4"))
+V77_TOP_STRATEGY_MIN_SAMPLES = int(os.getenv("V77_TOP_STRATEGY_MIN_SAMPLES", "6"))
+V77_TOP_STRATEGY_LIMIT = int(os.getenv("V77_TOP_STRATEGY_LIMIT", "8"))
+
+def _v77_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def v77_review_condition_tags(review):
+    f = review.get("features") or {}
+    side = str(review.get("side") or "").upper()
+    tags = []
+
+    funding = _v77_float(f.get("funding"), 50)
+    oi = _v77_float(f.get("oi"), 50)
+    taker = _v77_float(f.get("taker"), 50)
+    cg = _v77_float(f.get("coinglass"), 50)
+    inst = _v77_float(f.get("institution"), 50)
+    chart = _v77_float(f.get("chart"), 50)
+    volume = _v77_float(f.get("volume"), 50)
+    timing = _v77_float(f.get("timing"), 50)
+
+    if funding <= 42:
+        tags.append("Funding_Low")
+    elif funding >= 62:
+        tags.append("Funding_High")
+    else:
+        tags.append("Funding_Mid")
+
+    if oi >= 60:
+        tags.append("OI_Strong")
+    elif oi <= 40:
+        tags.append("OI_Weak")
+
+    if taker >= 60:
+        tags.append("Taker_Buy")
+    elif taker <= 40:
+        tags.append("Taker_Sell")
+
+    if cg >= 70:
+        tags.append("CoinGlass_High")
+    elif cg <= 45:
+        tags.append("CoinGlass_Low")
+
+    if inst >= 70:
+        tags.append("Institution_High")
+    elif inst <= 45:
+        tags.append("Institution_Low")
+
+    if chart >= 65:
+        tags.append("Chart_Strong")
+    elif chart <= 40:
+        tags.append("Chart_Weak")
+
+    if volume >= 65:
+        tags.append("Volume_High")
+    elif volume <= 40:
+        tags.append("Volume_Low")
+
+    if timing >= 65:
+        tags.append("Timing_Good")
+    elif timing <= 40:
+        tags.append("Timing_Bad")
+
+    regime = str(review.get("regime") or "")
+    if regime:
+        tags.append(f"Regime_{regime}")
+
+    if side:
+        tags.append(f"Side_{side}")
+
+    return tags
+
+def v77_coin_stats(symbol=None):
+    normalized = v69_normalize_symbol(symbol) if symbol else None
+    rows = V76_REVIEWS
+
+    if normalized:
+        rows = [
+            r for r in rows
+            if v69_normalize_symbol(r.get("symbol") or "") == normalized
+        ]
+
+    def side_stats(side):
+        subset = [r for r in rows if str(r.get("side")).upper() == side]
+        total = len(subset)
+        wins = sum(1 for r in subset if r.get("success"))
+        losses = total - wins
+        rate = round(wins / total * 100, 1) if total else 0.0
+
+        rr_values = []
+        for r in subset:
+            entry = _v77_float(r.get("entry"))
+            close = _v77_float(r.get("close_price"))
+            stop = _v77_float(r.get("stop"))
+            if entry and stop and abs(entry - stop) > 0:
+                rr_values.append(abs(close - entry) / abs(entry - stop))
+
+        avg_rr = round(sum(rr_values) / len(rr_values), 2) if rr_values else 0.0
+        return {
+            "total": total,
+            "wins": wins,
+            "losses": losses,
+            "win_rate": rate,
+            "avg_rr": avg_rr,
+        }
+
+    return {
+        "LONG": side_stats("LONG"),
+        "SHORT": side_stats("SHORT"),
+        "total": len(rows),
+    }
+
+def v77_all_coin_stats():
+    symbols = sorted({
+        v69_normalize_symbol(r.get("symbol") or "")
+        for r in V76_REVIEWS
+        if r.get("symbol")
+    })
+    return {symbol: v77_coin_stats(symbol) for symbol in symbols}
+
+def v77_condition_stats():
+    stats = {}
+
+    for review in V76_REVIEWS:
+        success = bool(review.get("success"))
+        for tag in v77_review_condition_tags(review):
+            row = stats.setdefault(tag, {"total": 0, "wins": 0, "losses": 0})
+            row["total"] += 1
+            if success:
+                row["wins"] += 1
+            else:
+                row["losses"] += 1
+
+    for row in stats.values():
+        row["win_rate"] = round(
+            row["wins"] / row["total"] * 100, 1
+        ) if row["total"] else 0.0
+
+    return stats
+
+def v77_blacklist_symbols():
+    blocked = {}
+    for symbol, data in v77_all_coin_stats().items():
+        total = data["LONG"]["total"] + data["SHORT"]["total"]
+        wins = data["LONG"]["wins"] + data["SHORT"]["wins"]
+        rate = round(wins / total * 100, 1) if total else 0.0
+
+        if total >= V77_BLACKLIST_SAMPLES and rate <= V77_BLACKLIST_WINRATE:
+            blocked[symbol] = {
+                "total": total,
+                "wins": wins,
+                "losses": total - wins,
+                "win_rate": rate,
+            }
+
+    return blocked
+
+def v77_coin_bonus(symbol, side):
+    stats = v77_coin_stats(symbol).get(side) or {}
+    samples = int(stats.get("total") or 0)
+    rate = _v77_float(stats.get("win_rate"), 50.0)
+
+    if samples < V77_MIN_COIN_SAMPLES:
+        return 0.0
+
+    bonus = ((rate - 50.0) / 50.0) * V77_COIN_BONUS_MAX
+    return round(max(-V77_COIN_BONUS_MAX, min(V77_COIN_BONUS_MAX, bonus)), 2)
+
+def v77_condition_bonus(r, side):
+    if len(V76_REVIEWS) < V77_CONDITION_MIN_SAMPLES:
+        return 0.0
+
+    pseudo_review = {
+        "side": side,
+        "features": v76_feature_snapshot(r),
+        "regime": v76_market_regime().get("code"),
+    }
+    tags = v77_review_condition_tags(pseudo_review)
+    stats = v77_condition_stats()
+
+    bonuses = []
+    for tag in tags:
+        row = stats.get(tag)
+        if not row or row["total"] < V77_CONDITION_MIN_SAMPLES:
+            continue
+        raw = ((row["win_rate"] - 50.0) / 50.0) * V77_CONDITION_BONUS_MAX
+        bonuses.append(raw)
+
+    if not bonuses:
+        return 0.0
+
+    bonus = sum(bonuses) / len(bonuses)
+    return round(max(-V77_CONDITION_BONUS_MAX, min(V77_CONDITION_BONUS_MAX, bonus)), 2)
+
+def v77_adjusted_scores(r, regime=None):
+    regime = regime or v76_market_regime()
+    long_score, short_score = v76_regime_adjusted_scores(r, regime)
+    symbol = getattr(r, "sym", "?")
+
+    long_score += v77_coin_bonus(symbol, "LONG")
+    short_score += v77_coin_bonus(symbol, "SHORT")
+    long_score += v77_condition_bonus(r, "LONG")
+    short_score += v77_condition_bonus(r, "SHORT")
+
+    blacklist = v77_blacklist_symbols()
+    normalized = v69_normalize_symbol(symbol)
+    if normalized in blacklist:
+        long_score -= V77_BLACKLIST_PENALTY
+        short_score -= V77_BLACKLIST_PENALTY
+
+    return round(_v76_clip(long_score), 1), round(_v76_clip(short_score), 1)
+
+def v77_strategy_combinations():
+    combo = {}
+
+    for review in V76_REVIEWS:
+        tags = sorted(v77_review_condition_tags(review))
+        success = bool(review.get("success"))
+
+        # 조합 폭발을 막기 위해 상위 특징 3개만 조합
+        core = [t for t in tags if not t.startswith("Side_")][:3]
+        side_tags = [t for t in tags if t.startswith("Side_")]
+        key_tags = side_tags + core
+        if not key_tags:
+            continue
+
+        key = " + ".join(key_tags)
+        row = combo.setdefault(key, {"total": 0, "wins": 0, "losses": 0})
+        row["total"] += 1
+        if success:
+            row["wins"] += 1
+        else:
+            row["losses"] += 1
+
+    rows = []
+    for key, row in combo.items():
+        if row["total"] < V77_TOP_STRATEGY_MIN_SAMPLES:
+            continue
+        row = dict(row)
+        row["strategy"] = key
+        row["win_rate"] = round(row["wins"] / row["total"] * 100, 1)
+        rows.append(row)
+
+    rows.sort(key=lambda x: (x["win_rate"], x["total"]), reverse=True)
+    return rows[:V77_TOP_STRATEGY_LIMIT]
+
+async def coin_cmd(update, context):
+    symbol = context.args[0] if context.args else "BTC"
+    normalized = v69_normalize_symbol(symbol)
+    stats = v77_coin_stats(normalized)
+
+    await update.message.reply_text(
+        "🪙 <b>A100 종목별 성과</b>\n"
+        f"종목: <b>{_v54_escape(normalized)}</b>\n\n"
+        f"🟢 LONG\n"
+        f"{stats['LONG']['total']}전 · {stats['LONG']['wins']}승 · {stats['LONG']['losses']}패\n"
+        f"승률 <b>{stats['LONG']['win_rate']}%</b> · 평균RR {stats['LONG']['avg_rr']}\n\n"
+        f"🔴 SHORT\n"
+        f"{stats['SHORT']['total']}전 · {stats['SHORT']['wins']}승 · {stats['SHORT']['losses']}패\n"
+        f"승률 <b>{stats['SHORT']['win_rate']}%</b> · 평균RR {stats['SHORT']['avg_rr']}\n\n"
+        f"자동보정 LONG {v77_coin_bonus(normalized, 'LONG'):+.2f} / "
+        f"SHORT {v77_coin_bonus(normalized, 'SHORT'):+.2f}",
+        parse_mode="HTML",
+    )
+
+async def conditionstats_cmd(update, context):
+    stats = v77_condition_stats()
+    rows = [
+        (tag, data)
+        for tag, data in stats.items()
+        if data["total"] >= V77_CONDITION_MIN_SAMPLES
+    ]
+    rows.sort(key=lambda item: (item[1]["win_rate"], item[1]["total"]), reverse=True)
+
+    if not rows:
+        await update.message.reply_text(
+            f"조건별 통계를 만들려면 조건당 최소 {V77_CONDITION_MIN_SAMPLES}회 기록이 필요합니다."
+        )
+        return
+
+    lines = ["📊 <b>A100 조건별 승률</b>"]
+    for tag, data in rows[:20]:
+        icon = "🟢" if data["win_rate"] >= 60 else "🔴" if data["win_rate"] <= 40 else "🟡"
+        lines.append(
+            f"{icon} {_v54_escape(tag)} · "
+            f"{data['wins']}/{data['total']} · <b>{data['win_rate']}%</b>"
+        )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def blacklist_cmd(update, context):
+    blocked = v77_blacklist_symbols()
+
+    if not blocked:
+        await update.message.reply_text(
+            "🚫 자동 블랙리스트 종목이 없습니다.\n"
+            f"기준: 최소 {V77_BLACKLIST_SAMPLES}회, 승률 {V77_BLACKLIST_WINRATE}% 이하"
+        )
+        return
+
+    lines = [
+        "🚫 <b>A100 자동 블랙리스트</b>",
+        f"기준: {V77_BLACKLIST_SAMPLES}회 이상 / 승률 {V77_BLACKLIST_WINRATE}% 이하",
+    ]
+    for symbol, row in sorted(
+        blocked.items(),
+        key=lambda item: item[1]["win_rate"]
+    ):
+        lines.append(
+            f"• <b>{_v54_escape(symbol)}</b> · "
+            f"{row['wins']}승 {row['losses']}패 · {row['win_rate']}%"
+        )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def topstrategy_cmd(update, context):
+    rows = v77_strategy_combinations()
+
+    if not rows:
+        await update.message.reply_text(
+            f"최고 전략 조합을 만들려면 조합당 최소 {V77_TOP_STRATEGY_MIN_SAMPLES}회 기록이 필요합니다."
+        )
+        return
+
+    lines = ["🏆 <b>A100 최고 전략 조합</b>"]
+    for i, row in enumerate(rows, 1):
+        lines.append(
+            f"{i}. <b>{_v54_escape(row['strategy'])}</b>\n"
+            f"   {row['wins']}승 {row['losses']}패 · 승률 <b>{row['win_rate']}%</b>"
+        )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def advisor_cmd(update, context):
+    ok, reason, st = v451_gate()
+    if not ok:
+        await update.message.reply_text(
+            f"⛔ Advisor 제한: {_v54_escape(reason or '-')}",
+            parse_mode="HTML",
+        )
+        return
+
+    await update.message.reply_text("🤖 v77 자가학습 전략 브리핑 생성 중...")
+
+    try:
+        rows, results, errors = await v70_async_scan()
+        if not results:
+            await update.message.reply_text("분석 가능한 후보가 없습니다.")
+            return
+
+        market = v59_market_state()
+        regime = v76_market_regime(market, results)
+
+        ranked = sorted(
+            results,
+            key=lambda r: max(v77_adjusted_scores(r, regime)),
+            reverse=True,
+        )
+
+        selected = []
+        for r in ranked:
+            symbol = v69_normalize_symbol(getattr(r, "sym", ""))
+            if symbol in v77_blacklist_symbols():
+                continue
+            selected.append(r)
+            if len(selected) >= V76_ADVISOR_TOP:
+                break
+
+        strategy = (
+            "LONG 우선" if regime["code"] == "TREND_UP"
+            else "SHORT 우선" if regime["code"] in ("CRASH", "TREND_DOWN")
+            else "신규진입 축소" if regime["code"] == "OVERHEAT"
+            else "관망·돌파 확인"
+        )
+
+        lines = [
+            "🤖 <b>A100 v77 SELF LEARNING ADVISOR</b>",
+            f"시장 국면: <b>{_v54_escape(regime['label'])}</b>",
+            f"오늘 전략: <b>{_v54_escape(strategy)}</b>",
+            f"자동 블랙리스트: {len(v77_blacklist_symbols())}종목",
+            "",
+            "<b>추천 후보</b>",
+        ]
+
+        for i, r in enumerate(selected, 1):
+            long_score, short_score = v77_adjusted_scores(r, regime)
+            side = "LONG" if long_score >= short_score else "SHORT"
+            base_wr = v76_expected_win_rate(r, side, regime)
+            cond_bonus = v77_condition_bonus(r, side)
+            coin_bonus = v77_coin_bonus(getattr(r, "sym", "?"), side)
+            expected = _v76_clip(base_wr + cond_bonus * 1.5 + coin_bonus * 1.5, 5, 92)
+            lines.append(
+                f"{i}. <b>{_v54_escape(getattr(r, 'sym', '?'))}</b> "
+                f"{side} · 점수 {max(long_score, short_score):.1f} · 승률 {expected:.1f}%\n"
+                f"   학습보정 종목 {coin_bonus:+.1f} / 조건 {cond_bonus:+.1f}"
+            )
+
+        strategies = v77_strategy_combinations()
+        if strategies:
+            best = strategies[0]
+            lines.extend([
+                "",
+                "<b>최고 학습 전략</b>",
+                f"{_v54_escape(best['strategy'])}",
+                f"승률 {best['win_rate']}% · 표본 {best['total']}회",
+            ])
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
+    except asyncio.TimeoutError:
+        await update.message.reply_text("advisor 오류: 분석 시간이 초과했습니다.")
+    except Exception as e:
+        await update.message.reply_text(
+            f"advisor 오류: {_v54_escape(e)}",
+            parse_mode="HTML",
+        )
+
+async def learning_cmd(update, context):
+    data = v75_rebuild_learning()
+    regime = v76_market_regime()
+    blocked = v77_blacklist_symbols()
+    strategies = v77_strategy_combinations()
+
+    await update.message.reply_text(
+        "🧠 <b>A100 v77 자가학습 상태</b>\n"
+        f"자동 복기: ✅ 활성\n"
+        f"복기 기록: {len(V76_REVIEWS)}건\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        f"블랙리스트: {len(blocked)}종목\n"
+        f"검증 전략: {len(strategies)}개\n\n"
+        f"🟢 LONG\n"
+        f"표본 {data['LONG']['samples']} · 성공 {data['LONG']['wins']} · 실패 {data['LONG']['losses']}\n"
+        f"기본보정 {data['LONG']['bonus']:+.2f} · 국면보정 {regime['long_bonus']:+.1f}\n\n"
+        f"🔴 SHORT\n"
+        f"표본 {data['SHORT']['samples']} · 성공 {data['SHORT']['wins']} · 실패 {data['SHORT']['losses']}\n"
+        f"기본보정 {data['SHORT']['bonus']:+.2f} · 국면보정 {regime['short_bonus']:+.1f}",
+        parse_mode="HTML",
+    )
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    perf = v72_performance_stats()
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+    volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+    regime = v76_market_regime()
+    blocked = v77_blacklist_symbols()
+
+    await update.message.reply_text(
+        "📦 <b>A100 v77 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        f"자동 복기: ✅ 활성\n"
+        f"종목별 학습: ✅ 활성\n"
+        f"조건별 학습: ✅ 활성\n"
+        f"자동 블랙리스트: ✅ 활성 ({len(blocked)}종목)\n"
+        f"최고 전략 생성: ✅ 활성\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        f"명령어: /coin /conditionstats /blacklist /topstrategy\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+def build_v44_application(token):
+    v76_startup()
+    v72_start_monitor()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monthly", monthly_cmd), ("learning", learning_cmd), ("advisor", advisor_cmd),
+        ("review", review_cmd), ("regime", regime_cmd), ("coin", coin_cmd),
+        ("conditionstats", conditionstats_cmd), ("blacklist", blacklist_cmd),
+        ("topstrategy", topstrategy_cmd), ("hybridstatus", hybridstatus_cmd),
+        ("resync", resync_cmd), ("monitorstatus", monitorstatus_cmd),
+        ("storagestatus", storagestatus_cmd), ("saveperformance", saveperformance_cmd),
+        ("restoreperformance", restoreperformance_cmd), ("dbstatus", dbstatus_cmd),
+        ("dbtest", dbtest_cmd), ("dbsync", dbsync_cmd), ("dbevents", dbevents_cmd),
+        ("chart", chart_cmd), ("fast", fast_cmd), ("cgstatus", cgstatus_cmd),
+        ("cgreset", cgreset_cmd), ("deep", deep_cmd), ("cache", cache_cmd),
+        ("quick", quick_cmd), ("speed", speedstatus_cmd), ("report", report_cmd),
+        ("history", history_cmd), ("stats", stats_cmd), ("ticker", ticker_cmd),
+        ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
         ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
     ]
     for name, fn in handlers:
