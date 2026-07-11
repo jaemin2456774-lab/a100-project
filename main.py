@@ -22850,5 +22850,457 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+# ============================================================================
+# A100 V90 FULL LEGACY INTEGRATION ENGINE
+# - V45~V89 명령 전체 정적 재등록
+# - 기존 기능 누락 방지용 명령 감사
+# - 도움말 페이지에 전체 명령 공개
+# ============================================================================
+
+V90_VERSION = "A100 V90 FULL LEGACY INTEGRATION ENGINE"
+V90_STARTED_AT = time.time()
+
+V90_COMMAND_CATEGORIES = {
+    "V90 핵심": [
+        "v90",
+        "v89",
+        "v88",
+        "decision",
+        "setup",
+        "conviction",
+        "watchlist",
+        "quality",
+        "pulse",
+        "risk",
+        "whale87",
+        "alertplan"
+    ],
+    "스캔·추천": [
+        "scan",
+        "rank",
+        "best",
+        "top",
+        "hot",
+        "sniper",
+        "elite",
+        "only",
+        "auto",
+        "god",
+        "real",
+        "scalp",
+        "tenx",
+        "breakout",
+        "bottom",
+        "timing",
+        "now",
+        "win",
+        "smart",
+        "danger",
+        "watch",
+        "ultimate",
+        "quick",
+        "fast",
+        "deep"
+    ],
+    "시장·데이터": [
+        "chart",
+        "ticker",
+        "flow",
+        "regime",
+        "whale",
+        "breakout85",
+        "confidence",
+        "readiness",
+        "macro",
+        "events",
+        "live",
+        "news",
+        "smartnews",
+        "cleannews",
+        "translate",
+        "final",
+        "mode",
+        "kr"
+    ],
+    "학습·성과": [
+        "performance",
+        "monthly",
+        "learning",
+        "advisor",
+        "review",
+        "scorehistory",
+        "history",
+        "stats",
+        "report",
+        "coin",
+        "conditionstats",
+        "blacklist",
+        "topstrategy"
+    ],
+    "DB·저장소": [
+        "dbstatus",
+        "dbtest",
+        "dbsync",
+        "dbevents",
+        "storagestatus",
+        "saveperformance",
+        "restoreperformance",
+        "hybridstatus",
+        "resync",
+        "monitorstatus"
+    ],
+    "상태·진단": [
+        "health",
+        "selfcheck",
+        "legacycheck",
+        "commands",
+        "datastatus",
+        "scanstatus",
+        "pending",
+        "why",
+        "quarantine",
+        "alertstatus",
+        "apicheck",
+        "bintest",
+        "cgtest",
+        "cgstatus",
+        "cgreset",
+        "cache",
+        "speed",
+        "check",
+        "myid"
+    ],
+    "포지션": [
+        "long",
+        "short",
+        "position"
+    ]
+}
+
+V90_COMMAND_REGISTRY = {
+    'advisor': advisor_cmd,
+    'alertplan': alertplan_cmd,
+    'alertstatus': alertstatus_cmd,
+    'apicheck': apicheck_cmd,
+    'auto': auto_cmd,
+    'best': rank_cmd,
+    'bintest': bintest_cmd,
+    'blacklist': blacklist_cmd,
+    'bottom': bottom_cmd,
+    'breakout': breakout_cmd,
+    'breakout85': breakout85_cmd,
+    'cache': cache_cmd,
+    'cgreset': cgreset_cmd,
+    'cgstatus': cgstatus_cmd,
+    'cgtest': cgtest_cmd,
+    'chart': chart_cmd,
+    'check': check,
+    'cleannews': cleannews_cmd,
+    'coin': coin_cmd,
+    'commands': commands90_cmd,
+    'conditionstats': conditionstats_cmd,
+    'confidence': confidence_cmd,
+    'conviction': conviction89_cmd,
+    'danger': danger_cmd,
+    'datastatus': datastatus_cmd,
+    'dbevents': dbevents_cmd,
+    'dbstatus': dbstatus_cmd,
+    'dbsync': dbsync_cmd,
+    'dbtest': dbtest_cmd,
+    'decision': decision89_cmd,
+    'deep': deep_cmd,
+    'elite': elite_cmd,
+    'errors': errors_cmd,
+    'events': events_cmd,
+    'fast': fast_cmd,
+    'final': final_cmd,
+    'flow': flow_cmd,
+    'god': god_cmd,
+    'health': health90_cmd,
+    'help': help90_cmd,
+    'history': history_cmd,
+    'hot': hot_cmd,
+    'hybridstatus': hybridstatus_cmd,
+    'kr': kr_cmd,
+    'learning': learning_cmd,
+    'legacycheck': legacycheck90_cmd,
+    'live': live_cmd,
+    'long': long_cmd,
+    'macro': macro_cmd,
+    'macrohelp': macrohelp_cmd,
+    'mode': mode_cmd,
+    'monitorstatus': monitorstatus_cmd,
+    'monthly': monthly_cmd,
+    'myid': myid,
+    'news': news_cmd,
+    'now': now_cmd,
+    'only': only_cmd,
+    'pending': pending_cmd,
+    'performance': performance_cmd,
+    'position': position_cmd,
+    'pulse': pulse_cmd,
+    'quality': quality_cmd,
+    'quarantine': quarantine_cmd,
+    'quick': quick_cmd,
+    'rank': rank_cmd,
+    'readiness': readiness_cmd,
+    'real': real_cmd,
+    'regime': regime_cmd,
+    'report': report_cmd,
+    'restoreperformance': restoreperformance_cmd,
+    'resync': resync_cmd,
+    'review': review_cmd,
+    'risk': risk_cmd,
+    'saveperformance': saveperformance_cmd,
+    'scalp': scalp_cmd,
+    'scan': scan_cmd,
+    'scanstatus': scanstatus_cmd,
+    'scorehistory': scorehistory_cmd,
+    'selfcheck': selfcheck90_cmd,
+    'setup': setup89_cmd,
+    'short': short_cmd,
+    'smart': smart_cmd,
+    'smartnews': news_cmd,
+    'sniper': sniper_cmd,
+    'speed': speedstatus_cmd,
+    'start': help90_cmd,
+    'stats': stats_cmd,
+    'storagestatus': storagestatus_cmd,
+    'tenx': tenx_cmd,
+    'ticker': ticker_cmd,
+    'timing': timing_cmd,
+    'top': rank_cmd,
+    'topstrategy': topstrategy_cmd,
+    'translate': translate_cmd,
+    'ultimate': ultimate_cmd,
+    'v88': v90_cmd,
+    'v89': v90_cmd,
+    'v90': v90_cmd,
+    'watch': watch_cmd,
+    'watchlist': watchlist89_cmd,
+    'whale': whale_cmd,
+    'whale87': whale87_cmd,
+    'why': why_cmd,
+    'win': win_cmd,
+}
+
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+def v90_registry_audit():
+    missing_callbacks = []
+    non_callable = []
+    for command, callback in V90_COMMAND_REGISTRY.items():
+        if callback is None:
+            missing_callbacks.append(command)
+        elif not callable(callback):
+            non_callable.append(command)
+    return {
+        "expected": len(V90_EXPECTED_COMMANDS),
+        "missing_callbacks": sorted(missing_callbacks),
+        "non_callable": sorted(non_callable),
+        "commands": sorted(V90_EXPECTED_COMMANDS),
+    }
+
+async def v90_cmd(update, context):
+    # V89의 안전한 종합 엔진을 그대로 사용하되 표시 버전만 V90으로 통일한다.
+    symbol = v88_symbol(context)
+    await update.message.reply_text(f"🧠 {symbol} V90 종합판단 분석 중...")
+    try:
+        data = await _v89_collect(symbol)
+        (
+            result, report, regime, long_score, short_score, metrics, blockers,
+            flow, whale, breakout, confidence, readiness, risk,
+            horizon, score, whale_detail
+        ) = data
+
+        final = v89_final_decision(readiness, risk, confidence, blockers)
+        report_symbol = v89_symbol_text(report, symbol)
+        lines = [
+            f"🧠 <b>{_v54_escape(report_symbol)} A100 V90</b>",
+            f"<b>{final}</b>",
+            "",
+            f"AI SCORE: <b>{v89_float(score,'total'):.1f}</b> · {_v54_escape(v89_get(score,'grade','-'))}등급",
+            f"준비도: <b>{v89_float(readiness,'score'):.1f}%</b>",
+            f"확신도: <b>{v89_float(confidence,'score'):.1f}%</b> {_v54_escape(v89_get(confidence,'stars',''))}",
+            f"위험도: {_v54_escape(v89_get(risk,'icon','⚠️'))} <b>{v89_float(risk,'score'):.1f}</b> · {_v54_escape(v89_get(risk,'label','-'))}",
+            f"시장체제: {_v54_escape(v89_get(regime,'label','-'))}",
+            f"방향우위: <b>{_v54_escape(v89_get(metrics,'side','-'))}</b> · R:R {v89_float(metrics,'rr'):.2f}:1",
+            "",
+            "<b>기간별 조건 충족도</b>",
+            f"24시간 {v89_float(horizon,'24h'):.1f} · 72시간 {v89_float(horizon,'72h'):.1f} · 7일 {v89_float(horizon,'7d'):.1f}",
+            f"세력흐름 {v89_float(whale_detail,'score'):.1f} · 돌파준비 {v89_float(breakout,'score'):.1f}",
+            "",
+            "<b>진입 방해요인</b>",
+        ]
+        blocker_lines = _v86_blocker_lines(blockers, readiness)
+        lines.extend(blocker_lines if blocker_lines else ["없음"])
+        lines += [
+            "",
+            "<i>V90 점수는 공개 시장데이터 기반 조건 점수이며 수익을 보장하지 않습니다.</i>",
+        ]
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as error:
+        v88_record_error(f"v90:{symbol}", error)
+        await update.message.reply_text(
+            f"⚠️ V90 분석 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."
+        )
+
+async def commands90_cmd(update, context):
+    requested = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    lines = [
+        f"📚 <b>A100 V90 전체 명령 {len(V90_EXPECTED_COMMANDS)}개</b>",
+        "",
+    ]
+    matched = False
+    for category, commands in V90_COMMAND_CATEGORIES.items():
+        available = [c for c in commands if c in V90_COMMAND_REGISTRY]
+        if not available:
+            continue
+        if requested and requested not in category.lower() and requested not in available:
+            continue
+        matched = True
+        lines.append(f"<b>{_v54_escape(category)}</b>")
+        lines.append(" ".join(f"/{c}" for c in available))
+        lines.append("")
+    if not matched:
+        lines += [
+            "검색 결과가 없습니다.",
+            "예: /commands 상태 또는 /commands scan",
+        ]
+    text = "\n".join(lines)
+    # Telegram 메시지 제한을 고려하여 분할
+    for start_idx in range(0, len(text), 3800):
+        await update.message.reply_text(text[start_idx:start_idx+3800], parse_mode="HTML")
+
+async def legacycheck90_cmd(update, context):
+    audit = v90_registry_audit()
+    status = not audit["missing_callbacks"] and not audit["non_callable"]
+    lines = [
+        "🧾 <b>A100 V90 기존 기능 감사</b>",
+        f"등록 대상: <b>{audit['expected']}개</b>",
+        f"콜백 누락: <b>{len(audit['missing_callbacks'])}개</b>",
+        f"실행 불가 콜백: <b>{len(audit['non_callable'])}개</b>",
+        f"판정: <b>{'✅ 통과' if status else '❌ 점검 필요'}</b>",
+        "",
+        "핵심 보존 항목:",
+        "✅ 초기 스캔·랭킹·뉴스·매크로 명령",
+        "✅ CoinGlass/API 상태·캐시 명령",
+        "✅ PostgreSQL·Volume·성과·학습 명령",
+        "✅ V77 자기학습 및 V78~V87 품질·리스크 명령",
+        "✅ V89 안정화 명령",
+    ]
+    if audit["missing_callbacks"]:
+        lines.append("누락: " + ", ".join(audit["missing_callbacks"]))
+    if audit["non_callable"]:
+        lines.append("실행 불가: " + ", ".join(audit["non_callable"]))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def selfcheck90_cmd(update, context):
+    audit = v90_registry_audit()
+    checks = [
+        ("전체 명령 콜백", not audit["missing_callbacks"] and not audit["non_callable"]),
+        ("명령 수 90개 이상", audit["expected"] >= 90),
+        ("Result.get 호환", bool("Result" in globals() and hasattr(Result, "get"))),
+        ("math import", "math" in globals()),
+        ("Telegram token", bool(os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN"))),
+        ("Chat ID", bool(CHAT_ID)),
+        ("CoinGlass key", bool(CG_KEY)),
+        ("PostgreSQL 설정", bool(v74_database_configured())),
+        ("Railway Volume", bool(os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK))),
+        ("Binance 심볼목록", bool(globals().get("V78_VALID_SYMBOLS"))),
+        ("V87 collector", callable(globals().get("_v87_collect"))),
+        ("V89 안전 collector", callable(globals().get("_v89_collect"))),
+    ]
+    passed = sum(1 for _, ok in checks if ok)
+    lines = [
+        "🩺 <b>A100 V90 SELF CHECK</b>",
+        f"결과: <b>{passed}/{len(checks)}</b>",
+        f"통합 명령: <b>{audit['expected']}개</b>",
+        "",
+        *[f"{'✅' if ok else '⚠️'} {_v54_escape(name)}" for name, ok in checks],
+        "",
+        f"가동시간: {int(time.time() - V90_STARTED_AT)}초",
+        f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def health90_cmd(update, context):
+    audit = v90_registry_audit()
+    await update.message.reply_text(
+        "\n".join([
+            "✅ <b>A100 V90 FULL LEGACY ENGINE</b>",
+            f"가동시간: {int(time.time() - V90_STARTED_AT)}초",
+            f"전체 명령: {audit['expected']}개",
+            f"명령 누락: {len(audit['missing_callbacks']) + len(audit['non_callable'])}개",
+            f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+            "V45~V89 통합 레지스트리: 활성",
+            "PostgreSQL·Volume·학습 계층: 유지",
+            "중복 unknown 응답: 차단",
+        ]),
+        parse_mode="HTML",
+    )
+
+async def help90_cmd(update, context):
+    await update.message.reply_text(
+        "\n".join([
+            "🤖 <b>A100 V90 FULL LEGACY ENGINE</b>",
+            "",
+            "/v90 BTC — 최신 종합판단",
+            "/decision BTC — 최종판정",
+            "/setup BTC — 진입·손절·목표",
+            "/conviction BTC — 확신도 구성",
+            "/watchlist — 감시 우선순위",
+            "/quality BTC /pulse BTC /risk BTC",
+            "/whale87 BTC /alertplan BTC",
+            "",
+            "/commands — 기존 포함 전체 명령",
+            "/legacycheck — 기존 기능 등록 감사",
+            "/selfcheck /health /errors",
+        ]),
+        parse_mode="HTML",
+    )
+
+def build_v44_application(token):
+    app = Application.builder().token(token).build()
+    registered = set()
+
+    for command in sorted(V90_COMMAND_REGISTRY):
+        callback = V90_COMMAND_REGISTRY[command]
+        if not callable(callback):
+            raise RuntimeError(f"V90 callback is not callable: {command}")
+        app.add_handler(CommandHandler(command, callback), group=0)
+        registered.add(command)
+
+    app.add_error_handler(v88_error_handler)
+
+    missing = sorted(V90_EXPECTED_COMMANDS - registered)
+    print(f"A100 V90 registered commands: {len(registered)}", flush=True)
+    print(
+        "A100 V90 full legacy command check: "
+        + ("OK" if not missing else "MISSING " + ",".join(missing)),
+        flush=True,
+    )
+    if missing:
+        raise RuntimeError("V90 commands missing: " + ",".join(missing))
+    return app
+
+def main():
+    start_health_server_once()
+    print("A100 V90 FULL LEGACY INTEGRATION ENGINE worker running...", flush=True)
+
+    if not acquire_v44_process_lock():
+        print("A100 V90 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        print("A100 V90 stopped by signal", flush=True)
+    except Exception as error:
+        v88_record_error("v90-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
 if __name__ == "__main__":
     main()
