@@ -8,7 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from telegram import Update
 from telegram.error import Conflict, NetworkError, TimedOut
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 load_dotenv()
 
@@ -5150,7 +5150,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v82 DECISION STAGE ENGINE worker running...", flush=True)
+    print("A100 v87.1 UNIFIED ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -22051,13 +22051,141 @@ async def datastatus_cmd(update, context):
         f"추천허용: {'예' if ok else '아니오'}", parse_mode="HTML")
 
 
-_v87_base_builder = build_v44_application
+
+# ============================================================================
+# A100 v87.1 UNIFIED COMMAND REGISTRY
+# ============================================================================
+
+V871_VERSION = "A100 v87.1 UNIFIED ENGINE"
+
+def _v871_normalize_symbol_arg(context, default="BTC"):
+    raw = context.args[0] if getattr(context, "args", None) else default
+    return v69_normalize_symbol(str(raw).strip().upper())
+
+async def v871_help_cmd(update, context):
+    commands = [
+        "/quality BTC", "/why BTC", "/flow BTC", "/pulse BTC", "/risk BTC",
+        "/whale87 BTC", "/alertplan BTC", "/scorehistory BTC", "/readiness BTC",
+        "/health", "/datastatus", "/scanstatus", "/performance", "/learning",
+        "/advisor", "/regime", "/pending", "/quarantine", "/topstrategy",
+    ]
+    await update.message.reply_text(
+        "🤖 A100 v87.1 UNIFIED ENGINE\n\n"
+        "주요 명령어\n" + "\n".join(commands) +
+        "\n\n종목 생략 시 BTC를 기본 분석합니다."
+    )
+
+async def v871_unknown_command(update, context):
+    command = update.message.text.split()[0] if update.message and update.message.text else "-"
+    print(f"CMD UNKNOWN {command}", flush=True)
+    await update.message.reply_text(
+        f"지원하지 않는 명령어입니다: {command}\n/help 로 사용 가능한 명령을 확인하세요."
+    )
+
+def _v871_register(app, command, handler, registered):
+    if not callable(handler):
+        print(f"CMD SKIP /{command}: handler missing", flush=True)
+        return False
+    if command in registered:
+        print(f"CMD DUPLICATE SKIP /{command}", flush=True)
+        return False
+    app.add_handler(CommandHandler(command, handler))
+    registered.add(command)
+    print(f"CMD REGISTER /{command} -> {handler.__name__}", flush=True)
+    return True
+
+_v871_whale87_impl = whale87_cmd
+async def whale87_cmd(update, context):
+    symbol = _v871_normalize_symbol_arg(context)
+    if not getattr(context, "args", None):
+        context.args = [symbol]
+    print(f"CMD /whale87 {symbol} START", flush=True)
+    try:
+        await _v871_whale87_impl(update, context)
+        print(f"CMD /whale87 {symbol} OK", flush=True)
+    except Exception as e:
+        print(f"CMD /whale87 {symbol} ERROR {type(e).__name__}: {e}", flush=True)
+        await update.message.reply_text(f"⚠️ /whale87 처리 오류: {type(e).__name__}")
+
+_v871_alertplan_impl = alertplan_cmd
+async def alertplan_cmd(update, context):
+    symbol = _v871_normalize_symbol_arg(context)
+    if not getattr(context, "args", None):
+        context.args = [symbol]
+    print(f"CMD /alertplan {symbol} START", flush=True)
+    try:
+        await _v871_alertplan_impl(update, context)
+        print(f"CMD /alertplan {symbol} OK", flush=True)
+    except Exception as e:
+        print(f"CMD /alertplan {symbol} ERROR {type(e).__name__}: {e}", flush=True)
+        await update.message.reply_text(f"⚠️ /alertplan 처리 오류: {type(e).__name__}")
+
 def build_v44_application(token):
-    app=_v87_base_builder(token)
-    app.add_handler(CommandHandler("pulse", pulse_cmd))
-    app.add_handler(CommandHandler("risk", risk_cmd))
-    app.add_handler(CommandHandler("alertplan", alertplan_cmd))
-    app.add_handler(CommandHandler("whale87", whale87_cmd))
+    try:
+        v76_startup()
+    except Exception as e:
+        print(f"v87.1 startup warning: {type(e).__name__}: {e}", flush=True)
+
+    try:
+        v72_start_monitor()
+    except Exception as e:
+        print(f"v87.1 monitor warning: {type(e).__name__}: {e}", flush=True)
+
+    try:
+        v79_api_health_snapshot()
+    except Exception as e:
+        print(f"v87.1 health warning: {type(e).__name__}: {e}", flush=True)
+
+    app = Application.builder().token(token).build()
+    registered = set()
+
+    registry = [
+        ("start", v871_help_cmd), ("help", v871_help_cmd),
+        ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd),
+        ("long", long_cmd), ("short", short_cmd), ("position", position_cmd),
+        ("performance", performance_cmd), ("monthly", monthly_cmd),
+        ("learning", learning_cmd), ("advisor", advisor_cmd), ("review", review_cmd),
+        ("regime", regime_cmd), ("coin", coin_cmd), ("conditionstats", conditionstats_cmd),
+        ("blacklist", blacklist_cmd), ("topstrategy", topstrategy_cmd),
+        ("health", health_cmd), ("scanstatus", scanstatus_cmd),
+        ("pending", pending_cmd), ("quarantine", quarantine_cmd),
+        ("hybridstatus", hybridstatus_cmd), ("resync", resync_cmd),
+        ("monitorstatus", monitorstatus_cmd), ("storagestatus", storagestatus_cmd),
+        ("saveperformance", saveperformance_cmd), ("restoreperformance", restoreperformance_cmd),
+        ("dbstatus", dbstatus_cmd), ("dbtest", dbtest_cmd), ("dbsync", dbsync_cmd),
+        ("dbevents", dbevents_cmd), ("chart", chart_cmd), ("fast", fast_cmd),
+        ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd), ("deep", deep_cmd),
+        ("cache", cache_cmd), ("quick", quick_cmd), ("speed", speedstatus_cmd),
+        ("report", report_cmd), ("history", history_cmd), ("stats", stats_cmd),
+        ("ticker", ticker_cmd), ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
+        ("quality", quality_cmd), ("why", why_cmd), ("flow", flow_cmd),
+        ("readiness", readiness_cmd), ("scorehistory", scorehistory_cmd),
+        ("pulse", pulse_cmd), ("risk", risk_cmd),
+        ("whale87", whale87_cmd), ("alertplan", alertplan_cmd),
+    ]
+
+    for command, handler in registry:
+        _v871_register(app, command, handler, registered)
+
+    app.add_handler(MessageHandler(filters.COMMAND, v871_unknown_command), group=99)
+    app.add_error_handler(error_handler)
+
+    required = {"quality", "why", "flow", "pulse", "risk", "whale87", "alertplan", "scorehistory"}
+    missing = sorted(required - registered)
+    print(f"A100 v87.1 registered commands: {len(registered)}", flush=True)
+    print(f"A100 v87.1 required command check: {'OK' if not missing else 'MISSING ' + ','.join(missing)}", flush=True)
     return app
 
 
