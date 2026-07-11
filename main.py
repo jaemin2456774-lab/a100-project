@@ -22432,7 +22432,6 @@ def build_v44_application(token):
         except Exception as error:
             v88_record_error(f"extra-handler:{group}", error)
 
-    app.add_handler(MessageHandler(filters.COMMAND, v88_unknown_cmd), group=99)
     app.add_error_handler(v88_error_handler)
 
     missing = sorted(V88_REQUIRED_COMMANDS - registered)
@@ -22461,6 +22460,393 @@ def main():
         print("A100 V88 stopped by signal", flush=True)
     except Exception as error:
         v88_record_error("fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
+# ============================================================================
+# A100 V89 ULTIMATE STABLE ENGINE
+# 핵심 수정:
+# 1) Result 객체의 dict-style .get() 호환
+# 2) 정상 명령 뒤 unknown-command 중복응답 제거
+# 3) V87/V88 데이터 구조 차이를 흡수하는 안전 접근 계층
+# 4) AttributeError 발생 위치를 /errors에 기록
+# ============================================================================
+
+V89_VERSION = "A100 V89 ULTIMATE STABLE ENGINE"
+V89_STARTED_AT = time.time()
+
+def _v89_result_get(self, key, default=None):
+    return getattr(self, key, default)
+
+# 이전 버전 엔진 일부는 Result를 객체처럼, 일부는 dict처럼 사용함.
+# 클래스에 get()을 추가해 양쪽 호출 방식을 모두 지원한다.
+try:
+    if "Result" in globals() and not hasattr(Result, "get"):
+        Result.get = _v89_result_get
+except Exception as error:
+    v88_record_error("v89-result-adapter", error)
+
+def v89_get(obj, key, default=None):
+    """dict / dataclass / 일반 객체 모두 안전하게 읽기."""
+    try:
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        getter = getattr(obj, "get", None)
+        if callable(getter):
+            return getter(key, default)
+        return getattr(obj, key, default)
+    except Exception:
+        return default
+
+def v89_float(obj, key=None, default=0.0):
+    value = v89_get(obj, key, default) if key is not None else obj
+    try:
+        value = float(value)
+        return value if math.isfinite(value) else default
+    except Exception:
+        return default
+
+def v89_symbol_text(obj, fallback="UNKNOWN"):
+    return str(
+        v89_get(obj, "symbol",
+            v89_get(obj, "sym", fallback)
+        )
+    )
+
+async def _v89_collect(symbol):
+    try:
+        data = await _v87_collect(symbol)
+        if not isinstance(data, (tuple, list)) or len(data) != 16:
+            raise RuntimeError(
+                f"collector shape mismatch: expected 16, got "
+                f"{len(data) if hasattr(data, '__len__') else type(data).__name__}"
+            )
+        return data
+    except Exception as error:
+        trace = traceback.format_exc(limit=8)
+        v88_record_error(f"v89-collect:{symbol}", RuntimeError(f"{error}\n{trace}"))
+        raise
+
+def v89_final_decision(readiness, risk, confidence, blockers):
+    rdy = v89_float(readiness, "score")
+    rsk = v89_float(risk, "score")
+    conf = v89_float(confidence, "score")
+    count = len(blockers or [])
+
+    if rsk >= 75 or count >= 4:
+        return "⛔ 진입 금지"
+    if rdy >= 72 and conf >= 70 and rsk < 55 and count <= 1:
+        return "🟢 분할진입 검토"
+    if rdy >= 58 and conf >= 58 and rsk < 68:
+        return "🟡 조건부 대기"
+    return "⚪ 관망"
+
+async def v89_cmd(update, context):
+    symbol = v88_symbol(context)
+    await update.message.reply_text(f"🧠 {symbol} V89 종합판단 분석 중...")
+    try:
+        (
+            result, report, regime, long_score, short_score, metrics, blockers,
+            flow, whale, breakout, confidence, readiness, risk,
+            horizon, score, whale_detail
+        ) = await _v89_collect(symbol)
+
+        final = v89_final_decision(readiness, risk, confidence, blockers)
+        report_symbol = v89_symbol_text(report, symbol)
+        lines = [
+            f"🧠 <b>{_v54_escape(report_symbol)} A100 V89</b>",
+            f"<b>{final}</b>",
+            "",
+            f"AI SCORE: <b>{v89_float(score,'total'):.1f}</b> · {_v54_escape(v89_get(score,'grade','-'))}등급",
+            f"준비도: <b>{v89_float(readiness,'score'):.1f}%</b>",
+            f"확신도: <b>{v89_float(confidence,'score'):.1f}%</b> {_v54_escape(v89_get(confidence,'stars',''))}",
+            f"위험도: {_v54_escape(v89_get(risk,'icon','⚠️'))} <b>{v89_float(risk,'score'):.1f}</b> · {_v54_escape(v89_get(risk,'label','-'))}",
+            f"시장체제: {_v54_escape(v89_get(regime,'label','-'))}",
+            f"방향우위: <b>{_v54_escape(v89_get(metrics,'side','-'))}</b> · R:R {v89_float(metrics,'rr'):.2f}:1",
+            "",
+            "<b>기간별 조건 충족도</b>",
+            f"24시간 {v89_float(horizon,'24h'):.1f} · 72시간 {v89_float(horizon,'72h'):.1f} · 7일 {v89_float(horizon,'7d'):.1f}",
+            f"세력흐름 {v89_float(whale_detail,'score'):.1f} · 돌파준비 {v89_float(breakout,'score'):.1f}",
+            "",
+            "<b>진입 방해요인</b>",
+        ]
+        blocker_lines = _v86_blocker_lines(blockers, readiness)
+        lines.extend(blocker_lines if blocker_lines else ["없음"])
+        lines += [
+            "",
+            "<i>V89 점수는 공개 시장데이터 기반 조건 점수이며 수익을 보장하지 않습니다.</i>",
+        ]
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as error:
+        await update.message.reply_text(
+            f"⚠️ V89 분석 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."
+        )
+
+async def decision89_cmd(update, context):
+    symbol = v88_symbol(context)
+    try:
+        data = await _v89_collect(symbol)
+        blockers, confidence, readiness, risk = data[6], data[10], data[11], data[12]
+        final = v89_final_decision(readiness, risk, confidence, blockers)
+        await update.message.reply_text(
+            "\n".join([
+                f"⚖️ <b>{symbol} V89 최종판정</b>",
+                f"<b>{final}</b>",
+                "",
+                f"준비도 {v89_float(readiness,'score'):.1f}%",
+                f"확신도 {v89_float(confidence,'score'):.1f}%",
+                f"위험도 {v89_float(risk,'score'):.1f}",
+                f"방해요인 {len(blockers or [])}개",
+            ]),
+            parse_mode="HTML",
+        )
+    except Exception as error:
+        await update.message.reply_text(
+            f"⚠️ decision 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."
+        )
+
+async def setup89_cmd(update, context):
+    symbol = v88_symbol(context)
+    try:
+        data = await _v89_collect(symbol)
+        result, metrics, blockers, confidence, readiness, risk = (
+            data[0], data[5], data[6], data[10], data[11], data[12]
+        )
+        final = v89_final_decision(readiness, risk, confidence, blockers)
+        await update.message.reply_text(
+            "\n".join([
+                f"🎯 <b>{symbol} V89 진입설계</b>",
+                f"판정: <b>{final}</b>",
+                "",
+                f"진입구간: <code>{v89_get(result,'entry_low','-')} ~ {v89_get(result,'entry_high','-')}</code>",
+                f"무효화/손절: <code>{v89_get(result,'stop','-')}</code>",
+                f"1차 목표: <code>{v89_get(result,'target1','-')}</code>",
+                f"2차 목표: <code>{v89_get(result,'target2','-')}</code>",
+                f"R:R: <b>{v89_float(metrics,'rr'):.2f}:1</b>",
+                "",
+                "⛔ 진입 금지 판정에서는 가격값을 주문 신호로 사용하지 마세요.",
+            ]),
+            parse_mode="HTML",
+        )
+    except Exception as error:
+        await update.message.reply_text(
+            f"⚠️ setup 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."
+        )
+
+async def conviction89_cmd(update, context):
+    symbol = v88_symbol(context)
+    try:
+        data = await _v89_collect(symbol)
+        confidence, readiness, breakout, score, whale_detail, risk = (
+            data[10], data[11], data[9], data[14], data[15], data[12]
+        )
+        parts = v89_get(confidence, "parts", {}) or {}
+        lines = [
+            f"🔬 <b>{symbol} V89 확신도 구성</b>",
+            f"종합 확신도: <b>{v89_float(confidence,'score'):.1f}%</b> {_v54_escape(v89_get(confidence,'stars',''))}",
+            "",
+        ]
+        if isinstance(parts, dict) and parts:
+            for key, value in parts.items():
+                lines.append(f"{_v54_escape(key)}: {v89_float(value):.1f}")
+        else:
+            lines += [
+                f"AI SCORE {v89_float(score,'total'):.1f}",
+                f"준비도 {v89_float(readiness,'score'):.1f}",
+                f"돌파준비 {v89_float(breakout,'score'):.1f}",
+                f"세력흐름 {v89_float(whale_detail,'score'):.1f}",
+                f"위험도 {v89_float(risk,'score'):.1f}",
+            ]
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as error:
+        await update.message.reply_text(
+            f"⚠️ conviction 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."
+        )
+
+async def watchlist89_cmd(update, context):
+    await update.message.reply_text("👀 V89 감시 우선순위 계산 중...")
+    rows = []
+    symbols = list(dict.fromkeys(DEFAULT_SYMBOLS))[:10]
+    for raw in symbols:
+        symbol = v69_normalize_symbol(raw)
+        try:
+            data = await _v89_collect(symbol)
+            report, blockers, confidence, readiness, risk, score, whale_detail = (
+                data[1], data[6], data[10], data[11], data[12], data[14], data[15]
+            )
+            priority = (
+                v89_float(readiness, "score") * 0.35
+                + v89_float(confidence, "score") * 0.30
+                + v89_float(score, "total") * 0.25
+                + v89_float(whale_detail, "score") * 0.10
+                - v89_float(risk, "score") * 0.20
+                - len(blockers or []) * 3.0
+            )
+            rows.append(
+                (
+                    priority,
+                    v89_symbol_text(report, symbol),
+                    v89_float(readiness, "score"),
+                    v89_float(risk, "score"),
+                )
+            )
+        except Exception:
+            continue
+
+    rows.sort(reverse=True)
+    if not rows:
+        await update.message.reply_text(
+            "감시목록을 계산할 수 없습니다.\n/selfcheck와 /errors를 확인하세요."
+        )
+        return
+
+    lines = ["👀 <b>A100 V89 WATCHLIST</b>"]
+    for idx, (priority, symbol, readiness, risk_score) in enumerate(rows[:7], 1):
+        lines.append(
+            f"{idx}. <b>{_v54_escape(symbol)}</b> · 우선도 {priority:.1f} · "
+            f"준비 {readiness:.1f} · 위험 {risk_score:.1f}"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def selfcheck89_cmd(update, context):
+    checks = [
+        ("Result.get 호환", bool("Result" in globals() and hasattr(Result, "get"))),
+        ("math import", "math" in globals()),
+        ("Telegram token", bool(os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN"))),
+        ("Chat ID", bool(CHAT_ID)),
+        ("CoinGlass key", bool(CG_KEY)),
+        ("PostgreSQL 설정", bool(v74_database_configured())),
+        ("Railway Volume", bool(os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK))),
+        ("Binance 심볼목록", bool(globals().get("V78_VALID_SYMBOLS"))),
+        ("V87 collector", callable(globals().get("_v87_collect"))),
+        ("V89 collector", callable(globals().get("_v89_collect"))),
+    ]
+    passed = sum(1 for _, status in checks if status)
+    lines = [
+        "🩺 <b>A100 V89 SELF CHECK</b>",
+        f"결과: <b>{passed}/{len(checks)}</b>",
+        "",
+        *[f"{'✅' if status else '⚠️'} {_v54_escape(name)}" for name, status in checks],
+        "",
+        f"가동시간: {int(time.time() - V89_STARTED_AT)}초",
+        f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def health89_cmd(update, context):
+    await update.message.reply_text(
+        "\n".join([
+            "✅ <b>A100 V89 ULTIMATE STABLE ENGINE</b>",
+            f"가동시간: {int(time.time() - V89_STARTED_AT)}초",
+            f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+            "Result 객체 호환계층: 활성",
+            "단일 명령 레지스트리: 활성",
+            "중복 unknown 응답: 제거",
+            "심볼 방어·오류 기록: 활성",
+        ]),
+        parse_mode="HTML",
+    )
+
+async def help89_cmd(update, context):
+    await update.message.reply_text(
+        "\n".join([
+            "🤖 <b>A100 V89 ULTIMATE</b>",
+            "",
+            "/v89 BTC — V89 종합판단",
+            "/v88 BTC — V89 엔진으로 호환 실행",
+            "/decision BTC — 최종판정",
+            "/setup BTC — 진입·손절·목표",
+            "/conviction BTC — 확신도 구성",
+            "/watchlist — 감시 우선순위",
+            "/quality BTC /pulse BTC /risk BTC",
+            "/whale87 BTC /alertplan BTC",
+            "/health /datastatus /selfcheck /errors",
+        ]),
+        parse_mode="HTML",
+    )
+
+_v89_base_builder = build_v44_application
+
+def build_v44_application(token):
+    legacy_app = _v89_base_builder(token)
+    legacy_commands, extras = _v88_extract_legacy_commands(legacy_app)
+
+    overrides = {
+        "start": help89_cmd,
+        "help": help89_cmd,
+        "health": health89_cmd,
+        "v89": v89_cmd,
+        "v88": v89_cmd,
+        "decision": decision89_cmd,
+        "setup": setup89_cmd,
+        "conviction": conviction89_cmd,
+        "watchlist": watchlist89_cmd,
+        "selfcheck": selfcheck89_cmd,
+        "errors": errors_cmd,
+        "quality": quality_cmd,
+        "pulse": pulse_cmd,
+        "risk": risk_cmd,
+        "whale87": whale87_cmd,
+        "alertplan": alertplan_cmd,
+        "datastatus": datastatus_cmd,
+    }
+    legacy_commands.update(overrides)
+
+    app = Application.builder().token(token).build()
+    registered = set()
+
+    for command in sorted(legacy_commands):
+        callback = legacy_commands[command]
+        if command in registered or not callable(callback):
+            continue
+        app.add_handler(CommandHandler(command, callback), group=0)
+        registered.add(command)
+
+    # 기존의 비-Command 핸들러 중 filters.COMMAND fallback은 이식하지 않는다.
+    for group, handler in extras:
+        try:
+            handler_filter = getattr(handler, "filters", None)
+            if handler_filter is not None and "COMMAND" in repr(handler_filter).upper():
+                continue
+            app.add_handler(handler, group=max(1, int(group)))
+        except Exception as error:
+            v88_record_error(f"v89-extra-handler:{group}", error)
+
+    app.add_error_handler(v88_error_handler)
+
+    required = {
+        "health", "datastatus", "quality", "pulse", "risk",
+        "whale87", "alertplan", "v89", "decision", "setup",
+        "conviction", "watchlist", "errors", "selfcheck",
+    }
+    missing = sorted(required - registered)
+    print(f"A100 V89 registered commands: {len(registered)}", flush=True)
+    print(
+        "A100 V89 required command check: "
+        + ("OK" if not missing else "MISSING " + ",".join(missing)),
+        flush=True,
+    )
+    if missing:
+        raise RuntimeError("V89 required commands missing: " + ",".join(missing))
+    return app
+
+def main():
+    start_health_server_once()
+    print("A100 V89 ULTIMATE STABLE ENGINE worker running...", flush=True)
+
+    if not acquire_v44_process_lock():
+        print("A100 V89 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        print("A100 V89 stopped by signal", flush=True)
+    except Exception as error:
+        v88_record_error("v89-fatal-main", error)
         print(traceback.format_exc(), flush=True)
         raise
 
