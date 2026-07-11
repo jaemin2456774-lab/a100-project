@@ -5150,7 +5150,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v79 ADAPTIVE SIGNAL QUALITY ENGINE worker running...", flush=True)
+    print("A100 v80 REAL LIQUIDITY QUALITY ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -19779,11 +19779,70 @@ def v79_result_value(r, *names, default=0.0):
             pass
     return default
 
+V80_TICKER_CACHE_TTL = int(os.getenv("V80_TICKER_CACHE_TTL", "45"))
+V80_LIQUIDITY_FLOOR = float(os.getenv("V80_LIQUIDITY_FLOOR", "2000000"))
+V80_LIQUIDITY_STRONG = float(os.getenv("V80_LIQUIDITY_STRONG", "50000000"))
+V80_LIQUIDITY_ELITE = float(os.getenv("V80_LIQUIDITY_ELITE", "500000000"))
+V80_TICKER_MAP_CACHE = {"ts": 0.0, "data": {}}
+
+def _v80_ticker_map(force=False):
+    now = time.time()
+    cached = V80_TICKER_MAP_CACHE.get("data") or {}
+    if cached and not force and now - _v79_float(V80_TICKER_MAP_CACHE.get("ts")) <= V80_TICKER_CACHE_TTL:
+        return cached
+
+    rows = []
+    try:
+        rows = v43_refresh_ticker(force=force) or []
+    except Exception:
+        rows = []
+    if not rows:
+        try:
+            rows = (V45_API_STATE.get("binance") or {}).get("ticker") or []
+        except Exception:
+            rows = []
+
+    mapped = {
+        str(x.get("symbol") or "").upper(): x
+        for x in rows if isinstance(x, dict) and x.get("symbol")
+    }
+    if mapped:
+        V80_TICKER_MAP_CACHE["ts"] = now
+        V80_TICKER_MAP_CACHE["data"] = mapped
+        return mapped
+    return cached
+
+def _v80_quote_volume(symbol):
+    pair = v79_symbol(symbol)
+    row = _v80_ticker_map().get(pair) or {}
+    try:
+        return max(0.0, float(row.get("quoteVolume") or 0.0))
+    except Exception:
+        return 0.0
+
+def _v80_liquidity_score(quote_volume):
+    qv = max(0.0, _v79_float(quote_volume))
+    if qv <= 0:
+        return 0.0
+    # 실제 24시간 USDT 거래대금을 로그 스케일로 0~100 환산한다.
+    if qv < V80_LIQUIDITY_FLOOR:
+        return _v79_clip(10.0 + 30.0 * qv / max(V80_LIQUIDITY_FLOOR, 1.0))
+    if qv < V80_LIQUIDITY_STRONG:
+        ratio = math.log(qv / V80_LIQUIDITY_FLOOR) / math.log(V80_LIQUIDITY_STRONG / V80_LIQUIDITY_FLOOR)
+        return _v79_clip(40.0 + ratio * 35.0)
+    if qv < V80_LIQUIDITY_ELITE:
+        ratio = math.log(qv / V80_LIQUIDITY_STRONG) / math.log(V80_LIQUIDITY_ELITE / V80_LIQUIDITY_STRONG)
+        return _v79_clip(75.0 + ratio * 20.0)
+    return 100.0
+
 def v79_market_metrics(r):
     price = v79_result_value(r, "price", "last", "close", default=0.0)
     quote_volume = v79_result_value(
         r, "quote_volume", "quoteVolume", "qv", "volume_usdt", "turnover", default=0.0
     )
+    # 분석 결과 객체에 거래대금이 없으면 Binance 24h ticker에서 직접 보강한다.
+    if quote_volume <= 0:
+        quote_volume = _v80_quote_volume(r)
     candle_count = int(v79_result_value(
         r, "candle_count", "candles", "kline_count", "bars", default=120
     ))
@@ -19792,6 +19851,7 @@ def v79_market_metrics(r):
     return {
         "price": price,
         "quote_volume": quote_volume,
+        "liquidity_score": _v80_liquidity_score(quote_volume),
         "candle_count": candle_count,
         "spread": spread,
         "age_days": age_days,
@@ -19822,13 +19882,14 @@ def v79_quality_report(r):
     if not candle_ok:
         penalties += 18
 
-    # 거래대금 값이 없으면 기존 거래량 점수로 보조 판정
+    # v80: 유동성은 내부 기술점수가 아니라 Binance 24시간 실제 USDT 거래대금으로 판정
+    liquidity_score = _v79_float(metrics.get("liquidity_score"))
     if metrics["quote_volume"] > 0:
-        liquidity_ok = metrics["quote_volume"] >= V79_MIN_QUOTE_VOLUME
-        liquidity_detail = f"{metrics['quote_volume']:,.0f} USDT"
+        liquidity_ok = metrics["quote_volume"] >= V80_LIQUIDITY_FLOOR
+        liquidity_detail = f"24h {metrics['quote_volume']:,.0f} USDT · 점수 {liquidity_score:.1f}"
     else:
-        liquidity_ok = volume_score >= 42
-        liquidity_detail = f"거래량점수 {volume_score:.1f}"
+        liquidity_ok = False
+        liquidity_detail = "24h 거래대금 조회 실패"
     checks.append(("유동성", liquidity_ok, liquidity_detail))
     if not liquidity_ok:
         penalties += 20
@@ -19851,12 +19912,13 @@ def v79_quality_report(r):
         penalties += 10
 
     score_core = (
-        chart * 0.18 +
-        volume_score * 0.18 +
-        timing * 0.14 +
-        institution * 0.14 +
-        cg_total * 0.18 +
-        max(0.0, 100.0 - risk) * 0.18
+        chart * 0.16 +
+        liquidity_score * 0.22 +
+        volume_score * 0.08 +
+        timing * 0.13 +
+        institution * 0.13 +
+        cg_total * 0.14 +
+        max(0.0, 100.0 - risk) * 0.14
     )
     quality = _v79_clip(score_core - penalties)
 
@@ -19993,7 +20055,7 @@ def v79_update_pending(r, regime=None):
             V79_CONFIRMED[key] = confirmed
             V79_PENDING.pop(key, None)
             v74_record_event(
-                "SIGNAL_CONFIRMED_V79",
+                "SIGNAL_CONFIRMED_V80",
                 symbol=signal["symbol"],
                 side=signal["side"],
                 payload=confirmed,
@@ -20094,7 +20156,7 @@ def v79_api_health_snapshot():
 
 async def health_cmd(update, context):
     health = v79_api_health_snapshot()
-    lines = ["🩺 <b>A100 v79 API 상태</b>"]
+    lines = ["🩺 <b>A100 v80 API 상태</b>"]
     for name in ("Binance", "CoinGlass", "Upbit", "PostgreSQL", "Volume"):
         row = health.get(name) or {}
         icon = "✅" if row.get("ok") else "⚠️"
@@ -20109,7 +20171,7 @@ async def scanstatus_cmd(update, context):
         if s.get("finished_at") else "-"
     )
     await update.message.reply_text(
-        "📡 <b>A100 v79 스캔 상태</b>\n"
+        "📡 <b>A100 v80 스캔 상태</b>\n"
         f"마지막 완료: {last}\n"
         f"전체 후보: {s.get('requested', 0)}\n"
         f"품질 통과: {s.get('valid', 0)}\n"
@@ -20163,7 +20225,7 @@ async def pending_cmd(update, context):
         key=lambda x: _v79_float(x.get("score")),
         reverse=True,
     )[:20]
-    lines = ["⏳ <b>A100 v79 재검증 대기</b>"]
+    lines = ["⏳ <b>A100 v80 재검증 대기</b>"]
     for row in rows:
         remain = max(
             0,
@@ -20212,7 +20274,7 @@ async def quarantine_cmd(update, context):
         await update.message.reply_text("🚫 현재 격리 중인 종목이 없습니다.")
         return
     now = time.time()
-    lines = ["🚫 <b>A100 v79 종목 격리</b>"]
+    lines = ["🚫 <b>A100 v80 종목 격리</b>"]
     for symbol, row in sorted(V79_QUARANTINE.items()):
         remain = max(0, int(_v79_float(row.get("until")) - now))
         lines.append(
@@ -20230,7 +20292,7 @@ async def datastatus_cmd(update, context):
     regime = v76_market_regime()
 
     await update.message.reply_text(
-        "📦 <b>A100 v79 데이터 상태</b>\n"
+        "📦 <b>A100 v80 데이터 상태</b>\n"
         f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
         f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
         f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
