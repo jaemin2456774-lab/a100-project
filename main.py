@@ -5150,7 +5150,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v78 SYMBOL GUARD & RATE LIMIT ENGINE worker running...", flush=True)
+    print("A100 v79 ADAPTIVE SIGNAL QUALITY ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -19650,6 +19650,638 @@ def build_v44_application(token):
         ("quick", quick_cmd), ("speed", speedstatus_cmd), ("report", report_cmd),
         ("history", history_cmd), ("stats", stats_cmd), ("ticker", ticker_cmd),
         ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
+        ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
+    ]
+    for name, fn in handlers:
+        if fn is not None:
+            app.add_handler(CommandHandler(name, fn))
+    app.add_error_handler(error_handler)
+    return app
+
+
+# ===== A100 v79 ADAPTIVE SIGNAL QUALITY ENGINE =====
+# 핵심 반영
+# - 데이터 품질 점수 0~100
+# - 저유동성 / 신규상장 / 캔들부족 / 데이터누락 필터
+# - 감지 -> 재검증 -> 확정 신호 3단계
+# - 오류 종목 자동 격리 및 만료
+# - API 상태 / 스캔 상태 / 품질 / 대기 / 이유 명령
+# - 최종점수 = 기본점수 × 데이터신뢰도 × 조건성과 × 시장적합도
+V79_VERSION = "A100 v79 ADAPTIVE SIGNAL QUALITY ENGINE"
+
+V79_MIN_QUALITY = float(os.getenv("V79_MIN_QUALITY", "68"))
+V79_CONFIRM_QUALITY = float(os.getenv("V79_CONFIRM_QUALITY", "75"))
+V79_MIN_QUOTE_VOLUME = float(os.getenv("V79_MIN_QUOTE_VOLUME", "1000000"))
+V79_MIN_CANDLES = int(os.getenv("V79_MIN_CANDLES", "90"))
+V79_RECHECK_SECONDS = int(os.getenv("V79_RECHECK_SECONDS", "900"))
+V79_PENDING_TTL = int(os.getenv("V79_PENDING_TTL", "14400"))
+V79_QUARANTINE_SECONDS = int(os.getenv("V79_QUARANTINE_SECONDS", "21600"))
+V79_ERROR_THRESHOLD = int(os.getenv("V79_ERROR_THRESHOLD", "2"))
+V79_SCORE_CONFIRM = float(os.getenv("V79_SCORE_CONFIRM", "72"))
+V79_MAX_PENDING = int(os.getenv("V79_MAX_PENDING", "200"))
+
+V79_LOCK = threading.RLock()
+V79_PENDING = {}
+V79_CONFIRMED = {}
+V79_QUARANTINE = {}
+V79_API_HEALTH = {
+    "Binance": {"ok": True, "last_error": "", "failures": 0, "updated": 0.0},
+    "CoinGlass": {"ok": True, "last_error": "", "failures": 0, "updated": 0.0},
+    "Upbit": {"ok": True, "last_error": "", "failures": 0, "updated": 0.0},
+    "PostgreSQL": {"ok": False, "last_error": "", "failures": 0, "updated": 0.0},
+    "Volume": {"ok": False, "last_error": "", "failures": 0, "updated": 0.0},
+}
+V79_SCAN_STATS = {
+    "started_at": 0.0,
+    "finished_at": 0.0,
+    "requested": 0,
+    "valid": 0,
+    "invalid_skipped": 0,
+    "quality_skipped": 0,
+    "low_liquidity": 0,
+    "data_shortage": 0,
+    "pending": 0,
+    "confirmed": 0,
+    "failed": 0,
+}
+
+def _v79_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def _v79_clip(value, low=0.0, high=100.0):
+    return max(low, min(high, _v79_float(value)))
+
+def v79_symbol(r_or_symbol):
+    if isinstance(r_or_symbol, str):
+        raw = r_or_symbol
+    else:
+        raw = getattr(r_or_symbol, "sym", "")
+    return normalize_usdt_symbol(raw)
+
+def v79_health_update(name, ok, error=""):
+    row = V79_API_HEALTH.setdefault(
+        name, {"ok": True, "last_error": "", "failures": 0, "updated": 0.0}
+    )
+    row["ok"] = bool(ok)
+    row["updated"] = time.time()
+    if ok:
+        row["last_error"] = ""
+        row["failures"] = 0
+    else:
+        row["last_error"] = str(error)[:180]
+        row["failures"] = int(row.get("failures") or 0) + 1
+
+def v79_cleanup_quarantine():
+    now = time.time()
+    with V79_LOCK:
+        expired = [
+            symbol for symbol, row in V79_QUARANTINE.items()
+            if _v79_float(row.get("until")) <= now
+        ]
+        for symbol in expired:
+            V79_QUARANTINE.pop(symbol, None)
+
+def v79_is_quarantined(symbol):
+    v79_cleanup_quarantine()
+    return v79_symbol(symbol) in V79_QUARANTINE
+
+def v79_quarantine_symbol(symbol, reason, seconds=None):
+    pair = v79_symbol(symbol)
+    duration = int(seconds or V79_QUARANTINE_SECONDS)
+    with V79_LOCK:
+        old = V79_QUARANTINE.get(pair) or {}
+        count = int(old.get("count") or 0) + 1
+        V79_QUARANTINE[pair] = {
+            "reason": str(reason)[:200],
+            "count": count,
+            "created_at": time.time(),
+            "until": time.time() + duration,
+        }
+    return pair
+
+def v79_result_value(r, *names, default=0.0):
+    for name in names:
+        try:
+            value = getattr(r, name)
+            if callable(value):
+                value = value()
+            if value is not None:
+                return _v79_float(value, default)
+        except Exception:
+            pass
+        try:
+            if isinstance(r, dict) and name in r:
+                return _v79_float(r.get(name), default)
+        except Exception:
+            pass
+    return default
+
+def v79_market_metrics(r):
+    price = v79_result_value(r, "price", "last", "close", default=0.0)
+    quote_volume = v79_result_value(
+        r, "quote_volume", "quoteVolume", "qv", "volume_usdt", "turnover", default=0.0
+    )
+    candle_count = int(v79_result_value(
+        r, "candle_count", "candles", "kline_count", "bars", default=120
+    ))
+    spread = v79_result_value(r, "spread_pct", "spread", default=0.0)
+    age_days = v79_result_value(r, "listing_age_days", "age_days", default=9999)
+    return {
+        "price": price,
+        "quote_volume": quote_volume,
+        "candle_count": candle_count,
+        "spread": spread,
+        "age_days": age_days,
+    }
+
+def v79_quality_report(r):
+    symbol = v79_symbol(r)
+    metrics = v79_market_metrics(r)
+    cg = v68_cg_raw(r)
+
+    chart = _v79_float(v56_chart_structure_score(r))
+    volume_score = _v79_float(v56_volume_volatility_score(r))
+    timing = _v79_float(v60_timing_score(r))
+    institution = _v79_float(v56_institution_strength(r))
+    cg_total = _v79_float(cg.get("total"))
+    risk = _v79_float(v60_risk_score(r))
+
+    checks = []
+    penalties = 0.0
+
+    valid_symbol = is_valid_binance_symbol(symbol)
+    checks.append(("심볼", valid_symbol, "정상" if valid_symbol else "Binance 미지원"))
+    if not valid_symbol:
+        penalties += 45
+
+    candle_ok = metrics["candle_count"] >= V79_MIN_CANDLES
+    checks.append(("캔들", candle_ok, f"{metrics['candle_count']}개"))
+    if not candle_ok:
+        penalties += 18
+
+    # 거래대금 값이 없으면 기존 거래량 점수로 보조 판정
+    if metrics["quote_volume"] > 0:
+        liquidity_ok = metrics["quote_volume"] >= V79_MIN_QUOTE_VOLUME
+        liquidity_detail = f"{metrics['quote_volume']:,.0f} USDT"
+    else:
+        liquidity_ok = volume_score >= 42
+        liquidity_detail = f"거래량점수 {volume_score:.1f}"
+    checks.append(("유동성", liquidity_ok, liquidity_detail))
+    if not liquidity_ok:
+        penalties += 20
+
+    spread_ok = metrics["spread"] <= 1.2 if metrics["spread"] > 0 else True
+    checks.append(("스프레드", spread_ok, f"{metrics['spread']:.2f}%"))
+    if not spread_ok:
+        penalties += 12
+
+    new_listing = metrics["age_days"] < 14 or metrics["candle_count"] < 84
+    checks.append(("신규상장", not new_listing, "신규/단기" if new_listing else "정상"))
+    if new_listing:
+        penalties += 12
+
+    cg_fields = ("total", "funding", "oi", "taker", "top_position", "top_account", "basis")
+    cg_present = sum(1 for key in cg_fields if cg.get(key) is not None)
+    cg_complete = cg_present >= 4
+    checks.append(("CoinGlass", cg_complete, f"{cg_present}/{len(cg_fields)}"))
+    if not cg_complete:
+        penalties += 10
+
+    score_core = (
+        chart * 0.18 +
+        volume_score * 0.18 +
+        timing * 0.14 +
+        institution * 0.14 +
+        cg_total * 0.18 +
+        max(0.0, 100.0 - risk) * 0.18
+    )
+    quality = _v79_clip(score_core - penalties)
+
+    if quality >= 85:
+        grade = "S"
+        status = "✅ 분석·확정 가능"
+    elif quality >= 75:
+        grade = "A"
+        status = "✅ 분석 가능"
+    elif quality >= V79_MIN_QUALITY:
+        grade = "B"
+        status = "🟡 재검증 필요"
+    elif quality >= 50:
+        grade = "C"
+        status = "⚠️ 데이터 축적용"
+    else:
+        grade = "SKIP"
+        status = "❌ 분석 제외"
+
+    reasons = []
+    for name, ok, detail in checks:
+        if not ok:
+            reasons.append(f"{name}: {detail}")
+
+    return {
+        "symbol": symbol,
+        "quality": round(quality, 1),
+        "grade": grade,
+        "status": status,
+        "checks": checks,
+        "reasons": reasons,
+        "metrics": metrics,
+        "cg_present": cg_present,
+        "cg_total_fields": len(cg_fields),
+        "eligible": quality >= V79_MIN_QUALITY and valid_symbol and not v79_is_quarantined(symbol),
+        "confirmable": quality >= V79_CONFIRM_QUALITY and valid_symbol and not v79_is_quarantined(symbol),
+    }
+
+def v79_condition_multiplier(r, side):
+    bonus = v77_condition_bonus(r, side)
+    return max(0.85, min(1.15, 1.0 + bonus / 100.0))
+
+def v79_market_multiplier(r, side, regime=None):
+    regime = regime or v76_market_regime()
+    bonus = (
+        _v79_float(regime.get("long_bonus"))
+        if side == "LONG"
+        else _v79_float(regime.get("short_bonus"))
+    )
+    return max(0.85, min(1.15, 1.0 + bonus / 100.0))
+
+def v79_final_scores(r, regime=None):
+    regime = regime or v76_market_regime()
+    long_base, short_base = v77_adjusted_scores(r, regime)
+    report = v79_quality_report(r)
+    confidence = report["quality"] / 100.0
+
+    long_final = (
+        long_base *
+        confidence *
+        v79_condition_multiplier(r, "LONG") *
+        v79_market_multiplier(r, "LONG", regime)
+    )
+    short_final = (
+        short_base *
+        confidence *
+        v79_condition_multiplier(r, "SHORT") *
+        v79_market_multiplier(r, "SHORT", regime)
+    )
+    return round(_v79_clip(long_final), 1), round(_v79_clip(short_final), 1), report
+
+def v79_pending_key(symbol, side):
+    return f"{v79_symbol(symbol)}:{side}"
+
+def v79_detect_signal(r, regime=None):
+    regime = regime or v76_market_regime()
+    long_score, short_score, report = v79_final_scores(r, regime)
+    side = "LONG" if long_score >= short_score else "SHORT"
+    score = max(long_score, short_score)
+    edge = round(abs(long_score - short_score), 1)
+
+    return {
+        "symbol": v79_symbol(r),
+        "side": side,
+        "score": score,
+        "edge": edge,
+        "quality": report["quality"],
+        "grade": report["grade"],
+        "eligible": report["eligible"],
+        "report": report,
+        "detected_at": time.time(),
+    }
+
+def v79_update_pending(r, regime=None):
+    signal = v79_detect_signal(r, regime)
+    key = v79_pending_key(signal["symbol"], signal["side"])
+    now = time.time()
+
+    with V79_LOCK:
+        # 오래된 대기 신호 제거
+        expired = [
+            k for k, row in V79_PENDING.items()
+            if now - _v79_float(row.get("detected_at")) > V79_PENDING_TTL
+        ]
+        for k in expired:
+            V79_PENDING.pop(k, None)
+
+        if not signal["eligible"] or signal["score"] < V79_SCORE_CONFIRM:
+            V79_PENDING.pop(key, None)
+            return "SKIP", signal
+
+        previous = V79_PENDING.get(key)
+        if previous is None:
+            V79_PENDING[key] = signal
+            if len(V79_PENDING) > V79_MAX_PENDING:
+                oldest = sorted(
+                    V79_PENDING,
+                    key=lambda x: _v79_float(V79_PENDING[x].get("detected_at"))
+                )[0]
+                V79_PENDING.pop(oldest, None)
+            return "PENDING", signal
+
+        elapsed = now - _v79_float(previous.get("detected_at"))
+        score_held = signal["score"] >= max(
+            V79_SCORE_CONFIRM,
+            _v79_float(previous.get("score")) - 5.0
+        )
+        quality_held = signal["quality"] >= V79_CONFIRM_QUALITY
+
+        if elapsed >= V79_RECHECK_SECONDS and score_held and quality_held:
+            confirmed = dict(signal)
+            confirmed["confirmed_at"] = now
+            confirmed["first_detected_at"] = previous.get("detected_at")
+            V79_CONFIRMED[key] = confirmed
+            V79_PENDING.pop(key, None)
+            v74_record_event(
+                "SIGNAL_CONFIRMED_V79",
+                symbol=signal["symbol"],
+                side=signal["side"],
+                payload=confirmed,
+            )
+            return "CONFIRMED", confirmed
+
+        V79_PENDING[key] = {
+            **previous,
+            "last_checked": now,
+            "last_score": signal["score"],
+            "last_quality": signal["quality"],
+        }
+        return "RECHECK", signal
+
+def v79_process_results(results):
+    regime = v76_market_regime(v59_market_state(), results)
+    summary = {
+        "requested": len(results),
+        "valid": 0,
+        "quality_skipped": 0,
+        "low_liquidity": 0,
+        "data_shortage": 0,
+        "pending": 0,
+        "confirmed": 0,
+        "failed": 0,
+    }
+
+    accepted = []
+    for r in results:
+        try:
+            report = v79_quality_report(r)
+            if not report["eligible"]:
+                summary["quality_skipped"] += 1
+                if any("유동성" in x for x in report["reasons"]):
+                    summary["low_liquidity"] += 1
+                if any(("캔들" in x or "CoinGlass" in x) for x in report["reasons"]):
+                    summary["data_shortage"] += 1
+                continue
+
+            summary["valid"] += 1
+            state, signal = v79_update_pending(r, regime)
+            if state in ("PENDING", "RECHECK"):
+                summary["pending"] += 1
+            elif state == "CONFIRMED":
+                summary["confirmed"] += 1
+
+            accepted.append(r)
+        except Exception as error:
+            summary["failed"] += 1
+            pair = v79_symbol(r)
+            current = V79_QUARANTINE.get(pair) or {}
+            if int(current.get("count") or 0) + 1 >= V79_ERROR_THRESHOLD:
+                v79_quarantine_symbol(pair, error)
+
+    with V79_LOCK:
+        V79_SCAN_STATS.update(summary)
+        V79_SCAN_STATS["finished_at"] = time.time()
+
+    log(
+        "v79 scan summary: "
+        f"requested={summary['requested']} valid={summary['valid']} "
+        f"quality_skipped={summary['quality_skipped']} "
+        f"pending={summary['pending']} confirmed={summary['confirmed']} "
+        f"failed={summary['failed']}"
+    )
+    return accepted, summary
+
+# 모든 상위 명령에서 사용하는 스캔 결과에 품질 필터를 자동 적용
+_v79_original_async_scan = v70_async_scan
+
+async def v70_async_scan():
+    with V79_LOCK:
+        V79_SCAN_STATS["started_at"] = time.time()
+    rows, results, errors = await _v79_original_async_scan()
+    filtered, summary = v79_process_results(results)
+    return rows, filtered, errors
+
+def v79_api_health_snapshot():
+    try:
+        symbols = binance_spot_symbols()
+        v79_health_update("Binance", bool(symbols), "" if symbols else "심볼목록 없음")
+    except Exception as e:
+        v79_health_update("Binance", False, e)
+
+    try:
+        db_ok = v74_initialize_database() if v74_database_configured() else False
+        v79_health_update("PostgreSQL", db_ok, V74_DB_LAST_ERROR if not db_ok else "")
+    except Exception as e:
+        v79_health_update("PostgreSQL", False, e)
+
+    try:
+        volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+        v79_health_update("Volume", volume_ok, "" if volume_ok else "쓰기 불가")
+    except Exception as e:
+        v79_health_update("Volume", False, e)
+
+    return V79_API_HEALTH
+
+async def health_cmd(update, context):
+    health = v79_api_health_snapshot()
+    lines = ["🩺 <b>A100 v79 API 상태</b>"]
+    for name in ("Binance", "CoinGlass", "Upbit", "PostgreSQL", "Volume"):
+        row = health.get(name) or {}
+        icon = "✅" if row.get("ok") else "⚠️"
+        extra = f" · {_v54_escape(row.get('last_error'))}" if row.get("last_error") else ""
+        lines.append(f"{icon} <b>{name}</b>{extra}")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def scanstatus_cmd(update, context):
+    s = dict(V79_SCAN_STATS)
+    last = (
+        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(s["finished_at"]))
+        if s.get("finished_at") else "-"
+    )
+    await update.message.reply_text(
+        "📡 <b>A100 v79 스캔 상태</b>\n"
+        f"마지막 완료: {last}\n"
+        f"전체 후보: {s.get('requested', 0)}\n"
+        f"품질 통과: {s.get('valid', 0)}\n"
+        f"품질 제외: {s.get('quality_skipped', 0)}\n"
+        f"저유동성: {s.get('low_liquidity', 0)}\n"
+        f"데이터 부족: {s.get('data_shortage', 0)}\n"
+        f"재검증 대기: {len(V79_PENDING)}\n"
+        f"확정 신호: {len(V79_CONFIRMED)}\n"
+        f"격리 종목: {len(V79_QUARANTINE)}\n"
+        f"실패: {s.get('failed', 0)}",
+        parse_mode="HTML",
+    )
+
+async def quality_cmd(update, context):
+    symbol = context.args[0] if context.args else "BTC"
+    normalized = v69_normalize_symbol(symbol)
+
+    await update.message.reply_text(f"🔍 {normalized} 데이터 품질 분석 중...")
+    try:
+        result = await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+
+        report = v79_quality_report(result)
+        lines = [
+            f"🧪 <b>{_v54_escape(report['symbol'])} 품질 보고서</b>",
+            f"등급: <b>{report['grade']}</b>",
+            f"품질: <b>{report['quality']}/100</b>",
+            f"판정: {_v54_escape(report['status'])}",
+            "",
+        ]
+        for name, ok, detail in report["checks"]:
+            lines.append(f"{'✅' if ok else '⚠️'} {name}: {_v54_escape(detail)}")
+        if v79_is_quarantined(report["symbol"]):
+            q = V79_QUARANTINE.get(report["symbol"]) or {}
+            lines.append(f"\n🚫 격리: {_v54_escape(q.get('reason') or '-')}")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def pending_cmd(update, context):
+    v79_cleanup_quarantine()
+    if not V79_PENDING:
+        await update.message.reply_text("⏳ 현재 재검증 대기 신호가 없습니다.")
+        return
+
+    now = time.time()
+    rows = sorted(
+        V79_PENDING.values(),
+        key=lambda x: _v79_float(x.get("score")),
+        reverse=True,
+    )[:20]
+    lines = ["⏳ <b>A100 v79 재검증 대기</b>"]
+    for row in rows:
+        remain = max(
+            0,
+            int(V79_RECHECK_SECONDS - (now - _v79_float(row.get("detected_at"))))
+        )
+        lines.append(
+            f"• <b>{_v54_escape(row.get('symbol'))}</b> {row.get('side')} · "
+            f"점수 {row.get('score')} · 품질 {row.get('quality')} · "
+            f"재검증 {remain // 60}분 {remain % 60}초"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def why_cmd(update, context):
+    symbol = context.args[0] if context.args else "BTC"
+    normalized = v69_normalize_symbol(symbol)
+    try:
+        result = await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+
+        regime = v76_market_regime()
+        long_score, short_score, report = v79_final_scores(result, regime)
+        side = "LONG" if long_score >= short_score else "SHORT"
+        decision = "추천 가능" if report["eligible"] and max(long_score, short_score) >= V79_SCORE_CONFIRM else "대기/제외"
+
+        reasons = report["reasons"] or ["핵심 품질조건 충족"]
+        await update.message.reply_text(
+            f"🧠 <b>{_v54_escape(report['symbol'])} 판단 이유</b>\n"
+            f"결론: <b>{decision}</b>\n"
+            f"우세방향: <b>{side}</b>\n"
+            f"LONG 최종점수: {long_score}\n"
+            f"SHORT 최종점수: {short_score}\n"
+            f"데이터 품질: {report['quality']}/100 · {report['grade']}급\n"
+            f"시장국면: {_v54_escape(regime.get('label'))}\n\n"
+            f"<b>판정 근거</b>\n" +
+            "\n".join(f"• {_v54_escape(x)}" for x in reasons),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"why 오류: {_v54_escape(e)}", parse_mode="HTML")
+
+async def quarantine_cmd(update, context):
+    v79_cleanup_quarantine()
+    if not V79_QUARANTINE:
+        await update.message.reply_text("🚫 현재 격리 중인 종목이 없습니다.")
+        return
+    now = time.time()
+    lines = ["🚫 <b>A100 v79 종목 격리</b>"]
+    for symbol, row in sorted(V79_QUARANTINE.items()):
+        remain = max(0, int(_v79_float(row.get("until")) - now))
+        lines.append(
+            f"• <b>{_v54_escape(symbol)}</b> · "
+            f"{remain // 3600}시간 {(remain % 3600) // 60}분 · "
+            f"{_v54_escape(row.get('reason') or '-')}"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    perf = v72_performance_stats()
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+    volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+    regime = v76_market_regime()
+
+    await update.message.reply_text(
+        "📦 <b>A100 v79 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        f"데이터 품질 엔진: ✅ 활성\n"
+        f"재검증 엔진: ✅ 활성 ({len(V79_PENDING)}대기)\n"
+        f"확정 신호: {len(V79_CONFIRMED)}개\n"
+        f"자동 격리: ✅ 활성 ({len(V79_QUARANTINE)}종목)\n"
+        f"자가학습: ✅ 활성\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        f"명령어: /health /scanstatus /quality /pending /why /quarantine\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+def build_v44_application(token):
+    v76_startup()
+    v72_start_monitor()
+    v79_api_health_snapshot()
+
+    app = Application.builder().token(token).build()
+    handlers = [
+        ("start", start), ("help", start), ("myid", myid), ("check", check),
+        ("scan", scan_cmd), ("rank", rank_cmd), ("best", rank_cmd), ("top", rank_cmd),
+        ("hot", hot_cmd), ("sniper", sniper_cmd), ("elite", elite_cmd), ("only", only_cmd),
+        ("auto", auto_cmd), ("god", god_cmd), ("real", real_cmd), ("scalp", scalp_cmd),
+        ("tenx", tenx_cmd), ("breakout", breakout_cmd), ("bottom", bottom_cmd),
+        ("timing", timing_cmd), ("now", now_cmd), ("win", win_cmd),
+        ("smart", smart_cmd), ("danger", danger_cmd), ("watch", watch_cmd),
+        ("risk", risk_cmd), ("kr", kr_cmd), ("cgtest", cgtest_cmd),
+        ("macro", macro_cmd), ("events", events_cmd), ("macrohelp", macrohelp_cmd),
+        ("live", live_cmd), ("news", news_cmd), ("final", final_cmd), ("mode", mode_cmd),
+        ("cleannews", cleannews_cmd), ("translate", translate_cmd),
+        ("smartnews", news_cmd), ("ultimate", ultimate_cmd), ("long", long_cmd),
+        ("short", short_cmd), ("position", position_cmd), ("performance", performance_cmd),
+        ("monthly", monthly_cmd), ("learning", learning_cmd), ("advisor", advisor_cmd),
+        ("review", review_cmd), ("regime", regime_cmd), ("coin", coin_cmd),
+        ("conditionstats", conditionstats_cmd), ("blacklist", blacklist_cmd),
+        ("topstrategy", topstrategy_cmd), ("health", health_cmd),
+        ("scanstatus", scanstatus_cmd), ("quality", quality_cmd),
+        ("pending", pending_cmd), ("why", why_cmd), ("quarantine", quarantine_cmd),
+        ("hybridstatus", hybridstatus_cmd), ("resync", resync_cmd),
+        ("monitorstatus", monitorstatus_cmd), ("storagestatus", storagestatus_cmd),
+        ("saveperformance", saveperformance_cmd), ("restoreperformance", restoreperformance_cmd),
+        ("dbstatus", dbstatus_cmd), ("dbtest", dbtest_cmd), ("dbsync", dbsync_cmd),
+        ("dbevents", dbevents_cmd), ("chart", chart_cmd), ("fast", fast_cmd),
+        ("cgstatus", cgstatus_cmd), ("cgreset", cgreset_cmd), ("deep", deep_cmd),
+        ("cache", cache_cmd), ("quick", quick_cmd), ("speed", speedstatus_cmd),
+        ("report", report_cmd), ("history", history_cmd), ("stats", stats_cmd),
+        ("ticker", ticker_cmd), ("apicheck", apicheck_cmd), ("bintest", bintest_cmd),
         ("datastatus", datastatus_cmd), ("alertstatus", alertstatus_cmd),
     ]
     for name, fn in handlers:
