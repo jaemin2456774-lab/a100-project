@@ -5150,7 +5150,7 @@ async def run_bot_async():
 
 def main():
     start_health_server_once()
-    print("A100 v81 SCORE BREAKDOWN QUALITY ENGINE worker running...", flush=True)
+    print("A100 v82 DECISION STAGE ENGINE worker running...", flush=True)
 
     if not acquire_v44_process_lock():
         # 포트는 열어 두되 두 번째 polling 인스턴스는 시작하지 않음
@@ -20430,6 +20430,218 @@ def build_v44_application(token):
             app.add_handler(CommandHandler(name, fn))
     app.add_error_handler(error_handler)
     return app
+
+
+# ============================================================
+# A100 v82 DECISION STAGE ENGINE
+# - 신뢰도/방향 막대/현재 단계/대기시간/예상 RR 표시
+# - 모든 확률은 실측 승률이 아닌 휴리스틱 참고값으로 명시
+# ============================================================
+
+def _v82_bar(value, maximum=100.0, width=10):
+    value=max(0.0,min(float(maximum),_v79_float(value)))
+    filled=int(round((value/maximum)*width)) if maximum else 0
+    return "█"*filled + "░"*(width-filled)
+
+
+def _v82_decision_metrics(r, report, long_score, short_score, regime):
+    quality=_v79_float(report.get("quality"))
+    best=max(_v79_float(long_score),_v79_float(short_score))
+    edge=abs(_v79_float(long_score)-_v79_float(short_score))
+    side="LONG" if _v79_float(long_score)>=_v79_float(short_score) else "SHORT"
+
+    # 데이터 완성도와 방향 분리도를 중심으로 계산한 신뢰도 지표
+    confidence=_v79_clip(quality*0.58 + min(best,100)*0.24 + min(edge*2.0,100)*0.18)
+    entry_ref=v81_entry_probability(long_score,short_score,report,regime)
+
+    # 실측 승률이 아닌 신호 강도 기반 기대 성공 참고값
+    expected_ref=_v79_clip(35.0 + quality*0.22 + best*0.20 + min(edge,25.0)*0.35)
+
+    # 휴리스틱 예상 손익비. 실제 주문의 TP/SL 계산값과 구분하기 위해 참고값으로만 사용
+    rr=_v79_clip(1.0 + quality/100.0*1.15 + edge/100.0*1.8, 1.0, 4.5)
+
+    eligible=bool(report.get("eligible"))
+    confirm_gap=max(0.0,V79_SCORE_CONFIRM-best)
+    quality_gap=max(0.0,V79_MIN_QUALITY-quality)
+    if not eligible or quality < V79_MIN_QUALITY:
+        stage=1; stage_name="데이터 보강"
+    elif best < V79_SCORE_CONFIRM-12:
+        stage=2; stage_name="축적"
+    elif best < V79_SCORE_CONFIRM:
+        stage=3; stage_name="진입대기"
+    elif edge < 8:
+        stage=4; stage_name="방향확인"
+    else:
+        stage=5; stage_name="확정 후보"
+
+    # 부족 점수 기반 대기시간 범위. 시장 예측이 아닌 재검증 예상 주기
+    deficit=quality_gap+confirm_gap
+    if stage>=5: wait="즉시 재검증"
+    elif deficit<=5: wait="1~3시간"
+    elif deficit<=15: wait="3~8시간"
+    elif deficit<=30: wait="8~24시간"
+    else: wait="24시간 이상 또는 조건 재설정"
+
+    action="관찰"
+    if stage>=5 and confidence>=70: action="진입 검토"
+    elif stage==4: action="방향 확인"
+    elif stage<=2: action="진입 금지"
+
+    return {
+        "side":side,"confidence":round(confidence,1),"entry_ref":round(entry_ref,1),
+        "expected_ref":round(expected_ref,1),"rr":round(rr,2),
+        "stage":stage,"stage_name":stage_name,"wait":wait,"action":action,
+        "edge":round(edge,1),"best":round(best,1),
+    }
+
+
+def _v82_primary_blocker(r, report, long_score, short_score):
+    candidates=[]
+    quality=_v79_float(report.get("quality"))
+    best=max(_v79_float(long_score),_v79_float(short_score))
+    if quality < V79_MIN_QUALITY:
+        candidates.append((V79_MIN_QUALITY-quality,"데이터 품질"))
+    if best < V79_SCORE_CONFIRM:
+        candidates.append((V79_SCORE_CONFIRM-best,"신호 점수"))
+    try:
+        cg=v68_cg_raw(r)
+        oi=_v79_float(cg.get("oi")); funding=_v79_float(cg.get("funding")); taker=_v79_float(cg.get("taker"))
+        if oi<50: candidates.append((50-oi,"OI 수급"))
+        if funding<45: candidates.append((45-funding,"Funding"))
+        if taker<50: candidates.append((50-taker,"Taker 방향성"))
+    except Exception:
+        pass
+    for name,ok,detail in report.get("checks",[]):
+        if not ok: candidates.append((30.0,name))
+    if not candidates: return "핵심 조건 충족",0.0
+    gap,name=max(candidates,key=lambda x:x[0])
+    return name,round(max(0.0,gap),1)
+
+
+async def quality_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    await update.message.reply_text(f"🔍 {normalized} 데이터 품질·AI 의사결정 분석 중...")
+    try:
+        result=await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+        report=v79_quality_report(result)
+        breakdown=v81_quality_breakdown(result,report)
+        regime=v76_market_regime()
+        long_score,short_score,_=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        blocker,gap=_v82_primary_blocker(result,report,long_score,short_score)
+        needed=v81_needed_conditions(result,report,long_score,short_score)
+        stage_bar="■"*m["stage"]+"□"*(5-m["stage"])
+
+        lines=[
+            f"🧪 <b>{_v54_escape(report['symbol'])} v82 품질·의사결정 보고서</b>",
+            f"등급: <b>{report['grade']}</b> · 품질 <b>{report['quality']}/100</b>",
+            f"판정: {_v54_escape(report['status'])}",
+            "", "<b>AI 종합판단</b>",
+            f"현재 단계: <b>{stage_bar} {m['stage']}/5 · {m['stage_name']}</b>",
+            f"우세 방향: <b>{m['side']}</b> · 격차 {m['edge']}",
+            f"추천 행동: <b>{m['action']}</b>",
+            f"예상 재검증 시간: <b>{m['wait']}</b>",
+            "", "<b>방향 비교</b>",
+            f"LONG  {_v82_bar(long_score)} {long_score:.1f}",
+            f"SHORT {_v82_bar(short_score)} {short_score:.1f}",
+            "", "<b>참고 지표</b>",
+            f"신뢰도: <b>{m['confidence']}%</b>",
+            f"진입 가능성: <b>{m['entry_ref']}%</b>",
+            f"예상 성공 참고값: <b>{m['expected_ref']}%</b>",
+            f"예상 손익비 참고값: <b>{m['rr']}:1</b>",
+            "", "<b>가장 부족한 요소</b>",
+            f"• {_v54_escape(blocker)}" + (f" · 약 +{gap}점 필요" if gap>0 else ""),
+            "", "<b>점수 산출 내역</b>",
+        ]
+        for name,contribution in breakdown["contributions"].items():
+            raw=breakdown["raw"][name]; weight=int(breakdown["weights"][name]*100)
+            lines.append(f"• {name}: {raw:.1f} × {weight}% = <b>+{contribution:.1f}</b>")
+        if breakdown["penalties"]:
+            lines.extend(["", "<b>감점 내역</b>"])
+            for name,penalty,detail in breakdown["penalties"]:
+                lines.append(f"• {name}: <b>-{penalty:.1f}</b> · {_v54_escape(detail)}")
+        lines.extend(["", "<b>통과까지 필요한 조건</b>"])
+        lines.extend(f"• {_v54_escape(x)}" for x in needed)
+        lines.extend(["", "<i>확률·손익비·대기시간은 실측 보장값이 아닌 현재 데이터 기반 참고값입니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"quality 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def why_cmd(update, context):
+    symbol=context.args[0] if context.args else "BTC"
+    normalized=v69_normalize_symbol(symbol)
+    try:
+        result=await v70_direct_symbol(normalized)
+        if result is None:
+            await update.message.reply_text(f"{normalized} 분석 데이터를 만들지 못했습니다.")
+            return
+        regime=v76_market_regime()
+        long_score,short_score,report=v79_final_scores(result,regime)
+        m=_v82_decision_metrics(result,report,long_score,short_score,regime)
+        blocker,gap=_v82_primary_blocker(result,report,long_score,short_score)
+        needed=v81_needed_conditions(result,report,long_score,short_score)
+        breakdown=v81_quality_breakdown(result,report)
+        reasons=report["reasons"] or ["필수 데이터 점검 통과"]
+        stage_bar="■"*m["stage"]+"□"*(5-m["stage"])
+        decision="추천 가능" if report["eligible"] and m["best"]>=V79_SCORE_CONFIRM else "대기/제외"
+        lines=[
+            f"🧠 <b>{_v54_escape(report['symbol'])} v82 판단 이유</b>",
+            f"결론: <b>{decision}</b>",
+            f"현재 단계: <b>{stage_bar} {m['stage']}/5 · {m['stage_name']}</b>",
+            f"추천 행동: <b>{m['action']}</b>",
+            f"우세 방향: <b>{m['side']}</b> · 격차 {m['edge']}",
+            f"LONG  {_v82_bar(long_score)} {long_score:.1f}",
+            f"SHORT {_v82_bar(short_score)} {short_score:.1f}",
+            f"품질: {report['quality']}/100 · {report['grade']}급",
+            f"신뢰도: {m['confidence']}% · 진입 가능성 {m['entry_ref']}%",
+            f"예상 성공 참고값: {m['expected_ref']}% · RR {m['rr']}:1",
+            f"예상 재검증: <b>{m['wait']}</b>",
+            "", "<b>핵심 병목</b>",
+            f"• {_v54_escape(blocker)}" + (f" · 약 +{gap}점 필요" if gap>0 else ""),
+            "", "<b>품질 핵심 기여</b>",
+        ]
+        top=sorted(breakdown["contributions"].items(),key=lambda x:x[1],reverse=True)
+        lines.extend(f"• {k}: +{v:.1f}" for k,v in top[:4])
+        lines.extend(["", "<b>판정 근거</b>"])
+        lines.extend(f"• {_v54_escape(x)}" for x in reasons)
+        lines.extend(["", "<b>다음 확인 조건</b>"])
+        lines.extend(f"• {_v54_escape(x)}" for x in needed[:4])
+        lines.extend(["", "<i>참고 수치는 실측 승률이나 수익 보장이 아니며 주문 실행 기준으로 단독 사용하지 않습니다.</i>"])
+        await update.message.reply_text("\n".join(lines),parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"why 오류: {_v54_escape(e)}",parse_mode="HTML")
+
+
+async def datastatus_cmd(update, context):
+    ok, reason, b = v451_gate()
+    perf = v72_performance_stats()
+    db_ready = v74_initialize_database() if v74_database_configured() else False
+    volume_ok = os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK)
+    regime = v76_market_regime()
+    await update.message.reply_text(
+        "📦 <b>A100 v82 데이터 상태</b>\n"
+        f"분석상태: {'✅ 가능' if ok else '⛔ 제한'}\n"
+        f"PostgreSQL: {'✅ 정상' if db_ready else '⚠ 폴백'}\n"
+        f"Railway Volume: {'✅ 정상' if volume_ok else '⛔ 오류'}\n"
+        f"시장 국면: {_v54_escape(regime['label'])}\n"
+        "AI 의사결정 엔진: ✅ 활성 (단계·신뢰도·RR)\n"
+        f"재검증 엔진: ✅ 활성 ({len(V79_PENDING)}대기)\n"
+        f"확정 신호: {len(V79_CONFIRMED)}개\n"
+        f"자동 격리: ✅ 활성 ({len(V79_QUARANTINE)}종목)\n"
+        "자가학습: ✅ 활성\n"
+        f"완료 {perf['total']}회 / 추적중 {perf['open']}개\n"
+        "명령어: /health /scanstatus /quality /pending /why /quarantine\n"
+        f"추천허용: {'예' if ok else '아니오'}",
+        parse_mode="HTML",disable_web_page_preview=True,
+    )
+
+
+# 기존 빌더가 새 명령 함수를 참조하도록 런타임 전역을 유지합니다.
 
 if __name__ == "__main__":
     main()
