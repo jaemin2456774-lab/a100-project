@@ -23639,5 +23639,209 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+
+# ===== A100 V90.3 STABILITY & SHARED CONTEXT REFACTOR =====
+# V90.2의 모든 기존 명령을 유지하면서 심볼 상태, 공통 분석 캐시,
+# 상태 점검 및 재연결 안정성을 강화한다.
+V90_3_VERSION = "A100 V90.3 STABILITY & SHARED CONTEXT"
+V90_3_STARTED_AT = time.time()
+V90_3_ANALYSIS_TTL = int(os.getenv("V90_3_ANALYSIS_TTL", "60"))
+V90_3_SYMBOL_REFRESH = int(os.getenv("V90_3_SYMBOL_REFRESH", "86400"))
+V90_3_ANALYSIS_CACHE = {}
+V90_3_ANALYSIS_LOCK = threading.RLock()
+V90_3_CACHE_HITS = 0
+V90_3_CACHE_MISSES = 0
+V90_3_SYMBOL_REFRESH_AT = 0.0
+V90_3_SYMBOL_REFRESH_ERROR = ""
+
+# 최종 analyze 구현을 보존한 뒤 동일 심볼의 중복 계산을 짧게 재사용한다.
+_v90_3_analyze_base = analyze
+
+def _v90_3_kr_fingerprint(kr):
+    try:
+        return int(KR_CACHE[0] // 60)
+    except Exception:
+        return 0
+
+def analyze(sym, kr):
+    global V90_3_CACHE_HITS, V90_3_CACHE_MISSES
+    pair = normalize_usdt_symbol(sym)
+    key = (pair, _v90_3_kr_fingerprint(kr))
+    now = time.time()
+    with V90_3_ANALYSIS_LOCK:
+        item = V90_3_ANALYSIS_CACHE.get(key)
+        if item and now - item[0] <= V90_3_ANALYSIS_TTL:
+            V90_3_CACHE_HITS += 1
+            return item[1]
+    result = _v90_3_analyze_base(pair, kr)
+    with V90_3_ANALYSIS_LOCK:
+        V90_3_ANALYSIS_CACHE[key] = (now, result)
+        V90_3_CACHE_MISSES += 1
+        if len(V90_3_ANALYSIS_CACHE) > 500:
+            cutoff = now - max(V90_3_ANALYSIS_TTL * 3, 180)
+            stale = [k for k, v in V90_3_ANALYSIS_CACHE.items() if v[0] < cutoff]
+            for k in stale:
+                V90_3_ANALYSIS_CACHE.pop(k, None)
+    return result
+
+def v90_3_refresh_symbols(force=False):
+    global V90_3_SYMBOL_REFRESH_AT, V90_3_SYMBOL_REFRESH_ERROR
+    try:
+        symbols = binance_spot_symbols(force=force)
+        if symbols:
+            # 구버전 진단 코드가 참조하는 이름도 동기화한다.
+            globals()["V78_VALID_SYMBOLS"] = set(symbols)
+            V90_3_SYMBOL_REFRESH_AT = time.time()
+            V90_3_SYMBOL_REFRESH_ERROR = ""
+            return True
+        V90_3_SYMBOL_REFRESH_ERROR = "empty symbol list"
+    except Exception as error:
+        V90_3_SYMBOL_REFRESH_ERROR = f"{type(error).__name__}: {error}"[:300]
+        log(f"V90.3 symbol refresh failed: {V90_3_SYMBOL_REFRESH_ERROR}")
+    return bool(_BINANCE_SYMBOL_CACHE.get("symbols"))
+
+def v90_3_symbol_refresh_loop():
+    # 첫 시작 직후 1회, 이후 하루 1회 갱신. 실패 시 기존 캐시는 유지한다.
+    while True:
+        v90_3_refresh_symbols(force=True)
+        time.sleep(max(3600, V90_3_SYMBOL_REFRESH))
+
+def v90_3_start_background_once():
+    if globals().get("_V90_3_BACKGROUND_STARTED"):
+        return
+    globals()["_V90_3_BACKGROUND_STARTED"] = True
+    threading.Thread(target=v90_3_symbol_refresh_loop, daemon=True, name="v90.3-symbol-refresh").start()
+
+def v90_3_symbol_ready():
+    symbols = globals().get("V78_VALID_SYMBOLS") or _BINANCE_SYMBOL_CACHE.get("symbols")
+    if symbols:
+        return True
+    return v90_3_refresh_symbols(force=False)
+
+def v90_3_registry_status():
+    audit = v90_registry_audit()
+    return audit, not audit["missing_callbacks"] and not audit["non_callable"]
+
+async def health90_3_cmd(update, context):
+    audit, registry_ok = v90_3_registry_status()
+    db_ok = False
+    try:
+        db_ok = bool(v74_initialize_database()) if v74_database_configured() else False
+    except Exception:
+        db_ok = False
+    volume_ok = bool(os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK))
+    symbol_count = len(globals().get("V78_VALID_SYMBOLS") or _BINANCE_SYMBOL_CACHE.get("symbols") or [])
+    cache_total = V90_3_CACHE_HITS + V90_3_CACHE_MISSES
+    hit_rate = (V90_3_CACHE_HITS * 100 / cache_total) if cache_total else 0.0
+    await v90_1_safe_reply(update, "\n".join([
+        "✅ A100 V90.3 STABILITY ENGINE",
+        f"가동시간: {int(time.time() - V90_3_STARTED_AT)}초",
+        f"명령 레지스트리: {'정상' if registry_ok else '오류'} ({audit['expected']}개)",
+        f"Binance 심볼: {'정상' if symbol_count else '점검'} ({symbol_count}개)",
+        f"CoinGlass key: {'정상' if CG_KEY else '미설정'}",
+        f"PostgreSQL: {'정상' if db_ok else '폴백/미설정'}",
+        f"Railway Volume: {'정상' if volume_ok else '점검'}",
+        f"공통 분석 캐시: {len(V90_3_ANALYSIS_CACHE)}개 / 적중률 {hit_rate:.1f}%",
+        f"처리 명령: {V90_1_DISPATCH_COUNT}회 / 오류 {V90_1_DISPATCH_ERRORS}회",
+        f"최근 기록 오류: {len(V88_RECENT_ERRORS)}건",
+        "단일 디스패처: 활성",
+        "대기 명령 보존: 활성",
+    ]))
+
+async def selfcheck90_3_cmd(update, context):
+    audit, registry_ok = v90_3_registry_status()
+    parser_test = v90_1_parse_command_lines("/health\n/selfcheck\n/quality BTC") == [
+        ("health", []), ("selfcheck", []), ("quality", ["BTC"]),
+    ]
+    checks = [
+        ("명령 레지스트리", registry_ok),
+        ("통합 명령 100개 이상", audit["expected"] >= 100),
+        ("단일 디스패처", callable(globals().get("v90_1_dispatch"))),
+        ("여러 줄 명령 파서", parser_test),
+        ("Result.get 호환", bool("Result" in globals() and hasattr(Result, "get"))),
+        ("math import", "math" in globals()),
+        ("Telegram token", bool(os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN"))),
+        ("Chat ID", bool(CHAT_ID)),
+        ("CoinGlass key", bool(CG_KEY)),
+        ("PostgreSQL 설정", bool(v74_database_configured())),
+        ("Railway Volume", bool(os.path.isdir(V75_DATA_DIR) and os.access(V75_DATA_DIR, os.W_OK))),
+        ("Binance 심볼목록", v90_3_symbol_ready()),
+        ("V89 안전 collector", callable(globals().get("_v89_collect"))),
+    ]
+    passed = sum(1 for _, ok in checks if ok)
+    await v90_1_safe_reply(update, "\n".join([
+        "🩺 A100 V90.3 SELF CHECK",
+        f"결과: {passed}/{len(checks)}",
+        f"통합 명령: {audit['expected']}개",
+        "",
+        *[f"{'✅' if ok else '⚠️'} {name}" for name, ok in checks],
+        "",
+        f"심볼 갱신 오류: {V90_3_SYMBOL_REFRESH_ERROR or '-'}",
+        f"최근 오류: {len(V88_RECENT_ERRORS)}건",
+    ]))
+
+async def legacycheck90_3_cmd(update, context):
+    audit, registry_ok = v90_3_registry_status()
+    required = {
+        "scan", "rank", "news", "macro", "events", "long", "short",
+        "performance", "learning", "dbstatus", "quality", "pending",
+        "pulse", "whale87", "alertplan", "v88", "v89", "v90",
+        "decision", "setup", "conviction", "watchlist", "commands",
+    }
+    missing = sorted(required - set(V90_COMMAND_REGISTRY))
+    await v90_1_safe_reply(update, "\n".join([
+        "🧾 A100 V90.3 기존 기능 감사",
+        f"등록 대상: {audit['expected']}개",
+        f"콜백 누락: {len(audit['missing_callbacks'])}",
+        f"실행 불가 콜백: {len(audit['non_callable'])}",
+        f"핵심 기능 누락: {len(missing)}개",
+        "판정: " + ("✅ 통과" if registry_ok and not missing else "❌ 점검 필요"),
+        *( ["누락: " + ", ".join(missing)] if missing else [] ),
+    ]))
+
+# 상태 명령만 V90.3 구현으로 교체하고 나머지 100개 이상 기존 기능은 그대로 보존한다.
+V90_COMMAND_REGISTRY["health"] = health90_3_cmd
+V90_COMMAND_REGISTRY["selfcheck"] = selfcheck90_3_cmd
+V90_COMMAND_REGISTRY["legacycheck"] = legacycheck90_3_cmd
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+# 최종 빌더를 다시 정의해 위 레지스트리 변경이 확실히 반영되도록 한다.
+def build_v44_application(token):
+    audit = v90_registry_audit()
+    invalid = audit["missing_callbacks"] + audit["non_callable"]
+    if invalid:
+        raise RuntimeError("V90.3 registry validation failed: " + ",".join(invalid))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V90.3 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V90.3 dispatcher count: 1", flush=True)
+    print("A100 V90.3 registry validation: OK", flush=True)
+    return app
+
+# 기존 재연결 로직은 유지하되 백그라운드 심볼 갱신을 한 번만 시작한다.
+_v90_3_run_bot_base = run_bot_async
+async def run_bot_async():
+    v90_3_start_background_once()
+    return await _v90_3_run_bot_base()
+
+def main():
+    start_health_server_once()
+    v90_3_start_background_once()
+    print("A100 V90.3 STABILITY & SHARED CONTEXT worker running...", flush=True)
+    if not acquire_v44_process_lock():
+        print("A100 V90.3 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        print("A100 V90.3 stopped by signal", flush=True)
+    except Exception as error:
+        v88_record_error("v90.3-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
 if __name__ == "__main__":
     main()
