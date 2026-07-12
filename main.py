@@ -29786,5 +29786,67 @@ def v91_preflight():
     audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1050_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1050-autonomous-intelligence-core-1'}
 
+
+# ============================================================================
+# A100 V106.0 REAL-TIME INTELLIGENCE ENGINE
+# ============================================================================
+V1060_VERSION = "A100 V106.0 REAL-TIME INTELLIGENCE ENGINE DEVELOPMENT"
+try:
+    from v1060_real_time_intelligence import (capture_live_memory as _v106_memory,adaptive_confidence as _v106_confidence,signal_health as _v106_health,detect_regime as _v106_regime,collective_brain as _v106_brain,accuracy_tracker as _v106_accuracy,evolution_dashboard as _v106_dashboard)
+except Exception:
+    _v106_memory=_v106_confidence=_v106_health=_v106_regime=_v106_brain=_v106_accuracy=_v106_dashboard=None
+
+def _v106_sync():
+    st,info,live=_v105_sync();dash=_v106_dashboard(st);_v101_save(V1010_STATE_FILE,st);info['v106_dashboard']=dash;return st,info,live
+
+def _v106_symbol(context):
+    s=str(context.args[0]).upper() if getattr(context,'args',None) else ''
+    if s and not s.endswith('USDT'):s+='USDT'
+    return s
+
+async def livememory1060_cmd(update,context):
+    st,info,_=_v106_sync();m=info['v106_dashboard']['memory'];lines=["🧠 <b>A100 V106.0 LIVE MEMORY</b>",f"실시간 스냅샷 <b>{m['total']}건</b> · 추적 신호 {m['signals']}개",f"현재 활성 {m['active']}개 · 이번 신규 {m['added']}건","","※ 열린 Paper/Shadow 신호의 관측값만 저장하며 주문을 실행하지 않습니다."];await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def adaptiveconfidence1060_cmd(update,context):
+    st,info,_=_v106_sync();s=_v106_symbol(context);x=_v106_confidence(st,s);await v90_1_safe_reply(update,'\n'.join(["📈 <b>A100 V106.0 ADAPTIVE CONFIDENCE</b>",f"{x['symbol']} · {x['base']:.1f}% → <b>{x['current']:.1f}%</b> · {x['trend']}",f"변화 {x['delta']:+.1f} · 관측 {x['points']}건"]),parse_mode='HTML')
+async def signalhealth1060_cmd(update,context):
+    st,info,_=_v106_sync();s=_v106_symbol(context);x=_v106_health(st,s);await v90_1_safe_reply(update,'\n'.join(["❤️ <b>A100 V106.0 SIGNAL HEALTH</b>",f"{x['symbol']} · 건강도 <b>{x['health']:.1f}</b> · 등급 {x['grade']}",f"방향 {x['trend']} · 변화 {x.get('delta',0):+.1f} · 신호 {x['signals']}개"]),parse_mode='HTML')
+async def marketregime1060_cmd(update,context):
+    st,info,_=_v106_sync();s=_v106_symbol(context);x=_v106_regime(st,s);lines=["🌦 <b>A100 V106.0 MARKET REGIME</b>",f"{x['symbol']} · <b>{x['regime']}</b> · 확신 {x['confidence']:.1f}%",f"표본 {x['samples']}건"]+[f"• {_v54_escape(r)}" for r in x.get('reasons',[])];await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def collectivebrain1060_cmd(update,context):
+    st,info,_=_v106_sync();x=_v106_brain(st);await v90_1_safe_reply(update,'\n'.join(["🌐 <b>A100 V106.0 COLLECTIVE BRAIN</b>",f"종목 {x['symbols']}개 · 활성 신호 {x['signals']}개",f"지배 국면 <b>{x['dominant_regime']}</b>",f"통합 Confidence {x['confidence']:.1f}% · Health {x['health']:.1f}",f"국면 분포 {_v54_escape(str(x['regimes']))}"]),parse_mode='HTML')
+async def accuracytracker1060_cmd(update,context):
+    st,info,_=_v106_sync();x=_v106_accuracy(st);await v90_1_safe_reply(update,'\n'.join(["🎯 <b>A100 V106.0 PREDICTION ACCURACY</b>",f"결정 표본 {x['samples']}건 · 상태 <b>{x['calibration']}</b>",f"예측 {x['predicted']:.1f}% · 실제 {x['actual']:.1f}%",f"보정 오차 {x['mae']:.1f}%p"]),parse_mode='HTML')
+async def evolutiondashboard1060_cmd(update,context):
+    st,info,_=_v106_sync();d=info['v106_dashboard'];await v90_1_safe_reply(update,'\n'.join(["🧬 <b>A100 V106.0 EVOLUTION DASHBOARD</b>",f"Live Memory {d['memory']['total']} · Active {d['memory']['active']}",f"Confidence {d['confidence']['current']:.1f}% · Health {d['health']['health']:.1f}",f"Regime <b>{d['regime']['regime']}</b> · Collective {d['brain']['symbols']}종목",f"Experience {d['experience']} · MTF DNA {d['mtf_dna']} · Global DNA {d['global_dna']}",f"Accuracy {d['accuracy']['actual']:.1f}% · 오차 {d['accuracy']['mae']:.1f}%p · Weakness {d['weaknesses']}개","","※ 통합 대시보드는 관측·추천 전용이며 실주문 설정을 변경하지 않습니다."]),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'livememory':'열린 신호 실시간 관측 메모리','adaptiveconfidence':'실시간 적응형 Confidence','signalhealth':'진행 신호 건강도 추적','marketregime':'시장 국면 자동 탐지','collectivebrain':'다종목 집단 지능 통합','accuracytracker':'Confidence 예측 보정 오차','evolutiondashboard':'실시간 진화 통합 대시보드'})
+for _c in ('livememory','adaptiveconfidence','signalhealth','marketregime','collectivebrain','accuracytracker','evolutiondashboard'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'livememory':livememory1060_cmd,'adaptiveconfidence':adaptiveconfidence1060_cmd,'signalhealth':signalhealth1060_cmd,'marketregime':marketregime1060_cmd,'collectivebrain':collectivebrain1060_cmd,'accuracytracker':accuracytracker1060_cmd,'evolutiondashboard':evolutiondashboard1060_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1060_VERSION
+
+async def help1060_cmd(update,context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V106.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help1050_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V106.0 HELP</b>","","Real-Time: /livememory · /adaptiveconfidence BTC · /signalhealth BTC","Market: /marketregime BTC · /collectivebrain · /accuracytracker","Dashboard: /evolutiondashboard","Closed Loop: /shadownetwork · /mtfdna · /globaldna · /closedloop","","전체 목록: /commands V106"]),parse_mode='HTML')
+async def commands1060_cmd(update,context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v106','v1060','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V106.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands1050_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1060_cmd,'commands':commands1060_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1050_PREFLIGHT_FOR_V1060=v91_preflight
+def v91_preflight():
+    base=_V1050_PREFLIGHT_FOR_V1060();checks=dict(base.get('checks',{}));checks['v1050_version_sync']=True
+    required={'livememory','adaptiveconfidence','signalhealth','marketregime','collectivebrain','accuracytracker','evolutiondashboard','help','commands'}
+    funcs=(_v106_memory,_v106_confidence,_v106_health,_v106_regime,_v106_brain,_v106_accuracy,_v106_dashboard)
+    checks.update({'v1060_module_loaded':all(callable(x) for x in funcs),'v1060_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1060_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1060_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1060_version_sync':V91_VERSION==V1060_VERSION,'v1060_schema_preserved':_v91_default_state().get('schema')==1,'v1060_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1060_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1060_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1060_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1060-real-time-intelligence-1'}
+
 if __name__ == "__main__":
     main()
