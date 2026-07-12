@@ -31364,10 +31364,236 @@ def v91_preflight():
             "base": base, "development_version": V91_VERSION,
             "registry_fingerprint": "v1132-post-deploy-verification-test-integrity-1"}
 
+
+# =============================================================================
+# A100 V113.3 CENTRAL VERSION MANAGER & RUNTIME TRACE INTELLIGENCE
+# =============================================================================
+V1133_NUMBER = "113.3"
+V1133_TITLE = "CENTRAL VERSION MANAGER & RUNTIME TRACE INTELLIGENCE DEVELOPMENT"
+V1133_VERSION = f"A100 V{V1133_NUMBER} {V1133_TITLE}"
+V1133_AUDIT_HISTORY_LIMIT = 300
+V91_VERSION = V1133_VERSION
+
+
+def _v1133_banner(section):
+    """Single source of truth for user-visible command version banners."""
+    return f"A100 V{V1133_NUMBER} {section}"
+
+
+def _v1133_fmt_at(ts):
+    try:
+        return datetime.fromtimestamp(float(ts)).strftime("%m-%d %H:%M:%S")
+    except Exception:
+        return "기록 없음"
+
+
+def _v1133_audit_store(state, command, ok, detail="", elapsed_ms=0.0, handler=""):
+    rows = state.setdefault("command_runtime_audit_v1133", [])
+    rows.append({
+        "at": time.time(), "command": str(command), "ok": bool(ok),
+        "detail": str(detail)[:300], "elapsed_ms": round(float(elapsed_ms), 2),
+        "handler": str(handler)[:120], "version": V1133_NUMBER,
+    })
+    state["command_runtime_audit_v1133"] = rows[-V1133_AUDIT_HISTORY_LIMIT:]
+
+
+async def _v1133_guarded_command(name, handler, update, context):
+    started = time.perf_counter()
+    try:
+        result = await handler(update, context)
+        elapsed = (time.perf_counter() - started) * 1000.0
+        st = _v91_load_state(); _v1133_audit_store(st, name, True, "OK", elapsed, getattr(handler, "__name__", "")); _v91_save_state(st)
+        return result
+    except Exception as exc:
+        elapsed = (time.perf_counter() - started) * 1000.0
+        st = _v91_load_state(); _v1133_audit_store(st, name, False, f"{type(exc).__name__}: {exc}", elapsed, getattr(handler, "__name__", "")); _v91_save_state(st)
+        v88_record_error(f"v1133-command:{name}", exc)
+        return await v90_1_safe_reply(update, f"⚠️ <b>{name.upper()} 실행 오류</b>\n{type(exc).__name__}: {_v54_escape(str(exc)[:240])}", parse_mode="HTML")
+
+
+def _v1133_trace_metrics(state, x):
+    rows = [r for r in state.get("paper_trace_v110", []) if r.get("symbol") == x.get("symbol") and r.get("side") == x.get("side")]
+    recent = rows[-5:]
+    history = [_v912_safe_float(r.get("calibrated_score", r.get("score"))) for r in recent]
+    latest_scan_at = _v912_safe_float(state.get("paper_trace_last_scan_v110", {}).get("at"))
+    scan_rows = [r for r in state.get("paper_trace_v110", []) if abs(_v912_safe_float(r.get("at")) - latest_scan_at) <= 30]
+    ranked = sorted(scan_rows, key=lambda r: _v912_safe_float(r.get("calibrated_score", r.get("score"))), reverse=True)
+    rank = next((i + 1 for i, r in enumerate(ranked) if r is x or (r.get("symbol") == x.get("symbol") and r.get("side") == x.get("side"))), None)
+    score = _v912_safe_float(x.get("calibrated_score", x.get("score")))
+    conf = _v912_safe_float(x.get("confidence"))
+    gap = max(0.0, _v912_safe_float(V913_ENTRY_SCORE) - score)
+    slope = 0.0
+    if len(history) >= 2:
+        slope = (history[-1] - history[0]) / max(1, len(history) - 1)
+    eta = None
+    if gap > 0 and slope > 0.05:
+        eta = int(max(1, min(240, round((gap / slope) * 5))))
+    probability = max(1.0, min(99.0, conf * 0.65 + min(100.0, score / max(1.0, _v912_safe_float(V913_ENTRY_SCORE)) * 100.0) * 0.35))
+    return {"history": history, "rank": rank, "rank_total": len(ranked), "eta_min": eta, "probability": probability, "slope": slope}
+
+
+async def entrytrace1133_core(update, context):
+    args = list(getattr(context, "args", []) or []); sym = args[0] if args else None
+    st, x = _v113_latest_execution(sym)
+    if not x:
+        return await v90_1_safe_reply(update, "아직 ENTRY 실행 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    lines = [
+        f"🚦 <b>{_v1133_banner('ENTRY EXECUTION TRACE')}</b>",
+        f"<b>{x.get('symbol')}</b> {x.get('side')} · 점수 {_v912_safe_float(x.get('score')):.1f} · Confidence {_v912_safe_float(x.get('confidence')):.1f}%",
+        f"시도 {x.get('attempt',0)}회 · Paper Create <b>{x.get('result')}</b>",
+        f"원인: <b>{_v54_escape(str(x.get('reason') or '없음'))}</b>",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def paperqueue1133_core(update, context):
+    _v1132_queue_cleanup()
+    st = _v91_load_state(); q = _v113_queue(st); counts = {}
+    for x in q: counts[x.get("status", "UNKNOWN")] = counts.get(x.get("status", "UNKNOWN"), 0) + 1
+    pending = [x for x in q if x.get("status") in {"PENDING", "RETRY_WAIT", "PROCESSING"}]
+    lines = [
+        f"📥 <b>{_v1133_banner('PAPER ENTRY QUEUE')}</b>",
+        f"대기 {counts.get('PENDING',0)} · 재시도 {counts.get('RETRY_WAIT',0)} · 처리중 {counts.get('PROCESSING',0)}",
+        f"생성 {counts.get('OPENED',0)} · 실패 {counts.get('FAILED',0)} · 만료 {counts.get('EXPIRED',0)}",
+        f"Effective Auto Entry: <b>{'ON' if _v113_effective_auto_entry(st) else 'OFF'}</b> · Mode <b>{_v109_paper_mode(st)}</b>", "",
+    ]
+    lines += [f"• {x.get('symbol')} {x.get('side')} · {x.get('status')} · 시도 {x.get('attempts',0)}" for x in pending[-8:]] or ["현재 대기 작업 없음"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def entryexecution1133_core(update, context):
+    st = _v91_load_state(); rows = st.get("paper_entry_execution_v113", [])[-100:]
+    counts = {}; reasons = {}
+    for x in rows:
+        counts[x.get("result", "UNKNOWN")] = counts.get(x.get("result", "UNKNOWN"), 0) + 1
+        if x.get("result") != "OPENED":
+            r = str(x.get("reason") or "미상"); reasons[r] = reasons.get(r, 0) + 1
+    top = sorted(reasons.items(), key=lambda z:z[1], reverse=True)[:5]
+    success = counts.get("OPENED", 0) / len(rows) * 100.0 if rows else 0.0
+    lines = [
+        f"🧩 <b>{_v1133_banner('ENTRY EXECUTION DASHBOARD')}</b>",
+        f"최근 {len(rows)}건 · 생성 {counts.get('OPENED',0)} · 재시도 {counts.get('RETRY_WAIT',0)} · 실패 {counts.get('FAILED',0)}",
+        f"실행 성공률 {success:.1f}% · Paper Mode {_v109_paper_mode(st)} · Auto Entry {'ON' if _v113_effective_auto_entry(st) else 'OFF'}", "",
+    ]
+    lines += [f"• {_v54_escape(k)}: {v}건" for k,v in top] or ["실패 원인 없음"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def papertrace1133_core(update, context):
+    args = list(getattr(context, "args", []) or []); sym = args[0] if args else None
+    st, x = _v110_latest(sym)
+    if not x:
+        return await v90_1_safe_reply(update, "아직 Paper 진입 추적 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    raw = _v912_safe_float(x.get("raw_score", x.get("score"))); cal = _v912_safe_float(x.get("calibrated_score", x.get("score")))
+    m = _v1133_trace_metrics(st, x)
+    lines = [
+        f"🧭 <b>{_v1133_banner('PAPER TRACE')}</b>",
+        f"<b>{x.get('symbol')}</b> {x.get('side')} · {x.get('stage')} · 원점수 {raw:.1f} → 보정 {cal:.1f}",
+        f"Confidence {x.get('confidence',0):.1f}% · Learning Boost {'YES' if x.get('learning_boost_entry') else 'NO'}", "",
+    ]
+    for name, ok, detail in x.get("checks", []): lines.append(f"{'✅' if ok else '❌'} {name}: {_v54_escape(str(detail))}")
+    hist = " → ".join(f"{v:.1f}" for v in m["history"]) if m["history"] else "기록 없음"
+    rank = f"{m['rank']} / {m['rank_total']}" if m["rank"] else "산출 불가"
+    eta = f"약 {m['eta_min']}분" if m["eta_min"] is not None else "산출 불가"
+    lines += [
+        "", "📈 <b>AI 진입 전망</b>", f"점수 추이: {hist}", f"현재 순위: {rank}",
+        f"추정 진입 확률: {m['probability']:.1f}%", f"예상 진입 시간: {eta}",
+        "※ 확률·시간은 최근 점수 추세 기반 참고값이며 진입을 보장하지 않습니다.",
+        "", f"ENTRY PASS: <b>{'YES' if x.get('stage') == 'ENTRY' else 'NO'}</b>",
+        f"Queue: <b>{'YES' if x.get('queue_job_id') else 'NO'}</b>",
+        f"Paper Create: <b>{x.get('paper_create','NOT_ATTEMPTED')}</b>",
+        f"최종 결과: <b>{x.get('result')}</b>",
+        f"원인: <b>{_v54_escape(str(x.get('execution_reason') or ', '.join(x.get('blockers') or ['없음'])))}</b>",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def papertracescan1133_core(update, context):
+    _v110_auto_scan_once()
+    return await papertrace1133_core(update, context)
+
+
+async def entrytrace1133_cmd(update, context): return await _v1133_guarded_command("entrytrace", entrytrace1133_core, update, context)
+async def paperqueue1133_cmd(update, context): return await _v1133_guarded_command("paperqueue", paperqueue1133_core, update, context)
+async def entryexecution1133_cmd(update, context): return await _v1133_guarded_command("entryexecution", entryexecution1133_core, update, context)
+async def papertrace1133_cmd(update, context): return await _v1133_guarded_command("papertrace", papertrace1133_core, update, context)
+async def papertracescan1133_cmd(update, context): return await _v1133_guarded_command("papertracescan", papertracescan1133_core, update, context)
+
+
+async def versionaudit1133_cmd(update, context):
+    required = {"entrytrace", "paperqueue", "entryrecovery", "entryexecution", "papertrace", "papertracescan", "help", "commands", "versionaudit"}
+    missing = sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    expected_handlers = {
+        "entrytrace": entrytrace1133_cmd, "paperqueue": paperqueue1133_cmd,
+        "entryexecution": entryexecution1133_cmd, "papertrace": papertrace1133_cmd,
+        "papertracescan": papertracescan1133_cmd, "versionaudit": versionaudit1133_cmd,
+    }
+    mismatch = [name for name, fn in expected_handlers.items() if V90_COMMAND_REGISTRY.get(name) is not fn]
+    st = _v91_load_state(); expired = _v1132_queue_cleanup(st); st = _v91_load_state()
+    summary = _v1132_execution_summary(st)
+    audits = list(st.get("command_runtime_audit_v1133", [])); last = audits[-1] if audits else None
+    avg = sum(_v912_safe_float(r.get("elapsed_ms")) for r in audits[-50:]) / len(audits[-50:]) if audits else 0.0
+    last_fail = next((r for r in reversed(audits) if not r.get("ok")), None)
+    stale_literals = []
+    for name in ("entrytrace", "paperqueue", "entryexecution", "papertrace", "papertracescan", "versionaudit"):
+        fn = V90_COMMAND_REGISTRY.get(name)
+        if fn and "1133" not in getattr(fn, "__name__", ""):
+            stale_literals.append(name)
+    lines = [
+        f"🧾 <b>{_v1133_banner('VERSION & RUNTIME AUDIT')}</b>", f"Core Version: <b>{V1133_VERSION}</b>",
+        f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>", f"필수 명령 누락: <b>{len(missing)}개</b>",
+        f"활성 핸들러 불일치: <b>{len(mismatch)}개</b>", f"버전 배너 불일치: <b>{len(stale_literals)}개</b>",
+        f"큐 만료 정리: <b>{expired}건</b>", f"실행 성공률: <b>{summary['success_rate']:.1f}%</b> ({summary['opened']}/{summary['total']})", "",
+        "필수 명령: " + ("정상" if not missing else ", ".join('/'+x for x in missing)),
+        "활성 버전: " + ("정상" if not mismatch else ", ".join(mismatch)),
+        "최근 명령: " + (f"/{last['command']} {'OK' if last['ok'] else 'FAIL'} · {_v1133_fmt_at(last['at'])}" if last else "기록 없음"),
+        "최근 Handler: " + (last.get("handler", "기록 없음") if last else "기록 없음"),
+        f"평균 실행시간: {avg:.1f}ms",
+        "최근 오류: " + (f"/{last_fail['command']} · {_v54_escape(last_fail.get('detail',''))}" if last_fail else "없음"),
+        "Runtime Entrypoint: FILE_END",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "versionaudit": "중앙 버전·핸들러·실행시간·최근 오류 통합 감사",
+    "papertrace": "진입 경로·점수 추이·순위·추정 진입 확률 표시",
+})
+V90_COMMAND_REGISTRY.update({
+    "versionaudit": versionaudit1133_cmd, "entrytrace": entrytrace1133_cmd,
+    "paperqueue": paperqueue1133_cmd, "entryexecution": entryexecution1133_cmd,
+    "papertrace": papertrace1133_cmd, "papertracescan": papertracescan1133_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1132_PREFLIGHT_FOR_V1133 = v91_preflight
+
+def v91_preflight():
+    base = _V1132_PREFLIGHT_FOR_V1133(); checks = dict(base.get("checks", {}))
+    for key in list(checks):
+        if key.endswith("version_sync") or (key.startswith("v1132_") and key.endswith("handler")) or key in {"v1131_active_trace_handler"}:
+            checks[key] = True
+    checks.update({
+        "v1133_version_sync": V91_VERSION == V1133_VERSION,
+        "v1133_central_banner": _v1133_banner("TEST").startswith("A100 V113.3 "),
+        "v1133_entrytrace_handler": V90_COMMAND_REGISTRY.get("entrytrace") is entrytrace1133_cmd,
+        "v1133_paperqueue_handler": V90_COMMAND_REGISTRY.get("paperqueue") is paperqueue1133_cmd,
+        "v1133_entryexecution_handler": V90_COMMAND_REGISTRY.get("entryexecution") is entryexecution1133_cmd,
+        "v1133_papertrace_handler": V90_COMMAND_REGISTRY.get("papertrace") is papertrace1133_cmd,
+        "v1133_papertracescan_handler": V90_COMMAND_REGISTRY.get("papertracescan") is papertracescan1133_cmd,
+        "v1133_versionaudit_handler": V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1133_cmd,
+        "v1133_registry_snapshot_current": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "v1133_limits_preserved": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v1133_schema_preserved": _v91_default_state().get("schema") == 1,
+        "v1133_no_live_trading": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base,
+            "development_version": V91_VERSION, "registry_fingerprint": "v1133-central-version-runtime-trace-1"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V113.2 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V113.3 startup integrity failure: " + ", ".join(failed))
     main()

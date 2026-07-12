@@ -1,7 +1,6 @@
 {
-  "release": "A100 V112.0 SCORE CALIBRATION & LEARNING BOOST DEVELOPMENT",
-  "generated_at": "2026-07-13",
-  "schema": 1,
+  "release": "A100 V113.3 CENTRAL VERSION MANAGER & RUNTIME TRACE INTELLIGENCE DEVELOPMENT",
+  "generated_at": "2026-07-13T07:20:00+09:00",
   "file_count": 125,
   "files": [
     {
@@ -10,34 +9,14 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
-      "path": ".pytest_cache/.gitignore",
-      "size": 37,
-      "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd"
-    },
-    {
-      "path": ".pytest_cache/CACHEDIR.TAG",
-      "size": 191,
-      "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4"
-    },
-    {
-      "path": ".pytest_cache/README.md",
-      "size": 302,
-      "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad"
-    },
-    {
-      "path": ".pytest_cache/v/cache/nodeids",
-      "size": 190,
-      "sha256": "919e8b48d68ae48167ae8ff8549ab8b92f60fb189c8a336c5bb5cf0942f1d79e"
-    },
-    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
       "size": 1265,
       "sha256": "a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3"
     },
     {
       "path": "README.md",
-      "size": 694,
-      "sha256": "b732437dcd20bf82eb97341374b10d04c45d900ae3e2756dabc8c5eab1ae55e8"
+      "size": 2394,
+      "sha256": "694c3d7de4f64e497ad27fc07d0fa162de6dcb6cef564c71455938117b0a573a"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -93,6 +72,16 @@
       "path": "docs/CHANGELOG_V112_0.md",
       "size": 510,
       "sha256": "025357f2cd99a824cc0dd9d42dfe917b7f696aa9e98961e77044190b40fe7889"
+    },
+    {
+      "path": "docs/CHANGELOG_V113_2.md",
+      "size": 508,
+      "sha256": "7cd569846554c2fdda76f91dcb2a883e64dc76aed0c8478a434fbd78df7d6b93"
+    },
+    {
+      "path": "docs/CHANGELOG_V113_3.md",
+      "size": 444,
+      "sha256": "c79c3fec4b2ab1d3fe70908bbb02bba9c26a535933be0ba5fa6ad8cf8d703bf0"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -280,6 +269,11 @@
       "sha256": "8f0fc7a5a5bf73e5d6135d5c23362f0ddae61421b3bf78bc10e0c446547bad2f"
     },
     {
+      "path": "docs/TEST_REPORT_V113_3.md",
+      "size": 207,
+      "sha256": "9f755988b1b47a67e515cfdaf5dc2c62e16749520483fed35741341d7d77866c"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -316,8 +310,13 @@
     },
     {
       "path": "main.py",
-      "size": 1398436,
-      "sha256": "8b84706ade1fb0bf047e6ab8ba9404a8f2f05c5858e65c004ff9041804779abc"
+      "size": 1442782,
+      "sha256": "d688c97aa27f880790214eb9eaea62d51e9e78fa57a0467f59774444a3a9d86b"
+    },
+    {
+      "path": "pytest.ini",
+      "size": 135,
+      "sha256": "e2ccc9774b42888a0c50b1e682b3f3fad26245bd5259c92cd21e46ca5884a2b8"
     },
     {
       "path": "railway.json",
@@ -330,24 +329,9 @@
       "sha256": "1ee7cd2517fe1e995714813c4e63b9f1255dfcd8d45af1bcbe46b4224472bbdf"
     },
     {
-      "path": "tests/.pytest_cache/.gitignore",
-      "size": 37,
-      "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd"
-    },
-    {
-      "path": "tests/.pytest_cache/CACHEDIR.TAG",
-      "size": 191,
-      "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4"
-    },
-    {
-      "path": "tests/.pytest_cache/README.md",
-      "size": 302,
-      "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad"
-    },
-    {
-      "path": "tests/.pytest_cache/v/cache/nodeids",
-      "size": 115,
-      "sha256": "b51539756e41a6e6068384f13b75e9ba876fbacc8d91ae59d20b6430f1b8650f"
+      "path": "tests/conftest.py",
+      "size": 144,
+      "sha256": "6d34c88cfc06ba1a91f2333fa65f64d270aaa45f686f86b551dbb9dfbef88085"
     },
     {
       "path": "tests/test_v101_0_closed_loop.py",
@@ -403,6 +387,21 @@
       "path": "tests/test_v1110_adaptive_threshold.py",
       "size": 363,
       "sha256": "af569e45573771be7830d066540370af6db7e69a20f8b8e7f42439807f276a1b"
+    },
+    {
+      "path": "tests/test_v1130_entry_execution_queue.py",
+      "size": 975,
+      "sha256": "387e81985c127a02c57dafa843c57f09a3df46c674ece21bcb3c3f34e3e59f55"
+    },
+    {
+      "path": "tests/test_v1132_post_deploy_verification.py",
+      "size": 1493,
+      "sha256": "c17bf3ac7e47882768d31252ea09cfd504f0f3006b8d83c7ab43523b275f852a"
+    },
+    {
+      "path": "tests/test_v1133_version_runtime_trace.py",
+      "size": 454,
+      "sha256": "8ff7c958f065c99e91810489b400400e9d17a3436f2207f9e6b05cd32f3cadd5"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -466,8 +465,8 @@
     },
     {
       "path": "tests/test_v92_8_command_integrity.py",
-      "size": 1385,
-      "sha256": "5c1370c371903b1bc788a01f767676e90680c9522b87cb8be8d8997a900c7171"
+      "size": 1397,
+      "sha256": "db7bd27b60b23301e7434e53d8d28182966cbf4742b4295431ea9bf23a8c06d5"
     },
     {
       "path": "tests/test_v93_0_ai_core.py",
@@ -629,28 +628,5 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ],
-  "validation": {
-    "python_compile": true,
-    "runtime_preflight": true,
-    "command_count": 249,
-    "paper_max_positions": 20,
-    "shadow_max_positions": 60,
-    "live_trading_added": false
-  },
-  "version": "V113.2",
-  "name": "ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE",
-  "development_version": "A100 V113.2 POST-DEPLOYMENT VERIFICATION & TEST INTEGRITY DEVELOPMENT",
-  "release_name": "A100_V113_2_POST_DEPLOYMENT_VERIFICATION_TEST_INTEGRITY_DEVELOPMENT_RELEASE",
-  "registry_fingerprint": "v1131-command-integrity-version-sync-1",
-  "command_count": 254,
-  "critical_fix": "runtime entrypoint moved after all callback registrations",
-  "baseline": "A100_V113_1_COMMAND_INTEGRITY_VERSION_SYNC_DEVELOPMENT_RELEASE.zip",
-  "test_result": "7 passed",
-  "changes": [
-    "Runtime command audit for entrytrace, paperqueue, entryexecution",
-    "Expanded versionaudit with execution success rate and queue cleanup",
-    "Six-hour stale queue expiration",
-    "Pytest path and maintained-suite integrity fixes"
   ]
 }
