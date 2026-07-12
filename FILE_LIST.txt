@@ -1,6 +1,7 @@
 .gitignore
 GITHUB_REPLACE_GUIDE_KR.md
 README.md
+RELEASE_MANIFEST.json
 docs/CHANGELOG_V101_0.md
 docs/CHANGELOG_V102_0.md
 docs/CHANGELOG_V103_0.md
@@ -20,6 +21,7 @@ docs/CHANGELOG_V114_1.md
 docs/CHANGELOG_V114_2.md
 docs/CHANGELOG_V115_0.md
 docs/CHANGELOG_V115_1.md
+docs/CHANGELOG_V115_2.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -38,6 +40,7 @@ docs/DEVELOPMENT_BACKLOG_V112_0.md
 docs/DEVELOPMENT_BACKLOG_V114_0.md
 docs/DEVELOPMENT_BACKLOG_V114_2.md
 docs/DEVELOPMENT_BACKLOG_V115_0.md
+docs/DEVELOPMENT_BACKLOG_V115_2.md
 docs/DEVELOPMENT_BACKLOG_V94.md
 docs/DEVELOPMENT_BACKLOG_V95.md
 docs/DEVELOPMENT_BACKLOG_V96.md
@@ -67,6 +70,7 @@ docs/TEST_REPORT_V114_1.md
 docs/TEST_REPORT_V114_2.md
 docs/TEST_REPORT_V115_0.md
 docs/TEST_REPORT_V115_1.md
+docs/TEST_REPORT_V115_2.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
 docs/TEST_REPORT_V96_0.md
@@ -99,6 +103,7 @@ tests/test_v114_1_explainable_similarity.py
 tests/test_v114_2_cross_market_self_optimization.py
 tests/test_v1150_intelligence_core.py
 tests/test_v1151_core_stabilization.py
+tests/test_v1152_intelligence_core2.py
 tests/test_v91_8_baseline.py
 tests/test_v91_8_scenario.py
 tests/test_v91_stability.py

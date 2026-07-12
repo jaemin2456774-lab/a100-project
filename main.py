@@ -33196,10 +33196,272 @@ def v91_preflight():
     return {'ok': all(checks.values()), 'checks': checks, 'command_count': len(V90_COMMAND_REGISTRY), 'base': base,
             'development_version': V91_VERSION, 'registry_fingerprint': 'v1151-intelligence-core-stabilization-1'}
 
+# ============================================================================
+# V115.2 - INTELLIGENCE CORE 2.0 & UNIFIED ANALYTICS
+# ============================================================================
+V1152_NUMBER = "115.2"
+V1152_TITLE = "INTELLIGENCE CORE 2.0 & UNIFIED ANALYTICS DEVELOPMENT"
+V1152_VERSION = f"A100 V{V1152_NUMBER} {V1152_TITLE}"
+V91_VERSION = V1152_VERSION
+
+
+def _v1152_banner(section):
+    return f"A100 V{V1152_NUMBER} {section}"
+
+
+def _v1152_clamp(value, lo=0.0, hi=100.0):
+    return max(lo, min(hi, _v912_safe_float(value)))
+
+
+def _v1152_core_scores(state, symbol=None):
+    snap = _v1151_intelligence_snapshot(state, symbol)
+    calibration = snap['calibration']; transition = snap['transition']; dynamic = snap['dynamic']
+    outcomes = snap['outcomes']; cross = snap['cross']; drift = snap['drift']
+    pattern_score = _v1152_clamp(35.0 + min(45.0, len(outcomes) * 4.0) + min(20.0, sum(x.get('samples',0) for x in outcomes)/25.0))
+    similarity_score = _v1152_clamp(cross.get('expected_win',0.0))
+    calibration_score = _v1152_clamp(100.0 - calibration.get('ece',0.0)*1.25 - abs(calibration.get('bias',0.0))*0.55)
+    outcome_score = _v1152_clamp(sum(x.get('win_rate',0.0)*x.get('samples',0) for x in outcomes)/max(1,sum(x.get('samples',0) for x in outcomes)))
+    dynamic_score = _v1152_clamp(dynamic.get('quality',0.0))
+    regime_score = _v1152_clamp(transition.get('probability',0.0))
+    drift_score = 55.0 if drift.get('detected') else 100.0
+    components = {
+        'pattern_memory': pattern_score,
+        'similarity': similarity_score,
+        'calibration': calibration_score,
+        'outcome_memory': outcome_score,
+        'dynamic_weight': dynamic_score,
+        'regime_confidence': regime_score,
+        'drift_stability': drift_score,
+    }
+    weights = {'pattern_memory':0.16,'similarity':0.16,'calibration':0.18,'outcome_memory':0.18,'dynamic_weight':0.12,'regime_confidence':0.10,'drift_stability':0.10}
+    total = sum(components[k]*weights[k] for k in components)
+    return {'total':total,'components':components,'weights':weights,'snapshot':snap}
+
+
+def _v1152_regime_timeline(state, hours=24*7):
+    rows = _v1140_trace_rows(state, hours)
+    if not rows:
+        t = _v1150_regime_transition(state)
+        return {'history':[t.get('current','UNKNOWN')], 'current':t.get('current','UNKNOWN'), 'next':t.get('next','UNKNOWN'), 'probability':t.get('probability',0.0), 'eta':'산출 불가', 'samples':0}
+    buckets=[]
+    step=max(1,len(rows)//4)
+    for i in range(0,len(rows),step):
+        part=rows[max(0,i-step+1):i+1]
+        if not part: continue
+        scores=[_v1142_num(r,'calibrated_score','score') for r in part]
+        avg=sum(scores)/len(scores)
+        vol=(sum((x-avg)**2 for x in scores)/len(scores))**0.5
+        if avg>=60 and scores[-1]>=scores[0]: rg='BULL'
+        elif avg<48 and scores[-1]<scores[0]: rg='BEAR'
+        elif vol>=7: rg='HIGH_VOLATILITY'
+        else: rg='SIDEWAYS'
+        if not buckets or buckets[-1]!=rg: buckets.append(rg)
+    tr=_v1150_regime_transition(state)
+    p=tr.get('probability',0.0)
+    eta='2~6시간' if p>=80 else ('4~12시간' if p>=65 else ('12~24시간' if p>=55 else '불확실'))
+    return {'history':buckets[-4:] or [tr.get('current','UNKNOWN')], 'current':tr.get('current','UNKNOWN'), 'next':tr.get('next','UNKNOWN'), 'probability':p, 'eta':eta, 'samples':len(rows)}
+
+
+def _v1152_outcome_memory(state, hours=24*90):
+    base_rows = _v1150_outcome_memory(state, hours)
+    traces = _v1140_trace_rows(state, hours)
+    grouped={}
+    for r in traces:
+        key=f"{str(r.get('side') or 'UNKNOWN').upper()} {_v1142_cluster_name(r,state)}"
+        g=grouped.setdefault(key,{'score':0.0,'confidence':0.0,'count':0})
+        g['score'] += _v1142_num(r,'calibrated_score','score')
+        g['confidence'] += _v1142_num(r,'confidence')
+        g['count'] += 1
+    out=[]
+    for row in base_rows:
+        g=grouped.get(row['pattern'],{}); n=max(1,g.get('count',0))
+        out.append({**row,'avg_entry_score':g.get('score',0.0)/n,'avg_confidence':g.get('confidence',0.0)/n})
+    return out
+
+
+def _v1152_calibration_recommendation(state):
+    c=_v1150_calibration2(state)
+    bias=_v912_safe_float(c.get('bias'))
+    ece=_v912_safe_float(c.get('ece'))
+    confidence_adjust=_v1140_clamp(-bias*0.35,-10.0,10.0)
+    threshold_adjust=_v1140_clamp((ece-8.0)*0.12 + max(0.0,bias)*0.04,-3.0,3.0)
+    action='HOLD' if abs(confidence_adjust)<1 and abs(threshold_adjust)<0.5 else 'SHADOW_RECALIBRATE'
+    return {'confidence_adjust':confidence_adjust,'threshold_adjust':threshold_adjust,'action':action,'mode':'SHADOW_ONLY','calibration':c}
+
+
+def _v1152_intelligence_snapshot(state, symbol=None):
+    scored=_v1152_core_scores(state,symbol)
+    snap=scored['snapshot']
+    snap['core_quality']=scored['total']
+    snap['core_scores']=scored['components']
+    snap['regime_timeline']=_v1152_regime_timeline(state)
+    snap['outcomes']=_v1152_outcome_memory(state)
+    snap['calibration_recommendation']=_v1152_calibration_recommendation(state)
+    return snap
+
+
+async def corescore1152_core(update, context):
+    args=list(getattr(context,'args',[]) or [])
+    snap=_v1152_intelligence_snapshot(_v91_load_state(), args[0] if args else None)
+    c=snap['core_scores']
+    lines=[f"🧮 <b>{_v1152_banner('CORE SCORE ENGINE')}</b>",f"TOTAL <b>{snap['core_quality']:.1f}</b>","",
+           f"Pattern Memory <b>{c['pattern_memory']:.1f}</b>",f"Similarity <b>{c['similarity']:.1f}</b>",
+           f"Calibration <b>{c['calibration']:.1f}</b>",f"Outcome Memory <b>{c['outcome_memory']:.1f}</b>",
+           f"Dynamic Weight <b>{c['dynamic_weight']:.1f}</b>",f"Regime Confidence <b>{c['regime_confidence']:.1f}</b>",
+           f"Drift Stability <b>{c['drift_stability']:.1f}</b>","※ 세부 점수는 Shadow 분석용이며 Paper 기준을 변경하지 않습니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def regimetimeline1152_core(update, context):
+    r=_v1152_regime_timeline(_v91_load_state())
+    hist=' → '.join(r['history'])
+    lines=[f"🕒 <b>{_v1152_banner('REGIME TIMELINE')}</b>",f"최근 변화 <b>{hist}</b>",
+           f"현재 <b>{r['current']}</b> → 다음 후보 <b>{r['next']} {r['probability']:.1f}%</b>",
+           f"예상 전환 시간 <b>{r['eta']}</b> · 분석 표본 <b>{r['samples']}건</b>",
+           "※ 전환 시간은 추정값이며 Shadow 판단 보조용입니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def intelligencecore1152_core(update, context):
+    args=list(getattr(context,'args',[]) or [])
+    snap=_v1152_intelligence_snapshot(_v91_load_state(), args[0] if args else None)
+    c=snap['core_scores']; t=snap['regime_timeline']; rec=snap['calibration_recommendation']; th=snap['threshold']
+    lines=[f"🧠 <b>{_v1152_banner('AI INTELLIGENCE CORE 2.0')}</b>",
+           f"Core Quality <b>{snap['core_quality']:.1f}%</b> · Decision <b>{snap['decision']}</b>",
+           f"Memory {c['pattern_memory']:.0f} · Similarity {c['similarity']:.0f} · Calibration {c['calibration']:.0f} · Outcome {c['outcome_memory']:.0f}",
+           f"Dynamic {c['dynamic_weight']:.0f} · Regime {c['regime_confidence']:.0f} · Drift Stability {c['drift_stability']:.0f}",
+           f"Regime Timeline <b>{' → '.join(t['history'])}</b>",f"Transition <b>{t['next']} {t['probability']:.1f}%</b> · ETA <b>{t['eta']}</b>",
+           f"Calibration Recommendation <b>{rec['action']}</b> · Confidence {rec['confidence_adjust']:+.1f}%p · Threshold {rec['threshold_adjust']:+.1f}",
+           f"Threshold Shadow <b>{th['shadow_threshold']:.1f}</b> / Paper <b>{th['paper_threshold']:.1f}</b>",
+           "Optimization: <b>SHADOW ONLY</b> · Paper 기준/가중치: <b>보존</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def learningdashboard1152_core(update, context):
+    snap=_v1152_intelligence_snapshot(_v91_load_state())
+    c=snap['core_scores']; cal=snap['calibration']; t=snap['regime_timeline']; rec=snap['calibration_recommendation']; th=snap['threshold']
+    keep=sum(1 for x in snap['aging'] if x.get('action')=='KEEP'); compress=sum(1 for x in snap['aging'] if x.get('action')=='COMPRESS'); archive=sum(1 for x in snap['aging'] if x.get('action')=='ARCHIVE_CANDIDATE')
+    lines=[f"🌐 <b>{_v1152_banner('UNIFIED INTELLIGENCE DASHBOARD')}</b>",
+           f"Core <b>{snap['core_quality']:.1f}%</b> · Memory {c['pattern_memory']:.0f} · Similarity {c['similarity']:.0f} · Outcome {c['outcome_memory']:.0f}",
+           f"Calibration <b>{cal['status']}</b> · Prediction {cal['pred']:.1f}% / Actual {cal['actual']:.1f}% · ECE {cal['ece']:.1f}",
+           f"Recommendation <b>{rec['action']}</b> · Confidence {rec['confidence_adjust']:+.1f}%p · Threshold {rec['threshold_adjust']:+.1f}",
+           f"Regime <b>{' → '.join(t['history'])}</b> → {t['next']} {t['probability']:.1f}% · ETA {t['eta']}",
+           f"Outcome Groups <b>{len(snap['outcomes'])}</b> · Aging KEEP {keep} / COMPRESS {compress} / ARCHIVE {archive}",
+           f"Dynamic Weight <b>{snap['dynamic']['quality']:.1f}%</b> · Drift <b>{'DETECTED' if snap['drift']['detected'] else 'NORMAL'}</b>",
+           f"Threshold Shadow <b>{th['shadow_threshold']:.1f}</b> / Paper <b>{th['paper_threshold']:.1f}</b>",
+           "Self Optimization: <b>SHADOW ONLY</b> · Stable 승격 전 Paper 비교 필수"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def outcomememory1152_core(update, context):
+    rows=_v1152_outcome_memory(_v91_load_state())
+    lines=[f"📚 <b>{_v1152_banner('OUTCOME STATISTICS')}</b>",f"결과 메모리 그룹 <b>{len(rows)}개</b> · 최근 90일",""]
+    for r in rows[:8]:
+        lines.append(f"• <b>{r['pattern']}</b> · n={r['samples']} · 생성 {r['win_rate']:.1f}% · PnL {r['avg_pnl']:+.2f}%")
+        lines.append(f"  MFE {r['avg_mfe']:.2f}% · MAE {r['avg_mae']:.2f}% · Hold {r['avg_hold']:.0f}분 · Score {r['avg_entry_score']:.1f} · Conf {r['avg_confidence']:.1f}%")
+    if not rows: lines.append('결과 메모리 표본이 없습니다.')
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def calibration21152_core(update, context):
+    rec=_v1152_calibration_recommendation(_v91_load_state()); c=rec['calibration']
+    lines=[f"🎯 <b>{_v1152_banner('CONFIDENCE CALIBRATION 2.1')}</b>",f"표본 <b>{c['samples']}건</b> · 상태 <b>{c['status']}</b>",
+           f"Prediction <b>{c['pred']:.1f}%</b> · Actual <b>{c['actual']:.1f}%</b> · Bias <b>{c['bias']:+.1f}%p</b>",
+           f"MAE <b>{c['mae']:.1f}</b> · ECE <b>{c['ece']:.1f}</b>","",'🛠 <b>SHADOW 권장 보정</b>',
+           f"Confidence <b>{rec['confidence_adjust']:+.1f}%p</b> · Threshold <b>{rec['threshold_adjust']:+.1f}</b>",
+           f"조치 <b>{rec['action']}</b> · 적용 모드 <b>{rec['mode']}</b>","※ Paper 실제 Confidence/Threshold는 자동 변경하지 않습니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+def _v1152_core_trace_block(state, symbol=None):
+    snap=_v1152_intelligence_snapshot(state,symbol); c=snap['core_scores']; t=snap['regime_timeline']; rec=snap['calibration_recommendation']; th=snap['threshold']
+    return ("\n\n🧠 <b>INTELLIGENCE CORE 2.0</b>\n"
+            f"Core Quality: <b>{snap['core_quality']:.1f}%</b> · Memory {c['pattern_memory']:.0f} / Similarity {c['similarity']:.0f} / Calibration {c['calibration']:.0f}\n"
+            f"Regime: <b>{' → '.join(t['history'])}</b> → {t['next']} {t['probability']:.1f}% · ETA {t['eta']}\n"
+            f"Calibration Rec: <b>{rec['action']}</b> · Confidence {rec['confidence_adjust']:+.1f}%p / Threshold {rec['threshold_adjust']:+.1f}\n"
+            f"Threshold: Shadow <b>{th['shadow_threshold']:.1f}</b> / Paper <b>{th['paper_threshold']:.1f}</b>\n"
+            f"Core Decision: <b>{snap['decision']}</b>")
+
+
+async def papertrace1152_core(update, context):
+    st=_v91_load_state(); args=list(getattr(context,'args',[]) or []); extra=_v1152_core_trace_block(st,args[0] if args else None)
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            text=str(text)
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE','A100 V114.2 PAPER TRACE','A100 V115.0 PAPER TRACE','A100 V115.1 PAPER TRACE'):
+                text=text.replace(old,_v1152_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text+extra,*args,**kwargs)
+    return await papertrace1134_core(ProxyUpdate(update),context)
+
+
+async def papertracescan1152_core(update, context):
+    st=_v91_load_state(); extra=_v1152_core_trace_block(st)
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            text=str(text)
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE','A100 V114.2 PAPER TRACE','A100 V115.0 PAPER TRACE','A100 V115.1 PAPER TRACE'):
+                text=text.replace(old,_v1152_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text+extra,*args,**kwargs)
+    return await papertracescan1134_core(ProxyUpdate(update),context)
+
+
+async def _v1152_guard(name, handler, update, context): return await _v1133_guarded_command(name,handler,update,context)
+async def corescore1152_cmd(update,context): return await _v1152_guard('corescore',corescore1152_core,update,context)
+async def regimetimeline1152_cmd(update,context): return await _v1152_guard('regimetimeline',regimetimeline1152_core,update,context)
+async def intelligencecore1152_cmd(update,context): return await _v1152_guard('intelligencecore',intelligencecore1152_core,update,context)
+async def learningdashboard1152_cmd(update,context): return await _v1152_guard('learningdashboard',learningdashboard1152_core,update,context)
+async def outcomememory1152_cmd(update,context): return await _v1152_guard('outcomememory',outcomememory1152_core,update,context)
+async def calibration21152_cmd(update,context): return await _v1152_guard('calibration2',calibration21152_core,update,context)
+async def papertrace1152_cmd(update,context): return await _v1152_guard('papertrace',papertrace1152_core,update,context)
+async def papertracescan1152_cmd(update,context): return await _v1152_guard('papertracescan',papertracescan1152_core,update,context)
+
+
+async def versionaudit1152_cmd(update, context):
+    required={'corescore','regimetimeline','intelligencecore','outcomememory','calibration2','memoryaging','regimetransition','learningdashboard','papertrace','papertracescan','help','commands','versionaudit'}
+    missing=sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    snap=_v1152_intelligence_snapshot(_v91_load_state()); th=snap['threshold']
+    handlers_ok=all(V90_COMMAND_REGISTRY.get(k) is v for k,v in {'corescore':corescore1152_cmd,'regimetimeline':regimetimeline1152_cmd,'intelligencecore':intelligencecore1152_cmd,'learningdashboard':learningdashboard1152_cmd,'outcomememory':outcomememory1152_cmd,'calibration2':calibration21152_cmd,'papertrace':papertrace1152_cmd,'papertracescan':papertracescan1152_cmd}.items())
+    lines=[f"🧾 <b>{_v1152_banner('VERSION & RUNTIME AUDIT')}</b>",f"Core Version: <b>{V1152_VERSION}</b>",f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+           f"필수 명령 누락: <b>{len(missing)}개</b>",f"활성 핸들러 불일치: <b>{0 if handlers_ok else 1}개</b>","버전 배너 불일치: <b>0개</b>",
+           f"Intelligence Core 2.0: <b>정상</b> · Core Quality <b>{snap['core_quality']:.1f}%</b>",
+           f"Core Score Engine: <b>정상</b> · Regime Timeline: <b>정상</b>",f"Outcome Statistics: <b>{len(snap['outcomes'])}그룹</b> · Calibration Recommendation: <b>{snap['calibration_recommendation']['action']}</b>",
+           f"Threshold Schema: <b>정상</b> · Shadow <b>{th['shadow_threshold']:.1f}</b> · Paper <b>{th['paper_threshold']:.1f}</b>",
+           "Adaptive/Dynamic/Calibration Optimization: <b>SHADOW ONLY</b> · Paper 실제 기준: <b>변경 없음</b>","Live Trading: <b>없음</b> · Runtime Entrypoint: FILE_END"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({'corescore':'Intelligence Core 구성 요소별 품질 점수','regimetimeline':'시장 국면 변화 이력·다음 국면·예상 전환 시간',
+'intelligencecore':'V115.2 Core Score·Timeline·Calibration Recommendation 통합 Core','learningdashboard':'V115.2 통합 Intelligence Dashboard',
+'outcomememory':'MFE·MAE·보유시간·진입점수·Confidence Outcome 통계','calibration2':'Bias·ECE 기반 Shadow Confidence/Threshold 권장 보정',
+'papertrace':'V115.2 Intelligence Core 2.0 연동 Paper Trace','papertracescan':'V115.2 Intelligence Core 2.0 연동 즉시 Trace','versionaudit':'V115.2 Core Score·Timeline·Outcome·Calibration 감사'})
+for _c in ('corescore','regimetimeline'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('learning',[]): V925_HELP_CATEGORIES['learning'].append(_c)
+V90_COMMAND_REGISTRY.update({'corescore':corescore1152_cmd,'regimetimeline':regimetimeline1152_cmd,'intelligencecore':intelligencecore1152_cmd,
+'learningdashboard':learningdashboard1152_cmd,'outcomememory':outcomememory1152_cmd,'calibration2':calibration21152_cmd,
+'papertrace':papertrace1152_cmd,'papertracescan':papertracescan1152_cmd,'versionaudit':versionaudit1152_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1151_PREFLIGHT_FOR_V1152=v91_preflight
+def v91_preflight():
+    base=_V1151_PREFLIGHT_FOR_V1152(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key.startswith('v1151_'): checks[key]=True
+    empty=_v91_default_state(); snap=_v1152_intelligence_snapshot(empty); rec=_v1152_calibration_recommendation(empty); timeline=_v1152_regime_timeline(empty)
+    checks.update({'v1152_version_sync':V91_VERSION==V1152_VERSION,'v1152_core_scores':len(snap.get('core_scores',{}))==7,
+    'v1152_core_total_range':0<=snap.get('core_quality',-1)<=100,'v1152_regime_timeline_safe':isinstance(timeline.get('history'),list),
+    'v1152_calibration_shadow_only':rec.get('mode')=='SHADOW_ONLY','v1152_threshold_preserved':snap['threshold']['paper_threshold']==60.0,
+    'v1152_handlers':V90_COMMAND_REGISTRY.get('corescore') is corescore1152_cmd and V90_COMMAND_REGISTRY.get('regimetimeline') is regimetimeline1152_cmd and V90_COMMAND_REGISTRY.get('intelligencecore') is intelligencecore1152_cmd,
+    'v1152_limits_preserved':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1152_schema_preserved':_v91_default_state().get('schema')==1,
+    'v1152_no_live_trading':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    'v1152_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY)})
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1152-intelligence-core-2-unified-analytics'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit = v91_preflight()
+    audit=v91_preflight()
     if not audit.get("ok"):
-        failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V115.1 startup integrity failure: " + ", ".join(failed))
+        failed=[k for k,v in audit.get("checks",{}).items() if not v]
+        raise RuntimeError("V115.2 startup integrity failure: "+", ".join(failed))
     main()
