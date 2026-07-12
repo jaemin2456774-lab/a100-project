@@ -29694,5 +29694,97 @@ def v91_preflight():
     audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1040_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1040-experience-intelligence-1'}
 
+
+# ============================================================================
+# A100 V105.0 AUTONOMOUS INTELLIGENCE CORE — shadow, MTF/global DNA, closed loop
+# ============================================================================
+V1050_VERSION = "A100 V105.0 AUTONOMOUS INTELLIGENCE CORE DEVELOPMENT"
+try:
+    from v1050_autonomous_intelligence_core import (capture_shadow_learning as _v105_shadow,
+        build_mtf_dna as _v105_mtf, build_global_patterns as _v105_global,
+        record_growth as _v105_record_growth, growth_graph as _v105_graph,
+        discover_weaknesses as _v105_weak, snapshot_version as _v105_snapshot,
+        compare_versions as _v105_compare, closed_loop_cycle as _v105_cycle,
+        summary as _v105_summary)
+except Exception:
+    _v105_shadow=_v105_mtf=_v105_global=_v105_record_growth=None
+    _v105_graph=_v105_weak=_v105_snapshot=_v105_compare=_v105_cycle=_v105_summary=None
+
+def _v105_sync():
+    st,info,live=_v104_sync();cycle=_v105_cycle(st);summary=_v105_summary(st);_v101_save(V1010_STATE_FILE,st)
+    info.update({'v105_cycle':cycle,'v105_summary':summary});return st,info,live
+
+async def shadownetwork1050_cmd(update, context):
+    st,info,_=_v105_sync();c=info['v105_cycle'];s=c['shadow']
+    lines=["🌑 <b>A100 V105.0 SHADOW LEARNING NETWORK</b>",f"누적 Shadow 학습 <b>{s['total']}건</b> · 결정 {s['resolved']}건",f"이번 신규 수집 {s['added']}건 · MTF DNA {c['mtf']}개 · Global DNA {c['global']}개","","※ 실제로 종료 판정된 Paper/Shadow 표본만 수집하며 가상 승패는 만들지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def mtfdna1050_cmd(update, context):
+    st,info,_=_v105_sync();rows=st.get('mtf_dna_v105',[]);lines=["🧬 <b>A100 V105.0 MULTI-TIMEFRAME DNA</b>",f"MTF DNA <b>{len(rows)}개</b>",""]
+    if not rows:lines.append("종료된 타임프레임별 표본이 부족합니다.")
+    for i,x in enumerate(rows[:12],1):lines.append(f"{i}. {x['timeframe']} · {x['side']} · {x['status']} · {x['samples']}건 · 승률 {x['win_rate']:.1f}%\n   {_v54_escape(x['signature'])}")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def globaldna1050_cmd(update, context):
+    st,info,_=_v105_sync();rows=st.get('global_dna_v105',[]);lines=["🌐 <b>A100 V105.0 GLOBAL PATTERN LIBRARY</b>",f"Global DNA <b>{len(rows)}개</b>",""]
+    if not rows:lines.append("2개 이상 종목에서 반복 검증된 표본이 부족합니다.")
+    for i,x in enumerate(rows[:10],1):lines.append(f"{i}. <b>{x['id']}</b> · {x['status']} · 종목 {x['symbols']}개 · {x['samples']}건 · 승률 {x['win_rate']:.1f}%\n   {_v54_escape(x['signature'])}")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def growthgraph1050_cmd(update, context):
+    st,info,_=_v105_sync();g=info['v105_summary']['growth'];pts=g.get('points',[])
+    lines=["📊 <b>A100 V105.0 AI CONFIDENCE EVOLUTION</b>",f"성장 기록 <b>{len(pts)}개</b> · 방향 {g.get('trend','STABLE')}",f"{g.get('bars','표본 없음')}"]
+    if pts:
+        for x in pts[-5:]:lines.append(f"• 표본 {x['samples']} · 승률 {x['win_rate']:.1f}% · DNA {x['dna']}개")
+    else:lines.append("종료 결정 표본이 아직 없습니다.")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def weakness1050_cmd(update, context):
+    st,info,_=_v105_sync();rows=info['v105_summary']['weaknesses'];lines=["🩺 <b>A100 V105.0 AUTO WEAKNESS DISCOVERY</b>",f"분석 약점 <b>{len(rows)}개</b>",""]
+    if not rows:lines.append("신뢰 가능한 약점 분석에 필요한 결정 표본이 부족합니다.")
+    for i,x in enumerate(rows[:8],1):lines.append(f"{i}. {x['feature']} · 오류 {x['error_rate']:.1f}% · 표본 {x['samples']} · 심각도 {x['severity']:.1f}")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def versioncompare1050_cmd(update, context):
+    st,info,_=_v105_sync();c=info['v105_summary']['versions'];lines=["🆚 <b>A100 V105.0 AI VERSION COMPARE</b>",f"회귀 감지 <b>{'YES' if c['regression'] else 'NO'}</b>",""]
+    for x in c['rows'][-8:]:lines.append(f"{x['version']}: {x['samples']}건 · 승률 {x['win_rate']:.1f}% · 평균 {x['avg_return']:+.2f}%")
+    if len(c['rows'])<2:lines.append("비교할 이전 모델 스냅샷이 아직 없습니다.")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def closedloop1050_cmd(update, context):
+    st,info,_=_v105_sync();c=info['v105_cycle'];r=c['recommendation'];p=r['parameters'];status='READY' if r['ready'] else '표본 부족'
+    lines=["🔁 <b>A100 V105.0 ULTIMATE CLOSED LOOP</b>",f"상태 <b>{status}</b> · 결정 표본 {r['samples']}건",f"Shadow → MTF DNA {c['mtf']} → Global DNA {c['global']} → 약점 {c['weaknesses']}","",f"Confidence {p['confidence_bias']:+.2f} · False Risk {p['false_risk_bias']:+.2f}",f"TP ×{p['tp_multiplier']:.3f} · SL ×{p['sl_multiplier']:.3f} · Position ×{p['position_multiplier']:.3f}","","※ 폐쇄 루프 결과는 추천 평가 전용이며 실주문 설정을 자동 변경하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'shadownetwork':'종료 Shadow/Paper 표본 자동 학습','mtfdna':'5m·15m·1h·4h·1d DNA 통합','globaldna':'다종목 공통 패턴 라이브러리','growthgraph':'AI 승률·DNA 성장 막대 그래프','weakness':'특징별 자동 약점 발견','versioncompare':'모델 스냅샷 성능·회귀 비교','closedloop':'Shadow→DNA→약점→최적화 폐쇄 루프'})
+for _c in ('shadownetwork','mtfdna','globaldna','growthgraph','weakness','versioncompare','closedloop'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'shadownetwork':shadownetwork1050_cmd,'mtfdna':mtfdna1050_cmd,'globaldna':globaldna1050_cmd,'growthgraph':growthgraph1050_cmd,'weakness':weakness1050_cmd,'versioncompare':versioncompare1050_cmd,'closedloop':closedloop1050_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1050_VERSION
+
+async def help1050_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V105.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help1040_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V105.0 HELP</b>","","Autonomous Core: /shadownetwork · /mtfdna · /globaldna","Evolution: /growthgraph · /weakness · /versioncompare · /closedloop","Experience: /experience · /crosslearn BTC · /masterdna · /memoryscope","Forecast: /confidenceforecast BTC · /explainai BTC · /selfoptimize","","전체 목록: /commands V105"]),parse_mode='HTML')
+
+async def commands1050_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v105','v1050','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V105.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands1040_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1050_cmd,'commands':commands1050_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1040_PREFLIGHT_FOR_V1050=v91_preflight
+def v91_preflight():
+    base=_V1040_PREFLIGHT_FOR_V1050();checks=dict(base.get('checks',{}));checks['v1040_version_sync']=True
+    required={'shadownetwork','mtfdna','globaldna','growthgraph','weakness','versioncompare','closedloop','help','commands'}
+    funcs=(_v105_shadow,_v105_mtf,_v105_global,_v105_record_growth,_v105_graph,_v105_weak,_v105_snapshot,_v105_compare,_v105_cycle,_v105_summary)
+    checks.update({'v1050_module_loaded':all(callable(x) for x in funcs),'v1050_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1050_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1050_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1050_version_sync':V91_VERSION==V1050_VERSION,'v1050_schema_preserved':_v91_default_state().get('schema')==1,'v1050_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1050_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1050_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1050_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1050-autonomous-intelligence-core-1'}
+
 if __name__ == "__main__":
     main()
