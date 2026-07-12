@@ -24041,12 +24041,15 @@ def main():
 # A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
 # 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
 # ============================================================================
-V91_VERSION = "A100 V91.1 PAPER STABILITY ENGINE"
+V91_VERSION = "A100 V91.2 MULTI-SYMBOL REGIME LEARNING ENGINE"
 V91_STARTED_AT = time.time()
 V91_LOCK = threading.RLock()
 V91_STOP = threading.Event()
 V91_MONITOR_THREAD = None
 V91_WATCHDOG_THREAD = None
+V912_AUTOSCAN_THREAD = None
+V912_LAST_SCAN_AT = 0.0
+V912_SCAN_ERRORS = 0
 V91_LAST_HEARTBEAT = 0.0
 V91_LAST_MONITOR_AT = 0.0
 V91_MONITOR_ERRORS = 0
@@ -24113,13 +24116,29 @@ V91_PAPER_ENABLED = _v91_bool("PAPER_TRADING_ENABLED", False)
 V91_AUTO_MONITOR = _v91_bool("PAPER_AUTO_MONITOR", False)
 V91_FEE_RATE = _v91_float("PAPER_FEE_RATE", 0.0004, 0.0, 0.02)
 V91_SLIPPAGE_RATE = _v91_float("PAPER_SLIPPAGE_RATE", 0.0005, 0.0, 0.05)
-V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 3, 1, 20)
+V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 10, 1, 30)
 V91_DAILY_LOSS_LIMIT = _v91_float("PAPER_DAILY_LOSS_LIMIT", 100.0, 0.0, 100000000.0)
 V91_DEFAULT_NOTIONAL = _v91_float("PAPER_DEFAULT_NOTIONAL", 100.0, 1.0, 100000000.0)
 V91_DEFAULT_SL_PCT = _v91_float("PAPER_DEFAULT_SL_PCT", 2.0, 0.1, 50.0)
 V91_DEFAULT_TP_PCT = _v91_float("PAPER_DEFAULT_TP_PCT", 4.0, 0.1, 500.0)
 V91_MONITOR_SECONDS = _v91_int("PAPER_MONITOR_SECONDS", 15, 5, 3600)
 V91_HEARTBEAT_SECONDS = _v91_int("WATCHDOG_HEARTBEAT_SECONDS", 30, 10, 3600)
+
+# V91.2 multi-symbol / regime learning configuration
+V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 6, 1, 30)
+V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 6, 1, 30)
+V912_MAX_TOTAL_NOTIONAL = _v91_float("PAPER_MAX_TOTAL_NOTIONAL", 1000.0, 1.0, 100000000.0)
+V912_SYMBOL_COOLDOWN_MIN = _v91_int("PAPER_SYMBOL_COOLDOWN_MINUTES", 60, 0, 10080)
+V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 20, 3, 100)
+V912_CANDIDATE_TOP = _v91_int("PAPER_CANDIDATE_TOP", 10, 1, 30)
+V912_MIN_QUOTE_VOLUME = _v91_float("PAPER_MIN_QUOTE_VOLUME", 5000000.0, 0.0, 1e15)
+V912_MAX_SPREAD_PCT = _v91_float("PAPER_MAX_SPREAD_PCT", 0.35, 0.01, 10.0)
+V912_AUTO_SCAN = _v91_bool("PAPER_AUTO_SCAN", False)
+V912_AUTO_ENTRY = _v91_bool("PAPER_AUTO_ENTRY", False)
+V912_SCAN_SECONDS = _v91_int("PAPER_SCAN_SECONDS", 300, 60, 3600)
+V912_AUTO_ENTRY_TOP = _v91_int("PAPER_AUTO_ENTRY_TOP", 2, 1, 10)
+V912_BTC_SHOCK_PCT = _v91_float("PAPER_BTC_SHOCK_PCT", 2.5, 0.5, 20.0)
+
 
 
 def _v91_default_state():
@@ -24134,6 +24153,10 @@ def _v91_default_state():
         "daily": {},
         "updated_at": time.time(),
         "sequence": 0,
+        "regime_snapshots": [],
+        "candidate_snapshots": [],
+        "performance": {},
+        "last_closed_by_symbol": {},
     }
 
 
@@ -24175,10 +24198,10 @@ def _v91_load_state():
                 raise ValueError("지원하지 않는 상태 파일")
             base = _v91_default_state()
             base.update(state)
-            for key in ("positions", "daily"):
+            for key in ("positions", "daily", "performance", "last_closed_by_symbol"):
                 if not isinstance(base.get(key), dict):
                     base[key] = {}
-            for key in ("closed", "events"):
+            for key in ("closed", "events", "regime_snapshots", "candidate_snapshots"):
                 if not isinstance(base.get(key), list):
                     base[key] = []
             return base
@@ -24392,6 +24415,8 @@ def _v91_write_heartbeat():
         "monitor_alive": bool(V91_MONITOR_THREAD and V91_MONITOR_THREAD.is_alive()),
         "telegram_dispatch_count": globals().get("V90_1_DISPATCH_COUNT", 0),
         "recent_errors": len(globals().get("V88_RECENT_ERRORS", [])),
+        "autoscan_alive": bool(V912_AUTOSCAN_THREAD and V912_AUTOSCAN_THREAD.is_alive()),
+        "last_scan_at": V912_LAST_SCAN_AT,
     }
     tmp = V91_HEARTBEAT_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
@@ -24417,6 +24442,10 @@ def v91_start_background_once():
         if V91_AUTO_MONITOR and (V91_MONITOR_THREAD is None or not V91_MONITOR_THREAD.is_alive()):
             V91_MONITOR_THREAD = threading.Thread(target=_v91_monitor_loop, name="a100-v91-paper-monitor", daemon=True)
             V91_MONITOR_THREAD.start()
+        global V912_AUTOSCAN_THREAD
+        if V912_AUTO_SCAN and (V912_AUTOSCAN_THREAD is None or not V912_AUTOSCAN_THREAD.is_alive()):
+            V912_AUTOSCAN_THREAD = threading.Thread(target=_v912_autoscan_loop, name="a100-v912-autoscan", daemon=True)
+            V912_AUTOSCAN_THREAD.start()
     try:
         _v91_write_heartbeat()
     except Exception as exc:
@@ -24526,12 +24555,344 @@ async def watchdog91_cmd(update, context):
         f"Heartbeat age: {age:.1f}초",
         f"Watchdog thread: {'✅' if V91_WATCHDOG_THREAD and V91_WATCHDOG_THREAD.is_alive() else '❌'}",
         f"Paper monitor: {'✅' if V91_MONITOR_THREAD and V91_MONITOR_THREAD.is_alive() else '비활성'}",
+        f"Alt autoscan: {'✅' if V912_AUTOSCAN_THREAD and V912_AUTOSCAN_THREAD.is_alive() else '비활성'}",
+        f"Scan errors: {V912_SCAN_ERRORS}",
         f"Monitor errors: {V91_MONITOR_ERRORS}",
         f"State errors: {V91_STATE_ERRORS}",
         f"열린 포지션: {len(state.get('positions',{}))}",
         f"저장 경로: {_v54_escape(V91_DATA_DIR)}",
     ]
     await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+
+# ============================================================================
+# A100 V91.2 MULTI-SYMBOL + MARKET REGIME LEARNING EXTENSION
+# ============================================================================
+def _v912_safe_float(value, default=0.0):
+    try:
+        out = float(value)
+        return out if math.isfinite(out) else float(default)
+    except Exception:
+        return float(default)
+
+
+def _v912_binance_klines(pair, interval="1h", limit=120):
+    pair = _v91_normalize_symbol(pair)
+    rows = http(f"{BINANCE}/api/v3/klines", {"symbol": pair, "interval": interval, "limit": int(limit)})
+    if not isinstance(rows, list) or len(rows) < 30:
+        raise RuntimeError(f"캔들 부족: {pair} {interval}")
+    return rows
+
+
+def _v912_ema(values, period):
+    values = [float(x) for x in values]
+    if not values:
+        return 0.0
+    alpha = 2.0 / (period + 1.0)
+    out = values[0]
+    for value in values[1:]:
+        out = alpha * value + (1.0 - alpha) * out
+    return out
+
+
+def _v912_atr_pct(rows, period=14):
+    trs = []
+    prev = None
+    for row in rows:
+        high, low, close = float(row[2]), float(row[3]), float(row[4])
+        tr = high - low if prev is None else max(high-low, abs(high-prev), abs(low-prev))
+        trs.append(tr)
+        prev = close
+    close = float(rows[-1][4])
+    atr = sum(trs[-period:]) / max(1, min(period, len(trs)))
+    return atr / close * 100.0 if close > 0 else 0.0
+
+
+def _v912_regime_snapshot(force=False):
+    now = time.time()
+    cache = globals().setdefault("_V912_REGIME_CACHE", {"at": 0.0, "value": None})
+    if not force and cache.get("value") and now - cache.get("at", 0) < 120:
+        return dict(cache["value"])
+    rows = _v912_binance_klines("BTCUSDT", "1h", 168)
+    closes = [float(r[4]) for r in rows]
+    last = closes[-1]
+    ema20, ema50 = _v912_ema(closes[-100:], 20), _v912_ema(closes[-150:], 50)
+    ret24 = (last / closes[-25] - 1.0) * 100.0
+    ret72 = (last / closes[-73] - 1.0) * 100.0
+    atr = _v912_atr_pct(rows, 14)
+    slope = (ema20 / ema50 - 1.0) * 100.0 if ema50 else 0.0
+    if atr >= 2.2:
+        regime = "HIGH_VOLATILITY"
+    elif atr <= 0.45 and abs(ret24) <= 1.0:
+        regime = "LOW_VOL_COMPRESSION"
+    elif slope >= 2.0 and ret72 >= 4.0:
+        regime = "STRONG_UPTREND"
+    elif slope >= 0.6 and ret24 >= 0:
+        regime = "MILD_UPTREND"
+    elif slope <= -2.0 and ret72 <= -4.0:
+        regime = "STRONG_DOWNTREND"
+    elif slope <= -0.6 and ret24 <= 0:
+        regime = "MILD_DOWNTREND"
+    elif slope > 0.25:
+        regime = "UP_RANGE"
+    elif slope < -0.25:
+        regime = "DOWN_RANGE"
+    else:
+        regime = "NEUTRAL_RANGE"
+    shock = abs(ret24) >= V912_BTC_SHOCK_PCT
+    value = {"at": now, "regime": regime, "btc_price": last, "btc_ret_24h": ret24,
+             "btc_ret_72h": ret72, "ema20": ema20, "ema50": ema50,
+             "trend_slope_pct": slope, "atr_pct": atr, "btc_shock": shock}
+    cache.update({"at": now, "value": value})
+    return dict(value)
+
+
+def _v912_ticker_rows():
+    rows = http(f"{BINANCE}/api/v3/ticker/24hr")
+    if not isinstance(rows, list):
+        raise RuntimeError("Binance ticker 응답 오류")
+    return rows
+
+
+def _v912_book_ticker_map():
+    rows = http(f"{BINANCE}/api/v3/ticker/bookTicker")
+    out = {}
+    if isinstance(rows, list):
+        for row in rows:
+            sym = str(row.get("symbol", ""))
+            bid, ask = _v912_safe_float(row.get("bidPrice")), _v912_safe_float(row.get("askPrice"))
+            if bid > 0 and ask >= bid:
+                out[sym] = (bid, ask)
+    return out
+
+
+def _v912_candidate_scan(force=False):
+    global V912_LAST_SCAN_AT, V912_SCAN_ERRORS
+    now = time.time()
+    cache = globals().setdefault("_V912_CANDIDATE_CACHE", {"at": 0.0, "rows": []})
+    if not force and cache.get("rows") and now - cache.get("at", 0) < 120:
+        return list(cache["rows"])
+    try:
+        regime = _v912_regime_snapshot(force=force)
+        books = _v912_book_ticker_map()
+        valid = globals().get("V78_VALID_SYMBOLS") or set()
+        blocked = {"USDCUSDT","FDUSDUSDT","TUSDUSDT","USDPUSDT","DAIUSDT","EURUSDT","TRYUSDT"}
+        candidates = []
+        for row in _v912_ticker_rows():
+            pair = str(row.get("symbol", ""))
+            if not pair.endswith("USDT") or pair in blocked or (valid and pair not in valid):
+                continue
+            qv = _v912_safe_float(row.get("quoteVolume"))
+            change = _v912_safe_float(row.get("priceChangePercent"))
+            count = _v912_safe_float(row.get("count"))
+            last = _v912_safe_float(row.get("lastPrice"))
+            if qv < V912_MIN_QUOTE_VOLUME or last <= 0:
+                continue
+            bid, ask = books.get(pair, (0.0, 0.0))
+            spread = ((ask-bid)/((ask+bid)/2)*100.0) if bid > 0 and ask > 0 else 999.0
+            if spread > V912_MAX_SPREAD_PCT:
+                continue
+            # liquidity + activity + controlled momentum; penalize late chase
+            liq_score = min(35.0, max(0.0, math.log10(max(qv, 1.0))-6.0) * 12.0)
+            activity_score = min(20.0, math.log10(max(count, 1.0)) * 3.0)
+            momentum_score = min(25.0, abs(change) * 2.2)
+            spread_score = max(0.0, 15.0 * (1.0 - spread / max(V912_MAX_SPREAD_PCT, 1e-9)))
+            chase_penalty = max(0.0, abs(change) - 12.0) * 2.5
+            score = liq_score + activity_score + momentum_score + spread_score - chase_penalty
+            side = "LONG" if change >= 0 else "SHORT"
+            if regime["regime"] in {"STRONG_DOWNTREND","MILD_DOWNTREND"} and side == "LONG": score -= 12
+            if regime["regime"] in {"STRONG_UPTREND","MILD_UPTREND"} and side == "SHORT": score -= 12
+            candidates.append({"symbol": pair, "score": round(score,2), "side": side,
+                               "change_24h": change, "quote_volume": qv,
+                               "spread_pct": spread, "last_price": last,
+                               "regime": regime["regime"]})
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        rows = candidates[:V912_CANDIDATE_LIMIT]
+        cache.update({"at": now, "rows": rows})
+        V912_LAST_SCAN_AT = now
+        state = _v91_load_state()
+        state["candidate_snapshots"].append({"at": now, "regime": regime, "rows": rows[:V912_CANDIDATE_TOP]})
+        state["candidate_snapshots"] = state["candidate_snapshots"][-100:]
+        state["regime_snapshots"].append(regime)
+        state["regime_snapshots"] = state["regime_snapshots"][-500:]
+        _v91_save_state(state)
+        return rows
+    except Exception:
+        V912_SCAN_ERRORS += 1
+        raise
+
+
+def _v912_direction_counts(state):
+    longs = sum(1 for p in state.get("positions", {}).values() if p.get("side") == "LONG")
+    shorts = sum(1 for p in state.get("positions", {}).values() if p.get("side") == "SHORT")
+    exposure = sum(_v912_safe_float(p.get("notional")) for p in state.get("positions", {}).values())
+    return longs, shorts, exposure
+
+
+_V911_OPEN_BASE = _v91_open
+_V911_CLOSE_BASE = _v91_close
+_V911_MONITOR_BASE = _v91_monitor_once
+
+
+def _v912_open(symbol, side="LONG", notional=None, sl_pct=None, tp_pct=None, source="manual", strategy="MANUAL"):
+    pair = _v91_normalize_symbol(symbol)
+    direction = str(side or "LONG").upper()
+    state = _v91_load_state()
+    longs, shorts, exposure = _v912_direction_counts(state)
+    requested = float(notional if notional is not None else V91_DEFAULT_NOTIONAL)
+    if direction == "LONG" and longs >= V912_MAX_LONG:
+        raise RuntimeError("LONG 동시 포지션 한도 도달")
+    if direction == "SHORT" and shorts >= V912_MAX_SHORT:
+        raise RuntimeError("SHORT 동시 포지션 한도 도달")
+    if exposure + requested > V912_MAX_TOTAL_NOTIONAL:
+        raise RuntimeError("Paper 총 노출금액 한도 도달")
+    last_closed = _v912_safe_float(state.get("last_closed_by_symbol", {}).get(pair))
+    remain = V912_SYMBOL_COOLDOWN_MIN*60 - (time.time()-last_closed)
+    if last_closed and remain > 0:
+        raise RuntimeError(f"재진입 쿨다운: {int(remain//60)+1}분 남음")
+    regime = _v912_regime_snapshot()
+    if regime.get("btc_shock") and pair != "BTCUSDT" and source != "manual":
+        raise RuntimeError("BTC 급변동 안전모드: 알트 자동진입 차단")
+    pos = _V911_OPEN_BASE(pair, direction, requested, sl_pct, tp_pct, source)
+    state = _v91_load_state()
+    row = state.get("positions", {}).get(pair)
+    if row:
+        row.update({"strategy": strategy, "regime_at_entry": regime,
+                    "mfe_pnl": 0.0, "mae_pnl": 0.0,
+                    "max_price": row.get("entry_price"), "min_price": row.get("entry_price")})
+        _v91_event(state, "ENTRY_CONTEXT", {"symbol": pair, "strategy": strategy, "regime": regime.get("regime")})
+        _v91_save_state(state)
+        return dict(row)
+    return pos
+
+
+def _v912_close(symbol, reason="MANUAL", price=None):
+    pair = _v91_normalize_symbol(symbol)
+    before = _v91_load_state().get("positions", {}).get(pair, {})
+    row = _V911_CLOSE_BASE(pair, reason, price)
+    state = _v91_load_state()
+    state.setdefault("last_closed_by_symbol", {})[pair] = time.time()
+    if state.get("closed"):
+        closed = state["closed"][-1]
+        closed["holding_seconds"] = max(0.0, _v912_safe_float(closed.get("closed_at"))- _v912_safe_float(closed.get("opened_at")))
+        closed["mfe_pnl"] = _v912_safe_float(before.get("mfe_pnl"))
+        closed["mae_pnl"] = _v912_safe_float(before.get("mae_pnl"))
+        closed["strategy"] = before.get("strategy", "UNKNOWN")
+        closed["regime_at_entry"] = before.get("regime_at_entry", {})
+        key = f"{closed.get('regime_at_entry',{}).get('regime','UNKNOWN')}|{closed.get('side')}|{closed.get('strategy')}"
+        perf = state.setdefault("performance", {}).setdefault(key, {"trades":0,"wins":0,"losses":0,"pnl":0.0})
+        perf["trades"] += 1
+        perf["pnl"] += _v912_safe_float(closed.get("realized_pnl"))
+        if _v912_safe_float(closed.get("realized_pnl")) > 0: perf["wins"] += 1
+        else: perf["losses"] += 1
+        row = dict(closed)
+    _v91_save_state(state)
+    return row
+
+
+def _v912_monitor_once():
+    state = _v91_load_state()
+    changed = False
+    for pair, pos in list(state.get("positions", {}).items()):
+        try:
+            price = _v91_price(pair)
+            pnl = _v91_unrealized(pos, price)
+            pos["mfe_pnl"] = max(_v912_safe_float(pos.get("mfe_pnl")), pnl)
+            pos["mae_pnl"] = min(_v912_safe_float(pos.get("mae_pnl")), pnl)
+            pos["max_price"] = max(_v912_safe_float(pos.get("max_price"), price), price)
+            pos["min_price"] = min(_v912_safe_float(pos.get("min_price"), price), price)
+            pos["last_mark_price"] = price
+            pos["last_mark_at"] = time.time()
+            changed = True
+        except Exception as exc:
+            v88_record_error(f"v912-mark:{pair}", exc)
+    if changed:
+        _v91_save_state(state)
+    return _V911_MONITOR_BASE()
+
+
+# Runtime override keeps all existing command call paths intact.
+_v91_open = _v912_open
+_v91_close = _v912_close
+_v91_monitor_once = _v912_monitor_once
+
+
+def _v912_auto_scan_once():
+    rows = _v912_candidate_scan(force=True)
+    if not V912_AUTO_ENTRY:
+        return []
+    state = _v91_load_state()
+    if not state.get("enabled") or state.get("kill_switch"):
+        return []
+    opened = []
+    for row in rows[:V912_AUTO_ENTRY_TOP]:
+        if len(_v91_load_state().get("positions", {})) >= V91_MAX_POSITIONS:
+            break
+        try:
+            opened.append(_v912_open(row["symbol"], row["side"], source="auto-candidate", strategy="MOMENTUM_LIQUIDITY"))
+        except Exception as exc:
+            v88_record_error(f"v912-auto-entry:{row.get('symbol')}", exc)
+    return opened
+
+
+def _v912_autoscan_loop():
+    while not V91_STOP.wait(V912_SCAN_SECONDS):
+        try:
+            _v912_auto_scan_once()
+        except Exception as exc:
+            globals()["V912_SCAN_ERRORS"] = globals().get("V912_SCAN_ERRORS", 0) + 1
+            v88_record_error("v912-autoscan", exc)
+
+
+async def paperregime912_cmd(update, context):
+    try:
+        r = _v912_regime_snapshot(force=True)
+        lines = ["🌐 <b>Market Regime</b>", f"국면: <b>{r['regime']}</b>",
+                 f"BTC 24h {r['btc_ret_24h']:+.2f}% / 72h {r['btc_ret_72h']:+.2f}%",
+                 f"EMA20/50 기울기 {r['trend_slope_pct']:+.2f}%", f"ATR {r['atr_pct']:.2f}%",
+                 f"BTC 급변 안전모드: {'ON' if r['btc_shock'] else 'OFF'}"]
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Regime 분석 실패: {exc}")
+
+
+async def papercandidates912_cmd(update, context):
+    try:
+        rows = _v912_candidate_scan(force=True)[:V912_CANDIDATE_TOP]
+        lines = ["🚀 <b>Paper Alt Candidates</b>"]
+        for i,row in enumerate(rows,1):
+            lines.append(f"{i}. <b>{row['symbol']}</b> {row['side']} | 점수 {row['score']:.1f} | 24h {row['change_24h']:+.2f}% | 스프레드 {row['spread_pct']:.3f}%")
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ 후보 스캔 실패: {exc}")
+
+
+async def paperperformance912_cmd(update, context):
+    state = _v91_load_state(); perf = state.get("performance", {})
+    if not perf:
+        return await v90_1_safe_reply(update, "아직 시장 국면별 청산 데이터가 없습니다.")
+    rows=[]
+    for key,val in perf.items():
+        trades=int(val.get("trades",0)); wins=int(val.get("wins",0)); pnl=_v912_safe_float(val.get("pnl"))
+        rows.append((trades,key,wins,pnl))
+    rows.sort(reverse=True)
+    lines=["📊 <b>Regime Strategy Performance</b>"]
+    for trades,key,wins,pnl in rows[:15]:
+        wr=wins/trades*100 if trades else 0
+        lines.append(f"{key}\n거래 {trades} | 승률 {wr:.1f}% | PnL {pnl:+.3f}")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def paperautostatus912_cmd(update, context):
+    state=_v91_load_state(); longs,shorts,exposure=_v912_direction_counts(state)
+    lines=["🤖 <b>V91.2 Multi-Symbol Status</b>",
+           f"포지션 {len(state.get('positions',{}))}/{V91_MAX_POSITIONS} | LONG {longs}/{V912_MAX_LONG} | SHORT {shorts}/{V912_MAX_SHORT}",
+           f"총 노출 {exposure:.2f}/{V912_MAX_TOTAL_NOTIONAL:.2f} USDT",
+           f"자동 스캔 {'ON' if V912_AUTO_SCAN else 'OFF'} / 자동 진입 {'ON' if V912_AUTO_ENTRY else 'OFF'}",
+           f"스캔 주기 {V912_SCAN_SECONDS}초 | 오류 {V912_SCAN_ERRORS}",
+           f"재진입 쿨다운 {V912_SYMBOL_COOLDOWN_MIN}분"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
 
 
 # 기존 104개 명령은 그대로 보존하고 Paper/Watchdog 명령만 추가한다.
@@ -24546,6 +24907,10 @@ V90_COMMAND_REGISTRY.update({
     "paperkill": paperkill91_cmd,
     "paperresetkill": paperresetkill91_cmd,
     "watchdog": watchdog91_cmd,
+    "paperregime": paperregime912_cmd,
+    "papercandidates": papercandidates912_cmd,
+    "paperperformance": paperperformance912_cmd,
+    "paperautostatus": paperautostatus912_cmd,
 })
 V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 
@@ -24553,7 +24918,7 @@ V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 def v91_preflight():
     base = v90_4_preflight()
     state = _v91_load_state()
-    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog"}
+    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus"}
     checks = {
         "base_v90_4": bool(base.get("ok")),
         "v91_callbacks": all(callable(V90_COMMAND_REGISTRY.get(name)) for name in v91_commands),
