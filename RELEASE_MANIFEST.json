@@ -1,9 +1,9 @@
 {
-  "release": "A100 V94.1 GitHub Clean Release",
-  "base": "V94.0 AI Learning Visualization",
+  "version": "A100 V95.0 AI UNIFIED DASHBOARD",
   "schema": 1,
   "state_file": "a100_v91_paper_state.json",
-  "state_file_included": false,
-  "purpose": "replace all legacy GitHub repository files with a compact current release",
-  "live_trading_added": false
+  "file_count": 39,
+  "github_web_upload_safe": true,
+  "live_trading_added": false,
+  "sha256_main": "b33233d6ed04885b34d18ecf796623115697a0210e39a3c5dad51ca2f0b04edd"
 }
