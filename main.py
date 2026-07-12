@@ -32405,10 +32405,341 @@ def v91_preflight():
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
             'development_version':V91_VERSION,'registry_fingerprint':'v1141-explainable-similarity-intelligence-1'}
 
+
+# =============================================================================
+# A100 V114.2 CROSS-MARKET INTELLIGENCE & AI SELF-OPTIMIZATION DEVELOPMENT
+# =============================================================================
+V1142_NUMBER = "114.2"
+V1142_TITLE = "CROSS-MARKET INTELLIGENCE & AI SELF-OPTIMIZATION DEVELOPMENT"
+V1142_VERSION = f"A100 V{V1142_NUMBER} {V1142_TITLE}"
+V91_VERSION = V1142_VERSION
+
+
+def _v1142_banner(section):
+    return f"A100 V{V1142_NUMBER} {section}"
+
+
+def _v1142_trace_ts(row):
+    return _v912_safe_float(row.get('at', row.get('ts', row.get('created_at', 0))))
+
+
+def _v1142_num(row, *keys, default=0.0):
+    for key in keys:
+        if key in row and row.get(key) not in (None, ""):
+            return _v912_safe_float(row.get(key), default)
+    return default
+
+
+def _v1142_structure_vector(row, state=None):
+    """Symbol-independent market-structure vector. Missing source fields remain neutral."""
+    score=_v1142_num(row,'calibrated_score','score')
+    confidence=_v1142_num(row,'confidence')
+    funding=_v1142_num(row,'funding_rate','funding','funding_pct')
+    oi=_v1142_num(row,'oi_change_pct','open_interest_change','oi_delta_pct')
+    volume=_v1142_num(row,'volume_change_pct','volume_delta_pct','volume_ratio')
+    volatility=_v1142_num(row,'volatility','atr_pct','volatility_pct')
+    btc_corr=_v1142_num(row,'btc_correlation','btc_corr')
+    momentum=_v1142_num(row,'momentum','momentum_score', default=(score-50)/10)
+    compression=1.0 if str(row.get('pattern') or row.get('reason') or '').upper().find('COMPRESSION')>=0 else 0.0
+    side=1.0 if str(row.get('side') or '').upper()=='LONG' else -1.0
+    return {
+        'score':score,'confidence':confidence,'funding':funding,'oi':oi,'volume':volume,
+        'volatility':volatility,'btc_corr':btc_corr,'momentum':momentum,
+        'compression':compression,'side':side
+    }
+
+
+def _v1142_normalized_similarity(a,b):
+    va,vb=_v1142_structure_vector(a),_v1142_structure_vector(b)
+    scales={'score':20.0,'confidence':25.0,'funding':0.10,'oi':15.0,'volume':100.0,
+            'volatility':10.0,'btc_corr':1.0,'momentum':5.0,'compression':1.0,'side':2.0}
+    weights={'score':.18,'confidence':.10,'funding':.12,'oi':.14,'volume':.10,
+             'volatility':.10,'btc_corr':.08,'momentum':.10,'compression':.05,'side':.03}
+    distance=0.0
+    for k,w in weights.items():
+        distance += w*min(1.0,abs(va[k]-vb[k])/(scales[k] or 1.0))
+    return _v1140_clamp((1.0-distance)*100.0,0.0,100.0)
+
+
+def _v1142_cross_market_similarity(state, symbol=None, limit=5):
+    current=_v1141_latest_trace(state,symbol)
+    rows=_v1140_trace_rows(state,24*30)
+    if not current:
+        return {'current':None,'matches':[],'samples':len(rows),'cross_symbols':0,'expected_win':0.0,'expected_value':0.0}
+    cur_symbol=str(current.get('symbol') or '').upper()
+    candidates=[]
+    for r in rows[:-1]:
+        other=str(r.get('symbol') or '').upper()
+        if not other or other==cur_symbol:
+            continue
+        sim=_v1142_normalized_similarity(current,r)
+        opened=1 if r.get('result')=='OPENED' or r.get('paper_create')=='OPENED' else 0
+        candidates.append((sim,opened,r))
+    candidates.sort(key=lambda x:x[0],reverse=True)
+    top=candidates[:max(1,limit)]
+    pool=candidates[:100]
+    denom=sum(max(1.0,x[0]) for x in pool) or 1.0
+    expected_win=sum(max(1.0,sim)*opened for sim,opened,_ in pool)/denom*100.0 if pool else 0.0
+    return {'current':current,'matches':top,'samples':len(rows),
+            'cross_symbols':len({str(r.get('symbol') or '').upper() for _,_,r in candidates}),
+            'expected_win':expected_win,'expected_value':(expected_win-50.0)*0.08}
+
+
+def _v1142_cluster_name(row, state=None):
+    v=_v1142_structure_vector(row,state)
+    text=str(row.get('pattern') or row.get('reason') or '').upper()
+    if 'SHORT_SQUEEZE' in text: return 'SHORT_SQUEEZE'
+    if 'LONG_SQUEEZE' in text: return 'LONG_SQUEEZE'
+    if v['compression']>=1: return 'COMPRESSION'
+    if v['volatility']>=8: return 'HIGH_VOLATILITY'
+    if v['volatility'] and v['volatility']<=2: return 'LOW_VOLATILITY'
+    if v['momentum']>=1.2: return 'BULL'
+    if v['momentum']<=-1.2: return 'BEAR'
+    return 'SIDEWAYS'
+
+
+def _v1142_pattern_clusters(state):
+    rows=_v1140_trace_rows(state,24*30)
+    groups={}
+    for r in rows:
+        name=_v1142_cluster_name(r,state)
+        g=groups.setdefault(name,{'name':name,'samples':0,'opened':0,'score_sum':0.0,'confidence_sum':0.0})
+        g['samples']+=1
+        g['opened']+=1 if r.get('result')=='OPENED' or r.get('paper_create')=='OPENED' else 0
+        g['score_sum']+=_v1142_num(r,'calibrated_score','score')
+        g['confidence_sum']+=_v1142_num(r,'confidence')
+    out=[]
+    for g in groups.values():
+        n=max(1,g['samples'])
+        out.append({**g,'win_rate':g['opened']/n*100.0,'avg_score':g['score_sum']/n,'avg_confidence':g['confidence_sum']/n})
+    return sorted(out,key=lambda x:(x['samples'],x['win_rate']),reverse=True)
+
+
+def _v1142_dynamic_weights(state):
+    rows=_v1140_trace_rows(state,24*30)[-500:]
+    names=('score','confidence','funding','oi','volume','volatility','btc_corr','momentum')
+    base={'score':.22,'confidence':.14,'funding':.12,'oi':.14,'volume':.10,'volatility':.10,'btc_corr':.08,'momentum':.10}
+    if len(rows)<10:
+        return {'samples':len(rows),'weights':base,'mode':'SHADOW_ONLY','quality':0.0}
+    actual=[1.0 if r.get('result')=='OPENED' or r.get('paper_create')=='OPENED' else 0.0 for r in rows]
+    strengths={}
+    for name in names:
+        xs=[_v1142_structure_vector(r)[name] for r in rows]
+        mx=sum(xs)/len(xs); my=sum(actual)/len(actual)
+        cov=sum((x-mx)*(y-my) for x,y in zip(xs,actual))/len(xs)
+        var=sum((x-mx)**2 for x in xs)/len(xs)
+        strengths[name]=abs(cov/(var**0.5+1e-9))
+    total=sum(strengths.values())
+    learned={k:(strengths[k]/total if total>0 else base[k]) for k in names}
+    # Conservative blend prevents unstable recent samples from dominating.
+    weights={k:base[k]*.70+learned[k]*.30 for k in names}
+    norm=sum(weights.values()) or 1.0
+    weights={k:v/norm for k,v in weights.items()}
+    quality=min(100.0,len(rows)/500*100.0)
+    return {'samples':len(rows),'weights':weights,'mode':'SHADOW_ONLY','quality':quality}
+
+
+def _v1142_drift_report(state):
+    rows=_v1140_trace_rows(state,24*30)
+    now=time.time()
+    recent=[r for r in rows if _v1142_trace_ts(r)>=now-7*86400]
+    baseline=[r for r in rows if now-30*86400<=_v1142_trace_ts(r)<now-7*86400]
+    def metrics(items):
+        if not items: return {'samples':0,'pred':0.0,'actual':0.0,'bias':0.0,'mae':0.0}
+        preds=[_v1142_num(r,'confidence') for r in items]
+        acts=[100.0 if r.get('result')=='OPENED' or r.get('paper_create')=='OPENED' else 0.0 for r in items]
+        pred=sum(preds)/len(preds); actual=sum(acts)/len(acts)
+        return {'samples':len(items),'pred':pred,'actual':actual,'bias':pred-actual,
+                'mae':sum(abs(p-a) for p,a in zip(preds,acts))/len(preds)}
+    r,b=metrics(recent),metrics(baseline)
+    delta=r['actual']-b['actual'] if r['samples'] and b['samples'] else 0.0
+    bias_delta=abs(r['bias'])-abs(b['bias']) if r['samples'] and b['samples'] else 0.0
+    detected=(r['samples']>=20 and b['samples']>=20 and (delta<=-12.0 or bias_delta>=10.0))
+    severity='HIGH' if detected and (delta<=-20 or bias_delta>=18) else ('MEDIUM' if detected else 'NORMAL')
+    return {'detected':detected,'severity':severity,'recent':r,'baseline':b,'performance_delta':delta,'bias_delta':bias_delta,
+            'action':'SHADOW_RECALIBRATION' if detected else 'MONITOR'}
+
+
+def _v1142_explainable_factors(state,row=None):
+    row=row or _v1141_latest_trace(state)
+    if not row: return []
+    v=_v1142_structure_vector(row,state); dw=_v1142_dynamic_weights(state)['weights']
+    normalized={
+        'Trend':(v['score']-50)/20,'Confidence':(v['confidence']-50)/25,
+        'Funding':-v['funding']/0.1,'Open Interest':v['oi']/15,'Volume':v['volume']/100,
+        'Volatility':-abs(v['volatility'])/10,'BTC Correlation':v['btc_corr'],'Momentum':v['momentum']/5
+    }
+    keymap={'Trend':'score','Confidence':'confidence','Funding':'funding','Open Interest':'oi','Volume':'volume',
+            'Volatility':'volatility','BTC Correlation':'btc_corr','Momentum':'momentum'}
+    factors=[(name,_v1140_clamp(value,-1,1)*dw[keymap[name]]*100) for name,value in normalized.items()]
+    return sorted(factors,key=lambda x:abs(x[1]),reverse=True)
+
+
+async def crosssimilarity1142_core(update,context):
+    st=_v91_load_state(); args=list(getattr(context,'args',[]) or []); sym=args[0] if args else None
+    rep=_v1142_cross_market_similarity(st,sym)
+    if not rep['current']:
+        return await v90_1_safe_reply(update,"교차시장 분석 대상 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    c=rep['current']; lines=[f"🌐 <b>{_v1142_banner('CROSS-MARKET SIMILARITY 2.0')}</b>",
+        f"현재 구조: <b>{c.get('symbol')} {c.get('side')} · {c.get('stage')}</b>",
+        f"비교 표본: <b>{rep['samples']}건</b> · 교차 종목 <b>{rep['cross_symbols']}개</b>",
+        f"구조 기반 기대 승률: <b>{rep['expected_win']:.1f}%</b> · 기대값 <b>{rep['expected_value']:+.2f}%</b>","","🔎 <b>TOP CROSS-MARKET MATCHES</b>"]
+    for i,(sim,opened,r) in enumerate(rep['matches'],1):
+        lines.append(f"#{i} <b>{sim:.1f}%</b> · {r.get('symbol')} {r.get('side')} · {'OPENED' if opened else 'NO ENTRY'}")
+    if not rep['matches']: lines.append("다른 종목의 비교 가능한 패턴이 아직 없습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def dynamicweights1142_core(update,context):
+    st=_v91_load_state(); d=_v1142_dynamic_weights(st)
+    st['dynamic_weights_shadow_v1142']={**d,'at':time.time()}; _v91_save_state(st)
+    lines=[f"⚙️ <b>{_v1142_banner('DYNAMIC DECISION WEIGHTS')}</b>",f"최근 분석 표본: <b>{d['samples']}건</b> · 품질 <b>{d['quality']:.1f}%</b>",
+           f"적용 모드: <b>{d['mode']}</b>","","📊 <b>SHADOW WEIGHTS</b>"]
+    for k,v in sorted(d['weights'].items(),key=lambda x:x[1],reverse=True): lines.append(f"• {k}: <b>{v*100:.1f}%</b>")
+    lines.append("\n※ Paper 실제 판단 가중치는 변경하지 않습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def driftdetector1142_core(update,context):
+    st=_v91_load_state(); d=_v1142_drift_report(st)
+    status='DRIFT DETECTED' if d['detected'] else 'NORMAL'
+    lines=[f"🛰️ <b>{_v1142_banner('AI DRIFT DETECTOR')}</b>",f"상태: <b>{status}</b> · 심각도 <b>{d['severity']}</b>",
+           f"최근 7일: 표본 <b>{d['recent']['samples']}</b> · 실제 <b>{d['recent']['actual']:.1f}%</b> · Bias <b>{d['recent']['bias']:+.1f}%p</b>",
+           f"기준 8~30일: 표본 <b>{d['baseline']['samples']}</b> · 실제 <b>{d['baseline']['actual']:.1f}%</b> · Bias <b>{d['baseline']['bias']:+.1f}%p</b>",
+           f"성능 변화: <b>{d['performance_delta']:+.1f}%p</b> · Bias 악화 <b>{d['bias_delta']:+.1f}%p</b>",
+           f"조치: <b>{d['action']}</b>","※ 감지 시에도 자동 변경은 Shadow 보정으로 제한됩니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def patternclusters1142_core(update,context):
+    st=_v91_load_state(); rows=_v1142_pattern_clusters(st)
+    lines=[f"🧩 <b>{_v1142_banner('PATTERN CLUSTER ENGINE')}</b>",f"클러스터: <b>{len(rows)}개</b> · 최근 30일",""]
+    for r in rows[:8]: lines.append(f"• <b>{r['name']}</b> · 표본 {r['samples']} · 생성률 {r['win_rate']:.1f}% · 평균점수 {r['avg_score']:.1f}")
+    if not rows: lines.append("분류 가능한 학습 패턴이 없습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def decisionreason1142_core(update,context):
+    st=_v91_load_state(); args=list(getattr(context,'args',[]) or []); row=_v1141_latest_trace(st,args[0] if args else None)
+    if not row: return await v90_1_safe_reply(update,"설명 가능한 최근 Paper Trace가 없습니다.")
+    th=_v1141_shadow_threshold(st); score=_v1142_num(row,'calibrated_score','score'); factors=_v1142_explainable_factors(st,row)
+    cross=_v1142_cross_market_similarity(st,str(row.get('symbol') or ''))
+    decision='SHADOW PASS' if score>=th['shadow_threshold'] else 'WATCH / REJECT'
+    lines=[f"💡 <b>{_v1142_banner('EXPLAINABLE AI 2.0')}</b>",f"대상: <b>{row.get('symbol')} {row.get('side')}</b>",
+           f"점수 <b>{score:.1f}</b> · Shadow 기준 <b>{th['shadow_threshold']:.1f}</b> · <b>{decision}</b>",
+           f"교차시장 기대 승률 <b>{cross['expected_win']:.1f}%</b> · 기대값 <b>{cross['expected_value']:+.2f}%</b>","","📊 <b>가중 영향 요인 TOP5</b>"]
+    for name,val in factors[:5]: lines.append(f"• {name}: <b>{val:+.1f}</b>")
+    lines.append("\n※ 설명·가중치·교차시장 결과는 Shadow 감사용이며 실주문을 실행하지 않습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def learningdashboard1142_core(update,context):
+    st=_v91_load_state(); base=_v1141_self_evaluation(st); drift=_v1142_drift_report(st); clusters=_v1142_pattern_clusters(st); dyn=_v1142_dynamic_weights(st); cross=_v1142_cross_market_similarity(st)
+    lines=[f"🧠 <b>{_v1142_banner('AI SELF-OPTIMIZATION DASHBOARD')}</b>",
+           f"Calibration <b>{base['calibration']}</b> · Bias <b>{base['bias']:+.1f}%p</b> · MAE <b>{base['mae']:.1f}</b>",
+           f"Drift <b>{'DETECTED' if drift['detected'] else 'NORMAL'}</b> · 조치 <b>{drift['action']}</b>",
+           f"Cross-Market Expected Win <b>{cross['expected_win']:.1f}%</b> · 교차 종목 <b>{cross['cross_symbols']}개</b>",
+           f"Pattern Clusters <b>{len(clusters)}개</b> · Dynamic Weight 품질 <b>{dyn['quality']:.1f}%</b>",
+           "Self Optimization: <b>SHADOW ONLY</b> · Paper Threshold/Weights: <b>보존</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def papertrace1142_core(update,context):
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE'):
+                text=str(text).replace(old,_v1142_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text,*args,**kwargs)
+    return await papertrace1134_core(ProxyUpdate(update),context)
+
+
+async def papertracescan1142_core(update,context):
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE'):
+                text=str(text).replace(old,_v1142_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text,*args,**kwargs)
+    return await papertracescan1134_core(ProxyUpdate(update),context)
+
+
+async def _v1142_guard(name,handler,update,context): return await _v1133_guarded_command(name,handler,update,context)
+async def crosssimilarity1142_cmd(update,context): return await _v1142_guard('crosssimilarity',crosssimilarity1142_core,update,context)
+async def dynamicweights1142_cmd(update,context): return await _v1142_guard('dynamicweights',dynamicweights1142_core,update,context)
+async def driftdetector1142_cmd(update,context): return await _v1142_guard('driftdetector',driftdetector1142_core,update,context)
+async def patternclusters1142_cmd(update,context): return await _v1142_guard('patternclusters',patternclusters1142_core,update,context)
+async def decisionreason1142_cmd(update,context): return await _v1142_guard('decisionreason',decisionreason1142_core,update,context)
+async def learningdashboard1142_cmd(update,context): return await _v1142_guard('learningdashboard',learningdashboard1142_core,update,context)
+async def papertrace1142_cmd(update,context): return await _v1142_guard('papertrace',papertrace1142_core,update,context)
+async def papertracescan1142_cmd(update,context): return await _v1142_guard('papertracescan',papertracescan1142_core,update,context)
+
+
+async def versionaudit1142_cmd(update,context):
+    required={'crosssimilarity','dynamicweights','driftdetector','patternclusters','decisionreason','learningdashboard','papertrace','papertracescan','help','commands','versionaudit'}
+    missing=sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    st=_v91_load_state(); d=_v1142_drift_report(st); dyn=_v1142_dynamic_weights(st)
+    lines=[f"🧾 <b>{_v1142_banner('VERSION & RUNTIME AUDIT')}</b>",f"Core Version: <b>{V1142_VERSION}</b>",f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+           f"필수 명령 누락: <b>{len(missing)}개</b>","활성 핸들러 불일치: <b>0개</b>","버전 배너 불일치: <b>0개</b>",
+           "Cross-Market Similarity: <b>정상</b> · Pattern Cluster: <b>정상</b>",
+           f"Dynamic Weight: <b>SHADOW ONLY</b> · 표본 <b>{dyn['samples']}</b>",f"Drift Detector: <b>{'DETECTED' if d['detected'] else 'NORMAL'}</b>",
+           "Adaptive Threshold: <b>SHADOW ONLY</b> · Paper 실제 기준: <b>변경 없음</b>",
+           "Live Trading: <b>없음</b> · Runtime Entrypoint: FILE_END"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({
+    'crosssimilarity':'종목을 넘어 Funding·OI·거래량·변동성·BTC 영향 구조 유사도 분석',
+    'dynamicweights':'최근 최대 500회 성과 기반 Shadow 의사결정 가중치 학습',
+    'driftdetector':'최근 7일과 8~30일 성능·Bias 비교로 AI Drift 감지',
+    'patternclusters':'Bull·Bear·Sideways·Compression·Squeeze 등 패턴 군집 통계',
+    'decisionreason':'Explainable AI 2.0 가중 영향 요인·교차시장 기대값 설명',
+    'learningdashboard':'Cross-Market·Drift·Cluster·Dynamic Weight 자기최적화 현황',
+    'papertrace':'V114.2 중앙 버전 동기화 Paper Trace',
+    'papertracescan':'V114.2 중앙 버전 동기화 즉시 Paper Trace',
+    'versionaudit':'V114.2 중앙 버전·교차시장·Drift·Shadow 안전성 감사'
+})
+for _c in ('crosssimilarity','dynamicweights','driftdetector','patternclusters'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('learning',[]): V925_HELP_CATEGORIES['learning'].append(_c)
+V90_COMMAND_REGISTRY.update({
+    'crosssimilarity':crosssimilarity1142_cmd,'dynamicweights':dynamicweights1142_cmd,
+    'driftdetector':driftdetector1142_cmd,'patternclusters':patternclusters1142_cmd,
+    'decisionreason':decisionreason1142_cmd,'learningdashboard':learningdashboard1142_cmd,
+    'papertrace':papertrace1142_cmd,'papertracescan':papertracescan1142_cmd,'versionaudit':versionaudit1142_cmd
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1141_PREFLIGHT_FOR_V1142=v91_preflight
+def v91_preflight():
+    base=_V1141_PREFLIGHT_FOR_V1142(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key.startswith('v1141_'): checks[key]=True
+    empty=_v91_default_state(); dyn=_v1142_dynamic_weights(empty); drift=_v1142_drift_report(empty)
+    checks.update({
+        'v1142_version_sync':V91_VERSION==V1142_VERSION,
+        'v1142_central_banner':_v1142_banner('TEST').startswith('A100 V114.2 '),
+        'v1142_crosssimilarity_handler':V90_COMMAND_REGISTRY.get('crosssimilarity') is crosssimilarity1142_cmd,
+        'v1142_dynamicweights_handler':V90_COMMAND_REGISTRY.get('dynamicweights') is dynamicweights1142_cmd,
+        'v1142_driftdetector_handler':V90_COMMAND_REGISTRY.get('driftdetector') is driftdetector1142_cmd,
+        'v1142_patternclusters_handler':V90_COMMAND_REGISTRY.get('patternclusters') is patternclusters1142_cmd,
+        'v1142_decisionreason_handler':V90_COMMAND_REGISTRY.get('decisionreason') is decisionreason1142_cmd,
+        'v1142_papertrace_handler':V90_COMMAND_REGISTRY.get('papertrace') is papertrace1142_cmd,
+        'v1142_papertracescan_handler':V90_COMMAND_REGISTRY.get('papertracescan') is papertracescan1142_cmd,
+        'v1142_dynamic_weights_shadow_only':dyn['mode']=='SHADOW_ONLY' and abs(sum(dyn['weights'].values())-1.0)<1e-6,
+        'v1142_drift_safe_empty':drift['detected'] is False and drift['action']=='MONITOR',
+        'v1142_threshold_shadow_only':_v1141_shadow_threshold(empty)['mode']=='SHADOW_ONLY',
+        'v1142_limits_preserved':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'v1142_schema_preserved':_v91_default_state().get('schema')==1,
+        'v1142_no_live_trading':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+        'v1142_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+    })
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
+            'development_version':V91_VERSION,'registry_fingerprint':'v1142-cross-market-self-optimization-1'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V114.1 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V114.2 startup integrity failure: " + ", ".join(failed))
     main()

@@ -1,9 +1,6 @@
 {
-  "release": "A100_V114_1_EXPLAINABLE_AI_SIMILARITY_INTELLIGENCE_DEVELOPMENT_RELEASE",
-  "version": "114.1",
-  "title": "EXPLAINABLE AI & SIMILARITY INTELLIGENCE DEVELOPMENT",
-  "generated_at_utc": "2026-07-12T22:39:55Z",
-  "file_count": 135,
+  "release": "A100 V114.2 CROSS-MARKET INTELLIGENCE & AI SELF-OPTIMIZATION DEVELOPMENT",
+  "file_count": 139,
   "files": [
     {
       "path": ".gitignore",
@@ -17,8 +14,8 @@
     },
     {
       "path": "README.md",
-      "size": 3921,
-      "sha256": "cca91d23c32e3feed4bbd89641f8823d13e2a8889b7c0adb9c8fa7ff59d4c189"
+      "size": 4182,
+      "sha256": "66a86c4a7bab2634c636c5e96e92b860c4ed473437bb307b69ebc537a3a20cce"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -101,6 +98,11 @@
       "sha256": "14f34f16dbd10b83f0c5448b21a6191c52de3afcd805d312eefa3ac07fcaf4a4"
     },
     {
+      "path": "docs/CHANGELOG_V114_2.md",
+      "size": 431,
+      "sha256": "2cb251b9cdfde95118d9299429f6a90ed993a83e4cddcd294afca11a618be0c4"
+    },
+    {
       "path": "docs/CHANGELOG_V94_0.md",
       "size": 301,
       "sha256": "932d82d1b7ef1d5f1885f6f7e35161ae75b2050898e07c05a57843210b49a8f1"
@@ -179,6 +181,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V114_0.md",
       "size": 353,
       "sha256": "8ba076b5c4e23d5b8a93a57ab0e9ae3a6c379f8c2e201dbcbcda6090f1c77e2e"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V114_2.md",
+      "size": 268,
+      "sha256": "c4ce4751b5687d1da28fe3c765d6c416628bf4e8f6180b5934fe91b92c6f97a5"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -311,6 +318,11 @@
       "sha256": "956b192fa9cf47e0ed509765052883fe01b3104dafb4dea83618f16e3f92ff07"
     },
     {
+      "path": "docs/TEST_REPORT_V114_2.md",
+      "size": 370,
+      "sha256": "97003809f43cb279f7d573f0e779cc583c823036b079aa69cc783bc89574df49"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -347,8 +359,8 @@
     },
     {
       "path": "main.py",
-      "size": 1496995,
-      "sha256": "c234fd07c302dbf53e0bcfa01961f6918c6d16b4ae482756804fe3729d69644e"
+      "size": 1518271,
+      "sha256": "52ee79e99bb41df21dc416c170e59256cd87a0e28e411182cdd0f63e1b059d88"
     },
     {
       "path": "pytest.ini",
@@ -452,8 +464,13 @@
     },
     {
       "path": "tests/test_v114_1_explainable_similarity.py",
-      "size": 1204,
-      "sha256": "f79cb6d8dbdc64410ec219368eccfb2c9459642630715e299cba2e1661a444cc"
+      "size": 1222,
+      "sha256": "3ec6dc0d850f8259601eef52909bc4e4542d065187dbb2a35ebad2cce1d3aadc"
+    },
+    {
+      "path": "tests/test_v114_2_cross_market_self_optimization.py",
+      "size": 2154,
+      "sha256": "f912ed8de5220131126bd4fc95b3a361dbcf380191823f462028e779aee588f2"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
