@@ -25694,5 +25694,193 @@ def main():
         raise
 
 
+
+# ================================================================
+# A100 V91.7 META DECISION + PATTERN SIMILARITY ENGINE
+# Analytics and Paper safety only. No live-order path.
+# ================================================================
+V917_SIMILARITY_MIN_SAMPLES = _v91_int("PAPER_SIMILARITY_MIN_SAMPLES", 8, 3, 5000)
+V917_SIMILARITY_TOP_K = _v91_int("PAPER_SIMILARITY_TOP_K", 30, 5, 500)
+V917_META_MAX_ADJUST = _v91_float("PAPER_META_MAX_ADJUST", 8.0, 0.0, 20.0)
+V917_META_TRADE_SCORE = _v91_float("PAPER_META_TRADE_SCORE", 76.0, 50.0, 99.0)
+V917_META_WAIT_SCORE = _v91_float("PAPER_META_WAIT_SCORE", 60.0, 20.0, 95.0)
+V917_META_RISK_WINDOW = _v91_int("PAPER_META_RISK_WINDOW", 20, 5, 500)
+V917_META_MAX_DRAWDOWN_PCT = _v91_float("PAPER_META_MAX_DRAWDOWN_PCT", 8.0, 1.0, 50.0)
+V917_META_AUTO_RISK_GUARD = _v91_bool("PAPER_META_AUTO_RISK_GUARD", True)
+
+
+def _v917_feature_vector(row):
+    return {
+        "score": _v912_safe_float(row.get("final_score", row.get("score")), 50.0),
+        "confidence": _v912_safe_float(row.get("confidence"), 50.0),
+        "momentum": _v912_safe_float(row.get("momentum_pct", row.get("change_pct"))),
+        "spread": _v912_safe_float(row.get("spread_pct")),
+        "liquidity": _v912_safe_float(row.get("quote_volume", row.get("qv"))),
+    }
+
+
+def _v917_similarity(a, b):
+    va, vb = _v917_feature_vector(a), _v917_feature_vector(b)
+    weights={"score":0.35,"confidence":0.25,"momentum":0.20,"spread":0.10,"liquidity":0.10}
+    scales={"score":25.0,"confidence":25.0,"momentum":8.0,"spread":1.0,"liquidity":max(abs(va['liquidity']),abs(vb['liquidity']),1.0)}
+    sim=0.0
+    for k,w in weights.items():
+        d=abs(va[k]-vb[k])/max(scales[k],1e-9)
+        sim += w*max(0.0,1.0-min(1.0,d))
+    for key,bonus in (("side",0.08),("strategy",0.06),("stage",0.04)):
+        if str(a.get(key,""))==str(b.get(key,"")): sim+=bonus
+    ra=str((a.get("regime_at_entry") or {}).get("regime",a.get("regime","UNKNOWN")))
+    rb=str((b.get("regime_at_entry") or {}).get("regime",b.get("regime","UNKNOWN")))
+    if ra==rb: sim+=0.12
+    if str(a.get("symbol",""))==str(b.get("symbol","")): sim+=0.08
+    return max(0.0,min(1.0,sim))
+
+
+def _v917_similarity_stats(row, state=None):
+    history=_v915_learning_rows(state)
+    ranked=[]
+    for h in history:
+        if str(h.get("side","")) != str(row.get("side","")): continue
+        ranked.append((_v917_similarity(row,h),h))
+    ranked.sort(key=lambda x:x[0], reverse=True)
+    selected=[h for sim,h in ranked[:V917_SIMILARITY_TOP_K] if sim>=0.45]
+    returns=[_v915_row_return_pct(h) for h in selected]
+    wins=[x for x in returns if x>0]; losses=[x for x in returns if x<=0]
+    n=len(returns); prior_n=10.0; prior_w=5.0
+    wr=((len(wins)+prior_w)/(n+prior_n)*100.0) if n or prior_n else 50.0
+    avg_win=sum(wins)/len(wins) if wins else 0.0
+    avg_loss=abs(sum(losses)/len(losses)) if losses else 0.0
+    ev=(wr/100.0)*avg_win-(1-wr/100.0)*avg_loss
+    avg_sim=sum(sim for sim,_ in ranked[:len(selected)])/len(selected) if selected else 0.0
+    return {"trades":n,"wins":len(wins),"win_rate":wr,"avg_win_pct":avg_win,"avg_loss_pct":avg_loss,"expectancy_pct":ev,"avg_similarity":avg_sim}
+
+
+def _v917_market_context(force=False):
+    # Must not call the enriched-candidate pipeline here: doing so would recurse
+    # through _v917_explain_candidate and could also create unnecessary API load.
+    try:
+        regime=_v912_regime_snapshot(force=force)
+    except Exception as exc:
+        v88_record_error("v917-market-context", exc)
+        regime={"regime":"UNKNOWN","btc_change_24h":0.0,"volatility_pct":0.0}
+    btc=_v912_safe_float(regime.get("btc_change_24h",regime.get("btc_change")))
+    vol=_v912_safe_float(regime.get("volatility_pct",regime.get("atr_pct")))
+    cached=[]
+    try:
+        cache_obj=globals().get("V913_ENRICHED_CACHE") or globals().get("V912_CANDIDATE_CACHE") or {}
+        if isinstance(cache_obj, dict): cached=cache_obj.get("rows") or cache_obj.get("data") or []
+        elif isinstance(cache_obj, list): cached=cache_obj
+    except Exception:
+        cached=[]
+    longs=sum(1 for r in cached[:40] if str(r.get("side"))=="LONG")
+    shorts=sum(1 for r in cached[:40] if str(r.get("side"))=="SHORT")
+    breadth=(longs/(longs+shorts)*100.0) if (longs+shorts) else 50.0
+    avg_spread=sum(_v912_safe_float(r.get("spread_pct")) for r in cached[:20])/max(1,len(cached[:20]))
+    score=50.0 + max(-15,min(15,btc*3.0)) + (breadth-50.0)*0.25 - min(10.0,avg_spread*8.0)
+    if str(regime.get("regime")) in {"STRONG_UPTREND","MILD_UPTREND"}: score+=8
+    if str(regime.get("regime")) in {"STRONG_DOWNTREND","MILD_DOWNTREND"}: score-=8
+    if str(regime.get("regime"))=="HIGH_VOL_SHOCK": score-=12
+    return {"score":round(max(0,min(100,score)),1),"regime":regime.get("regime","UNKNOWN"),"btc_change":btc,"volatility":vol,"breadth":breadth,"avg_spread":avg_spread,"candidates":len(cached)}
+
+
+def _v917_risk_state(state=None):
+    rows=_v915_learning_rows(state)[-V917_META_RISK_WINDOW:]
+    rets=[_v915_row_return_pct(r) for r in rows]
+    equity=0.0; peak=0.0; max_dd=0.0; streak=0; max_streak=0
+    for x in rets:
+        equity+=x; peak=max(peak,equity); max_dd=max(max_dd,peak-equity)
+        streak=streak+1 if x<=0 else 0; max_streak=max(max_streak,streak)
+    wr=(sum(1 for x in rets if x>0)/len(rets)*100.0) if rets else 50.0
+    mode="NORMAL"; multiplier=1.0
+    if max_dd>=V917_META_MAX_DRAWDOWN_PCT or max_streak>=5: mode="HALT"; multiplier=0.0
+    elif max_dd>=V917_META_MAX_DRAWDOWN_PCT*0.6 or max_streak>=3 or (len(rets)>=10 and wr<40): mode="DEFENSIVE"; multiplier=0.5
+    elif len(rets)>=10 and wr>=60 and max_dd<V917_META_MAX_DRAWDOWN_PCT*0.3: mode="AGGRESSIVE"; multiplier=1.15
+    return {"mode":mode,"multiplier":multiplier,"trades":len(rets),"win_rate":wr,"max_drawdown_pct":max_dd,"max_loss_streak":max_streak}
+
+
+_V916_EXPLAIN_BASE = _v913_explain_candidate
+def _v917_explain_candidate(row, state=None):
+    out=_V916_EXPLAIN_BASE(row,state)
+    sim=_v917_similarity_stats(out,state)
+    ctx=_v917_market_context(False)
+    risk=_v917_risk_state(state)
+    adj=0.0
+    if sim["trades"]>=V917_SIMILARITY_MIN_SAMPLES:
+        adj += max(-4.0,min(4.0,sim["expectancy_pct"]*1.8 + (sim["win_rate"]-50.0)*0.08))
+    side=str(out.get("side","LONG"))
+    ctx_edge=(ctx["score"]-50.0)/10.0
+    adj += max(-3.0,min(3.0,ctx_edge if side=="LONG" else -ctx_edge))
+    if risk["mode"]=="DEFENSIVE": adj-=2.0
+    elif risk["mode"]=="HALT": adj-=V917_META_MAX_ADJUST
+    adj=max(-V917_META_MAX_ADJUST,min(V917_META_MAX_ADJUST,adj))
+    out["meta_adjust"]=round(adj,2); out["similarity_stats"]=sim; out["market_context"]=ctx; out["risk_state"]=risk
+    out["final_score"]=round(max(0,min(100,_v912_safe_float(out.get("final_score"))+adj)),2)
+    if risk["mode"]=="HALT": decision="SKIP"
+    elif out["final_score"]>=V917_META_TRADE_SCORE and out.get("stage")=="ENTRY": decision="TRADE"
+    elif out["final_score"]>=V917_META_WAIT_SCORE: decision="WAIT"
+    else: decision="SKIP"
+    out["meta_decision"]=decision
+    if V917_META_AUTO_RISK_GUARD and decision!="TRADE" and out.get("stage")=="ENTRY": out["stage"]="READY"
+    return out
+_v913_explain_candidate=_v917_explain_candidate
+
+
+async def papermeta917_cmd(update, context):
+    rows=_v913_enriched_candidates(force=True)[:12]
+    lines=["🧠 <b>V91.7 Meta AI Decision</b>"]
+    for i,r in enumerate(rows,1):
+        sim=r.get("similarity_stats",{}); risk=r.get("risk_state",{})
+        lines.append(f"{i}. <b>{r.get('symbol')}</b> {r.get('side')} · {r.get('meta_decision','WAIT')}\n점수 {r.get('final_score',0):.1f} · Meta {r.get('meta_adjust',0):+.1f} · 유사표본 {sim.get('trades',0)} · EV {sim.get('expectancy_pct',0):+.2f}% · 위험 {risk.get('mode','NORMAL')}")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def papersimilarity917_cmd(update, context):
+    rows=_v913_enriched_candidates(force=True)[:12]
+    lines=["🧬 <b>V91.7 Pattern Similarity</b>"]
+    for r in rows:
+        s=r.get("similarity_stats",{})
+        lines.append(f"<b>{r.get('symbol')}</b> {r.get('side')} | 표본 {s.get('trades',0)} · 유사도 {s.get('avg_similarity',0)*100:.1f}% · 승률 {s.get('win_rate',50):.1f}% · EV {s.get('expectancy_pct',0):+.2f}%")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def papercontext917_cmd(update, context):
+    c=_v917_market_context(True)
+    await v90_1_safe_reply(update,"\n".join(["🌐 <b>V91.7 Market Context</b>",f"점수: <b>{c['score']:.1f}</b>",f"국면: {c['regime']}",f"BTC 변화: {c['btc_change']:+.2f}%",f"알트 LONG 비율: {c['breadth']:.1f}%",f"평균 스프레드: {c['avg_spread']:.3f}%",f"후보 수: {c['candidates']}"]),parse_mode="HTML")
+
+async def paperrisk917_cmd(update, context):
+    r=_v917_risk_state()
+    await v90_1_safe_reply(update,"\n".join(["🛡️ <b>V91.7 Adaptive Paper Risk</b>",f"모드: <b>{r['mode']}</b>",f"규모 배수: {r['multiplier']:.2f}x",f"최근 표본: {r['trades']}",f"승률: {r['win_rate']:.1f}%",f"최대 낙폭: {r['max_drawdown_pct']:.2f}%",f"최대 연속손실: {r['max_loss_streak']}"]),parse_mode="HTML")
+
+V917_COMMAND_USAGE = {
+ "paperstatus":"Paper 상태", "paperon":"Paper 켜기", "paperoff":"Paper 끄기", "paperopen":"가상 포지션 진입", "paperclose":"가상 포지션 청산", "paperpositions":"열린 Paper 포지션", "paperhistory":"Paper 거래내역", "paperkill":"Paper Kill Switch", "paperresetkill":"Kill Switch 해제", "watchdog":"Watchdog 상태", "paperregime":"시장 국면", "papercandidates":"알트 후보", "paperperformance":"국면별 성과", "paperautostatus":"자동스캔 상태", "paperlearning":"학습 현황", "papersignals":"단계별 신호", "papershadow":"Shadow 상태", "papershadowpositions":"Shadow 포지션", "papershadowperformance":"Shadow 성과", "paperexpectancy":"기대값 순위", "paperpatterns":"패턴 기억", "paperlifecycle":"거래 생애주기", "paperadaptive":"적응형 전략", "paperstrategies":"전략 매트릭스", "paperquarantine":"격리 전략", "papermeta":"Meta AI 최종판단", "papersimilarity":"유사패턴 통계", "papercontext":"시장 컨텍스트", "paperrisk":"적응형 위험상태"
+}
+
+async def help917_cmd(update, context):
+    lines=["🤖 <b>A100 V91.7 HELP</b>","","핵심: /v90 BTC /decision BTC /setup BTC /conviction BTC","","<b>V91 Paper·학습 명령</b>"]
+    for cmd,desc in V917_COMMAND_USAGE.items(): lines.append(f"/{cmd} — {desc}")
+    lines += ["","/commands — 전체 명령", "/commands V91 — V91 명령만"]
+    text="\n".join(lines)
+    for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+
+async def commands917_cmd(update, context):
+    requested=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if requested in {"v91","paper","학습"}:
+        lines=[f"📚 <b>A100 V91 명령 {len(V917_COMMAND_USAGE)}개</b>","", " ".join('/'+x for x in V917_COMMAND_USAGE)]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    return await commands90_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"papermeta":papermeta917_cmd,"papersimilarity":papersimilarity917_cmd,"papercontext":papercontext917_cmd,"paperrisk":paperrisk917_cmd,"help":help917_cmd,"commands":commands917_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION="A100 V91.7 META DECISION & PATTERN SIMILARITY ENGINE"
+
+def _v917_help_audit():
+    registered={x for x in V90_COMMAND_REGISTRY if x.startswith('paper') or x=='watchdog'}
+    usage=set(V917_COMMAND_USAGE)
+    return {"usage_missing":sorted(registered-usage),"stale_usage":sorted(usage-registered),"v91_registered":len(registered),"v91_usage":len(usage)}
+
+_V916_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V916_PREFLIGHT_BASE(); checks=dict(base.get('checks',{})); audit=_v917_help_audit()
+    checks.update({"v917_meta_callable":all(callable(globals().get(n)) for n in {'_v917_similarity_stats','_v917_market_context','_v917_risk_state'}),"v917_callbacks":all(callable(V90_COMMAND_REGISTRY.get(n)) for n in {'papermeta','papersimilarity','papercontext','paperrisk'}),"help_sync":not audit['usage_missing'] and not audit['stale_usage']})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit}
+
 if __name__ == "__main__":
     main()
