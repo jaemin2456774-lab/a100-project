@@ -1,7 +1,0 @@
-A100 V90.4 CHANGELOG
-- Added startup regression preflight.
-- Hardened Result mapping compatibility.
-- Added finite-number guard for NaN/Infinity.
-- Enforced complete callable command registry before Telegram polling.
-- Preserved V90.3 full registry, symbol refresh, shared cache and single dispatcher.
-- Upgraded health/selfcheck/legacycheck diagnostics.
