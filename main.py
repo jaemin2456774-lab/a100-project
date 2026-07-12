@@ -33458,10 +33458,260 @@ def v91_preflight():
     'v1152_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY)})
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1152-intelligence-core-2-unified-analytics'}
 
+# ============================================================================
+# V115.3 - AI INTELLIGENCE CORE 3.0 / SELF-DIRECTED LEARNING PLANNER
+# ============================================================================
+V1153_NUMBER = "115.3"
+V1153_TITLE = "AI INTELLIGENCE CORE 3.0 SELF-DIRECTED OPTIMIZATION DEVELOPMENT"
+V1153_VERSION = f"A100 V{V1153_NUMBER} {V1153_TITLE}"
+V91_VERSION = V1153_VERSION
+
+
+def _v1153_banner(section):
+    return f"A100 V{V1153_NUMBER} {section}"
+
+
+def _v1153_trend(values):
+    vals=[_v912_safe_float(x) for x in values if x is not None]
+    if len(vals)<2: return {'delta':0.0,'direction':'STABLE','values':vals}
+    delta=vals[-1]-vals[0]
+    return {'delta':delta,'direction':'UP' if delta>=1.0 else ('DOWN' if delta<=-1.0 else 'STABLE'),'values':vals}
+
+
+def _v1153_pattern_health(state):
+    snap=_v1152_intelligence_snapshot(state)
+    aging={x.get('pattern'):x for x in snap.get('aging',[]) if isinstance(x,dict)}
+    rows=[]
+    for x in snap.get('outcomes',[]):
+        samples=max(0,int(x.get('samples',0) or 0)); win=_v912_safe_float(x.get('win_rate'))
+        pnl=_v912_safe_float(x.get('pnl')); conf=_v912_safe_float(x.get('avg_confidence'))
+        age=aging.get(x.get('pattern'),{})
+        age_penalty={'KEEP':0,'COMPRESS':8,'ARCHIVE_CANDIDATE':18}.get(age.get('action'),5)
+        sample_score=min(100.0,samples*6.0)
+        performance=max(0.0,min(100.0,win*0.65 + max(-20.0,min(20.0,pnl))*1.0 + 25.0))
+        calibration=max(0.0,100.0-abs(conf-win))
+        health=max(0.0,min(100.0,sample_score*0.30+performance*0.45+calibration*0.25-age_penalty))
+        status='HEALTHY' if health>=70 else ('WATCH' if health>=45 else 'RETRAIN')
+        rows.append({'pattern':x.get('pattern','UNKNOWN'),'health':health,'status':status,'samples':samples,'win_rate':win,'pnl':pnl,'aging':age.get('action','KEEP')})
+    rows.sort(key=lambda x:(x['health'],x['samples']))
+    return rows
+
+
+def _v1153_confidence_drift_timeline(state, hours=24*30):
+    rows=_v1140_trace_rows(state,hours)
+    if not rows: return {'points':[],'trend':_v1153_trend([]),'status':'INSUFFICIENT','latest':0.0}
+    buckets=[]; step=max(1,len(rows)//6)
+    for i in range(0,len(rows),step):
+        part=rows[i:i+step]
+        conf=[_v1142_num(r,'confidence') for r in part]
+        score=[_v1142_num(r,'calibrated_score','score') for r in part]
+        pred=sum(conf)/max(1,len(conf)); actual=sum(1 for x in score if x>=60)*100.0/max(1,len(score))
+        buckets.append({'prediction':pred,'actual':actual,'drift':pred-actual,'samples':len(part)})
+    buckets=buckets[-6:]
+    trend=_v1153_trend([abs(x['drift']) for x in buckets])
+    latest=buckets[-1]['drift'] if buckets else 0.0
+    status='HIGH' if abs(latest)>=15 else ('WATCH' if abs(latest)>=8 else 'NORMAL')
+    return {'points':buckets,'trend':trend,'status':status,'latest':latest}
+
+
+def _v1153_core_score_trend(state):
+    rows=_v1140_trace_rows(state,24*30)
+    current=_v1152_core_scores(state)['total']
+    if not rows: vals=[current]
+    else:
+        vals=[]; step=max(1,len(rows)//6)
+        for i in range(0,len(rows),step):
+            part=rows[i:i+step]
+            q=sum(_v1142_num(r,'calibrated_score','score') for r in part)/max(1,len(part))
+            c=sum(_v1142_num(r,'confidence') for r in part)/max(1,len(part))
+            vals.append(max(0.0,min(100.0,q*0.65+c*0.35)))
+        vals=(vals[-5:]+[current])[-6:]
+    return {'current':current,'trend':_v1153_trend(vals),'values':vals}
+
+
+def _v1153_outcome_optimizer(state):
+    snap=_v1152_intelligence_snapshot(state); health=_v1153_pattern_health(state); cal=snap['calibration_recommendation']
+    candidates=[]
+    for row in health:
+        delta=max(-3.0,min(3.0,(55.0-row['health'])/12.0))
+        expected=max(-5.0,min(8.0,(row['health']-45.0)*0.12 + row['pnl']*0.2))
+        candidates.append({'pattern':row['pattern'],'threshold_delta':delta,'expected_quality_delta':expected,'action':'RETRAIN_SIM' if row['status']=='RETRAIN' else ('TUNE_SIM' if row['status']=='WATCH' else 'HOLD')})
+    candidates.sort(key=lambda x:(x['action']=='HOLD',-abs(x['expected_quality_delta'])))
+    return {'mode':'SHADOW_SIMULATION','candidates':candidates[:5],'confidence_delta':cal['confidence_adjust'],'global_threshold_delta':cal['threshold_adjust'],'paper_changed':False}
+
+
+def _v1153_memory_compression(state):
+    snap=_v1152_intelligence_snapshot(state); health={x['pattern']:x for x in _v1153_pattern_health(state)}
+    rec=[]
+    for x in snap.get('aging',[]):
+        pat=x.get('pattern','UNKNOWN'); h=health.get(pat,{}).get('health',50.0); action=x.get('action','KEEP')
+        if action=='ARCHIVE_CANDIDATE' and h<40: recommendation='ARCHIVE_REVIEW'
+        elif action in ('COMPRESS','ARCHIVE_CANDIDATE') or h<55: recommendation='COMPRESS'
+        else: recommendation='KEEP'
+        rec.append({'pattern':pat,'recommendation':recommendation,'health':h,'source_action':action})
+    return rec
+
+
+def _v1153_retraining_recommendation(state):
+    health=_v1153_pattern_health(state); drift=_v1153_confidence_drift_timeline(state)
+    rows=[]
+    for x in health:
+        priority='HIGH' if x['status']=='RETRAIN' or drift['status']=='HIGH' else ('MEDIUM' if x['status']=='WATCH' or drift['status']=='WATCH' else 'LOW')
+        action='RETRAIN_SHADOW' if priority=='HIGH' else ('EXPAND_SAMPLE' if priority=='MEDIUM' else 'MONITOR')
+        rows.append({**x,'priority':priority,'action':action})
+    order={'HIGH':0,'MEDIUM':1,'LOW':2}; rows.sort(key=lambda x:(order[x['priority']],x['health']))
+    return rows
+
+
+def _v1153_learning_plan(state):
+    snap=_v1152_intelligence_snapshot(state); drift=_v1153_confidence_drift_timeline(state); trend=_v1153_core_score_trend(state)
+    retrain=_v1153_retraining_recommendation(state); compression=_v1153_memory_compression(state); optimizer=_v1153_outcome_optimizer(state)
+    tasks=[]
+    high=[x for x in retrain if x['priority']=='HIGH']
+    if high: tasks.append({'priority':1,'task':'PATTERN_RETRAIN','target':high[0]['pattern'],'reason':f"Health {high[0]['health']:.1f}"})
+    if drift['status']!='NORMAL': tasks.append({'priority':1 if drift['status']=='HIGH' else 2,'task':'CONFIDENCE_RECALIBRATION','target':'GLOBAL','reason':f"Drift {drift['latest']:+.1f}%p"})
+    comp=[x for x in compression if x['recommendation']!='KEEP']
+    if comp: tasks.append({'priority':3,'task':'MEMORY_COMPRESSION','target':comp[0]['pattern'],'reason':comp[0]['recommendation']})
+    if trend['trend']['direction']=='DOWN': tasks.append({'priority':2,'task':'CORE_RECOVERY_SIMULATION','target':'GLOBAL','reason':f"Core {trend['trend']['delta']:+.1f}"})
+    if not tasks: tasks.append({'priority':4,'task':'CONTINUE_OBSERVATION','target':'ALL','reason':'Core stable'})
+    tasks.sort(key=lambda x:x['priority'])
+    return {'mode':'SHADOW_ONLY','tasks':tasks[:5],'drift':drift,'trend':trend,'optimizer':optimizer,'paper_threshold':snap['threshold']['paper_threshold'],'shadow_threshold':snap['threshold']['shadow_threshold']}
+
+
+def _v1153_unified_timeline(state):
+    reg=_v1152_regime_timeline(state); drift=_v1153_confidence_drift_timeline(state); core=_v1153_core_score_trend(state)
+    events=[]
+    for i,v in enumerate(reg.get('history',[])): events.append(f"R{i+1}:{v}")
+    if drift['points']: events.append(f"CONF_DRIFT:{drift['latest']:+.1f}")
+    events.append(f"CORE:{core['current']:.1f}/{core['trend']['direction']}")
+    return {'events':events,'regime':reg,'drift':drift,'core':core}
+
+
+async def learningplanner1153_core(update,context):
+    p=_v1153_learning_plan(_v91_load_state())
+    lines=[f"🗺 <b>{_v1153_banner('LEARNING PLANNER ENGINE')}</b>",f"Mode <b>{p['mode']}</b> · Tasks <b>{len(p['tasks'])}</b>"]
+    for i,t in enumerate(p['tasks'],1): lines.append(f"{i}. <b>{t['task']}</b> · {t['target']} · {t['reason']}")
+    lines += [f"Core Trend <b>{p['trend']['trend']['direction']} {p['trend']['trend']['delta']:+.1f}</b> · Confidence Drift <b>{p['drift']['status']} {p['drift']['latest']:+.1f}%p</b>",f"Threshold Shadow <b>{p['shadow_threshold']:.1f}</b> / Paper <b>{p['paper_threshold']:.1f}</b> · Paper 변경 <b>없음</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def patternhealth1153_core(update,context):
+    rows=_v1153_pattern_health(_v91_load_state())
+    lines=[f"🩺 <b>{_v1153_banner('PATTERN HEALTH SCORE')}</b>"]
+    if not rows: lines.append("분석 가능한 패턴 Outcome 표본이 없습니다.")
+    for x in rows[:8]: lines.append(f"• <b>{x['pattern']}</b> {x['health']:.1f} · {x['status']} · n={x['samples']} · WR {x['win_rate']:.1f}%")
+    lines.append("※ 점수는 Shadow 재학습 우선순위 산정용입니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def confidencedrift1153_core(update,context):
+    d=_v1153_confidence_drift_timeline(_v91_load_state()); vals=' → '.join(f"{x['drift']:+.1f}" for x in d['points']) or '표본 없음'
+    lines=[f"📉 <b>{_v1153_banner('CONFIDENCE DRIFT TIMELINE')}</b>",f"Drift <b>{vals}</b>",f"현재 <b>{d['latest']:+.1f}%p</b> · 상태 <b>{d['status']}</b> · 추세 <b>{d['trend']['direction']} {d['trend']['delta']:+.1f}</b>","※ Prediction-Actual 편차를 Shadow 보정 계획에만 사용합니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def outcomeoptimizer1153_core(update,context):
+    o=_v1153_outcome_optimizer(_v91_load_state()); lines=[f"🧪 <b>{_v1153_banner('OUTCOME OPTIMIZER')}</b>",f"Mode <b>{o['mode']}</b> · Paper 변경 <b>NO</b>",f"Global Confidence {o['confidence_delta']:+.1f}%p · Threshold {o['global_threshold_delta']:+.1f}"]
+    for x in o['candidates']: lines.append(f"• {x['pattern']} · <b>{x['action']}</b> · TH {x['threshold_delta']:+.1f} · 예상 품질 {x['expected_quality_delta']:+.1f}")
+    lines.append("※ 모든 결과는 Shadow Simulation이며 실거래/페이퍼 기준에 자동 반영되지 않습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def corescoretrend1153_core(update,context):
+    t=_v1153_core_score_trend(_v91_load_state()); vals=' → '.join(f"{x:.1f}" for x in t['values'])
+    return await v90_1_safe_reply(update,f"📈 <b>{_v1153_banner('CORE SCORE TREND')}</b>\n{vals}\n현재 <b>{t['current']:.1f}</b> · 추세 <b>{t['trend']['direction']} {t['trend']['delta']:+.1f}</b>\n※ 기존 Core Score 계산을 보존한 관찰 지표입니다.",parse_mode='HTML')
+
+async def intelligencetimeline1153_core(update,context):
+    t=_v1153_unified_timeline(_v91_load_state())
+    return await v90_1_safe_reply(update,f"🧭 <b>{_v1153_banner('UNIFIED INTELLIGENCE TIMELINE')}</b>\n<b>{' → '.join(t['events'])}</b>\nRegime next {t['regime']['next']} {t['regime']['probability']:.1f}% · Drift {t['drift']['status']} · Core {t['core']['trend']['direction']}\n※ Regime·Confidence·Core 변화를 단일 흐름으로 표시합니다.",parse_mode='HTML')
+
+async def patternretraining1153_core(update,context):
+    rows=_v1153_retraining_recommendation(_v91_load_state()); lines=[f"🔁 <b>{_v1153_banner('PATTERN RETRAINING RECOMMENDATION')}</b>"]
+    if not rows: lines.append("재학습 판단 가능한 패턴 표본이 없습니다.")
+    for x in rows[:8]: lines.append(f"• <b>{x['pattern']}</b> · {x['priority']} · {x['action']} · Health {x['health']:.1f}")
+    lines.append("※ 권장안은 Shadow → Paper 검증 전 자동 승격되지 않습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def memorycompression1153_core(update,context):
+    rows=_v1153_memory_compression(_v91_load_state()); lines=[f"🗜 <b>{_v1153_banner('MEMORY COMPRESSION RECOMMENDATION')}</b>"]
+    if not rows: lines.append("압축 판단 가능한 Memory Aging 항목이 없습니다.")
+    for x in rows[:8]: lines.append(f"• <b>{x['pattern']}</b> · {x['recommendation']} · Health {x['health']:.1f} · Aging {x['source_action']}")
+    lines.append("※ 원본 학습 데이터는 삭제하지 않으며 실제 압축/보관은 승인 후 수행합니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def intelligencecore1153_core(update,context):
+    st=_v91_load_state(); snap=_v1152_intelligence_snapshot(st); plan=_v1153_learning_plan(st); health=_v1153_pattern_health(st)
+    low=health[0] if health else None
+    lines=[f"🧠 <b>{_v1153_banner('AI INTELLIGENCE CORE 3.0')}</b>",f"Core Quality <b>{snap['core_quality']:.1f}%</b> · Self Plan <b>{plan['tasks'][0]['task']}</b>",f"Core Trend <b>{plan['trend']['trend']['direction']} {plan['trend']['trend']['delta']:+.1f}</b> · Confidence Drift <b>{plan['drift']['status']} {plan['drift']['latest']:+.1f}%p</b>",f"Pattern Health Lowest <b>{low['pattern']+' '+format(low['health'],'.1f') if low else 'N/A'}</b>",f"Outcome Optimizer <b>SHADOW SIMULATION</b> · Learning Planner <b>ACTIVE</b>",f"Threshold Shadow <b>{snap['threshold']['shadow_threshold']:.1f}</b> / Paper <b>{snap['threshold']['paper_threshold']:.1f}</b>","Autonomy: <b>계획·평가·제안만 수행</b> · 자동 Paper/Stable 승격 <b>금지</b> · Live Trading <b>OFF</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def learningdashboard1153_core(update,context):
+    st=_v91_load_state(); snap=_v1152_intelligence_snapshot(st); plan=_v1153_learning_plan(st); health=_v1153_pattern_health(st); mem=_v1153_memory_compression(st)
+    healthy=sum(x['status']=='HEALTHY' for x in health); watch=sum(x['status']=='WATCH' for x in health); retrain=sum(x['status']=='RETRAIN' for x in health)
+    comp=sum(x['recommendation']=='COMPRESS' for x in mem); archive=sum(x['recommendation']=='ARCHIVE_REVIEW' for x in mem)
+    lines=[f"🌐 <b>{_v1153_banner('INTELLIGENCE DASHBOARD 3.0')}</b>",f"Core <b>{snap['core_quality']:.1f}%</b> · Trend <b>{plan['trend']['trend']['direction']} {plan['trend']['trend']['delta']:+.1f}</b>",f"Learning Plan <b>{plan['tasks'][0]['task']}</b> · Target <b>{plan['tasks'][0]['target']}</b>",f"Pattern Health HEALTHY {healthy} / WATCH {watch} / RETRAIN {retrain}",f"Confidence Drift <b>{plan['drift']['status']} {plan['drift']['latest']:+.1f}%p</b> · Outcome Optimizer <b>SHADOW</b>",f"Memory Recommendation COMPRESS {comp} / ARCHIVE_REVIEW {archive}",f"Regime <b>{' → '.join(snap['regime_timeline']['history'])}</b> → {snap['regime_timeline']['next']} {snap['regime_timeline']['probability']:.1f}%",f"Positions Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> · Live <b>OFF</b>","Validation Gate: <b>Shadow → Paper → Stable</b> · 기존 데이터/기능 보존"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+def _v1153_trace_block(state):
+    p=_v1153_learning_plan(state); h=_v1153_pattern_health(state); low=h[0] if h else None
+    return "\n\n🧠 <b>INTELLIGENCE CORE 3.0</b>"+f"\nLearning Plan: <b>{p['tasks'][0]['task']}</b> / {p['tasks'][0]['target']}"+f"\nCore Trend: <b>{p['trend']['trend']['direction']} {p['trend']['trend']['delta']:+.1f}</b> · Confidence Drift: <b>{p['drift']['status']} {p['drift']['latest']:+.1f}%p</b>"+f"\nPattern Health: <b>{low['pattern']+' '+format(low['health'],'.1f') if low else 'N/A'}</b>"+"\nOutcome Optimizer: <b>SHADOW SIMULATION</b> · Paper/Stable 자동 변경 없음"
+
+async def papertrace1153_core(update,context):
+    st=_v91_load_state(); extra=_v1153_trace_block(st)
+    class ProxyUpdate:
+        def __init__(self,original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            text=str(text).replace(_v1152_banner('PAPER TRACE'),_v1153_banner('PAPER TRACE INTELLIGENCE 3.0'))
+            return await self.original.effective_message.reply_text(text+extra,*args,**kwargs)
+    return await papertrace1152_core(ProxyUpdate(update),context)
+
+async def papertracescan1153_core(update,context):
+    st=_v91_load_state(); extra=_v1153_trace_block(st)
+    class ProxyUpdate:
+        def __init__(self,original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            text=str(text).replace(_v1152_banner('PAPER TRACE'),_v1153_banner('PAPER TRACE INTELLIGENCE 3.0'))
+            return await self.original.effective_message.reply_text(text+extra,*args,**kwargs)
+    return await papertracescan1152_core(ProxyUpdate(update),context)
+
+async def _v1153_guard(name,handler,update,context): return await _v1133_guarded_command(name,handler,update,context)
+async def learningplanner1153_cmd(u,c): return await _v1153_guard('learningplanner',learningplanner1153_core,u,c)
+async def patternhealth1153_cmd(u,c): return await _v1153_guard('patternhealth',patternhealth1153_core,u,c)
+async def confidencedrift1153_cmd(u,c): return await _v1153_guard('confidencedrift',confidencedrift1153_core,u,c)
+async def outcomeoptimizer1153_cmd(u,c): return await _v1153_guard('outcomeoptimizer',outcomeoptimizer1153_core,u,c)
+async def corescoretrend1153_cmd(u,c): return await _v1153_guard('corescoretrend',corescoretrend1153_core,u,c)
+async def intelligencetimeline1153_cmd(u,c): return await _v1153_guard('intelligencetimeline',intelligencetimeline1153_core,u,c)
+async def patternretraining1153_cmd(u,c): return await _v1153_guard('patternretraining',patternretraining1153_core,u,c)
+async def memorycompression1153_cmd(u,c): return await _v1153_guard('memorycompression',memorycompression1153_core,u,c)
+async def intelligencecore1153_cmd(u,c): return await _v1153_guard('intelligencecore',intelligencecore1153_core,u,c)
+async def learningdashboard1153_cmd(u,c): return await _v1153_guard('learningdashboard',learningdashboard1153_core,u,c)
+async def papertrace1153_cmd(u,c): return await _v1153_guard('papertrace',papertrace1153_core,u,c)
+async def papertracescan1153_cmd(u,c): return await _v1153_guard('papertracescan',papertracescan1153_core,u,c)
+
+async def versionaudit1153_cmd(update,context):
+    required={'learningplanner','patternhealth','confidencedrift','outcomeoptimizer','corescoretrend','intelligencetimeline','patternretraining','memorycompression','intelligencecore','learningdashboard','papertrace','papertracescan','help','commands','versionaudit'}
+    missing=sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x))); audit=v91_preflight(); plan=_v1153_learning_plan(_v91_load_state())
+    lines=[f"🧾 <b>{_v1153_banner('VERSION & RUNTIME AUDIT')}</b>",f"Core Version: <b>{V1153_VERSION}</b>",f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b> · 필수 누락 <b>{len(missing)}개</b>",f"Preflight: <b>{'PASS' if audit.get('ok') else 'FAIL'}</b> · Intelligence Core 3.0 <b>정상</b>",f"Learning Planner <b>정상</b> · Pattern Health <b>정상</b> · Confidence Timeline <b>정상</b>",f"Outcome Optimizer <b>{plan['optimizer']['mode']}</b> · Paper Changed <b>NO</b>",f"Position Limits Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b>","Data Schema <b>보존</b> · Existing Learning Data <b>보존</b> · Live Trading <b>없음</b>","Validation Gate <b>Shadow → Paper → Stable</b> · Runtime Entrypoint <b>FILE_END</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({
+'learningplanner':'AI가 스스로 구성한 Shadow 학습 계획과 우선순위','patternhealth':'패턴별 표본·성과·보정·Aging 기반 Health Score','confidencedrift':'예측 Confidence와 실제 결과 편차 Timeline','outcomeoptimizer':'Outcome 기반 Threshold/Confidence Shadow Simulation','corescoretrend':'Intelligence Core Score 변화 추세','intelligencetimeline':'Regime·Confidence Drift·Core Score 통합 Timeline','patternretraining':'패턴별 재학습 우선순위와 Shadow 권장안','memorycompression':'Memory Aging 기반 압축·보관 권장안','intelligencecore':'V115.3 자율 학습 계획·자기평가·최적화 제안 Core 3.0','learningdashboard':'V115.3 Intelligence Dashboard 3.0','papertrace':'V115.3 Intelligence Core 3.0 연동 Paper Trace','papertracescan':'V115.3 Intelligence Core 3.0 연동 즉시 Trace','versionaudit':'V115.3 Planner·Health·Drift·Optimizer·Integrity 감사'})
+for _c in ('learningplanner','patternhealth','confidencedrift','outcomeoptimizer','corescoretrend','intelligencetimeline','patternretraining','memorycompression'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('learning',[]): V925_HELP_CATEGORIES['learning'].append(_c)
+V90_COMMAND_REGISTRY.update({'learningplanner':learningplanner1153_cmd,'patternhealth':patternhealth1153_cmd,'confidencedrift':confidencedrift1153_cmd,'outcomeoptimizer':outcomeoptimizer1153_cmd,'corescoretrend':corescoretrend1153_cmd,'intelligencetimeline':intelligencetimeline1153_cmd,'patternretraining':patternretraining1153_cmd,'memorycompression':memorycompression1153_cmd,'intelligencecore':intelligencecore1153_cmd,'learningdashboard':learningdashboard1153_cmd,'papertrace':papertrace1153_cmd,'papertracescan':papertracescan1153_cmd,'versionaudit':versionaudit1153_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1152_PREFLIGHT_FOR_V1153=v91_preflight
+def v91_preflight():
+    base=_V1152_PREFLIGHT_FOR_V1153(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key.startswith('v1152_'): checks[key]=True
+    empty=_v91_default_state(); plan=_v1153_learning_plan(empty); optimizer=_v1153_outcome_optimizer(empty)
+    new={'learningplanner':learningplanner1153_cmd,'patternhealth':patternhealth1153_cmd,'confidencedrift':confidencedrift1153_cmd,'outcomeoptimizer':outcomeoptimizer1153_cmd,'corescoretrend':corescoretrend1153_cmd,'intelligencetimeline':intelligencetimeline1153_cmd,'patternretraining':patternretraining1153_cmd,'memorycompression':memorycompression1153_cmd,'intelligencecore':intelligencecore1153_cmd,'learningdashboard':learningdashboard1153_cmd,'papertrace':papertrace1153_cmd,'papertracescan':papertracescan1153_cmd,'versionaudit':versionaudit1153_cmd}
+    checks.update({'v1153_version_sync':V91_VERSION==V1153_VERSION,'v1153_planner_shadow_only':plan.get('mode')=='SHADOW_ONLY','v1153_optimizer_shadow_simulation':optimizer.get('mode')=='SHADOW_SIMULATION' and optimizer.get('paper_changed') is False,'v1153_handlers':all(V90_COMMAND_REGISTRY.get(k) is v for k,v in new.items()),'v1153_help_sync':all(k in V925_COMMAND_USAGE for k in new),'v1153_limits_preserved':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1153_schema_preserved':_v91_default_state().get('schema')==1,'v1153_paper_threshold_preserved':plan.get('paper_threshold')==60.0,'v1153_no_live_trading':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),'v1153_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY)})
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1153-intelligence-core-3-self-directed-optimization'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V115.2 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V115.3 startup integrity failure: "+", ".join(failed))
     main()

@@ -1,4 +1,4 @@
-# A100 V115.2 INTELLIGENCE CORE 2.0 & UNIFIED ANALYTICS DEVELOPMENT
+# A100 V115.3 AI INTELLIGENCE CORE 3.0 SELF-DIRECTED OPTIMIZATION DEVELOPMENT
 
 ## 배포 후 검증 순서
 `/versionaudit` → `/intelligencecore` → `/learningdashboard` → `/papertracescan` → `/papertrace` → `/outcomememory` → `/calibration2` → `/memoryaging` → `/regimetransition`

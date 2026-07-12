@@ -1,12 +1,32 @@
 {
-  "release": "A100 V115.2",
-  "title": "INTELLIGENCE CORE 2.0 & UNIFIED ANALYTICS DEVELOPMENT",
-  "file_count": 150,
+  "release": "A100 V115.3 AI INTELLIGENCE CORE 3.0 SELF-DIRECTED OPTIMIZATION DEVELOPMENT",
+  "baseline": "A100 V115.2 INTELLIGENCE CORE 2.0 & UNIFIED ANALYTICS DEVELOPMENT",
+  "generated_at_utc": "2026-07-12T23:30:07.487275+00:00",
+  "safety": {
+    "paper_positions": 20,
+    "shadow_positions": 60,
+    "paper_threshold": 60.0,
+    "live_trading": false,
+    "optimization_mode": "SHADOW_ONLY",
+    "data_schema_preserved": true
+  },
+  "tests": {
+    "python_compile": "PASS",
+    "targeted_regression": "12 PASS",
+    "runtime_preflight": "PASS",
+    "command_count": 281,
+    "historical_version_locked_tests": "Known baseline incompatibility; documented in TEST_REPORT_V115_3.md"
+  },
   "files": [
     {
       "path": ".gitignore",
       "size": 167,
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
+    },
+    {
+      "path": "FILE_LIST.txt",
+      "size": 4670,
+      "sha256": "da0dbc15171b741ce79b5198df1f0a20147bfafcc27a2df4a32e6ff79fb758d4"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -15,8 +35,8 @@
     },
     {
       "path": "README.md",
-      "size": 5469,
-      "sha256": "2216686b7b89c01848725c582baaa43bc84f8a2470a0349cc74bd7e31b9365f8"
+      "size": 5479,
+      "sha256": "eb405f1e67e63f034ace11a8b094d4fb2ecb7e09a27fa0d29511d4d63fb78f2b"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -119,6 +139,11 @@
       "sha256": "77d2c5bd13c8b8f8ff6b25023f4f84e3cf5c394b1b9dcb8ee0f9b86df0c3bf18"
     },
     {
+      "path": "docs/CHANGELOG_V115_3.md",
+      "size": 778,
+      "sha256": "289ae5fcbd9c5e0f0695d2f7abf441992b77d5881a83e32a02bfea1ada6d8570"
+    },
+    {
       "path": "docs/CHANGELOG_V94_0.md",
       "size": 301,
       "sha256": "932d82d1b7ef1d5f1885f6f7e35161ae75b2050898e07c05a57843210b49a8f1"
@@ -212,6 +237,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V115_2.md",
       "size": 259,
       "sha256": "7a78c25c6c1cc6e7696a80b52f905ee53c2097a7e93951880d13ae488e98adaa"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V115_3.md",
+      "size": 316,
+      "sha256": "7a18a6c7feee84032c43347896062188e9893b27cfcdc94b14edda29e74a3e11"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -364,6 +394,11 @@
       "sha256": "ed46039612becc9b20ed139cdd2956d8e8ba2fd2d81a6a46fc0621b665fcfb55"
     },
     {
+      "path": "docs/TEST_REPORT_V115_3.md",
+      "size": 759,
+      "sha256": "625de572b171380f20b435577f22a9c25fbade30db2b5ff1d995cae1add08f63"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -400,8 +435,8 @@
     },
     {
       "path": "main.py",
-      "size": 1566661,
-      "sha256": "788a8885b3ecbde182c6910774ba494365abdd1a99346353702305132b9d65bd"
+      "size": 1589748,
+      "sha256": "c5ddbdc9f7aeb069e7f4f09946bdb664879e5365adb2c48c33444bc443790a82"
     },
     {
       "path": "pytest.ini",
@@ -527,6 +562,11 @@
       "path": "tests/test_v1152_intelligence_core2.py",
       "size": 838,
       "sha256": "abcfb6faa701b08439c28da44131453db763dfe4d139228837208618fad167d9"
+    },
+    {
+      "path": "tests/test_v1153_intelligence_core3.py",
+      "size": 1417,
+      "sha256": "02186f11ccdefbc8a2cc8e6b4b5da58152fa130c7341e7563064946e2a16c014"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -753,12 +793,5 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ],
-  "safety": {
-    "paper_positions": 20,
-    "shadow_positions": 60,
-    "live_trading": false,
-    "threshold_mode": "SHADOW_ONLY",
-    "schema": 1
-  }
+  ]
 }
