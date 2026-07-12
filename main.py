@@ -25884,43 +25884,219 @@ def v91_preflight():
 
 
 # ================================================================
-# A100 V91.8 DEVELOPMENT BASELINE
-# - V91.7 state/data compatibility is intentionally preserved.
-# - State filename and schema remain unchanged to retain Paper,
-#   Shadow, learning, expectancy, lifecycle, and adaptive history.
-# - No live-trading order path is introduced.
+# A100 V91.8 SCENARIO DECISION ENGINE
+# Reuses V91.7 enriched candidates. No live-order path and no schema change.
 # ================================================================
 V918_BASE_VERSION = "A100 V91.7 META DECISION & PATTERN SIMILARITY ENGINE"
 V918_STATE_SCHEMA = 1
 V918_STATE_FILENAME = "a100_v91_paper_state.json"
-V91_VERSION = "A100 V91.8 DEVELOPMENT BASELINE"
+V918_SCENARIO_CACHE_TTL = _v91_int("PAPER_SCENARIO_CACHE_SECONDS", 120, 15, 3600)
+V918_SCENARIO_TOP = _v91_int("PAPER_SCENARIO_TOP", 7, 1, 20)
+V918_SCENARIO_CACHE = {}
+V91_VERSION = "A100 V91.8 SCENARIO DECISION ENGINE"
+
+
+def _v918_probability_normalize(values):
+    vals = [max(1.0, _v912_safe_float(x, 1.0)) for x in values]
+    total = sum(vals) or 1.0
+    rounded = [round(x / total * 100.0, 1) for x in vals]
+    rounded[-1] = round(rounded[-1] + (100.0 - sum(rounded)), 1)
+    return rounded
+
+
+def _v918_entry_state(row):
+    stage = str(row.get("stage", "IGNORE")).upper()
+    decision = str(row.get("meta_decision", "WAIT")).upper()
+    change = abs(_v912_safe_float(row.get("change_24h")))
+    risk = str((row.get("risk_state") or {}).get("mode", "NORMAL")).upper()
+    if risk == "HALT" or decision == "SKIP":
+        return "INVALID"
+    if change >= 15.0:
+        return "LATE"
+    if stage == "ENTRY" and decision == "TRADE":
+        return "TRIGGERED"
+    if stage in {"ENTRY", "READY"} or decision == "WAIT":
+        return "READY"
+    if stage == "WATCH":
+        return "WATCH"
+    return "INVALID"
+
+
+def _v918_scenario_from_row(row):
+    symbol = str(row.get("symbol", "")).upper()
+    side = str(row.get("side", "LONG")).upper()
+    price = max(_v912_safe_float(row.get("last_price")), 1e-12)
+    score = _v912_safe_float(row.get("final_score"), 50.0)
+    confidence = _v912_safe_float(row.get("confidence"), 50.0)
+    change = _v912_safe_float(row.get("change_24h"))
+    sim = row.get("similarity_stats") or {}
+    ev = _v912_safe_float(sim.get("expectancy_pct"))
+    sim_n = int(_v912_safe_float(sim.get("trades")))
+    sim_wr = _v912_safe_float(sim.get("win_rate"), 50.0)
+    risk = row.get("risk_state") or {}
+    risk_mode = str(risk.get("mode", "NORMAL"))
+    state = _v918_entry_state(row)
+
+    direction = 1.0 if side == "LONG" else -1.0
+    vol = max(1.2, min(8.0, abs(change) * 0.28 + 1.2))
+    pullback = max(0.8, min(4.5, vol * 0.55))
+    invalid = max(1.8, min(7.0, vol * 0.95))
+    target1 = max(2.0, min(12.0, vol * 1.35 + max(0.0, ev)))
+    target2 = max(target1 + 1.5, min(20.0, target1 * 1.75))
+
+    entry_a = price * (1.0 - direction * pullback / 100.0)
+    entry_b = price * (1.0 - direction * pullback * 0.35 / 100.0)
+    trigger = price * (1.0 + direction * max(0.6, vol * 0.35) / 100.0)
+    invalid_price = price * (1.0 - direction * invalid / 100.0)
+    tp1 = price * (1.0 + direction * target1 / 100.0)
+    tp2 = price * (1.0 + direction * target2 / 100.0)
+
+    trend_strength = (score - 50.0) * 0.75 + (confidence - 50.0) * 0.35 + (sim_wr - 50.0) * min(0.25, sim_n / 120.0)
+    risk_penalty = {"HALT": 28.0, "DEFENSIVE": 12.0, "NORMAL": 0.0, "AGGRESSIVE": -4.0}.get(risk_mode, 3.0)
+    late_penalty = max(0.0, abs(change) - 10.0) * 1.5
+    raw = [
+        31.0 + trend_strength * 0.30 - late_penalty * 0.45,  # pullback then continuation
+        23.0 + trend_strength * 0.32 - late_penalty * 0.25,  # immediate breakout
+        22.0 + max(0.0, 68.0-score) * 0.25,                 # accumulation/range
+        14.0 + late_penalty * 0.55 + risk_penalty * 0.30,   # fakeout
+        10.0 + risk_penalty * 0.70 - trend_strength * 0.15, # invalidation
+    ]
+    probs = _v918_probability_normalize(raw)
+    scenarios = [
+        {"code":"PULLBACK", "name":"눌림 후 추세 진행", "probability":probs[0], "entry_low":min(entry_a,entry_b), "entry_high":max(entry_a,entry_b), "target1":tp1, "target2":tp2, "invalidation":invalid_price, "eta":"6~24시간"},
+        {"code":"BREAKOUT", "name":"즉시 돌파 진행", "probability":probs[1], "trigger":trigger, "target1":tp1, "target2":tp2, "invalidation":price, "eta":"1~12시간"},
+        {"code":"RANGE", "name":"횡보·재매집 지속", "probability":probs[2], "entry_low":min(entry_a,price), "entry_high":max(entry_a,price), "target1":trigger, "target2":tp1, "invalidation":invalid_price, "eta":"12~48시간"},
+        {"code":"FAKEOUT", "name":"페이크 돌파 후 역행", "probability":probs[3], "trigger":trigger, "target1":invalid_price, "target2":invalid_price, "invalidation":tp1, "eta":"1~18시간"},
+        {"code":"INVALID", "name":"추세 완전 무효화", "probability":probs[4], "trigger":invalid_price, "target1":invalid_price, "target2":invalid_price, "invalidation":invalid_price, "eta":"즉시~24시간"},
+    ]
+    scenarios.sort(key=lambda x: x["probability"], reverse=True)
+
+    if state == "TRIGGERED": action = "조건 충족 — 추격 금지, 계획 가격과 무효화선 준수"
+    elif state == "READY": action = "즉시 추격보다 눌림 또는 돌파 확인 대기"
+    elif state == "WATCH": action = "관찰 유지 — 점수·거래대금·시장국면 개선 확인"
+    elif state == "LATE": action = "과열·지연 구간 — 신규 추격 진입 회피"
+    else: action = "시나리오 무효 또는 위험모드 — 진입 보류"
+
+    return {
+        "symbol": symbol, "side": side, "price": price, "entry_state": state,
+        "score": round(score, 2), "confidence": round(confidence, 1),
+        "grade": row.get("recommendation_grade", "N"), "meta_decision": row.get("meta_decision", "WAIT"),
+        "risk_mode": risk_mode, "similarity_trades": sim_n, "similarity_win_rate": round(sim_wr,1),
+        "similarity_ev_pct": round(ev,3), "action": action, "scenarios": scenarios,
+        "generated_at": time.time(),
+    }
+
+
+def _v918_scenarios(force=False):
+    key = "all"
+    cached = V918_SCENARIO_CACHE.get(key)
+    if not force and cached and time.time() - cached[0] <= V918_SCENARIO_CACHE_TTL:
+        return list(cached[1])
+    rows = _v913_enriched_candidates(force=force)
+    result = [_v918_scenario_from_row(row) for row in rows]
+    result.sort(key=lambda x: (x["entry_state"] == "TRIGGERED", x["score"], x["confidence"]), reverse=True)
+    V918_SCENARIO_CACHE[key] = (time.time(), result)
+    return list(result)
+
+
+def _v918_find_scenario(symbol, force=False):
+    pair = _v91_normalize_symbol(symbol)
+    for item in _v918_scenarios(force=force):
+        if item.get("symbol") == pair:
+            return item
+    # A symbol can be outside the ranked candidate limit. Return a clear error rather than inventing data.
+    raise RuntimeError(f"{pair}는 현재 V91 후보 목록에 없습니다. /scenario_top 으로 현재 후보를 확인하세요.")
+
+
+def _v918_fmt_price(value):
+    x = _v912_safe_float(value)
+    if x >= 1000: return f"{x:,.2f}"
+    if x >= 1: return f"{x:.4f}"
+    if x >= 0.01: return f"{x:.6f}"
+    return f"{x:.8f}"
+
+
+async def scenario918_cmd(update, context):
+    if not getattr(context, "args", None):
+        return await v90_1_safe_reply(update, "사용법: /scenario BTC")
+    try:
+        item = _v918_find_scenario(context.args[0], force=False)
+        lines = [f"🧠 <b>V91.8 Scenario Decision</b>",
+                 f"종목: <b>{_v54_escape(item['symbol'])}</b> · {item['side']}",
+                 f"상태: <b>{item['entry_state']}</b> · 등급 {item['grade']} · AI Confidence {item['confidence']:.1f}%",
+                 f"점수 {item['score']:.1f} · Meta {item['meta_decision']} · 위험 {item['risk_mode']}",
+                 f"유사표본 {item['similarity_trades']}건 · 승률 {item['similarity_win_rate']:.1f}% · EV {item['similarity_ev_pct']:+.2f}%", ""]
+        for i,s in enumerate(item["scenarios"][:3],1):
+            lines.append(f"<b>{i}. {s['name']}</b> · {s['probability']:.1f}%")
+            if "entry_low" in s:
+                lines.append(f"진입 {_v918_fmt_price(s['entry_low'])} ~ {_v918_fmt_price(s['entry_high'])}")
+            else:
+                lines.append(f"확인 가격 {_v918_fmt_price(s['trigger'])}")
+            lines.append(f"목표 {_v918_fmt_price(s['target1'])} / {_v918_fmt_price(s['target2'])} · 무효화 {_v918_fmt_price(s['invalidation'])} · {s['eta']}")
+        lines += ["", f"<b>최종 판단</b>: {_v54_escape(item['action'])}", "<i>Paper 분석이며 실주문을 실행하지 않습니다.</i>"]
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Scenario 분석 실패: {_v54_escape(str(exc))}", parse_mode="HTML")
+
+
+async def scenario_top918_cmd(update, context):
+    try:
+        rows = _v918_scenarios(force=True)[:V918_SCENARIO_TOP]
+        lines = ["🏆 <b>V91.8 Scenario Top</b>"]
+        for i,item in enumerate(rows,1):
+            best = item["scenarios"][0]
+            lines.append(f"{i}. <b>{_v54_escape(item['symbol'])}</b> {item['side']} · {item['entry_state']} · {item['grade']}\n점수 {item['score']:.1f} · {best['name']} {best['probability']:.1f}% · 위험 {item['risk_mode']}")
+        lines += ["", "상세: /scenario 종목"]
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Scenario Top 실패: {_v54_escape(str(exc))}", parse_mode="HTML")
+
+
+# Register commands and synchronize /help and /commands V91.
+V918_COMMAND_USAGE = dict(V917_COMMAND_USAGE)
+V918_COMMAND_USAGE.update({"scenario":"종목별 다중 시나리오 판단", "scenario_top":"시나리오 우선순위 TOP"})
+
+async def help918_cmd(update, context):
+    lines=["🤖 <b>A100 V91.8 HELP</b>","","핵심: /v90 BTC /decision BTC /setup BTC /scenario BTC","","<b>V91 Paper·학습·시나리오 명령</b>"]
+    for cmd,desc in V918_COMMAND_USAGE.items(): lines.append(f"/{cmd} — {desc}")
+    lines += ["","/commands — 전체 명령", "/commands V91 — V91 명령만"]
+    text="\n".join(lines)
+    for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+
+async def commands918_cmd(update, context):
+    requested=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if requested in {"v91","paper","학습","scenario","시나리오"}:
+        lines=[f"📚 <b>A100 V91 명령 {len(V918_COMMAND_USAGE)}개</b>","", " ".join('/'+x for x in V918_COMMAND_USAGE)]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    return await commands90_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"scenario":scenario918_cmd,"scenario_top":scenario_top918_cmd,"help":help918_cmd,"commands":commands918_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def _v918_help_audit():
+    registered={x for x in V90_COMMAND_REGISTRY if x.startswith('paper') or x in {'watchdog','scenario','scenario_top'}}
+    usage=set(V918_COMMAND_USAGE)
+    return {"usage_missing":sorted(registered-usage),"stale_usage":sorted(usage-registered),"v91_registered":len(registered),"v91_usage":len(usage)}
 
 _V917_PREFLIGHT_FOR_V918 = v91_preflight
 def v91_preflight():
     base = _V917_PREFLIGHT_FOR_V918()
     checks = dict(base.get("checks", {}))
+    audit = _v918_help_audit()
     checks.update({
         "v918_base_preflight": bool(base.get("ok")),
         "v918_state_schema_compatible": _v91_default_state().get("schema") == V918_STATE_SCHEMA,
         "v918_state_filename_preserved": os.path.basename(V91_STATE_FILE) == V918_STATE_FILENAME,
-        "v918_command_count_preserved": len(V90_COMMAND_REGISTRY) == 133,
-        "v918_help_sync_preserved": bool(base.get("checks", {}).get("help_sync")),
-        "v918_live_trading_disabled": not any(
-            token in globals() for token in ("place_live_order", "submit_live_order", "execute_live_trade")
-        ),
+        "v918_command_count": len(V90_COMMAND_REGISTRY) == 135,
+        "v918_callbacks": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"scenario","scenario_top"}),
+        "v918_scenario_callable": all(callable(globals().get(x)) for x in {"_v918_scenario_from_row","_v918_scenarios","_v918_find_scenario"}),
+        "v918_help_sync": not audit["usage_missing"] and not audit["stale_usage"],
+        "v918_live_trading_disabled": not any(token in globals() for token in ("place_live_order", "submit_live_order", "execute_live_trade")),
     })
-    return {
-        "ok": all(checks.values()),
-        "checks": checks,
-        "command_count": len(V90_COMMAND_REGISTRY),
-        "base": base,
-        "development_version": V91_VERSION,
-        "data_compatibility": {
-            "state_file": V91_STATE_FILE,
-            "schema": V918_STATE_SCHEMA,
-            "preserved": True,
-        },
-    }
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base,
+            "help_audit": audit, "development_version": V91_VERSION,
+            "data_compatibility": {"state_file": V91_STATE_FILE, "schema": V918_STATE_SCHEMA, "preserved": True}}
 
 if __name__ == "__main__":
     main()

@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix="a100_v916_") as tmp:
 
     preflight = module.v91_preflight()
     assert preflight["ok"], preflight
-    assert len(module.V90_COMMAND_REGISTRY) == 133
+    assert len(module.V90_COMMAND_REGISTRY) == 135
     for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals", "papershadow", "papershadowpositions", "papershadowperformance", "paperexpectancy", "paperpatterns", "paperlifecycle", "paperadaptive", "paperstrategies", "paperquarantine"):
         assert callable(module.V90_COMMAND_REGISTRY.get(command))
 

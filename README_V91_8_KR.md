@@ -1,52 +1,32 @@
-# A100 V91.8 DEVELOPMENT BASELINE
+# A100 V91.8 Scenario Decision Engine
 
-기준 원본: 정상 작동 확인된 **V91.7 META DECISION & PATTERN SIMILARITY ENGINE**
+V91.7의 Meta Decision과 Pattern Similarity 결과를 실제 행동 판단용 다중 시나리오로 변환하는 Paper 분석 버전입니다.
 
-## 개발 시작 상태
-- V91.7 전체 기능과 133개 Telegram 명령 유지
-- `/help`, `/commands V91` 동기화 상태 유지
-- Paper / Shadow / 학습 / 기대값 / 생애주기 / 적응형 전략 / Meta / 유사패턴 데이터 유지
-- 실계좌 주문 기능 없음
-- V91.8 신규 기능은 아직 추가하지 않은 안전한 개발 기준본
+## 신규 명령어
 
-## 기존 데이터 유지 조건
-다음 항목을 변경하지 않았습니다.
+- `/scenario BTC` : 현재 후보에 포함된 종목의 시나리오, 확률, 진입 구간, 목표가, 무효화 가격을 출력합니다.
+- `/scenario_top` : 현재 시나리오 우선순위 상위 종목을 출력합니다.
 
-```text
-상태 파일명: a100_v91_paper_state.json
-상태 스키마: 1
-저장 경로 우선순위:
-1. RAILWAY_VOLUME_MOUNT_PATH
-2. V91_DATA_DIR
-3. 기존 V75_DATA_DIR
-4. A100_DATA_DIR
-5. /data 또는 현재 작업 디렉터리
-```
+기존 `/decision BTC` 명령은 변경하지 않았습니다.
 
-Railway에서 기존 Volume을 동일 경로로 마운트하면 V91.7의 누적 상태를 V91.8이 그대로 읽습니다.
+## 진입 상태
 
-## 배포 전 필수 환경변수 확인
-```text
-RAILWAY_VOLUME_MOUNT_PATH=/data
-PAPER_TRADING_ENABLED=기존값 유지
-TELEGRAM_BOT_TOKEN=기존값 유지
-TELEGRAM_CHAT_ID=기존값 유지
-COINGLASS_API_KEY=기존값 유지
-```
+- `WATCH`: 관찰 단계
+- `READY`: 눌림 또는 돌파 확인 대기
+- `TRIGGERED`: 조건 충족
+- `LATE`: 과열 또는 추격 위험
+- `INVALID`: 위험모드 또는 시나리오 무효
 
-## 배포 후 확인 명령
-```text
-/selfcheck
-/legacycheck
-/help
-/commands V91
-/watchdog
-/paperstatus
-/paperhistory
-/papershadowperformance
-/paperlearning
-/papermeta
-/papersimilarity
-/papercontext
-/paperrisk
-```
+## 성능 보호
+
+시나리오 엔진은 별도 대규모 시장 API 호출을 추가하지 않고 기존 V91.7 enriched candidate 결과를 재사용합니다. 기본 캐시 시간은 120초이며 환경변수 `PAPER_SCENARIO_CACHE_SECONDS`로 조절할 수 있습니다.
+
+## 데이터 호환성
+
+- 파일명: `a100_v91_paper_state.json`
+- schema: `1`
+- 기존 Railway Volume과 상태 파일을 그대로 사용합니다.
+
+## 안전성
+
+본 버전은 Paper 분석 전용입니다. 실계좌 주문 함수 및 주문 실행 경로를 추가하지 않았습니다.

@@ -1,16 +1,21 @@
-# CHANGELOG V91.8 DEVELOPMENT BASELINE
+# A100 V91.8 Scenario Decision Engine
 
-## Base
-- V91.7 verified ZIP을 원본으로 사용
+## Added
+- Five-way scenario generation: pullback continuation, immediate breakout, range/accumulation, fakeout, invalidation.
+- Scenario probability normalization to 100%.
+- Entry-state classification: WATCH, READY, TRIGGERED, LATE, INVALID.
+- Price plan: entry range, breakout trigger, target 1/2, invalidation, estimated time window.
+- `/scenario <symbol>` and `/scenario_top` Telegram commands.
+- Scenario cache (`PAPER_SCENARIO_CACHE_SECONDS`, default 120 seconds) to avoid repeated heavy scans.
 
-## Compatibility
-- `a100_v91_paper_state.json` 파일명 유지
-- State schema 1 유지
-- Railway Volume 및 기존 데이터 경로 우선순위 유지
-- 기존 133개 명령 및 콜백 유지
-- `/help`, `/commands V91` 동기화 유지
+## Preserved
+- State file: `a100_v91_paper_state.json`
+- State schema: `1`
+- Existing Paper, Shadow, learning, expectancy, lifecycle, adaptive strategy, Meta, and pattern-similarity history.
+- Existing `/decision` command behavior.
+- Paper-only safety; no live-order execution path.
 
-## Safety
-- V91.8 호환성 Preflight 추가
-- 실계좌 주문 경로 추가 없음
-- 신규 전략/명령/데이터 마이그레이션은 아직 적용하지 않음
+## Command registry
+- V91.7 baseline: 133 commands
+- V91.8: 135 commands
+- `/help` and `/commands V91` synchronized.
