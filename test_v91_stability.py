@@ -1,4 +1,4 @@
-"""A100 V91.4 offline regression smoke test.
+"""A100 V91.5 offline regression smoke test.
 No live orders, Telegram polling, Binance network, or real account calls are made.
 """
 from __future__ import annotations
@@ -19,17 +19,17 @@ os.environ["PAPER_MAX_SHORT_POSITIONS"] = "6"
 os.environ["PAPER_MAX_TOTAL_NOTIONAL"] = "1000"
 os.environ["PAPER_SYMBOL_COOLDOWN_MINUTES"] = "60"
 
-with tempfile.TemporaryDirectory(prefix="a100_v914_") as tmp:
+with tempfile.TemporaryDirectory(prefix="a100_v915_") as tmp:
     os.environ["A100_DATA_DIR"] = tmp
-    spec = importlib.util.spec_from_file_location("a100_v914", ROOT / "main.py")
+    spec = importlib.util.spec_from_file_location("a100_v915", ROOT / "main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
     preflight = module.v91_preflight()
     assert preflight["ok"], preflight
-    assert len(module.V90_COMMAND_REGISTRY) == 123
-    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals", "papershadow", "papershadowpositions", "papershadowperformance"):
+    assert len(module.V90_COMMAND_REGISTRY) == 126
+    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals", "papershadow", "papershadowpositions", "papershadowperformance", "paperexpectancy", "paperpatterns", "paperlifecycle"):
         assert callable(module.V90_COMMAND_REGISTRY.get(command))
 
     module.V78_VALID_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
@@ -97,6 +97,8 @@ with tempfile.TemporaryDirectory(prefix="a100_v914_") as tmp:
     prices["SOLUSDT"] = 52.5
     shadow_closed = module._v914_shadow_monitor_once()
     assert shadow_closed and shadow_closed[0]["close_reason"] == "TAKE_PROFIT"
+    assert shadow_closed[0].get("lifecycle",{}).get("partial") is True
+    assert shadow_closed[0].get("lifecycle",{}).get("trailing") is True
     shadow_state = module._v91_load_state()
     assert len(shadow_state["shadow_closed"]) == 1
     assert shadow_state["shadow_performance"]
@@ -116,5 +118,9 @@ with tempfile.TemporaryDirectory(prefix="a100_v914_") as tmp:
     assert abs(explained["learning_adjust"]) <= module.V913_MAX_ADJUST
     assert explained["stage"] in {"WATCH","READY","ENTRY"}
     assert explained["reasons"]
+    assert explained["recommendation_grade"] in {"N","A+","A","B+","B","C","D"}
+    assert "pattern_stats" in explained
+    assert explained["pattern_stats"]["smoothed_win_rate"] >= 0
+    assert callable(module.V90_COMMAND_REGISTRY.get("paperexpectancy"))
 
-print("A100 V91.4 fast-learning shadow trading smoke test: PASS")
+print("A100 V91.5 expectancy pattern lifecycle learning smoke test: PASS")

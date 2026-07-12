@@ -24041,7 +24041,7 @@ def main():
 # A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
 # 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
 # ============================================================================
-V91_VERSION = "A100 V91.4 FAST LEARNING SHADOW TRADING ENGINE"
+V91_VERSION = "A100 V91.5 EXPECTANCY PATTERN LIFECYCLE LEARNING ENGINE"
 V91_STARTED_AT = time.time()
 V91_LOCK = threading.RLock()
 V91_STOP = threading.Event()
@@ -25266,6 +25266,182 @@ async def papershadowperformance914_cmd(update, context):
     await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
 
 
+
+# ================================================================
+# A100 V91.5 EXPECTANCY + PATTERN MEMORY + LIFECYCLE LEARNING
+# Learning-only analytics. No live-order path is added.
+# ================================================================
+V915_PATTERN_MIN_SAMPLES = _v91_int("PAPER_PATTERN_MIN_SAMPLES", 8, 3, 1000)
+V915_PATTERN_WINDOW = _v91_int("PAPER_PATTERN_WINDOW", 1000, 50, 50000)
+V915_PRIOR_TRADES = _v91_float("PAPER_PATTERN_PRIOR_TRADES", 10.0, 0.0, 1000.0)
+V915_PRIOR_WIN_RATE = _v91_float("PAPER_PATTERN_PRIOR_WIN_RATE", 50.0, 1.0, 99.0)
+V915_PARTIAL_TRIGGER_R = _v91_float("PAPER_LIFECYCLE_PARTIAL_R", 0.50, 0.10, 2.0)
+V915_BREAKEVEN_TRIGGER_R = _v91_float("PAPER_LIFECYCLE_BREAKEVEN_R", 0.65, 0.10, 3.0)
+V915_TRAILING_TRIGGER_R = _v91_float("PAPER_LIFECYCLE_TRAILING_R", 0.80, 0.10, 5.0)
+
+
+def _v915_learning_rows(state=None):
+    state = state or _v91_load_state()
+    real = [dict(r, sample_type="PAPER") for r in state.get("closed", []) if isinstance(r, dict)]
+    shadow = [dict(r, sample_type="SHADOW") for r in state.get("shadow_closed", []) if isinstance(r, dict)]
+    rows = real + shadow
+    rows.sort(key=lambda r: _v912_safe_float(r.get("closed_at")))
+    return rows[-V915_PATTERN_WINDOW:]
+
+
+def _v915_row_return_pct(row):
+    if row.get("sample_type") == "SHADOW" or "realized_pct" in row:
+        return _v912_safe_float(row.get("realized_pct"))
+    notional = abs(_v912_safe_float(row.get("notional")))
+    pnl = _v912_safe_float(row.get("realized_pnl"))
+    return (pnl / notional * 100.0) if notional > 0 else pnl
+
+
+def _v915_pattern_stats(symbol, side, stage, strategy, regime, state=None):
+    rows = _v915_learning_rows(state)
+    symbol, side, stage = str(symbol).upper(), str(side).upper(), str(stage).upper()
+    strategy, regime = str(strategy), str(regime)
+    buckets = {"exact": [], "symbol_side": [], "regime_side_stage": [], "regime_side": [], "side": []}
+    for r in rows:
+        rsym, rside = str(r.get("symbol","")).upper(), str(r.get("side","")).upper()
+        if rside != side: continue
+        rstage = str(r.get("stage", "ENTRY" if r.get("sample_type") == "PAPER" else "UNKNOWN")).upper()
+        rstrategy = str(r.get("strategy","UNKNOWN"))
+        rregime = str((r.get("regime_at_entry") or {}).get("regime","UNKNOWN"))
+        buckets["side"].append(r)
+        if rsym == symbol: buckets["symbol_side"].append(r)
+        if rregime == regime: buckets["regime_side"].append(r)
+        if rregime == regime and rstage == stage: buckets["regime_side_stage"].append(r)
+        if rsym == symbol and rside == side and rstage == stage and rstrategy == strategy and rregime == regime:
+            buckets["exact"].append(r)
+    selected_name, selected = "side", buckets["side"]
+    for name in ("exact","symbol_side","regime_side_stage","regime_side","side"):
+        if len(buckets[name]) >= V915_PATTERN_MIN_SAMPLES:
+            selected_name, selected = name, buckets[name]
+            break
+    returns=[_v915_row_return_pct(r) for r in selected]
+    wins=[x for x in returns if x>0]; losses=[x for x in returns if x<=0]
+    n=len(returns); raw_wr=(len(wins)/n*100.0) if n else 0.0
+    prior_w=V915_PRIOR_TRADES*(V915_PRIOR_WIN_RATE/100.0)
+    smoothed_wr=((len(wins)+prior_w)/(n+V915_PRIOR_TRADES)*100.0) if (n+V915_PRIOR_TRADES)>0 else 50.0
+    avg_win=sum(wins)/len(wins) if wins else 0.0
+    avg_loss=abs(sum(losses)/len(losses)) if losses else 0.0
+    ev=(smoothed_wr/100.0)*avg_win-(1.0-smoothed_wr/100.0)*avg_loss
+    payoff=(avg_win/avg_loss) if avg_loss>0 else (99.0 if avg_win>0 else 0.0)
+    holds=[_v912_safe_float(r.get("holding_seconds")) for r in selected if _v912_safe_float(r.get("holding_seconds"))>0]
+    avg_hold=sum(holds)/len(holds) if holds else 0.0
+    mfe=[_v912_safe_float(r.get("mfe_pct", r.get("mfe_pnl"))) for r in selected]
+    mae=[_v912_safe_float(r.get("mae_pct", r.get("mae_pnl"))) for r in selected]
+    quality=min(1.0,n/max(V915_PATTERN_MIN_SAMPLES*5,1))
+    return {"bucket":selected_name,"trades":n,"wins":len(wins),"losses":len(losses),
+            "raw_win_rate":raw_wr,"smoothed_win_rate":smoothed_wr,"avg_win_pct":avg_win,
+            "avg_loss_pct":avg_loss,"expectancy_pct":ev,"payoff_ratio":payoff,
+            "avg_hold_seconds":avg_hold,"avg_mfe":sum(mfe)/len(mfe) if mfe else 0.0,
+            "avg_mae":sum(mae)/len(mae) if mae else 0.0,"sample_quality":quality}
+
+
+def _v915_grade(stats, final_score, confidence):
+    n=stats.get("trades",0); ev=stats.get("expectancy_pct",0.0); wr=stats.get("smoothed_win_rate",50.0)
+    if n < V915_PATTERN_MIN_SAMPLES: return "N"  # not enough data
+    composite = ev*12.0 + (wr-50.0)*0.35 + (final_score-50.0)*0.12 + (confidence-50.0)*0.08
+    if composite >= 18: return "A+"
+    if composite >= 12: return "A"
+    if composite >= 7: return "B+"
+    if composite >= 3: return "B"
+    if composite >= 0: return "C"
+    return "D"
+
+
+_V913_EXPLAIN_BASE = _v913_explain_candidate
+def _v915_explain_candidate(row, state=None):
+    out = _V913_EXPLAIN_BASE(row, state)
+    stats = _v915_pattern_stats(out.get("symbol"),out.get("side"),out.get("stage"),out.get("strategy"),out.get("regime"),state)
+    grade = _v915_grade(stats,_v912_safe_float(out.get("final_score")),_v912_safe_float(out.get("confidence")))
+    out["pattern_stats"] = stats; out["recommendation_grade"] = grade
+    if stats["trades"] >= V915_PATTERN_MIN_SAMPLES:
+        ev_adj=max(-5.0,min(5.0,stats["expectancy_pct"]*1.5))
+        out["final_score"] = round(max(0.0,min(100.0,_v912_safe_float(out.get("final_score"))+ev_adj)),2)
+        out["confidence"] = round(max(10.0,min(99.0,_v912_safe_float(out.get("confidence"))+stats["sample_quality"]*5.0)),1)
+        out["expectancy_adjust"] = round(ev_adj,2)
+        if stats["expectancy_pct"] > 0: out.setdefault("reasons",[]).append(f"기대값 {stats['expectancy_pct']:+.2f}%")
+        elif stats["expectancy_pct"] < 0: out.setdefault("penalties",[]).append(f"기대값 {stats['expectancy_pct']:+.2f}%")
+    else:
+        out["expectancy_adjust"] = 0.0
+    return out
+_v913_explain_candidate = _v915_explain_candidate
+
+
+def _v915_update_lifecycle(key, price):
+    state=_v91_load_state(); pos=state.setdefault("shadow_positions",{}).get(key)
+    if not pos: return False
+    entry=_v912_safe_float(pos.get("entry_price")); tp=abs(_v912_safe_float(pos.get("tp_pct"),V914_SHADOW_TP_PCT))
+    if entry<=0 or tp<=0: return False
+    move=((price/entry)-1.0)*100.0
+    if str(pos.get("side")).upper()=="SHORT": move*=-1.0
+    r_progress=move/tp
+    life=pos.setdefault("lifecycle",{"add":False,"partial":False,"breakeven":False,"trailing":False,"events":[]})
+    now=time.time(); changed=False
+    tests=(("add",0.25,"ADD_READY"),("partial",V915_PARTIAL_TRIGGER_R,"PARTIAL_TP_READY"),
+           ("breakeven",V915_BREAKEVEN_TRIGGER_R,"BREAKEVEN_READY"),("trailing",V915_TRAILING_TRIGGER_R,"TRAILING_READY"))
+    for field,threshold,event in tests:
+        if not life.get(field) and r_progress>=threshold:
+            life[field]=True; life["events"].append({"event":event,"at":now,"price":price,"move_pct":move}); changed=True
+    if changed: _v91_save_state(state)
+    return changed
+
+
+_V914_MONITOR_RAW = _v914_shadow_monitor_once
+def _v915_shadow_monitor_once():
+    state=_v91_load_state()
+    for key,pos in list(state.get("shadow_positions",{}).items()):
+        try: _v915_update_lifecycle(key,_v91_price(pos.get("symbol")))
+        except Exception as exc: v88_record_error(f"v915-lifecycle:{key}",exc)
+    return _V914_MONITOR_RAW()
+_v914_shadow_monitor_once = _v915_shadow_monitor_once
+
+
+async def paperexpectancy915_cmd(update, context):
+    rows=_v913_enriched_candidates(force=True)[:15]
+    lines=["📐 <b>V91.5 Expected Value Ranking</b>"]
+    for i,r in enumerate(rows,1):
+        x=r.get("pattern_stats",{}); hold=x.get("avg_hold_seconds",0)/3600.0
+        lines.append(f"{i}. <b>{r.get('symbol')}</b> {r.get('side')} {r.get('stage')} | 등급 {r.get('recommendation_grade','N')}\n"
+                     f"점수 {r.get('final_score',0):.1f} · 표본 {x.get('trades',0)} · 보정승률 {x.get('smoothed_win_rate',50):.1f}% · EV {x.get('expectancy_pct',0):+.2f}% · 예상보유 {hold:.1f}h")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def paperpatterns915_cmd(update, context):
+    rows=_v915_learning_rows(); groups={}
+    for r in rows:
+        key=f"{(r.get('regime_at_entry') or {}).get('regime','UNKNOWN')}|{r.get('side','?')}|{r.get('stage','ENTRY')}|{r.get('strategy','UNKNOWN')}"
+        groups.setdefault(key,[]).append(r)
+    ranked=[]
+    for key,items in groups.items():
+        returns=[_v915_row_return_pct(x) for x in items]; n=len(returns); wins=sum(1 for x in returns if x>0)
+        ev=sum(returns)/n if n else 0.0; ranked.append((n,ev,wins,key))
+    ranked.sort(key=lambda x:(x[0]>=V915_PATTERN_MIN_SAMPLES,x[1],x[0]),reverse=True)
+    lines=["🧬 <b>V91.5 Pattern Memory</b>",f"통합 표본 {len(rows)} · 최소 유효표본 {V915_PATTERN_MIN_SAMPLES}"]
+    for n,ev,wins,key in ranked[:20]: lines.append(f"{key}\n표본 {n} · 승률 {(wins/n*100 if n else 0):.1f}% · 평균 {ev:+.2f}%")
+    if not ranked: lines.append("아직 청산된 Paper/Shadow 표본이 없습니다.")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def paperlifecycle915_cmd(update, context):
+    rows=list(_v91_load_state().get("shadow_positions",{}).values())
+    lines=["🔄 <b>V91.5 Trade Lifecycle Learning</b>"]
+    counts={"add":0,"partial":0,"breakeven":0,"trailing":0}
+    for p in rows:
+        life=p.get("lifecycle") or {}
+        for k in counts: counts[k]+=1 if life.get(k) else 0
+    lines += [f"열린 Shadow {len(rows)}건",f"ADD 도달 {counts['add']} · 부분익절 후보 {counts['partial']}",
+              f"본전이동 후보 {counts['breakeven']} · 트레일링 후보 {counts['trailing']}",
+              f"기준: Partial {V915_PARTIAL_TRIGGER_R:.2f}R / BE {V915_BREAKEVEN_TRIGGER_R:.2f}R / Trail {V915_TRAILING_TRIGGER_R:.2f}R"]
+    for p in rows[:15]:
+        life=p.get("lifecycle") or {}; flags="/".join(k.upper() for k in ("add","partial","breakeven","trailing") if life.get(k)) or "진입"
+        lines.append(f"{p.get('symbol')} {p.get('side')} {p.get('stage')} · {flags} · MFE {p.get('mfe_pct',0):+.2f}%")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
 # 기존 104개 명령은 그대로 보존하고 Paper/Watchdog 명령만 추가한다.
 V90_COMMAND_REGISTRY.update({
     "paperstatus": paperstatus91_cmd,
@@ -25287,6 +25463,9 @@ V90_COMMAND_REGISTRY.update({
     "papershadow": papershadow914_cmd,
     "papershadowpositions": papershadowpositions914_cmd,
     "papershadowperformance": papershadowperformance914_cmd,
+    "paperexpectancy": paperexpectancy915_cmd,
+    "paperpatterns": paperpatterns915_cmd,
+    "paperlifecycle": paperlifecycle915_cmd,
 })
 V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 
@@ -25294,7 +25473,7 @@ V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 def v91_preflight():
     base = v90_4_preflight()
     state = _v91_load_state()
-    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals","papershadow","papershadowpositions","papershadowperformance"}
+    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals","papershadow","papershadowpositions","papershadowperformance","paperexpectancy","paperpatterns","paperlifecycle"}
     checks = {
         "base_v90_4": bool(base.get("ok")),
         "v91_callbacks": all(callable(V90_COMMAND_REGISTRY.get(name)) for name in v91_commands),
@@ -25305,6 +25484,7 @@ def v91_preflight():
         "utc_date_key": bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", _v91_today())),
         "paper_core_callable": all(callable(globals().get(name)) for name in {"_v91_open", "_v91_close", "_v91_load_state", "_v91_save_state", "_v91_monitor_once"}),
         "shadow_core_callable": all(callable(globals().get(name)) for name in {"_v914_shadow_open", "_v914_shadow_close", "_v914_shadow_monitor_once", "_v914_shadow_capture"}),
+        "v915_learning_callable": all(callable(globals().get(name)) for name in {"_v915_pattern_stats", "_v915_grade", "_v915_update_lifecycle"}),
     }
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base}
 
