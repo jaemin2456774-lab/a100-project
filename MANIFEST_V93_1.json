@@ -1,0 +1,24 @@
+{
+  "version": "A100 V93.1 SELF-LEARNING AI",
+  "schema": 1,
+  "state_file": "a100_v91_paper_state.json",
+  "baseline": "V93.0",
+  "files": {
+    "main.py": {
+      "sha256": "8b5cec089c5f08740df60d962a77e290240a1256c1bdd2b02c46022e0ce9efdb",
+      "bytes": 1192093
+    },
+    "v930_ai_intelligence_core.py": {
+      "sha256": "900a2d4c40848e288e5efecf0cf9f1e53445ccf050c6134828543fdeff67ed6d",
+      "bytes": 4748
+    },
+    "v931_self_learning_ai.py": {
+      "sha256": "f8a66cccaca96cf38a16b0c6568d2e2c071e61653957f1e6d4c165bc99f133dd",
+      "bytes": 5159
+    },
+    "test_v93_1_self_learning.py": {
+      "sha256": "62f5aad9f6042b660a9081e648b20e711612120be8b4d638dc0ec8a5d348602d",
+      "bytes": 1120
+    }
+  }
+}
