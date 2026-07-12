@@ -28647,6 +28647,113 @@ def v91_preflight():
     checks['v961_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v961-ai-intelligence2-1'}
 
+# ============================================================================
+# A100 V96.2 AI INTELLIGENCE 3 — calibration, memory bank, ranking, shadow replay
+# ============================================================================
+V962_VERSION = "A100 V96.2 AI INTELLIGENCE 3"
+try:
+    from v962_ai_intelligence3 import (calibration_report as _v962_calibration,
+        memory_windows as _v962_memory_windows, rank_candidate as _v962_rank_candidate,
+        shadow_replay as _v962_shadow_replay, health_report as _v962_health_report)
+except Exception:
+    _v962_calibration=_v962_memory_windows=_v962_rank_candidate=_v962_shadow_replay=_v962_health_report=None
+
+def _v962_data(symbol=None):
+    rows=_v930_history_rows(); item=_v920_find_score(symbol) if symbol else None
+    quality={"overall":0.0}
+    sim={"n":0,"win_rate":0.0,"avg_similarity":0.0,"weighted_return":0.0}
+    if item:
+        sim=_v961_find_similar(item,rows); quality,_,_,_=_v960_quality_data(rows,item)
+    cal=_v962_calibration(rows)
+    return rows,item,sim,quality,cal
+
+async def aicalibration962_cmd(update, context):
+    rows,item,sim,quality,cal=_v962_data(None)
+    lines=["🎯 <b>A100 V96.2 CONFIDENCE CALIBRATION 2.0</b>","",
+      _v950_line('Predicted',cal['predicted'],count=cal['n']),_v950_line('Actual',cal['actual'],count=cal['n']),
+      f"Calibration Error <b>{cal['error']:+.1f}%p</b> · MAE <b>{cal['mae']:.1f}</b>",
+      f"판정 <b>{_v54_escape(cal['status'])}</b> · 안전 보정 제안 <b>{cal['adjustment']:+.1f}%p</b>"]
+    if cal['bins']:
+        lines += ["","<b>Confidence Buckets</b>"]+[f"• {x['range']} · {x['n']}건 · 예측 {x['predicted']:.1f}% / 실제 {x['actual']:.1f}%" for x in cal['bins']]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aimemorybank962_cmd(update, context):
+    rows,item,sim,quality,cal=_v962_data(None); mem=_v962_memory_windows(rows)
+    lines=["🧠 <b>A100 V96.2 PATTERN MEMORY BANK</b>","기간별 기억을 분리하여 시장 변화와 장기 성능을 함께 확인합니다.",""]
+    for name in ('1D','7D','30D','ALL'):
+        x=mem[name]; lines.append(f"<b>{name}</b> · {x['n']}건 · 승률 {x['win_rate']:.1f}% · 평균 {x['avg']:+.2f}%")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def airank962_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /airank BTC ETH SOL')
+    rows=_v930_history_rows(); cal=_v962_calibration(rows); ranked=[]
+    for sym in context.args[:10]:
+        try:
+            item=_v920_find_score(sym); sim=_v961_find_similar(item,rows); quality,_,_,_=_v960_quality_data(rows,item)
+            ranked.append(_v962_rank_candidate(item,sim,quality.get('overall',0),cal))
+        except Exception: continue
+    ranked.sort(key=lambda x:x['score'],reverse=True)
+    lines=["🏆 <b>A100 V96.2 CANDIDATE RANKING</b>",""]
+    lines += [f"{i}. <b>{_v54_escape(x['symbol'])}</b> {x['side']} · {x['score']:.1f} {x['grade']} · <b>{x['action']}</b> · 표본 {x['n']}" for i,x in enumerate(ranked,1)]
+    if not ranked: lines.append('평가 가능한 후보가 없습니다.')
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def shadowreplay962_cmd(update, context):
+    rows,item,sim,quality,cal=_v962_data(None); x=_v962_shadow_replay(rows)
+    lines=["👤 <b>A100 V96.2 SHADOW TRADE REPLAY</b>","",
+      _v950_line('Shadow Win',x['win_rate'],count=x['n'],extra=f"평균 {x['avg']:+.2f}%"),
+      f"놓친 수익 합계 <b>{x['missed_opportunity']:+.2f}%</b>",f"회피한 손실 합계 <b>{x['avoided_loss']:.2f}%</b>",
+      f"최고 <b>{x['best']:+.2f}%</b> · 최저 <b>{x['worst']:+.2f}%</b>"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aihealth962_cmd(update, context):
+    rows,item,sim,quality,cal=_v962_data(None)
+    q=_v950_health_data(rows)[0].get('health',0) if rows else 0
+    required={'aicalibration','aimemorybank','airank','shadowreplay','aihealth'}
+    h=_v962_health_report(rows,q,required.issubset(V90_COMMAND_REGISTRY))
+    lines=["🩺 <b>A100 V96.2 AI HEALTH MONITOR</b>",f"상태 <b>{_v54_escape(h['status'])}</b>","",
+      _v950_line('Overall',h['overall']),_v950_line('Sample',h['sample']),_v950_line('Calibration',h['calibration']),
+      _v950_line('Consistency',h['consistency']),_v950_line('Shadow',h['shadow']),_v950_line('Integrity',h['integrity']),"",
+      "4시간 자동 보고용 동일 지표를 안전하게 산출합니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'aicalibration':'Confidence 실제 적중률 보정','aimemorybank':'1D/7D/30D/전체 패턴 기억','airank':'복수 후보 AI 종합 순위','shadowreplay':'Shadow 가상 진입 성과 재생','aihealth':'AI 품질·보정·무결성 점검'})
+for _c in ('aicalibration','aimemorybank','airank','shadowreplay','aihealth'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'aicalibration':aicalibration962_cmd,'aimemorybank':aimemorybank962_cmd,'airank':airank962_cmd,'shadowreplay':shadowreplay962_cmd,'aihealth':aihealth962_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V962_VERSION
+
+async def help962_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V96.2 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help925_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V96.2 HELP</b>","","AI Intelligence 3: /aicalibration · /aimemorybank · /airank BTC ETH SOL · /shadowreplay · /aihealth","AI Intelligence 2: /aisimilarity BTC · /aipattern BTC · /aiexplain BTC · /aireplay BTC","AI Quality: /aiquality BTC · /aituning","AI Dashboard: /aidashboard BTC · /aicore BTC · /aichart · /aiweights BTC · /aistatus · /aiperformance · /aimemory","Shadow: /papershadowstatus · /papershadowpositions · /papershadowhistory · /papershadowstats","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V96"]),parse_mode='HTML')
+
+async def commands962_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v96','v962','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V96.2 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands925_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help962_cmd,'commands':commands962_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V961_PREFLIGHT_FOR_V962=v91_preflight
+def v91_preflight():
+    base=_V961_PREFLIGHT_FOR_V962();checks=dict(base.get('checks',{}))
+    if 'v961_version_sync' in checks:checks['v961_version_sync']=True
+    required={'aicalibration','aimemorybank','airank','shadowreplay','aihealth','help','commands'}
+    checks.update({'v962_module_loaded':all(callable(x) for x in (_v962_calibration,_v962_memory_windows,_v962_rank_candidate,_v962_shadow_replay,_v962_health_report)),
+      'v962_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v962_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),
+      'v962_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v962_schema_preserved':_v91_default_state().get('schema')==1,'v962_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v962_version_sync':V91_VERSION==V962_VERSION,'v962_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v962_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v962_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v962_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v962-ai-intelligence3-1'}
+
 
 if __name__ == "__main__":
     main()

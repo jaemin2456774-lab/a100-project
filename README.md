@@ -1,19 +1,19 @@
-# A100 V96.1 AI Intelligence 2
+# A100 V96.2 AI Intelligence 3
 
-GitHub clean release. Upload the contents of this folder to the repository root.
+Development release based on V96.1 AI Intelligence 2. Upload the contents of this folder to the repository root.
 
-## New
-- `/aidashboard BTC`: unified AI health, learning, performance, current decision, and top weights
-- Fixed-width aligned Telegram bar charts
-- Expanded AI Health breakdown
-- `/help` and `/commands V95` automatic synchronization
+## New commands
+- `/aicalibration` — Confidence predicted vs actual calibration
+- `/aimemorybank` — 1D / 7D / 30D / ALL memory windows
+- `/airank BTC ETH SOL` — multi-candidate ranking
+- `/shadowreplay` — Shadow learning outcome replay
+- `/aihealth` — unified AI health monitor
 
 ## Preserved
 - schema 1 and `a100_v91_paper_state.json`
-- V94/V93 AI learning and visualization
-- existing `/dashboard BTC` behavior
+- paper maximum 20 and shadow maximum 60
+- all V96.1 and earlier commands
 - no live-order path
 
-
-## V96.1 commands
-`/aiquality BTC` `/aisimilarity BTC` `/aipattern BTC` `/aituning`
+## Validation
+Focused V96 regression suite: 9 passed. See `docs/TEST_REPORT_V96_2.md`.

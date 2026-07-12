@@ -1,11 +1,13 @@
 {
-  "version": "A100 V96.1 AI INTELLIGENCE 2",
+  "version": "A100 V96.2 AI INTELLIGENCE 3",
+  "release_channel": "Development",
+  "stable_baseline": "V96.1",
   "schema": 1,
-  "stable_baseline": "V95.0",
   "paper_max": 20,
   "shadow_max": 60,
   "live_trading": false,
-  "file_count": 49,
+  "focused_tests": "9 passed",
+  "file_count": 53,
   "files": [
     {
       "path": ".gitignore",
@@ -14,8 +16,8 @@
     },
     {
       "path": "FILE_LIST.txt",
-      "size": 1152,
-      "sha256": "023362f34e14ed6bd2d1e749637f3f05c89a965a1ef9ac5834f743338d90bfd1"
+      "size": 1402,
+      "sha256": "6e0b58c8067ae830938a15246036e93b8e6b77cd959d1aa9aa8d4896e16da9a6"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -24,13 +26,8 @@
     },
     {
       "path": "README.md",
-      "size": 589,
-      "sha256": "9f5d5d4eb99ae7799be7a8df6390a38331dca6a54c501945ac5547357662f017"
-    },
-    {
-      "path": "RELEASE_MANIFEST.json",
-      "size": 7329,
-      "sha256": "08a870b582aae1d5e57a8eab54319a112c8756d35b95376960f97def6193b5d9"
+      "size": 674,
+      "sha256": "ec808266bc337a81e32df94cbe1863b19714d88580da0d0a920e360654105391"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -53,6 +50,11 @@
       "sha256": "cab6976a12da914a0ec6030fe5bb0a0a648b78507826eb62d7ed74b2cea9a4a4"
     },
     {
+      "path": "docs/CHANGELOG_V96_2.md",
+      "size": 745,
+      "sha256": "fa03ab94b79c80e87bcc4573c4f445277ae5ac1df28d01ed153e69148c1df267"
+    },
+    {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
       "size": 736,
       "sha256": "236de097103fe60627f3e4b0d5726e7bcb8377ff9e1b8cef372f7775cbf6d590"
@@ -71,6 +73,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V96_1.md",
       "size": 367,
       "sha256": "b8c9aef632576b697f5291f1392bec98fd926f048cc430ff35090f354a76f5b8"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V96_2.md",
+      "size": 453,
+      "sha256": "7d526dd17761b7b54614ea6461a65c89cd52d4c78412edae5f934434409ab537"
     },
     {
       "path": "docs/README_V94_0_KR.md",
@@ -98,9 +105,14 @@
       "sha256": "4c6f2d1c116f327fb089a37dcc36afa7912b92b9205c98cfa6d471cef9ad6b63"
     },
     {
+      "path": "docs/TEST_REPORT_V96_2.md",
+      "size": 470,
+      "sha256": "ab7aec541f6edd5d397b1b4f6bf24b7c78cadfd91b393e7fc6d8ae3cb553bff0"
+    },
+    {
       "path": "main.py",
-      "size": 1230539,
-      "sha256": "acb75cab95e9b9c27489b24a887dc57c934f420bc4ac56d80f16e9ae2fbfecd2"
+      "size": 1239440,
+      "sha256": "3acc3b63279991f93c613df21ad95f320ff5bef267ee3a7b6b3488364d661e47"
     },
     {
       "path": "railway.json",
@@ -208,6 +220,11 @@
       "sha256": "119d6bc4f5af0e6eea97f286e5597a0bc8d84ec1ae850eb48799acb148feba9d"
     },
     {
+      "path": "tests/test_v96_2_intelligence3.py",
+      "size": 997,
+      "sha256": "87558a51f6e81cbe3b5be12110a9c8830c6c202ea3cb9dadf9ec5922638fdaea"
+    },
+    {
       "path": "v925_decision_intelligence.py",
       "size": 1755,
       "sha256": "710c090da8fdc27116e48941c24ee4f2dca0114f3513ca9c082c58ca45fd8d19"
@@ -251,6 +268,11 @@
       "path": "v961_ai_intelligence2.py",
       "size": 5797,
       "sha256": "fe2a7eee8bb54bddc35bed09c91dbf008df3216bc8b38ea0388f76aab01cd7dd"
+    },
+    {
+      "path": "v962_ai_intelligence3.py",
+      "size": 6037,
+      "sha256": "682449306fd6c27894fb345d47e12a1ccf8982569fe854e92a55f86ae747e2b4"
     }
   ]
 }
