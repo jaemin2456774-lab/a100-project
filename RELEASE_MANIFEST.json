@@ -1,12 +1,21 @@
 {
-  "release": "A100 V113.3 CENTRAL VERSION MANAGER & RUNTIME TRACE INTELLIGENCE DEVELOPMENT",
-  "generated_at": "2026-07-13T07:20:00+09:00",
-  "file_count": 125,
+  "release": "A100 V113.4 OPERATIONS & LEARNING OBSERVABILITY DEVELOPMENT",
+  "created_at": "2026-07-13",
+  "command_count": 256,
+  "paper_position_limit": 20,
+  "shadow_position_limit": 60,
+  "data_schema_preserved": true,
+  "live_trading": false,
   "files": [
     {
       "path": ".gitignore",
       "size": 167,
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
+    },
+    {
+      "path": "FILE_LIST.txt",
+      "size": 3792,
+      "sha256": "551c6ec364967bd137e7bd444b0f0f9bef263a4193e3b8917621a1f3e5264875"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -15,8 +24,8 @@
     },
     {
       "path": "README.md",
-      "size": 2394,
-      "sha256": "694c3d7de4f64e497ad27fc07d0fa162de6dcb6cef564c71455938117b0a573a"
+      "size": 2985,
+      "sha256": "c64a3ac5035326ddcb7e6a9aa8e5cf6fe2b96ef23127b432f28e607402b6c46c"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -82,6 +91,11 @@
       "path": "docs/CHANGELOG_V113_3.md",
       "size": 444,
       "sha256": "c79c3fec4b2ab1d3fe70908bbb02bba9c26a535933be0ba5fa6ad8cf8d703bf0"
+    },
+    {
+      "path": "docs/CHANGELOG_V113_4.md",
+      "size": 1086,
+      "sha256": "222687023f3f2e23b392c5ab365e7abb3d58ad757d9478b6ea97c7fb0a066343"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -274,6 +288,11 @@
       "sha256": "9f755988b1b47a67e515cfdaf5dc2c62e16749520483fed35741341d7d77866c"
     },
     {
+      "path": "docs/TEST_REPORT_V113_4.md",
+      "size": 341,
+      "sha256": "f8578e9a9273e8fc89a13360e78633a72b09b3c9200075872fd7262b28aedc64"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -310,8 +329,8 @@
     },
     {
       "path": "main.py",
-      "size": 1442782,
-      "sha256": "d688c97aa27f880790214eb9eaea62d51e9e78fa57a0467f59774444a3a9d86b"
+      "size": 1462575,
+      "sha256": "01fd006f23f9c1d30e8bb95febd52e89ca46bd00804f648e0eed888df8466981"
     },
     {
       "path": "pytest.ini",
@@ -402,6 +421,11 @@
       "path": "tests/test_v1133_version_runtime_trace.py",
       "size": 454,
       "sha256": "8ff7c958f065c99e91810489b400400e9d17a3436f2207f9e6b05cd32f3cadd5"
+    },
+    {
+      "path": "tests/test_v1134_operations_observability.py",
+      "size": 1494,
+      "sha256": "20b235de21f8c543c5427b6cf1855bb1cec790001d6e65d0dc807ced437ad1bc"
     },
     {
       "path": "tests/test_v91_8_baseline.py",

@@ -1,3 +1,17 @@
+# A100 V113.4 OPERATIONS & LEARNING OBSERVABILITY DEVELOPMENT
+
+기준 버전 V113.3을 기반으로 운영 상태와 AI 학습 가시성을 강화한 개발 릴리스입니다.
+
+## 배포 후 검증 순서
+`/versionaudit` → `/runtimehealth` → `/learningdashboard` → `/papertracescan` → `/papertrace` → `/entrytrace` → `/paperqueue` → `/entryexecution`
+
+## 핵심 변경
+- 중앙 버전 V113.4 동기화
+- Entry Pipeline 단계 표시
+- Queue 평균/P95 및 24시간 통계
+- AI 점수 추세와 24시간 최고·최저
+- Runtime Health 및 AI Learning Dashboard 신규 명령
+
 # A100 V113.3 CENTRAL VERSION MANAGER & RUNTIME TRACE INTELLIGENCE DEVELOPMENT
 
 ## 핵심 변경
