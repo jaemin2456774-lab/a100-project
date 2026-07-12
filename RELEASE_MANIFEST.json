@@ -1,7 +1,8 @@
 {
-  "release": "A100 V102.0 EVOLUTION ENGINE DEVELOPMENT",
-  "generated_at": 1783881766.5615568,
-  "file_count": 78,
+  "release": "A100 V103.0 AUTONOMOUS EVOLUTION DEVELOPMENT",
+  "baseline": "A100 V102.0 EVOLUTION ENGINE DEVELOPMENT",
+  "generated_at": 1783882375.2705922,
+  "file_count": 82,
   "files": [
     {
       "path": ".gitignore",
@@ -10,8 +11,8 @@
     },
     {
       "path": "FILE_LIST.txt",
-      "size": 2046,
-      "sha256": "2faed7d8f5c498680bd6aa352c455a2c63c89fcdb83b4399b2c41bb94d6f64d4"
+      "size": 2285,
+      "sha256": "b75ae5790a0bb629638ee4913a13a19bd09e35aab11760d779bdd602525579da"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -20,13 +21,8 @@
     },
     {
       "path": "README.md",
-      "size": 473,
-      "sha256": "0ed622ce5c15b3530dee76a56ebe06fbbe935e29ad6af503e5d04e8cae04f90d"
-    },
-    {
-      "path": "RELEASE_MANIFEST.json",
-      "size": 11199,
-      "sha256": "6e3803b8d584d0d6ceafa1cb00e56a731de5f7be27e4af0525c54ef61966d6fb"
+      "size": 434,
+      "sha256": "186d614b7e43c2091848342edff12532b8c56f13319ceb6f561bf002732bf16b"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -37,6 +33,11 @@
       "path": "docs/CHANGELOG_V102_0.md",
       "size": 672,
       "sha256": "e0cbc80fe6c1987c42767f030c8d4d20672841af3fb51e150078a1115ffb39bf"
+    },
+    {
+      "path": "docs/CHANGELOG_V103_0.md",
+      "size": 755,
+      "sha256": "2092d1ad869e1c57d209134ac6576be94d575f2f343d729d788ee2ab891d1029"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -82,6 +83,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V101_0.md",
       "size": 285,
       "sha256": "79739a4b3ff859a7cc3f63aca9042af2689ca67b31c2e0474f2412448f542368"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V103_0.md",
+      "size": 334,
+      "sha256": "a9b57dd1be612490f19e3bda9bbe5a1746435fb013c78e606010f8144a0301da"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -139,6 +145,11 @@
       "sha256": "c9c75ee9da71efe2b1101c0446309cb342abfb5e781557c0e107e33219c6ebe0"
     },
     {
+      "path": "docs/TEST_REPORT_V103_0.md",
+      "size": 293,
+      "sha256": "e8b81b23780f4df098f62ec9ae989e246184b08eab4fcf721c843102e21ce966"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -175,8 +186,8 @@
     },
     {
       "path": "main.py",
-      "size": 1296942,
-      "sha256": "2a54dcf0370f5a5ed4c9b727e326a1cc57a05436d81df60efd7108b825450d8c"
+      "size": 1306683,
+      "sha256": "1a60c5dd15ef6bb45242e0b185d52e9b5b7706470e89340f4c73beeca6eab28f"
     },
     {
       "path": "railway.json",
@@ -197,6 +208,11 @@
       "path": "tests/test_v102_0_evolution_engine.py",
       "size": 1635,
       "sha256": "181823b07300565962832bacfbd5d3e9fc3e02829d1baf28b838fc2a9f87162a"
+    },
+    {
+      "path": "tests/test_v103_0_autonomous_evolution.py",
+      "size": 1733,
+      "sha256": "fa34d38eecdf6aedbfd55be6877a27e07cc488fc6cfd4de70ff6c14bc4cd0b40"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -329,6 +345,11 @@
       "sha256": "ee7fbd5a94319bb1ae98afba9b87de2afb602ecf8ba730ba648913380a6a9e6b"
     },
     {
+      "path": "v1030_autonomous_evolution.py",
+      "size": 8567,
+      "sha256": "a2eae88c18ae57b355e699b02d578fb1555bbec2d60a96ebe65b30c892650ebb"
+    },
+    {
       "path": "v925_decision_intelligence.py",
       "size": 1755,
       "sha256": "710c090da8fdc27116e48941c24ee4f2dca0114f3513ca9c082c58ca45fd8d19"
@@ -395,14 +416,15 @@
     }
   ],
   "tests": {
-    "focused_passed": 11,
+    "focused_passed": 6,
     "preflight": true,
-    "commands": 201
+    "commands": 205
   },
   "safety": {
     "live_trading_added": false,
     "paper_limit": 20,
     "shadow_limit": 60,
-    "schema": 1
+    "schema": 1,
+    "data_preserved": true
   }
 }

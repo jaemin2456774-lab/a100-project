@@ -29478,5 +29478,127 @@ def v91_preflight():
       'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},
       'registry_fingerprint':'v1020-evolution-engine-1'}
 
+
+# ============================================================================
+# A100 V103.0 AUTONOMOUS EVOLUTION — fuzzy DNA, replay, calibration
+# ============================================================================
+V1030_VERSION = "A100 V103.0 AUTONOMOUS EVOLUTION DEVELOPMENT"
+try:
+    from v1030_autonomous_evolution import (evaluate_extended_outcomes as _v103_evaluate,
+        build_fuzzy_dna as _v103_build_dna, fuzzy_dna_match as _v103_dna_match,
+        explain_false_signal as _v103_false, self_calibrate as _v103_calibrate,
+        replay_outcomes as _v103_replay, growth_summary as _v103_growth)
+except Exception:
+    _v103_evaluate=_v103_build_dna=_v103_dna_match=_v103_false=None
+    _v103_calibrate=_v103_replay=_v103_growth=None
+
+
+def _v103_sync():
+    st=_v101_load(V1010_STATE_FILE)
+    prices=_v102_price_map(st)
+    live=_v103_evaluate(st,prices)
+    matched=_v101_reconcile(st,_v101_outcomes())
+    _v101_learn(st);_v102_adaptive(st);_v102_build_dna(st)
+    dna=_v103_build_dna(st);cal=_v103_calibrate(st);replays=_v103_replay(st)
+    info=_v101_summary(st);growth=_v103_growth(st)
+    _v101_save(V1010_STATE_FILE,st)
+    info.update({'price_count':len(prices),'live_changed':live['changed'],'matched_now':matched,'dna_v103':len(dna),'calibration':cal,'replays':len(replays),'growth':growth})
+    return st,info,live
+
+
+def _v103_capture_symbol(symbol):
+    rec,created,info,dyn=_v102_capture_symbol(symbol)
+    st=_v101_load(V1010_STATE_FILE);_v103_build_dna(st)
+    fs=_v103_false(st,rec);rec['false_signal_v103']=fs
+    _v103_calibrate(st);_v103_replay(st);_v101_save(V1010_STATE_FILE,st)
+    return rec,created,_v101_summary(st),fs
+
+
+async def aigrowth1030_cmd(update, context):
+    st,info,_=_v103_sync();g=info['growth'];curve=' → '.join(f"{x:.0f}" for x in g['curve'][-10:]) if g['curve'] else '표본 없음'
+    lines=["📈 <b>A100 V103.0 AI GROWTH</b>",f"결정 표본 <b>{g['samples']}건</b> · 학습 승률 <b>{g['win_rate']:.1f}%</b>",f"Fuzzy DNA <b>{g['dna']}개</b> · 복기 기록 <b>{g['replays']}개</b>","",f"성장 곡선: <code>{curve}</code>"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def replay1030_cmd(update, context):
+    st,info,_=_v103_sync();rows=st.get('replays_v103',[])
+    lines=["🔁 <b>A100 V103.0 OUTCOME REPLAY</b>",f"최근 복기 <b>{len(rows)}건</b>",""]
+    if not rows:lines.append("복기 가능한 종료 표본이 없습니다.")
+    for x in rows[:8]:
+        lines.append(f"• <b>{_v54_escape(x.get('symbol','?'))}</b> {x.get('side')} · {x.get('result')} {x.get('return_pct',0):+.2f}% · {x.get('outcome_type')}")
+        lines.append("  "+" / ".join(_v54_escape(c) for c in x.get('causes',[])))
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def dnalearn1030_cmd(update, context):
+    st,info,_=_v103_sync();rows=st.get('dna_library_v103',[])
+    lines=["🧬 <b>A100 V103.0 FUZZY DNA LEARNING</b>",f"근접 패턴 DNA <b>{len(rows)}개</b> · 결정 표본 {info['wins']+info['losses']}건",""]
+    if not rows:lines.append("아직 DNA 생성에 필요한 결정 표본이 부족합니다.")
+    for i,x in enumerate(rows[:10],1):
+        lines.append(f"{i}. <b>{x['id']}</b> · {x['status']} · {x['n']}건 · 승률 {x['win_rate']:.1f}% · 신뢰도 {x['confidence']:.1f}%")
+        lines.append(f"   {_v54_escape(x['pattern'])}")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def outcomelog1030_cmd(update, context):
+    st,info,live=_v103_sync();types={}
+    for s in st.get('signals',[]):
+        k=s.get('outcome_type')
+        if k:types[k]=types.get(k,0)+1
+    lines=["🎯 <b>A100 V103.0 OUTCOME LOG</b>",f"추적 {info['open']} · 승 {info['wins']} · 패 {info['losses']} · 보류 {info['holds']}",f"이번 자동판정 {info['live_changed']}건 · 기존 결과매칭 {info['matched_now']}건",""]
+    lines += [f"{k}: <b>{v}건</b>" for k,v in sorted(types.items())] or ["종료 판정 기록 없음"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def evolution1030_cmd(update, context):
+    st,info,_=_v103_sync();c=info['calibration'];p=c.get('parameters',{})
+    lines=["🧠 <b>A100 V103.0 AUTONOMOUS EVOLUTION</b>",f"학습 표본 {info['wins']+info['losses']}건 · 승률 <b>{info['win_rate']:.1f}%</b>",f"Fuzzy DNA {info['dna_v103']}개 · Replay {info['replays']}건", "",f"Self Calibration: <b>{'UPDATED' if c.get('changed') else c.get('reason','STABLE')}</b>",f"Score Bias {p.get('score_bias',0):+.2f} · Confidence Bias {p.get('confidence_bias',0):+.2f}",f"TP ×{p.get('tp_multiplier',1):.3f} · SL ×{p.get('sl_multiplier',1):.3f}","","※ 학습값은 추천 평가에만 사용하며 실주문을 실행하거나 변경하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+_FALSEFILTER1020_FOR_V1030=falsefilter1020_cmd
+async def falsefilter1030_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /falsefilter BTC')
+    rec,_,_,f=_v103_capture_symbol(context.args[0]);dna=f['dna']
+    lines=["🛡️ <b>A100 V103.0 EXPLAINABLE FALSE FILTER</b>",f"<b>{_v54_escape(rec['symbol'])}</b> · {rec['side']} · 판정 <b>{f['decision']}</b>",f"False Risk <b>{f['risk']:.1f}%</b> · 진입 허용 확률 <b>{f['allow_probability']:.1f}%</b>",f"유사 DNA <b>{_v54_escape(dna.get('id','NEW'))}</b> · 유사도 {dna.get('similarity',0):.1f}% · 표본 {f['similar_samples']}건 · 승률 {dna.get('win_rate',0):.1f}%","","근거"]
+    lines += [f"• {_v54_escape(x)}" for x in f['reasons']]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({'aigrowth':'AI 학습 승률·DNA·성장곡선','replay':'최근 승패 원인 자동 복기','dnalearn':'유사 특징을 묶는 Fuzzy DNA 학습','outcomelog':'TP·SL·TIMEOUT·수동·반전·트레일링 종료 통계','evolution':'자율 보정 및 진화 상태','falsefilter':'유사 DNA 표본 기반 설명형 허위신호 필터'})
+for _c in ('aigrowth','replay','dnalearn','outcomelog','evolution'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'aigrowth':aigrowth1030_cmd,'replay':replay1030_cmd,'dnalearn':dnalearn1030_cmd,'outcomelog':outcomelog1030_cmd,'evolution':evolution1030_cmd,'falsefilter':falsefilter1030_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1030_VERSION
+
+
+async def help1030_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V103.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help1020_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V103.0 HELP</b>","","Autonomous: /evolution · /aigrowth · /replay · /dnalearn · /outcomelog","Filter: /falsefilter BTC · /confidenceevolution","Closed Loop: /learningcore BTC · /autotrack · /weightboard · /strategyboard","Main: /aiunified BTC · /truememory · /learningloop · /scorebreakdown BTC","","전체 목록: /commands V103"]),parse_mode='HTML')
+
+
+async def commands1030_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v103','v1030','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V103.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands1020_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1030_cmd,'commands':commands1030_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+_V1020_PREFLIGHT_FOR_V1030=v91_preflight
+def v91_preflight():
+    base=_V1020_PREFLIGHT_FOR_V1030();checks=dict(base.get('checks',{}))
+    if 'v1020_version_sync' in checks:checks['v1020_version_sync']=True
+    required={'aigrowth','replay','dnalearn','outcomelog','evolution','falsefilter','help','commands'}
+    funcs=(_v103_evaluate,_v103_build_dna,_v103_dna_match,_v103_false,_v103_calibrate,_v103_replay,_v103_growth)
+    checks.update({'v1030_module_loaded':all(callable(x) for x in funcs),'v1030_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1030_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1030_category_sync':(required-{'help','commands','falsefilter'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1030_version_sync':V91_VERSION==V1030_VERSION,'v1030_schema_preserved':_v91_default_state().get('schema')==1,'v1030_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1030_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1030_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))}
+    checks['v1030_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1030-autonomous-evolution-1'}
+
 if __name__ == "__main__":
     main()

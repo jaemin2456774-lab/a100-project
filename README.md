@@ -1,12 +1,7 @@
-# A100 V102.0 Evolution Engine Development
+# A100 V103.0 Autonomous Evolution Development
 
-V101 Closed Loop Learning을 기준으로 자동 결과 판정, 적응형 가중치, AI DNA, 허위 신호 필터, Confidence 진화를 추가한 개발 검수 버전입니다.
+기준: V102.0 Evolution Engine Development
 
-## 신규 명령
-- `/outcomeengine`
-- `/dnaboard`
-- `/falsefilter BTC`
-- `/confidenceevolution`
+확장 종료 판정, Fuzzy DNA, 설명형 False Filter, 제한형 Self Calibration, Outcome Replay를 추가한 개발 릴리스입니다. 기존 Paper/Shadow/학습 데이터 경로를 보존하며 실주문을 실행하지 않습니다.
 
-## 안전 범위
-현재가 관측과 기존 Paper/Shadow 종료 기록만 학습합니다. 실거래 주문을 생성하거나 변경하지 않습니다.
+주요 명령: `/evolution`, `/aigrowth`, `/replay`, `/dnalearn`, `/outcomelog`, `/falsefilter BTC`
