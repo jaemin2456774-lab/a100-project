@@ -1,3 +1,23 @@
+# A100 V115.0 AI INTELLIGENCE CORE DEVELOPMENT
+
+기준 버전 V114.2를 계승하여 Pattern Memory, Cross-Market Similarity, Market Regime, Dynamic Weight, Drift Detector, Adaptive Threshold를 하나의 Shadow Intelligence Core로 통합한 개발 릴리스입니다.
+
+## 신규 명령
+- `/intelligencecore`
+- `/outcomememory`
+- `/calibration2`
+- `/memoryaging`
+- `/regimetransition`
+
+## 안전 정책
+- Paper 실제 Threshold 변경 없음
+- Dynamic Weight 및 Adaptive Threshold는 Shadow 전용
+- Paper 포지션 20개, Shadow 포지션 60개 유지
+- 기존 데이터 스키마 보존
+- 라이브 주문 경로 없음
+
+## 이전 버전 안내
+
 # A100 V114.0 PATTERN MEMORY, REGIME & ADAPTIVE LEARNING DEVELOPMENT
 
 기준 버전 V113.4의 운영 안정성과 학습 가시성을 유지하면서 Pattern Memory, Market Regime AI, Adaptive Entry Threshold, Post Trade Learning 2.0을 추가한 개발 릴리스입니다.

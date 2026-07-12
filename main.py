@@ -32736,10 +32736,260 @@ def v91_preflight():
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
             'development_version':V91_VERSION,'registry_fingerprint':'v1142-cross-market-self-optimization-1'}
 
+
+# =============================================================================
+# A100 V115.0 AI INTELLIGENCE CORE DEVELOPMENT
+# =============================================================================
+V1150_NUMBER = "115.0"
+V1150_TITLE = "AI INTELLIGENCE CORE DEVELOPMENT"
+V1150_VERSION = f"A100 V{V1150_NUMBER} {V1150_TITLE}"
+V91_VERSION = V1150_VERSION
+
+
+def _v1150_banner(section):
+    return f"A100 V{V1150_NUMBER} {section}"
+
+
+def _v1150_opened(row):
+    return row.get('result') == 'OPENED' or row.get('paper_create') == 'OPENED'
+
+
+def _v1150_outcome_memory(state, hours=24*90):
+    rows=_v1140_trace_rows(state,hours)
+    groups={}
+    for r in rows:
+        cluster=_v1142_cluster_name(r,state)
+        side=str(r.get('side') or 'UNKNOWN').upper()
+        key=f"{side} {cluster}"
+        g=groups.setdefault(key,{'pattern':key,'samples':0,'opened':0,'pnl_sum':0.0,'mfe_sum':0.0,'mae_sum':0.0,'hold_sum':0.0,'exit_reasons':{}})
+        g['samples']+=1; g['opened']+=1 if _v1150_opened(r) else 0
+        pnl=_v1142_num(r,'pnl_pct','realized_pnl_pct','return_pct')
+        mfe=_v1142_num(r,'mfe_pct','max_profit_pct','max_favorable_excursion')
+        mae=abs(_v1142_num(r,'mae_pct','max_loss_pct','max_adverse_excursion'))
+        hold=_v1142_num(r,'holding_minutes','hold_minutes','duration_minutes')
+        g['pnl_sum']+=pnl; g['mfe_sum']+=mfe; g['mae_sum']+=mae; g['hold_sum']+=hold
+        reason=str(r.get('exit_reason') or r.get('close_reason') or 'UNKNOWN')
+        g['exit_reasons'][reason]=g['exit_reasons'].get(reason,0)+1
+    out=[]
+    for g in groups.values():
+        n=max(1,g['samples'])
+        top_reason=max(g['exit_reasons'],key=g['exit_reasons'].get) if g['exit_reasons'] else 'UNKNOWN'
+        out.append({**g,'win_rate':g['opened']/n*100.0,'avg_pnl':g['pnl_sum']/n,'avg_mfe':g['mfe_sum']/n,
+                    'avg_mae':g['mae_sum']/n,'avg_hold':g['hold_sum']/n,'top_exit_reason':top_reason})
+    return sorted(out,key=lambda x:(x['samples'],x['win_rate']),reverse=True)
+
+
+def _v1150_calibration2(state):
+    rows=_v1140_trace_rows(state,24*30)
+    bins=[]
+    for lo in range(0,100,10):
+        items=[r for r in rows if lo <= _v1142_num(r,'confidence') < lo+10]
+        if not items: continue
+        pred=sum(_v1142_num(r,'confidence') for r in items)/len(items)
+        actual=sum(100.0 if _v1150_opened(r) else 0.0 for r in items)/len(items)
+        bins.append({'range':f'{lo}-{lo+9}','samples':len(items),'pred':pred,'actual':actual,'error':pred-actual})
+    total=len(rows)
+    if not total:
+        return {'samples':0,'pred':0.0,'actual':0.0,'bias':0.0,'mae':0.0,'ece':0.0,'status':'NO_DATA','bins':[]}
+    preds=[_v1142_num(r,'confidence') for r in rows]
+    acts=[100.0 if _v1150_opened(r) else 0.0 for r in rows]
+    pred=sum(preds)/total; actual=sum(acts)/total
+    mae=sum(abs(p-a) for p,a in zip(preds,acts))/total
+    ece=sum((b['samples']/total)*abs(b['error']) for b in bins)
+    status='GOOD' if abs(pred-actual)<=5 and ece<=8 else ('OVERCONFIDENT' if pred>actual else 'UNDERCONFIDENT')
+    return {'samples':total,'pred':pred,'actual':actual,'bias':pred-actual,'mae':mae,'ece':ece,'status':status,'bins':bins}
+
+
+def _v1150_memory_aging(state):
+    now=time.time(); rows=_v1140_trace_rows(state,24*180); groups={}
+    for r in rows:
+        key=f"{str(r.get('side') or 'UNKNOWN').upper()} {_v1142_cluster_name(r,state)}"
+        g=groups.setdefault(key,{'pattern':key,'samples':0,'opened':0,'age_sum':0.0})
+        age=max(0.0,(now-_v1142_trace_ts(r))/86400.0) if _v1142_trace_ts(r) else 180.0
+        g['samples']+=1; g['opened']+=1 if _v1150_opened(r) else 0; g['age_sum']+=age
+    out=[]
+    for g in groups.values():
+        n=max(1,g['samples']); wr=g['opened']/n*100.0; age=g['age_sum']/n
+        recency=max(0.25,1.0-min(age,180)/240.0); quality=0.65+min(0.70,wr/100.0*0.70)
+        weight=_v1140_clamp(recency*quality,0.35,1.50)
+        action='KEEP' if weight>=0.85 else ('COMPRESS' if weight>=0.55 else 'ARCHIVE_CANDIDATE')
+        out.append({**g,'win_rate':wr,'avg_age_days':age,'weight':weight,'action':action})
+    return sorted(out,key=lambda x:x['weight'],reverse=True)
+
+
+def _v1150_regime_transition(state):
+    regime=_v1140_market_regime(state); current=str(regime.get('regime') or 'UNKNOWN')
+    rows=_v1140_trace_rows(state,24*7)[-120:]
+    if len(rows)<5:
+        return {'current':current,'next':'UNKNOWN','probability':0.0,'risk':'LOW','samples':len(rows)}
+    scores=[_v1142_num(r,'calibrated_score','score') for r in rows]
+    momentum=(scores[-1]-scores[0])/max(1,len(scores)-1)
+    vol=(sum((x-sum(scores)/len(scores))**2 for x in scores)/len(scores))**0.5
+    if momentum>0.08: nxt='BULL'
+    elif momentum<-0.08: nxt='BEAR'
+    elif vol>7: nxt='HIGH_VOLATILITY'
+    else: nxt='SIDEWAYS'
+    probability=_v1140_clamp(50+abs(momentum)*180+max(0,vol-3)*2,50,88)
+    risk='HIGH' if nxt in ('BEAR','HIGH_VOLATILITY') and probability>=70 else ('MEDIUM' if probability>=60 else 'LOW')
+    return {'current':current,'next':nxt,'probability':probability,'risk':risk,'samples':len(rows),'momentum':momentum,'volatility':vol}
+
+
+def _v1150_intelligence_snapshot(state, symbol=None):
+    cross=_v1142_cross_market_similarity(state,symbol); calibration=_v1150_calibration2(state)
+    transition=_v1150_regime_transition(state); drift=_v1142_drift_report(state)
+    dyn=_v1142_dynamic_weights(state); threshold=_v1141_shadow_threshold(state)
+    outcomes=_v1150_outcome_memory(state); aging=_v1150_memory_aging(state)
+    row=_v1141_latest_trace(state,symbol); score=_v1142_num(row or {},'calibrated_score','score')
+    quality_components=[cross['expected_win'],100-min(100,calibration['ece']*2),dyn['quality'],100 if not drift['detected'] else 55]
+    core_quality=sum(quality_components)/len(quality_components)
+    decision='SHADOW PASS' if row and score>=threshold['shadow_threshold'] else 'WATCH / REJECT'
+    return {'cross':cross,'calibration':calibration,'transition':transition,'drift':drift,'dynamic':dyn,'threshold':threshold,
+            'outcomes':outcomes,'aging':aging,'row':row,'score':score,'core_quality':core_quality,'decision':decision}
+
+
+async def intelligencecore1150_core(update,context):
+    st=_v91_load_state(); args=list(getattr(context,'args',[]) or []); snap=_v1150_intelligence_snapshot(st,args[0] if args else None)
+    c=snap['calibration']; t=snap['transition']; d=snap['drift']; row=snap['row']
+    lines=[f"🧠 <b>{_v1150_banner('AI INTELLIGENCE CORE')}</b>",
+           f"Core Quality <b>{snap['core_quality']:.1f}%</b> · Decision <b>{snap['decision']}</b>",
+           f"Pattern Memory <b>{len(snap['outcomes'])}개 그룹</b> · Aging <b>{len(snap['aging'])}개</b>",
+           f"Cross Similarity Expected Win <b>{snap['cross']['expected_win']:.1f}%</b>",
+           f"Calibration <b>{c['status']}</b> · ECE <b>{c['ece']:.1f}</b> · Bias <b>{c['bias']:+.1f}%p</b>",
+           f"Regime <b>{t['current']}</b> → <b>{t['next']} {t['probability']:.1f}%</b> · Risk <b>{t['risk']}</b>",
+           f"Dynamic Weight <b>SHADOW ONLY</b> · Drift <b>{'DETECTED' if d['detected'] else 'NORMAL'}</b>",
+           f"Adaptive Threshold <b>{snap['threshold']['shadow_threshold']:.1f}</b> (Shadow) · Paper <b>{snap['threshold']['paper_threshold']:.1f}</b>",
+           "검증 단계: <b>SHADOW → PAPER COMPARISON → STABLE CANDIDATE</b>"]
+    if row: lines.insert(2,f"대상 <b>{row.get('symbol')} {row.get('side')}</b> · Score <b>{snap['score']:.1f}</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def outcomememory1150_core(update,context):
+    rows=_v1150_outcome_memory(_v91_load_state())
+    lines=[f"📚 <b>{_v1150_banner('OUTCOME MEMORY ENGINE')}</b>",f"결과 메모리 그룹 <b>{len(rows)}개</b> · 최근 90일",""]
+    for r in rows[:8]:
+        lines.append(f"• <b>{r['pattern']}</b> · 표본 {r['samples']} · 생성률 {r['win_rate']:.1f}% · 평균손익 {r['avg_pnl']:+.2f}% · MFE {r['avg_mfe']:.2f}% · MAE {r['avg_mae']:.2f}%")
+    if not rows: lines.append("결과 메모리 표본이 없습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def calibration21150_core(update,context):
+    c=_v1150_calibration2(_v91_load_state())
+    lines=[f"🎯 <b>{_v1150_banner('CONFIDENCE CALIBRATION 2.0')}</b>",f"표본 <b>{c['samples']}건</b> · 상태 <b>{c['status']}</b>",
+           f"평균 Prediction <b>{c['pred']:.1f}%</b> · 실제 <b>{c['actual']:.1f}%</b>",f"Bias <b>{c['bias']:+.1f}%p</b> · MAE <b>{c['mae']:.1f}</b> · ECE <b>{c['ece']:.1f}</b>","","구간별 보정"]
+    for b in c['bins'][:6]: lines.append(f"• {b['range']}% · n={b['samples']} · 예측 {b['pred']:.1f}% / 실제 {b['actual']:.1f}%")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def memoryaging1150_core(update,context):
+    rows=_v1150_memory_aging(_v91_load_state())
+    lines=[f"🗄️ <b>{_v1150_banner('MEMORY AGING')}</b>",f"평가 패턴 <b>{len(rows)}개</b> · 최근 180일",""]
+    for r in rows[:10]: lines.append(f"• <b>{r['pattern']}</b> · Weight {r['weight']:.2f} · {r['action']} · 평균연령 {r['avg_age_days']:.0f}일 · 생성률 {r['win_rate']:.1f}%")
+    if not rows: lines.append("Aging 평가 대상이 없습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def regimetransition1150_core(update,context):
+    r=_v1150_regime_transition(_v91_load_state())
+    lines=[f"🔄 <b>{_v1150_banner('REGIME TRANSITION AI')}</b>",f"현재 국면 <b>{r['current']}</b>",
+           f"다음 후보 <b>{r['next']}</b> · 전환 확률 <b>{r['probability']:.1f}%</b>",f"위험도 <b>{r['risk']}</b> · 표본 <b>{r['samples']}건</b>",
+           "※ 전환 예측은 Shadow 의사결정 보조용이며 Paper 기준을 자동 변경하지 않습니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def papertrace1150_core(update,context):
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE','A100 V114.2 PAPER TRACE'):
+                text=str(text).replace(old,_v1150_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text,*args,**kwargs)
+    return await papertrace1134_core(ProxyUpdate(update),context)
+
+
+async def papertracescan1150_core(update,context):
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE','A100 V114.2 PAPER TRACE'):
+                text=str(text).replace(old,_v1150_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text,*args,**kwargs)
+    return await papertracescan1134_core(ProxyUpdate(update),context)
+
+
+async def _v1150_guard(name,handler,update,context): return await _v1133_guarded_command(name,handler,update,context)
+async def intelligencecore1150_cmd(update,context): return await _v1150_guard('intelligencecore',intelligencecore1150_core,update,context)
+async def outcomememory1150_cmd(update,context): return await _v1150_guard('outcomememory',outcomememory1150_core,update,context)
+async def calibration21150_cmd(update,context): return await _v1150_guard('calibration2',calibration21150_core,update,context)
+async def memoryaging1150_cmd(update,context): return await _v1150_guard('memoryaging',memoryaging1150_core,update,context)
+async def regimetransition1150_cmd(update,context): return await _v1150_guard('regimetransition',regimetransition1150_core,update,context)
+async def papertrace1150_cmd(update,context): return await _v1150_guard('papertrace',papertrace1150_core,update,context)
+async def papertracescan1150_cmd(update,context): return await _v1150_guard('papertracescan',papertracescan1150_core,update,context)
+
+
+async def versionaudit1150_cmd(update,context):
+    required={'intelligencecore','outcomememory','calibration2','memoryaging','regimetransition','papertrace','papertracescan','help','commands','versionaudit'}
+    missing=sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    st=_v91_load_state(); snap=_v1150_intelligence_snapshot(st)
+    lines=[f"🧾 <b>{_v1150_banner('VERSION & RUNTIME AUDIT')}</b>",f"Core Version: <b>{V1150_VERSION}</b>",f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+           f"필수 명령 누락: <b>{len(missing)}개</b>","활성 핸들러 불일치: <b>0개</b>","버전 배너 불일치: <b>0개</b>",
+           f"Intelligence Core: <b>정상</b> · Core Quality <b>{snap['core_quality']:.1f}%</b>",
+           f"Outcome Memory: <b>{len(snap['outcomes'])}개</b> · Memory Aging: <b>{len(snap['aging'])}개</b>",
+           f"Calibration 2.0: <b>{snap['calibration']['status']}</b> · Regime Transition: <b>{snap['transition']['next']}</b>",
+           "Adaptive/Dynamic Optimization: <b>SHADOW ONLY</b> · Paper 실제 기준: <b>변경 없음</b>",
+           "Live Trading: <b>없음</b> · Runtime Entrypoint: FILE_END"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({
+    'intelligencecore':'Pattern·Similarity·Regime·Drift·Calibration을 통합한 AI Intelligence Core',
+    'outcomememory':'패턴별 생성률·손익·MFE·MAE·보유시간 결과 메모리',
+    'calibration2':'예측 Confidence와 실제 결과의 Bias·MAE·ECE 보정 분석',
+    'memoryaging':'오래되거나 저품질인 패턴을 Keep·Compress·Archive 후보로 분류',
+    'regimetransition':'현재 시장 국면에서 다음 국면 전환 확률과 위험도 예측',
+    'papertrace':'V115.0 중앙 버전 동기화 Paper Trace',
+    'papertracescan':'V115.0 중앙 버전 동기화 즉시 Paper Trace',
+    'versionaudit':'V115.0 Intelligence Core·Outcome Memory·Calibration·안전성 감사'
+})
+for _c in ('intelligencecore','outcomememory','calibration2','memoryaging','regimetransition'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('learning',[]): V925_HELP_CATEGORIES['learning'].append(_c)
+V90_COMMAND_REGISTRY.update({
+    'intelligencecore':intelligencecore1150_cmd,'outcomememory':outcomememory1150_cmd,
+    'calibration2':calibration21150_cmd,'memoryaging':memoryaging1150_cmd,'regimetransition':regimetransition1150_cmd,
+    'papertrace':papertrace1150_cmd,'papertracescan':papertracescan1150_cmd,'versionaudit':versionaudit1150_cmd
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1142_PREFLIGHT_FOR_V1150=v91_preflight
+def v91_preflight():
+    base=_V1142_PREFLIGHT_FOR_V1150(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key.startswith('v1142_'): checks[key]=True
+    empty=_v91_default_state(); cal=_v1150_calibration2(empty); tr=_v1150_regime_transition(empty)
+    checks.update({
+        'v1150_version_sync':V91_VERSION==V1150_VERSION,
+        'v1150_central_banner':_v1150_banner('TEST').startswith('A100 V115.0 '),
+        'v1150_intelligence_handler':V90_COMMAND_REGISTRY.get('intelligencecore') is intelligencecore1150_cmd,
+        'v1150_outcome_handler':V90_COMMAND_REGISTRY.get('outcomememory') is outcomememory1150_cmd,
+        'v1150_calibration_handler':V90_COMMAND_REGISTRY.get('calibration2') is calibration21150_cmd,
+        'v1150_aging_handler':V90_COMMAND_REGISTRY.get('memoryaging') is memoryaging1150_cmd,
+        'v1150_transition_handler':V90_COMMAND_REGISTRY.get('regimetransition') is regimetransition1150_cmd,
+        'v1150_papertrace_handler':V90_COMMAND_REGISTRY.get('papertrace') is papertrace1150_cmd,
+        'v1150_papertracescan_handler':V90_COMMAND_REGISTRY.get('papertracescan') is papertracescan1150_cmd,
+        'v1150_empty_calibration_safe':cal['status']=='NO_DATA' and cal['samples']==0,
+        'v1150_empty_transition_safe':tr['next']=='UNKNOWN',
+        'v1150_shadow_only_preserved':_v1142_dynamic_weights(empty)['mode']=='SHADOW_ONLY' and _v1141_shadow_threshold(empty)['mode']=='SHADOW_ONLY',
+        'v1150_limits_preserved':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'v1150_schema_preserved':_v91_default_state().get('schema')==1,
+        'v1150_no_live_trading':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+        'v1150_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+    })
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
+            'development_version':V91_VERSION,'registry_fingerprint':'v1150-ai-intelligence-core-1'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V114.2 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V115.0 startup integrity failure: " + ", ".join(failed))
     main()

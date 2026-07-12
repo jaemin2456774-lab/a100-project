@@ -1,6 +1,8 @@
 {
-  "release": "A100 V114.2 CROSS-MARKET INTELLIGENCE & AI SELF-OPTIMIZATION DEVELOPMENT",
-  "file_count": 139,
+  "release": "A100 V115.0 AI INTELLIGENCE CORE DEVELOPMENT",
+  "base": "A100 V114.2",
+  "generated_utc": "2026-07-12T23:02:52Z",
+  "file_count": 143,
   "files": [
     {
       "path": ".gitignore",
@@ -14,8 +16,8 @@
     },
     {
       "path": "README.md",
-      "size": 4182,
-      "sha256": "66a86c4a7bab2634c636c5e96e92b860c4ed473437bb307b69ebc537a3a20cce"
+      "size": 4832,
+      "sha256": "6b1e136ed260a6dc01ba03eabcbf21c7427f4d308277a96d34d56f6a69d2df3b"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -103,6 +105,11 @@
       "sha256": "2cb251b9cdfde95118d9299429f6a90ed993a83e4cddcd294afca11a618be0c4"
     },
     {
+      "path": "docs/CHANGELOG_V115_0.md",
+      "size": 824,
+      "sha256": "cde14274c0c43d92042b503db163b708bcc52468dc46e731378b39b8132d66af"
+    },
+    {
       "path": "docs/CHANGELOG_V94_0.md",
       "size": 301,
       "sha256": "932d82d1b7ef1d5f1885f6f7e35161ae75b2050898e07c05a57843210b49a8f1"
@@ -186,6 +193,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V114_2.md",
       "size": 268,
       "sha256": "c4ce4751b5687d1da28fe3c765d6c416628bf4e8f6180b5934fe91b92c6f97a5"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V115_0.md",
+      "size": 294,
+      "sha256": "ac6960e3f722cdffe1f22e69823b7f9de784f164f727b2b72e6f2e3dd5484093"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -323,6 +335,11 @@
       "sha256": "97003809f43cb279f7d573f0e779cc583c823036b079aa69cc783bc89574df49"
     },
     {
+      "path": "docs/TEST_REPORT_V115_0.md",
+      "size": 443,
+      "sha256": "2b41c9f9ad1d9f940a437d2e52087cf8db8f49692433172ec63f29059ca04e1b"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -359,8 +376,8 @@
     },
     {
       "path": "main.py",
-      "size": 1518271,
-      "sha256": "52ee79e99bb41df21dc416c170e59256cd87a0e28e411182cdd0f63e1b059d88"
+      "size": 1535130,
+      "sha256": "e43e4cedd841dce74fad57a0046c290495e8c5ec5e3d7812ad6f77736e68550f"
     },
     {
       "path": "pytest.ini",
@@ -471,6 +488,11 @@
       "path": "tests/test_v114_2_cross_market_self_optimization.py",
       "size": 2154,
       "sha256": "f912ed8de5220131126bd4fc95b3a361dbcf380191823f462028e779aee588f2"
+    },
+    {
+      "path": "tests/test_v1150_intelligence_core.py",
+      "size": 832,
+      "sha256": "90b7bbbb9b3f12a41f0ae94045d0d1ffc984ca98ab719426fcef8b24e1148ac3"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -697,5 +719,13 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ]
+  ],
+  "safety": {
+    "paper_max_positions": 20,
+    "shadow_max_positions": 60,
+    "adaptive_threshold": "SHADOW_ONLY",
+    "dynamic_weights": "SHADOW_ONLY",
+    "live_trading": false,
+    "schema_preserved": true
+  }
 }
