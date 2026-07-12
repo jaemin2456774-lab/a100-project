@@ -29091,5 +29091,104 @@ def v91_preflight():
     checks['v990_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v990-predictive-intelligence-1'}
 
+
+# ============================================================================
+# A100 V100.0 LEARNING INTELLIGENCE — true memory, validation loop, transparency
+# ============================================================================
+V1000_VERSION = "A100 V100.0 LEARNING INTELLIGENCE DEVELOPMENT"
+try:
+    from v1000_learning_intelligence import (true_memory as _v1000_memory, decay_learning as _v1000_decay,
+        validation_loop as _v1000_validate, score_breakdown as _v1000_breakdown,
+        learning_readiness as _v1000_readiness)
+except Exception:
+    _v1000_memory=_v1000_decay=_v1000_validate=_v1000_breakdown=_v1000_readiness=None
+
+def _v1000_bundle(sym=None):
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data()
+    true_mem=_v1000_memory(rows); decay=_v1000_decay(rows); loop=_v1000_validate(rows)
+    ready=_v1000_readiness(true_mem,decay,loop)
+    if sym is None:return rows,mem,cal,shadow,h,r,g,c,e,true_mem,decay,loop,ready
+    p,item=_v980_candidate(sym,rows,cal,r,c); score=_v990_score(p,c,h,e,cal,shadow)
+    mtf=_v990_mtf(p); entry=_v990_entry(p,score); why=_v990_explain(p,score,mtf)
+    hist=_v990_history(rows,20); breakdown=_v1000_breakdown(p,c,h,e,cal,shadow)
+    return rows,mem,cal,shadow,h,r,g,c,e,true_mem,decay,loop,ready,p,item,score,mtf,entry,why,hist,breakdown
+
+async def truememory1000_cmd(update, context):
+    *_,m,d,v,ready=_v1000_bundle()
+    lines=["🧠 <b>A100 V100.0 TRUE MEMORY</b>",f"Timestamp Coverage <b>{m['coverage_pct']:.1f}%</b> · Readiness <b>{ready['score']:.1f} {ready['grade']}</b>",""]
+    for name in ('1D','7D','30D','ALL'):
+        x=m[name]; lines.append(f"<b>{name}</b> · {x['n']}건 · {x['wins']}승 {x['losses']}패 {x['holds']}보류 · 승률 {x['win_rate']:.1f}% · 평균 {x['avg']:+.3f}%")
+    lines += ["",f"Decay 14D · 유효표본 {d['effective_sample']:.1f} · Freshness {d['freshness']:.1f}%"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def learningloop1000_cmd(update, context):
+    *_,m,d,v,ready=_v1000_bundle()
+    lines=["🔁 <b>A100 V100.0 RESULT VALIDATION LOOP</b>",f"상태 <b>{_v54_escape(v['status'])}</b> · Readiness {ready['score']:.1f} {ready['grade']}","",
+      f"결정 표본 <b>{v['n']}</b> · {v['wins']}승 {v['losses']}패 · 승률 <b>{v['win_rate']:.1f}%</b>",
+      _v980_bar('Reliability',v['reliability']),f"Brier Error <b>{v['brier']:.1f}</b> · Confidence Bias <b>{v['bias']:+.1f}%p</b>",
+      f"권장 Confidence Shift <b>{v['suggested_shift']:+.1f}%p</b>","",f"시간감쇠 승률 {d['weighted_win_rate']:.1f}% · 평균 {d['weighted_avg']:+.3f}% · 유효표본 {d['effective_sample']:.1f}",
+      "※ 분석·보정 제안만 수행하며 데이터와 주문 경로는 변경하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def scorebreakdown1000_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /scorebreakdown BTC')
+    *_,p,item,s,mtf,z,why,hist,b=_v1000_bundle(context.args[0])
+    lines=["🧮 <b>A100 V100.0 AI SCORE BREAKDOWN</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {p['side']} · <b>{b['score']:.1f}</b>",""]
+    lines += [f"{x['name']} <b>{x['points']:+.1f}p</b>" for x in b['components']]
+    lines += ["",f"Positive {b['positive']:+.1f}p · Penalty {b['penalty']:+.1f}p"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aiunified1000_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiunified BTC')
+    rows,mem,cal,shadow,h,r,g,c,e,tm,d,v,ready,p,item,s,mtf,z,why,hist,b=_v1000_bundle(context.args[0])
+    lo,hi=p['expected_move'];move=f"{lo:.1f}~{hi:.1f}%" if hi else '산출 보류'
+    lines=["🧭 <b>A100 V100.0 UNIFIED DASHBOARD 5.0</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {p['side']} · <b>{_v54_escape(s['label'])}</b>","",
+      _v980_bar('AI SCORE',b['score'],s['grade']),_v980_bar('Pump',p['probability_v2'],p['grade_v2']),_v980_bar('Confidence',p['confidence']),
+      _v980_bar('Reliability',v['reliability']),_v980_bar('Learning Ready',ready['score'],ready['grade']),"",
+      f"MTF <b>{mtf['alignment']}/4</b> · 15M {mtf['frames']['15M']['direction']} · 1H {mtf['frames']['1H']['direction']} · 4H {mtf['frames']['4H']['direction']} · 1D {mtf['frames']['1D']['direction']}",
+      f"Cycle <b>{c['cycle']}</b> · Risk {c['risk']} · {_v54_escape(c['policy'])}",f"예상시간 <b>{p['eta']}</b> · 예상변동 <b>{move}</b>",
+      f"Entry {z['entry_from']:+.2f}%~{z['entry_to']:+.2f}% · Stop {z['stop_pct']:.2f}% · T1 {z['target1_pct']:.2f}% · T2 {z['target2_pct']:.2f}%",
+      f"True Memory 1D {tm['1D']['n']}건/{tm['1D']['win_rate']:.1f}% · 7D {tm['7D']['n']}건/{tm['7D']['win_rate']:.1f}% · 30D {tm['30D']['n']}건/{tm['30D']['win_rate']:.1f}%",
+      f"Validation {v['n']}건 · 승률 {v['win_rate']:.1f}% · Bias {v['bias']:+.1f}%p · Shift {v['suggested_shift']:+.1f}%p",
+      f"History {hist['n']}건 · {hist['wins']}승 {hist['losses']}패 {hist['holds']}보류","",f"핵심 이유: {_v54_escape(' · '.join(why['positives'][:3]))}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'truememory':'실제 timestamp 기반 1D·7D·30D 기억','learningloop':'추천 결과 검증·신뢰도 보정 루프','scorebreakdown':'AI Score 구성요소별 기여도'})
+for _c in ('truememory','learningloop','scorebreakdown'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'truememory':truememory1000_cmd,'learningloop':learningloop1000_cmd,'scorebreakdown':scorebreakdown1000_cmd,'aiunified':aiunified1000_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1000_VERSION
+
+async def help1000_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V100.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help990_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V100.0 HELP</b>","","Learning Intelligence: /aiunified BTC · /truememory · /learningloop · /scorebreakdown BTC","Predictive: /aiscore BTC · /multiframe BTC · /entryzone BTC · /aiexplain BTC · /signalhistory","Market: /earlypump BTC ETH SOL · /marketcycle · /aiportfolio BTC ETH SOL · /pumpevolution","Quality: /aigrowth · /selfheal · /aicalibration · /shadowreplay · /aihealth","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V100"]),parse_mode='HTML')
+
+async def commands1000_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v100','v1000','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V100.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands990_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1000_cmd,'commands':commands1000_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V990_PREFLIGHT_FOR_V1000=v91_preflight
+def v91_preflight():
+    base=_V990_PREFLIGHT_FOR_V1000();checks=dict(base.get('checks',{}))
+    if 'v990_version_sync' in checks:checks['v990_version_sync']=True
+    required={'aiunified','truememory','learningloop','scorebreakdown','help','commands'}
+    checks.update({'v1000_module_loaded':all(callable(x) for x in (_v1000_memory,_v1000_decay,_v1000_validate,_v1000_breakdown,_v1000_readiness)),
+      'v1000_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+      'v1000_help_sync':{'truememory','learningloop','scorebreakdown'}.issubset(V925_COMMAND_USAGE),
+      'v1000_category_sync':{'truememory','learningloop','scorebreakdown'}.issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v1000_schema_preserved':_v91_default_state().get('schema')==1,'v1000_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v1000_version_sync':V91_VERSION==V1000_VERSION,'v1000_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1000_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v1000_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v1000_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1000-learning-intelligence-1'}
+
 if __name__ == "__main__":
     main()
