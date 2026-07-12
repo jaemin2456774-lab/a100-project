@@ -1,6 +1,8 @@
 .gitignore
 GITHUB_REPLACE_GUIDE_KR.md
 README.md
+__pycache__/main.cpython-313.pyc
+__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc
 docs/CHANGELOG_V101_0.md
 docs/CHANGELOG_V102_0.md
 docs/CHANGELOG_V103_0.md
@@ -8,6 +10,7 @@ docs/CHANGELOG_V104_0.md
 docs/CHANGELOG_V105_0.md
 docs/CHANGELOG_V106_0.md
 docs/CHANGELOG_V108_0.md
+docs/CHANGELOG_V109_0.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -41,6 +44,7 @@ docs/TEST_REPORT_V105_0.md
 docs/TEST_REPORT_V106_0.md
 docs/TEST_REPORT_V107_0.md
 docs/TEST_REPORT_V108_0.md
+docs/TEST_REPORT_V109_0.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
 docs/TEST_REPORT_V96_0.md
@@ -51,6 +55,11 @@ docs/TEST_REPORT_V99_0.md
 main.py
 railway.json
 requirements.txt
+tests/.pytest_cache/.gitignore
+tests/.pytest_cache/CACHEDIR.TAG
+tests/.pytest_cache/README.md
+tests/.pytest_cache/v/cache/nodeids
+tests/__pycache__/test_v1090_paper_learning_mode.cpython-313-pytest-9.0.2.pyc
 tests/test_v101_0_closed_loop.py
 tests/test_v102_0_evolution_engine.py
 tests/test_v103_0_autonomous_evolution.py
@@ -59,6 +68,7 @@ tests/test_v105_0_autonomous_core.py
 tests/test_v106_0_real_time_intelligence.py
 tests/test_v1070_autonomous_market_intelligence.py
 tests/test_v1080_pattern_recognition_intelligence.py
+tests/test_v1090_paper_learning_mode.py
 tests/test_v91_8_baseline.py
 tests/test_v91_8_scenario.py
 tests/test_v91_stability.py

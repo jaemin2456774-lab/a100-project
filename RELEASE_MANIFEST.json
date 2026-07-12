@@ -1,16 +1,16 @@
 {
-  "release": "A100 V108.0 PATTERN RECOGNITION INTELLIGENCE DEVELOPMENT",
-  "created_at": "2026-07-13",
-  "baseline": "V107.0 Autonomous Market Intelligence Development",
-  "schema": 1,
-  "paper_max_positions": 20,
-  "shadow_max_positions": 60,
-  "live_trading_added": false,
+  "release": "A100 V109.0 PAPER LEARNING MODE DEVELOPMENT",
+  "created_at": "2026-07-12T19:53:12Z",
   "files": [
     {
       "path": ".gitignore",
       "size": 167,
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
+    },
+    {
+      "path": "FILE_LIST.txt",
+      "size": 3533,
+      "sha256": "d43a81a4b6bf511ec9616d8a5bd3f9c96cda18e97e92247558e1fa3b6ab453bc"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -19,8 +19,18 @@
     },
     {
       "path": "README.md",
-      "size": 315,
-      "sha256": "35675adfa9ea18ef0c1dfb2948ff473f14323572ac8a644d94c2817f79a051e9"
+      "size": 213,
+      "sha256": "ec40bd978d1c93b7a86fc5c29e2dbc929fa4248d396f37507420536c12596885"
+    },
+    {
+      "path": "__pycache__/main.cpython-313.pyc",
+      "size": 1990110,
+      "sha256": "dde61df3479d3e2f94d477ab6b67c8a629c56d862591646a61c68851f97bedfd"
+    },
+    {
+      "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
+      "size": 18584,
+      "sha256": "490e285a636e05162610787254115afae04ff2d493192070e1a35fc0e961148c"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -56,6 +66,11 @@
       "path": "docs/CHANGELOG_V108_0.md",
       "size": 167,
       "sha256": "959ec33a0ab67283d9e72e0227eda6b973106a3735d05fcc01022d3e030e77a1"
+    },
+    {
+      "path": "docs/CHANGELOG_V109_0.md",
+      "size": 426,
+      "sha256": "5d6882a4dfb78a65857989dccbdf0c9b16a844360f4e950f5cadb271cc779e9a"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -223,6 +238,11 @@
       "sha256": "e1b4f63256d44ef36aa33cf1b21efa32457f78a47cead26286bdd829f231a2a1"
     },
     {
+      "path": "docs/TEST_REPORT_V109_0.md",
+      "size": 299,
+      "sha256": "804cd067ecacd83ced0201dca15e1ef42ded19f0dc8024d0f1fef66288566cc6"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -259,8 +279,8 @@
     },
     {
       "path": "main.py",
-      "size": 1351311,
-      "sha256": "6a6725e36073abeb059bfe937f0b142d3cdcca5f4a4a7d97a0c171380602304e"
+      "size": 1359917,
+      "sha256": "b9016d809eb4a87bc5a2c877371a5a1177432030f147748e8ce75a2ab9fd90d3"
     },
     {
       "path": "railway.json",
@@ -271,6 +291,31 @@
       "path": "requirements.txt",
       "size": 99,
       "sha256": "1ee7cd2517fe1e995714813c4e63b9f1255dfcd8d45af1bcbe46b4224472bbdf"
+    },
+    {
+      "path": "tests/.pytest_cache/.gitignore",
+      "size": 37,
+      "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd"
+    },
+    {
+      "path": "tests/.pytest_cache/CACHEDIR.TAG",
+      "size": 191,
+      "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4"
+    },
+    {
+      "path": "tests/.pytest_cache/README.md",
+      "size": 302,
+      "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad"
+    },
+    {
+      "path": "tests/.pytest_cache/v/cache/nodeids",
+      "size": 66,
+      "sha256": "4690345cc701fb493958f8712938c53ad3a6de392b245fe9f6faebf3f07e2cea"
+    },
+    {
+      "path": "tests/__pycache__/test_v1090_paper_learning_mode.cpython-313-pytest-9.0.2.pyc",
+      "size": 4245,
+      "sha256": "24563f1f2f8a0cfd820eda3ed3d2e5f6435d344a7dc0aec6e267b2d6c913ade9"
     },
     {
       "path": "tests/test_v101_0_closed_loop.py",
@@ -311,6 +356,11 @@
       "path": "tests/test_v1080_pattern_recognition_intelligence.py",
       "size": 859,
       "sha256": "f447b69a83668dfa4617eef70336b3798c3964dbad8ffaf0f580f91d1d90a5b0"
+    },
+    {
+      "path": "tests/test_v1090_paper_learning_mode.py",
+      "size": 478,
+      "sha256": "1bee6ff4930df0268dd646a8f539a4509f3abd9882cf80d081efb95780e01d51"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -536,11 +586,6 @@
       "path": "v990_predictive_intelligence.py",
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
-    },
-    {
-      "path": "FILE_LIST.txt",
-      "size": 3133,
-      "sha256": "61ebbe7c360817c912d1c6190abc8cad7488c3a3567c5e491449b0f1f69b7b99"
     }
   ]
 }

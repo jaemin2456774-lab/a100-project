@@ -24304,8 +24304,8 @@ def _v91_open(symbol, side="LONG", notional=None, sl_pct=None, tp_pct=None, sour
     if state.get("kill_switch"):
         raise RuntimeError("Kill Switch 활성 상태")
     daily = _v91_daily(state)
-    if V91_DAILY_LOSS_LIMIT > 0 and float(daily.get("realized_pnl", 0)) <= -V91_DAILY_LOSS_LIMIT:
-        raise RuntimeError("일일 손실 한도 도달")
+    if _v109_paper_mode(state) != "LEARNING" and V91_DAILY_LOSS_LIMIT > 0 and float(daily.get("realized_pnl", 0)) <= -V91_DAILY_LOSS_LIMIT:
+        raise RuntimeError("일일 손실 한도 도달 (PROTECTED 모드)")
     if pair in state["positions"]:
         raise RuntimeError(f"중복 진입 차단: {pair}")
     if len(state["positions"]) >= V91_MAX_POSITIONS:
@@ -24371,7 +24371,7 @@ def _v91_close(symbol, reason="MANUAL", price=None):
         daily["wins"] = int(daily.get("wins", 0)) + 1
     else:
         daily["losses"] = int(daily.get("losses", 0)) + 1
-    if V91_DAILY_LOSS_LIMIT > 0 and daily["realized_pnl"] <= -V91_DAILY_LOSS_LIMIT:
+    if _v109_paper_mode(state) != "LEARNING" and V91_DAILY_LOSS_LIMIT > 0 and daily["realized_pnl"] <= -V91_DAILY_LOSS_LIMIT:
         state["kill_switch"] = True
         _v91_event(state, "KILL_SWITCH", {"reason": "DAILY_LOSS_LIMIT", "pnl": daily["realized_pnl"]})
     _v91_event(state, "CLOSE", {"symbol": pair, "reason": reason, "pnl": pnl, "exit": fill})
@@ -29971,6 +29971,153 @@ def v91_preflight():
  checks.update({'v1080_module_loaded':all(callable(x) for x in funcs),'v1080_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1080_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1080_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1080_version_sync':V91_VERSION==V1080_VERSION,'v1080_schema_preserved':_v91_default_state().get('schema')==1,'v1080_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1080_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1080_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
  audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1080_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
  return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1080-pattern-recognition-intelligence-1'}
+
+
+# ============================================================================
+# A100 V109.0 PAPER LEARNING MODE & PATTERN HOTFIX
+# ============================================================================
+V1090_VERSION = "A100 V109.0 PAPER LEARNING MODE DEVELOPMENT"
+
+def _v109_paper_mode(state):
+    mode = str((state or {}).get("paper_mode") or "LEARNING").strip().upper()
+    return mode if mode in {"LEARNING", "PROTECTED"} else "LEARNING"
+
+def _v109_block_reasons(state):
+    reasons=[]
+    day=_v91_daily(state)
+    mode=_v109_paper_mode(state)
+    if not state.get("enabled"): reasons.append("Paper Trading OFF")
+    if state.get("kill_switch"): reasons.append("Kill Switch ON")
+    if len(state.get("positions",{})) >= V91_MAX_POSITIONS: reasons.append("최대 동시 포지션")
+    if mode == "PROTECTED" and V91_DAILY_LOSS_LIMIT > 0 and float(day.get("realized_pnl",0)) <= -V91_DAILY_LOSS_LIMIT:
+        reasons.append("일일 손실 한도")
+    return reasons
+
+async def papermode1090_cmd(update, context):
+    args=list(getattr(context,"args",[]) or [])
+    state=_v91_load_state()
+    if not args:
+        return await v90_1_safe_reply(update, f"🧪 Paper Mode: <b>{_v109_paper_mode(state)}</b>\n변경: /papermode learning 또는 /papermode protected", parse_mode="HTML")
+    raw=str(args[0]).strip().upper()
+    aliases={"LEARNING":"LEARNING","LEARN":"LEARNING","학습":"LEARNING","PROTECTED":"PROTECTED","PROTECT":"PROTECTED","보호":"PROTECTED"}
+    mode=aliases.get(raw)
+    if not mode:
+        return await v90_1_safe_reply(update,"사용법: /papermode learning 또는 /papermode protected")
+    state["paper_mode"]=mode
+    # Learning mode must not remain blocked by a prior daily-loss kill switch.
+    if mode == "LEARNING" and state.get("kill_switch"):
+        state["kill_switch"]=False
+        _v91_event(state,"KILL_SWITCH_RESET",{"reason":"PAPER_LEARNING_MODE"})
+    _v91_event(state,"PAPER_MODE",{"mode":mode,"by":"telegram"})
+    _v91_save_state(state)
+    if mode == "LEARNING":
+        msg="✅ Paper Mode: <b>LEARNING</b>\n일일 손실·수익 제한: <b>미적용</b>\n최대 20포지션·중복 방지·쿨다운·Kill Switch·데이터 안전장치는 유지됩니다."
+    else:
+        msg=f"🛡 Paper Mode: <b>PROTECTED</b>\n일일 손실 한도: <b>{V91_DAILY_LOSS_LIMIT:.2f} USDT</b> 적용"
+    await v90_1_safe_reply(update,msg,parse_mode="HTML")
+
+async def paperstatus1090_cmd(update, context):
+    state=_v91_load_state(); day=_v91_daily(state); mode=_v109_paper_mode(state)
+    pnl=float(day.get("realized_pnl",0)); reasons=_v109_block_reasons(state)
+    loss_line="DISABLED (학습 모드)" if mode=="LEARNING" else f"{V91_DAILY_LOSS_LIMIT:.2f} USDT"
+    trading="BLOCKED" if reasons else "ACTIVE"
+    lines=[
+        "🧪 <b>A100 V109.0 Paper Trading</b>",
+        f"Mode: <b>{mode}</b> · 거래 상태: <b>{trading}</b>",
+        f"상태: <b>{'ON' if state.get('enabled') else 'OFF'}</b> · Kill Switch: <b>{'ON' if state.get('kill_switch') else 'OFF'}</b>",
+        f"열린 포지션: <b>{len(state.get('positions',{}))}/{V91_MAX_POSITIONS}</b>",
+        f"오늘 실현손익: <b>{pnl:+.4f} USDT</b>",
+        f"오늘 거래: {day.get('trades',0)}회 / 승 {day.get('wins',0)} / 패 {day.get('losses',0)}",
+        f"일일 손실 제한: <b>{loss_line}</b>",
+        f"자동감시: {'ON' if V91_AUTO_MONITOR else 'OFF'} / {V91_MONITOR_SECONDS}초",
+        f"차단 사유: <b>{', '.join(reasons) if reasons else '없음'}</b>",
+        "유지 안전장치: 최대 포지션·중복 진입·쿨다운·데이터 오류·Kill Switch",
+        "실계좌 주문: <b>미구현·비활성</b>",
+    ]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def paperdiagnosis1090_cmd(update, context):
+    state=_v91_load_state(); reasons=_v109_block_reasons(state); mode=_v109_paper_mode(state)
+    await v90_1_safe_reply(update,"\n".join([
+        "🔍 <b>A100 V109.0 PAPER DIAGNOSIS</b>",
+        f"Mode {mode} · 상태 {'BLOCKED' if reasons else 'ACTIVE'}",
+        f"차단 사유: {', '.join(reasons) if reasons else '없음'}",
+        f"포지션 {len(state.get('positions',{}))}/{V91_MAX_POSITIONS}",
+        "※ LEARNING 모드에서는 일일 손실 한도가 신규 Paper 표본 생성을 차단하지 않습니다."
+    ]),parse_mode="HTML")
+
+# V108 NameError hotfix: _v103_symbol was never defined in the release.
+def _v109_symbol(context):
+    args=list(getattr(context,"args",[]) or [])
+    token=args[0] if args else "BTC"
+    try:return _v91_normalize_symbol(token)
+    except Exception:return str(token or "BTC").strip().upper().replace("/","") + ("" if str(token).upper().endswith("USDT") else "USDT")
+
+async def patterndetect1090_cmd(update, context):
+    st,info,_=_v108_sync(); sym=_v109_symbol(context); x=_v108_detect(st,sym)
+    await v90_1_safe_reply(update,"\n".join([
+        "🔎 <b>A100 V109.0 PATTERN DETECTOR</b>",
+        f"{x['symbol']} · <b>{x['name']}</b>",
+        f"Pattern ID {x['pattern_id']} · Confidence {x['confidence']:.1f}%",
+        f"근거 {', '.join(x.get('evidence') or []) or '없음'}"
+    ]),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+    "papermode":"Paper 학습/보호 모드 전환",
+    "paperdiagnosis":"Paper 신규 진입 차단 사유 진단",
+    "patterndetect":"종목 최신 패턴 자동 식별 (V109 수정)",
+})
+for _c in ("papermode","paperdiagnosis"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("paper",[]): V925_HELP_CATEGORIES["paper"].append(_c)
+V90_COMMAND_REGISTRY.update({
+    "paper":paperstatus1090_cmd,"paperstatus":paperstatus1090_cmd,
+    "papermode":papermode1090_cmd,"paperdiagnosis":paperdiagnosis1090_cmd,
+    "patterndetect":patterndetect1090_cmd,
+})
+V91_VERSION=V1090_VERSION
+
+async def help1090_cmd(update,context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,"\n".join([f"🧠 <b>A100 V109.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode="HTML")
+    if req:return await help1080_cmd(update,context)
+    await v90_1_safe_reply(update,"\n".join([
+        "🧠 <b>A100 V109.0 HELP</b>","",
+        "Paper Learning: /paper · /papermode learning · /paperdiagnosis",
+        "Protected: /papermode protected",
+        "Pattern Hotfix: /patterndetect BTC",
+        "Shadow: /shadownetwork · /mtfdna · /globaldna · /closedloop",
+        "Autonomous: /automarketscan · /autonomousscheduler",
+        "","전체 목록: /commands V109"
+    ]),parse_mode="HTML")
+
+async def commands1090_cmd(update,context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v109","v1090","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V109.0 전체 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands1080_cmd(update,context)
+
+V90_COMMAND_REGISTRY.update({"help":help1090_cmd,"commands":commands1090_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1080_PREFLIGHT_FOR_V1090=v91_preflight
+def v91_preflight():
+    base=_V1080_PREFLIGHT_FOR_V1090(); checks=dict(base.get("checks",{})); checks["v1080_version_sync"]=True
+    required={"paper","paperstatus","papermode","paperdiagnosis","patterndetect","help","commands"}
+    checks.update({
+        "v1090_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+        "v1090_learning_default":_v109_paper_mode({})=="LEARNING",
+        "v1090_daily_loss_bypass_present":"_v109_paper_mode(state) != \"LEARNING\"" in open(__file__,encoding="utf-8").read(),
+        "v1090_pattern_hotfix":callable(patterndetect1090_cmd),
+        "v1090_version_sync":V91_VERSION==V1090_VERSION,
+        "v1090_schema_preserved":_v91_default_state().get("schema")==1,
+        "v1090_paper_limit_unchanged":V91_MAX_POSITIONS==20,
+        "v1090_shadow_limit_unchanged":V914_SHADOW_MAX==60,
+        "v1090_no_live_trading":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1090-paper-learning-mode-1"}
 
 if __name__ == "__main__":
     main()
