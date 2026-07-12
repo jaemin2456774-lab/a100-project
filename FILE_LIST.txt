@@ -4,6 +4,7 @@ GITHUB_REPLACE_GUIDE_KR.md
 README.md
 RELEASE_MANIFEST.json
 docs/CHANGELOG_V101_0.md
+docs/CHANGELOG_V102_0.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -23,6 +24,7 @@ docs/DEVELOPMENT_BACKLOG_V98_0.md
 docs/DEVELOPMENT_BACKLOG_V99_0.md
 docs/README_V94_0_KR.md
 docs/TEST_REPORT_V101_0.md
+docs/TEST_REPORT_V102_0.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
 docs/TEST_REPORT_V96_0.md
@@ -34,6 +36,7 @@ main.py
 railway.json
 requirements.txt
 tests/test_v101_0_closed_loop.py
+tests/test_v102_0_evolution_engine.py
 tests/test_v91_8_baseline.py
 tests/test_v91_8_scenario.py
 tests/test_v91_stability.py
@@ -59,6 +62,7 @@ tests/test_v98_0_market_intelligence.py
 tests/test_v99_0_predictive_intelligence.py
 v1000_learning_intelligence.py
 v1010_closed_loop_learning.py
+v1020_evolution_engine.py
 v925_decision_intelligence.py
 v926_learning_intelligence.py
 v927_learning_calibration.py

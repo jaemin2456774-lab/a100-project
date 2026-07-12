@@ -29325,5 +29325,158 @@ def v91_preflight():
       'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},
       'registry_fingerprint':'v1010-closed-loop-learning-1'}
 
+
+# ============================================================================
+# A100 V102.0 EVOLUTION ENGINE — live outcomes, adaptive weights, DNA, filters
+# ============================================================================
+V1020_VERSION = "A100 V102.0 EVOLUTION ENGINE DEVELOPMENT"
+try:
+    from v1020_evolution_engine import (attach_reference as _v102_attach,
+        evaluate_open_signals as _v102_evaluate, adaptive_learn as _v102_adaptive,
+        build_dna as _v102_build_dna, dna_match as _v102_dna_match,
+        false_signal_risk as _v102_false, confidence_evolution as _v102_conf_evo,
+        dynamic_score as _v102_dynamic_score)
+except Exception:
+    _v102_attach=_v102_evaluate=_v102_adaptive=_v102_build_dna=None
+    _v102_dna_match=_v102_false=_v102_conf_evo=_v102_dynamic_score=None
+
+
+def _v102_price_map(state):
+    prices={}
+    for s in state.get('signals',[]):
+        if s.get('status')!='OPEN': continue
+        sym=str(s.get('symbol') or '').upper()
+        if not sym or sym in prices: continue
+        try:
+            px=_v91_price(sym)
+            if px and float(px)>0: prices[sym]=float(px)
+        except Exception as exc:
+            v88_record_error('v102-price-observation',exc)
+    return prices
+
+
+def _v102_sync_live():
+    st=_v101_load(V1010_STATE_FILE)
+    prices=_v102_price_map(st)
+    live=_v102_evaluate(st,prices)
+    matched=_v101_reconcile(st,_v101_outcomes())
+    _v101_learn(st)
+    feature_stats=_v102_adaptive(st)
+    dna=_v102_build_dna(st)
+    info=_v101_summary(st)
+    _v101_save(V1010_STATE_FILE,st)
+    info.update({'live_changed':live['changed'],'matched_now':matched,'price_count':len(prices),
+                 'feature_stats':feature_stats,'dna_count':len(dna)})
+    return st,info,live
+
+
+def _v102_capture_symbol(symbol):
+    rows,mem,cal,shadow,h,r,g,c,e,tm,d,v,ready,p,item,s,mtf,z,why,hist,b=_v1000_bundle(symbol)
+    st=_v101_load(V1010_STATE_FILE)
+    rec,created=_v101_capture(st,p,b,mtf,z,why.get('positives',[]))
+    try:
+        px=_v91_price(rec['symbol'])
+        _v102_attach(rec,px)
+    except Exception as exc:
+        v88_record_error('v102-reference-price',exc)
+    _v102_evaluate(st,_v102_price_map(st)); _v101_reconcile(st,_v101_outcomes()); _v101_learn(st)
+    _v102_adaptive(st); _v102_build_dna(st)
+    dynamic=_v102_dynamic_score(rec.get('ai_score',0),st,rec)
+    rec['dynamic_score']=dynamic['score'];rec['false_signal']=dynamic['false'];rec['dna_match']=dynamic['dna']
+    _v101_save(V1010_STATE_FILE,st)
+    return rec,created,_v101_summary(st),dynamic
+
+
+async def outcomeengine1020_cmd(update, context):
+    st,info,live=_v102_sync_live()
+    types={}
+    for e in live.get('events',[]):types[e.get('outcome_type','?')]=types.get(e.get('outcome_type','?'),0)+1
+    lines=["🎯 <b>A100 V102.0 LIVE OUTCOME ENGINE</b>",
+      f"가격 관측 <b>{info['price_count']}종목</b> · 이번 자동판정 <b>{info['live_changed']}건</b> · 기존 종료매칭 <b>{info['matched_now']}건</b>",
+      f"추적 중 {info['open']} · 결과 {info['wins']}승 {info['losses']}패 {info['holds']}보류 · 승률 <b>{info['win_rate']:.1f}%</b>",""]
+    lines += [f"{k} <b>{v}건</b>" for k,v in sorted(types.items())] or ["새 TP/SL/TIMEOUT 판정 없음"]
+    lines += ["","※ 현재가 관측과 저장된 상대 TP/SL만 사용하며 주문은 실행·변경하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def dnaboard1020_cmd(update, context):
+    st,info,_=_v102_sync_live(); rows=st.get('dna_library',[])
+    lines=["🧬 <b>A100 V102.0 AI DNA LIBRARY</b>",f"저장 DNA <b>{len(rows)}개</b> · 결정 표본 {info['wins']+info['losses']}건",""]
+    if not rows: lines.append("DNA 생성에 필요한 동일 조합 결정 표본이 아직 부족합니다.")
+    for i,x in enumerate(rows[:12],1):
+        lines.append(f"{i}. <b>{x['id']}</b> · {x['status']} · {x['n']}건 · 승률 {x['win_rate']:.1f}% · 평균 {x['avg_return']:+.3f}%")
+        lines.append(f"   {_v54_escape(x['pattern'])}")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def falsefilter1020_cmd(update, context):
+    if not getattr(context,'args',None): return await v90_1_safe_reply(update,'사용법: /falsefilter BTC')
+    rec,created,info,dyn=_v102_capture_symbol(context.args[0]); f=dyn['false']; dna=dyn['dna']
+    lines=["🛡️ <b>A100 V102.0 FALSE SIGNAL DETECTOR</b>",f"<b>{_v54_escape(rec['symbol'])}</b> · {rec['side']} · 판정 <b>{f['decision']}</b>",
+      f"False Risk <b>{f['risk']:.1f}%</b> · Dynamic Score <b>{dyn['score']:.1f}</b> (Base {dyn['base']:.1f})",
+      f"DNA <b>{_v54_escape(dna.get('id','NEW'))}</b> · 표본 {dna.get('n',0)} · 승률 {dna.get('win_rate',0):.1f}%","","근거"]
+    lines += [f"• {_v54_escape(x)}" for x in f['reasons']]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def confidenceevolution1020_cmd(update, context):
+    st,info,_=_v102_sync_live(); x=_v102_conf_evo(st,20)
+    recent=' → '.join(f"{v:.0f}" for v in x['trend'][-8:]) if x['trend'] else '표본 없음'
+    lines=["📈 <b>A100 V102.0 CONFIDENCE EVOLUTION</b>",f"결정 표본 <b>{x['n']}건</b> · 최근 적중률 <b>{x['recent_accuracy']:.1f}%</b> · 방향 <b>{x['direction']}</b>","",f"최근 누적 추세: <code>{recent}</code>",
+      f"현재 학습 승률 {info['win_rate']:.1f}% · DNA {info['dna_count']}개"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+_AIUNIFIED1010_FOR_V1020=aiunified1010_cmd
+async def aiunified1020_cmd(update, context):
+    if getattr(context,'args',None):
+        try:
+            rec,_,_,dyn=_v102_capture_symbol(context.args[0])
+            if dyn['false']['decision']=='IGNORE':
+                await v90_1_safe_reply(update,f"🛡️ <b>V102 보호필터</b> · {_v54_escape(rec['symbol'])} False Risk {dyn['false']['risk']:.1f}% · <b>IGNORE 권고</b>",parse_mode='HTML')
+        except Exception as exc:v88_record_error('v102-dashboard-evolution',exc)
+    return await _AIUNIFIED1010_FOR_V1020(update,context)
+
+V925_COMMAND_USAGE.update({'outcomeengine':'현재가 기반 TP1·TP2·SL·TIMEOUT 자동판정','dnaboard':'성공·실패 지표 조합 DNA 라이브러리',
+ 'falsefilter':'저성과 전략·DNA 기반 허위신호 필터','confidenceevolution':'최근 결정 결과 기반 Confidence 진화 추세'})
+for _c in ('outcomeengine','dnaboard','falsefilter','confidenceevolution'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'outcomeengine':outcomeengine1020_cmd,'dnaboard':dnaboard1020_cmd,'falsefilter':falsefilter1020_cmd,
+ 'confidenceevolution':confidenceevolution1020_cmd,'aiunified':aiunified1020_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1020_VERSION
+
+async def help1020_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧬 <b>A100 V102.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help1010_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧬 <b>A100 V102.0 HELP</b>","","Evolution: /outcomeengine · /dnaboard · /falsefilter BTC · /confidenceevolution","Closed Loop: /learningcore BTC · /autotrack · /weightboard · /strategyboard","Main: /aiunified BTC · /truememory · /learningloop · /scorebreakdown BTC","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V102"]),parse_mode='HTML')
+
+async def commands1020_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v102','v1020','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V102.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands1010_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1020_cmd,'commands':commands1020_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1010_PREFLIGHT_FOR_V1020=v91_preflight
+def v91_preflight():
+    base=_V1010_PREFLIGHT_FOR_V1020();checks=dict(base.get('checks',{}))
+    if 'v1010_version_sync' in checks:checks['v1010_version_sync']=True
+    required={'aiunified','outcomeengine','dnaboard','falsefilter','confidenceevolution','help','commands'}
+    funcs=(_v102_attach,_v102_evaluate,_v102_adaptive,_v102_build_dna,_v102_dna_match,_v102_false,_v102_conf_evo,_v102_dynamic_score)
+    checks.update({'v1020_module_loaded':all(callable(x) for x in funcs),'v1020_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+      'v1020_help_sync':(required-{'help','commands','aiunified'}).issubset(V925_COMMAND_USAGE),
+      'v1020_category_sync':(required-{'help','commands','aiunified'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v1020_version_sync':V91_VERSION==V1020_VERSION,'v1020_schema_preserved':_v91_default_state().get('schema')==1,
+      'v1020_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1020_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v1020_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))}
+    checks['v1020_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,
+      'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},
+      'registry_fingerprint':'v1020-evolution-engine-1'}
+
 if __name__ == "__main__":
     main()

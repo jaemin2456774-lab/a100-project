@@ -1,16 +1,12 @@
-# A100 V101.0 Closed Loop Learning Development
+# A100 V102.0 Evolution Engine Development
 
-기준 버전: V100.0 Learning Intelligence.
+V101 Closed Loop Learning을 기준으로 자동 결과 판정, 적응형 가중치, AI DNA, 허위 신호 필터, Confidence 진화를 추가한 개발 검수 버전입니다.
 
-## 핵심 변경
-- `/aiunified SYMBOL` 실행 시 추천 신호를 별도 학습 DB에 자동 저장
-- 기존 Paper/Shadow 종료 기록과 추천을 자동 매칭해 WIN/LOSS/HOLD 판정
-- 거래량·OI·Funding·압축·Momentum·Pattern·Cycle·MTF 가중치 안전 학습
-- 저성과 전략은 충분한 표본 이후 자동 `DISABLED`
-- 신규 명령: `/learningcore`, `/autotrack`, `/weightboard`, `/strategyboard`
+## 신규 명령
+- `/outcomeengine`
+- `/dnaboard`
+- `/falsefilter BTC`
+- `/confidenceevolution`
 
-## 안전성
-- 기존 `a100_v91_paper_state.json`과 Schema 1 유지
-- 학습 상태는 `a100_v101_learning_state.json`에 분리 저장
-- Paper 20개, Shadow 60개 한도 유지
-- 실거래 주문 경로 추가 없음
+## 안전 범위
+현재가 관측과 기존 Paper/Shadow 종료 기록만 학습합니다. 실거래 주문을 생성하거나 변경하지 않습니다.
