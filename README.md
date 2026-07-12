@@ -1,3 +1,17 @@
+# A100 V114.0 PATTERN MEMORY, REGIME & ADAPTIVE LEARNING DEVELOPMENT
+
+기준 버전 V113.4의 운영 안정성과 학습 가시성을 유지하면서 Pattern Memory, Market Regime AI, Adaptive Entry Threshold, Post Trade Learning 2.0을 추가한 개발 릴리스입니다.
+
+## 배포 후 검증 순서
+`/versionaudit` → `/runtimehealth` → `/learningdashboard` → `/marketregime` → `/adaptivethreshold` → `/patternmemory` → `/postlearning` → `/papertracescan` → `/entrytrace`
+
+## 핵심 안전 정책
+- Paper-only
+- Paper 포지션 20개
+- Shadow 포지션 60개
+- Adaptive Threshold는 55~70 범위의 권장값으로 시작
+- 기존 상태 및 학습 데이터 보존
+
 # A100 V113.4 OPERATIONS & LEARNING OBSERVABILITY DEVELOPMENT
 
 기준 버전 V113.3을 기반으로 운영 상태와 AI 학습 가시성을 강화한 개발 릴리스입니다.

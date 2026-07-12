@@ -1,6 +1,8 @@
 .gitignore
+FILE_LIST.txt
 GITHUB_REPLACE_GUIDE_KR.md
 README.md
+RELEASE_MANIFEST.json
 docs/CHANGELOG_V101_0.md
 docs/CHANGELOG_V102_0.md
 docs/CHANGELOG_V103_0.md
@@ -15,6 +17,7 @@ docs/CHANGELOG_V112_0.md
 docs/CHANGELOG_V113_2.md
 docs/CHANGELOG_V113_3.md
 docs/CHANGELOG_V113_4.md
+docs/CHANGELOG_V114_0.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -30,6 +33,7 @@ docs/DEVELOPMENT_BACKLOG_V105_0.md
 docs/DEVELOPMENT_BACKLOG_V106_0.md
 docs/DEVELOPMENT_BACKLOG_V108_0.md
 docs/DEVELOPMENT_BACKLOG_V112_0.md
+docs/DEVELOPMENT_BACKLOG_V114_0.md
 docs/DEVELOPMENT_BACKLOG_V94.md
 docs/DEVELOPMENT_BACKLOG_V95.md
 docs/DEVELOPMENT_BACKLOG_V96.md
@@ -54,6 +58,7 @@ docs/TEST_REPORT_V110_0.md
 docs/TEST_REPORT_V111_0.md
 docs/TEST_REPORT_V113_3.md
 docs/TEST_REPORT_V113_4.md
+docs/TEST_REPORT_V114_0.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
 docs/TEST_REPORT_V96_0.md
@@ -81,6 +86,7 @@ tests/test_v1130_entry_execution_queue.py
 tests/test_v1132_post_deploy_verification.py
 tests/test_v1133_version_runtime_trace.py
 tests/test_v1134_operations_observability.py
+tests/test_v114_0_pattern_memory_regime_adaptive.py
 tests/test_v91_8_baseline.py
 tests/test_v91_8_scenario.py
 tests/test_v91_stability.py

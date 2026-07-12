@@ -1,21 +1,16 @@
 {
-  "release": "A100 V113.4 OPERATIONS & LEARNING OBSERVABILITY DEVELOPMENT",
-  "created_at": "2026-07-13",
-  "command_count": 256,
+  "release": "A100 V114.0 PATTERN MEMORY, REGIME & ADAPTIVE LEARNING DEVELOPMENT",
+  "baseline": "A100 V113.4 OPERATIONS & LEARNING OBSERVABILITY DEVELOPMENT",
+  "generated_at_epoch": 1783895499,
+  "paper_only": true,
   "paper_position_limit": 20,
   "shadow_position_limit": 60,
-  "data_schema_preserved": true,
-  "live_trading": false,
+  "command_count": 258,
   "files": [
     {
       "path": ".gitignore",
       "size": 167,
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
-    },
-    {
-      "path": "FILE_LIST.txt",
-      "size": 3792,
-      "sha256": "551c6ec364967bd137e7bd444b0f0f9bef263a4193e3b8917621a1f3e5264875"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -24,8 +19,8 @@
     },
     {
       "path": "README.md",
-      "size": 2985,
-      "sha256": "c64a3ac5035326ddcb7e6a9aa8e5cf6fe2b96ef23127b432f28e607402b6c46c"
+      "size": 3671,
+      "sha256": "e48c0edd19911e0b0a43da58b745ddd9ad48e16ec850f8d296d8838e4dc9b45a"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -96,6 +91,11 @@
       "path": "docs/CHANGELOG_V113_4.md",
       "size": 1086,
       "sha256": "222687023f3f2e23b392c5ab365e7abb3d58ad757d9478b6ea97c7fb0a066343"
+    },
+    {
+      "path": "docs/CHANGELOG_V114_0.md",
+      "size": 1541,
+      "sha256": "3aa116d674767550fc9ba77fa10df002887e629a802113ffebe93bcdbd5526c8"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -171,6 +171,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V112_0.md",
       "size": 335,
       "sha256": "5b94cef1bf8c6ed8b50167d10f03e860657d1a80b47d4e603f2f0f3857b9097c"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V114_0.md",
+      "size": 353,
+      "sha256": "8ba076b5c4e23d5b8a93a57ab0e9ae3a6c379f8c2e201dbcbcda6090f1c77e2e"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -293,6 +298,11 @@
       "sha256": "f8578e9a9273e8fc89a13360e78633a72b09b3c9200075872fd7262b28aedc64"
     },
     {
+      "path": "docs/TEST_REPORT_V114_0.md",
+      "size": 401,
+      "sha256": "27d96577f39b92f035f75767c3877a3b3178340a40c21abb96d280c783feca25"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -329,8 +339,8 @@
     },
     {
       "path": "main.py",
-      "size": 1462575,
-      "sha256": "01fd006f23f9c1d30e8bb95febd52e89ca46bd00804f648e0eed888df8466981"
+      "size": 1480067,
+      "sha256": "fbe99a3ce0b9cb7aea8fd29e1d8788286ab49f4c40a45a22921a9e562d6bc5a2"
     },
     {
       "path": "pytest.ini",
@@ -424,8 +434,13 @@
     },
     {
       "path": "tests/test_v1134_operations_observability.py",
-      "size": 1494,
-      "sha256": "20b235de21f8c543c5427b6cf1855bb1cec790001d6e65d0dc807ced437ad1bc"
+      "size": 741,
+      "sha256": "39c7b8c18b2d4ba1c3f86eb81c3e208a094a624f84ac4608364f2a91ff5a70c9"
+    },
+    {
+      "path": "tests/test_v114_0_pattern_memory_regime_adaptive.py",
+      "size": 1569,
+      "sha256": "fb6ddbf1eaedc1d67d294beb07b25cf67cf2fe847ce2d14c127a88e9b99e4a05"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
