@@ -1,4 +1,4 @@
-"""A100 V91.5 offline regression smoke test.
+"""A100 V91.6 offline adaptive strategy regression smoke test.
 No live orders, Telegram polling, Binance network, or real account calls are made.
 """
 from __future__ import annotations
@@ -19,17 +19,17 @@ os.environ["PAPER_MAX_SHORT_POSITIONS"] = "6"
 os.environ["PAPER_MAX_TOTAL_NOTIONAL"] = "1000"
 os.environ["PAPER_SYMBOL_COOLDOWN_MINUTES"] = "60"
 
-with tempfile.TemporaryDirectory(prefix="a100_v915_") as tmp:
+with tempfile.TemporaryDirectory(prefix="a100_v916_") as tmp:
     os.environ["A100_DATA_DIR"] = tmp
-    spec = importlib.util.spec_from_file_location("a100_v915", ROOT / "main.py")
+    spec = importlib.util.spec_from_file_location("a100_v916", ROOT / "main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
     preflight = module.v91_preflight()
     assert preflight["ok"], preflight
-    assert len(module.V90_COMMAND_REGISTRY) == 126
-    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals", "papershadow", "papershadowpositions", "papershadowperformance", "paperexpectancy", "paperpatterns", "paperlifecycle"):
+    assert len(module.V90_COMMAND_REGISTRY) == 129
+    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals", "papershadow", "papershadowpositions", "papershadowperformance", "paperexpectancy", "paperpatterns", "paperlifecycle", "paperadaptive", "paperstrategies", "paperquarantine"):
         assert callable(module.V90_COMMAND_REGISTRY.get(command))
 
     module.V78_VALID_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
@@ -123,4 +123,33 @@ with tempfile.TemporaryDirectory(prefix="a100_v915_") as tmp:
     assert explained["pattern_stats"]["smoothed_win_rate"] >= 0
     assert callable(module.V90_COMMAND_REGISTRY.get("paperexpectancy"))
 
-print("A100 V91.5 expectancy pattern lifecycle learning smoke test: PASS")
+    # V91.6 adaptive strategy selection and quarantine.
+    adaptive_state = module._v91_load_state()
+    base_closed = dict(adaptive_state["closed"][-1])
+    bad=[]
+    for i in range(module.V916_QUARANTINE_MIN_SAMPLES):
+        row=dict(base_closed)
+        row.update({"symbol":"SOLUSDT","side":"LONG","stage":"ENTRY",
+                    "strategy":"BREAKOUT_MOMENTUM","regime_at_entry":{"regime":"MILD_UPTREND"},
+                    "realized_pnl":-2.0,"notional":100.0,"closed_at":3000+i})
+        bad.append(row)
+    good=[]
+    for i in range(module.V916_QUARANTINE_MIN_SAMPLES):
+        row=dict(base_closed)
+        row.update({"symbol":"SOLUSDT","side":"LONG","stage":"ENTRY",
+                    "strategy":"TREND_PULLBACK","regime_at_entry":{"regime":"MILD_UPTREND"},
+                    "realized_pnl":3.0,"notional":100.0,"closed_at":4000+i})
+        good.append(row)
+    adaptive_state["closed"].extend(bad+good)
+    module._v91_save_state(adaptive_state)
+    selected, ranking = module._v916_select_strategy("SOLUSDT","LONG","MILD_UPTREND","ENTRY")
+    assert selected["strategy"] == "TREND_PULLBACK", (selected, ranking)
+    quarantined = [x for x in ranking if x["strategy"] == "BREAKOUT_MOMENTUM"][0]
+    assert quarantined["quarantined"] is True
+    adaptive = module._v913_explain_candidate({"symbol":"SOLUSDT","side":"LONG","strategy":"MOMENTUM_LIQUIDITY",
+        "regime":"MILD_UPTREND","score":75.0,"quote_volume":100000000,"spread_pct":0.02,"change_24h":5.0})
+    assert adaptive["strategy"] == "TREND_PULLBACK"
+    assert abs(adaptive["strategy_adjust"]) <= module.V916_STRATEGY_MAX_ADJUST
+    assert callable(module.V90_COMMAND_REGISTRY.get("paperadaptive"))
+
+print("A100 V91.6 adaptive strategy selection smoke test: PASS")

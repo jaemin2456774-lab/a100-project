@@ -24041,7 +24041,7 @@ def main():
 # A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
 # 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
 # ============================================================================
-V91_VERSION = "A100 V91.5 EXPECTANCY PATTERN LIFECYCLE LEARNING ENGINE"
+V91_VERSION = "A100 V91.6 ADAPTIVE STRATEGY SELECTION ENGINE"
 V91_STARTED_AT = time.time()
 V91_LOCK = threading.RLock()
 V91_STOP = threading.Event()
@@ -25442,6 +25442,165 @@ async def paperlifecycle915_cmd(update, context):
     await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
 
 
+
+# ================================================================
+# A100 V91.6 ADAPTIVE STRATEGY SELECTION + QUARANTINE ENGINE
+# Paper/Shadow learning only. No live-order path is added.
+# ================================================================
+V916_STRATEGY_MIN_SAMPLES = _v91_int("PAPER_STRATEGY_MIN_SAMPLES", 12, 3, 1000)
+V916_QUARANTINE_MIN_SAMPLES = _v91_int("PAPER_STRATEGY_QUARANTINE_MIN_SAMPLES", 20, 5, 5000)
+V916_QUARANTINE_WIN_RATE = _v91_float("PAPER_STRATEGY_QUARANTINE_WIN_RATE", 40.0, 1.0, 80.0)
+V916_QUARANTINE_EV_PCT = _v91_float("PAPER_STRATEGY_QUARANTINE_EV_PCT", -0.15, -20.0, 5.0)
+V916_STRATEGY_MAX_ADJUST = _v91_float("PAPER_STRATEGY_MAX_ADJUST", 6.0, 0.0, 20.0)
+V916_AUTO_QUARANTINE = _v91_bool("PAPER_STRATEGY_AUTO_QUARANTINE", True)
+
+V916_STRATEGIES = {
+    "LONG": ("BREAKOUT_MOMENTUM", "TREND_PULLBACK", "RANGE_MEAN_REVERSION"),
+    "SHORT": ("BREAKDOWN_MOMENTUM", "RALLY_FADE", "RANGE_MEAN_REVERSION"),
+}
+
+
+def _v916_regime_fit(strategy, regime, side):
+    strategy, regime, side = str(strategy), str(regime), str(side).upper()
+    strong_up = regime in {"STRONG_UPTREND", "MILD_UPTREND"}
+    strong_down = regime in {"STRONG_DOWNTREND", "MILD_DOWNTREND"}
+    ranging = regime in {"UP_RANGE", "NEUTRAL_RANGE", "DOWN_RANGE", "LOW_VOL_COMPRESSION"}
+    high_vol = regime in {"HIGH_VOL_SHOCK", "HIGH_VOLATILITY"}
+    fit = 50.0
+    if strategy == "BREAKOUT_MOMENTUM": fit = 74.0 if strong_up and side == "LONG" else 57.0 if ranging else 40.0
+    elif strategy == "TREND_PULLBACK": fit = 78.0 if strong_up and side == "LONG" else 55.0 if ranging else 38.0
+    elif strategy == "RANGE_MEAN_REVERSION": fit = 76.0 if ranging else 44.0
+    elif strategy == "BREAKDOWN_MOMENTUM": fit = 74.0 if strong_down and side == "SHORT" else 56.0 if ranging else 40.0
+    elif strategy == "RALLY_FADE": fit = 78.0 if strong_down and side == "SHORT" else 55.0 if ranging else 38.0
+    if high_vol: fit -= 12.0
+    return max(0.0, min(100.0, fit))
+
+
+def _v916_strategy_stats(symbol, side, strategy, regime, stage="ENTRY", state=None):
+    stats = _v915_pattern_stats(symbol, side, stage, strategy, regime, state)
+    n = int(stats.get("trades", 0))
+    wr = _v912_safe_float(stats.get("smoothed_win_rate"), 50.0)
+    ev = _v912_safe_float(stats.get("expectancy_pct"), 0.0)
+    fit = _v916_regime_fit(strategy, regime, side)
+    sample_weight = min(1.0, n / max(V916_STRATEGY_MIN_SAMPLES * 3.0, 1.0))
+    learned = max(0.0, min(100.0, 50.0 + (wr - 50.0) * 0.8 + ev * 12.0))
+    adaptive_score = fit * (1.0 - sample_weight) + learned * sample_weight
+    quarantine = bool(V916_AUTO_QUARANTINE and n >= V916_QUARANTINE_MIN_SAMPLES and
+                      (wr < V916_QUARANTINE_WIN_RATE or ev < V916_QUARANTINE_EV_PCT))
+    return {**stats, "strategy": strategy, "regime_fit": round(fit, 2),
+            "adaptive_score": round(adaptive_score, 2), "quarantined": quarantine,
+            "sample_weight": round(sample_weight, 3)}
+
+
+def _v916_strategy_rank(symbol, side, regime, stage="ENTRY", state=None):
+    side = str(side).upper()
+    rows = [_v916_strategy_stats(symbol, side, st, regime, stage, state)
+            for st in V916_STRATEGIES.get(side, ())]
+    rows.sort(key=lambda x: (not x.get("quarantined"), x.get("adaptive_score", 0.0),
+                             x.get("trades", 0)), reverse=True)
+    return rows
+
+
+def _v916_select_strategy(symbol, side, regime, stage="ENTRY", state=None):
+    rows = _v916_strategy_rank(symbol, side, regime, stage, state)
+    active = [r for r in rows if not r.get("quarantined")]
+    selected = (active or rows or [{"strategy":"MOMENTUM_LIQUIDITY", "adaptive_score":50.0,
+                                    "trades":0, "quarantined":False}])[0]
+    return selected, rows
+
+
+_V915_EXPLAIN_BASE = _v913_explain_candidate
+def _v916_explain_candidate(row, state=None):
+    out = _V915_EXPLAIN_BASE(row, state)
+    selected, ranking = _v916_select_strategy(out.get("symbol"), out.get("side"),
+                                               out.get("regime"), out.get("stage"), state)
+    old_strategy = out.get("strategy", "MOMENTUM_LIQUIDITY")
+    out["strategy"] = selected.get("strategy", old_strategy)
+    out["strategy_ranking"] = ranking
+    out["strategy_quarantined"] = bool(selected.get("quarantined"))
+    out["strategy_samples"] = int(selected.get("trades", 0))
+    out["strategy_win_rate"] = round(_v912_safe_float(selected.get("smoothed_win_rate"), 50.0), 1)
+    out["strategy_ev_pct"] = round(_v912_safe_float(selected.get("expectancy_pct"), 0.0), 3)
+    adj = max(-V916_STRATEGY_MAX_ADJUST, min(V916_STRATEGY_MAX_ADJUST,
+              (_v912_safe_float(selected.get("adaptive_score"), 50.0) - 50.0) * 0.12))
+    if selected.get("quarantined"):
+        adj = -V916_STRATEGY_MAX_ADJUST
+        out.setdefault("penalties", []).append("전략 격리 상태")
+    elif selected.get("trades", 0) >= V916_STRATEGY_MIN_SAMPLES:
+        out.setdefault("reasons", []).append(
+            f"전략 {selected.get('strategy')} 승률 {selected.get('smoothed_win_rate',50):.1f}%")
+    else:
+        out.setdefault("reasons", []).append(f"국면 적합 전략 {selected.get('strategy')}")
+    out["strategy_adjust"] = round(adj, 2)
+    out["final_score"] = round(max(0.0, min(100.0, _v912_safe_float(out.get("final_score")) + adj)), 2)
+    out["previous_strategy"] = old_strategy
+    # Strategy quarantine never creates an ENTRY signal by itself.
+    if selected.get("quarantined") and out.get("stage") == "ENTRY": out["stage"] = "READY"
+    out["recommendation_grade"] = _v915_grade(selected, out["final_score"], _v912_safe_float(out.get("confidence")))
+    return out
+_v913_explain_candidate = _v916_explain_candidate
+
+
+def _v916_strategy_summary(state=None):
+    state = state or _v91_load_state()
+    regimes = ["STRONG_UPTREND", "MILD_UPTREND", "NEUTRAL_RANGE", "LOW_VOL_COMPRESSION",
+               "MILD_DOWNTREND", "STRONG_DOWNTREND"]
+    symbols = sorted({str(r.get("symbol","")).upper() for r in _v915_learning_rows(state) if r.get("symbol")})
+    if not symbols: symbols = ["BTCUSDT", "ETHUSDT"]
+    output=[]
+    for symbol in symbols[:50]:
+        for side in ("LONG","SHORT"):
+            for regime in regimes:
+                selected, ranking = _v916_select_strategy(symbol, side, regime, "ENTRY", state)
+                if any(int(x.get("trades",0)) for x in ranking):
+                    output.append({"symbol":symbol,"side":side,"regime":regime,
+                                   "selected":selected,"ranking":ranking})
+    return output
+
+
+async def paperadaptive916_cmd(update, context):
+    regime = _v912_regime_snapshot(force=True)
+    rows = _v913_enriched_candidates(force=True)[:12]
+    lines=["🧠 <b>V91.6 Adaptive Strategy Engine</b>",
+           f"현재 국면: <b>{regime.get('regime','UNKNOWN')}</b>",
+           f"자동 격리: {'ON' if V916_AUTO_QUARANTINE else 'OFF'} · 최소표본 {V916_STRATEGY_MIN_SAMPLES}"]
+    for i,r in enumerate(rows,1):
+        lines.append(f"{i}. <b>{r.get('symbol')}</b> {r.get('side')} {r.get('stage')} | {r.get('strategy')}\n"
+                     f"점수 {r.get('final_score',0):.1f} · 전략보정 {r.get('strategy_adjust',0):+.1f} · "
+                     f"표본 {r.get('strategy_samples',0)} · 승률 {r.get('strategy_win_rate',50):.1f}% · EV {r.get('strategy_ev_pct',0):+.2f}%")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def paperstrategies916_cmd(update, context):
+    state=_v91_load_state(); rows=_v916_strategy_summary(state)
+    lines=["📊 <b>V91.6 Symbol Strategy Matrix</b>",
+           f"학습표본 {len(_v915_learning_rows(state))} · 격리 기준 {V916_QUARANTINE_MIN_SAMPLES}건"]
+    if not rows:
+        lines.append("아직 전략별 유효 청산 표본이 없습니다.")
+    for item in rows[:20]:
+        x=item["selected"]
+        lines.append(f"<b>{item['symbol']}</b> {item['side']} · {item['regime']}\n"
+                     f"선택 {x.get('strategy')} · 표본 {x.get('trades',0)} · "
+                     f"승률 {x.get('smoothed_win_rate',50):.1f}% · EV {x.get('expectancy_pct',0):+.2f}%")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def paperquarantine916_cmd(update, context):
+    state=_v91_load_state(); rows=_v916_strategy_summary(state); quarantined=[]
+    for item in rows:
+        for x in item.get("ranking",[]):
+            if x.get("quarantined"):
+                quarantined.append((item["symbol"],item["side"],item["regime"],x))
+    lines=["🚧 <b>V91.6 Strategy Quarantine</b>",
+           f"자동 격리 {'ON' if V916_AUTO_QUARANTINE else 'OFF'} · 기준 표본 {V916_QUARANTINE_MIN_SAMPLES}+",
+           f"승률 &lt; {V916_QUARANTINE_WIN_RATE:.1f}% 또는 EV &lt; {V916_QUARANTINE_EV_PCT:+.2f}%"]
+    if not quarantined: lines.append("현재 자동 격리된 전략이 없습니다.")
+    for symbol,side,regime,x in quarantined[:30]:
+        lines.append(f"{symbol} {side} · {regime} · <b>{x.get('strategy')}</b>\n"
+                     f"표본 {x.get('trades',0)} · 승률 {x.get('smoothed_win_rate',0):.1f}% · EV {x.get('expectancy_pct',0):+.2f}%")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
 # 기존 104개 명령은 그대로 보존하고 Paper/Watchdog 명령만 추가한다.
 V90_COMMAND_REGISTRY.update({
     "paperstatus": paperstatus91_cmd,
@@ -25466,6 +25625,9 @@ V90_COMMAND_REGISTRY.update({
     "paperexpectancy": paperexpectancy915_cmd,
     "paperpatterns": paperpatterns915_cmd,
     "paperlifecycle": paperlifecycle915_cmd,
+    "paperadaptive": paperadaptive916_cmd,
+    "paperstrategies": paperstrategies916_cmd,
+    "paperquarantine": paperquarantine916_cmd,
 })
 V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 
@@ -25473,7 +25635,7 @@ V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 def v91_preflight():
     base = v90_4_preflight()
     state = _v91_load_state()
-    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals","papershadow","papershadowpositions","papershadowperformance","paperexpectancy","paperpatterns","paperlifecycle"}
+    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals","papershadow","papershadowpositions","papershadowperformance","paperexpectancy","paperpatterns","paperlifecycle","paperadaptive","paperstrategies","paperquarantine"}
     checks = {
         "base_v90_4": bool(base.get("ok")),
         "v91_callbacks": all(callable(V90_COMMAND_REGISTRY.get(name)) for name in v91_commands),
@@ -25485,6 +25647,7 @@ def v91_preflight():
         "paper_core_callable": all(callable(globals().get(name)) for name in {"_v91_open", "_v91_close", "_v91_load_state", "_v91_save_state", "_v91_monitor_once"}),
         "shadow_core_callable": all(callable(globals().get(name)) for name in {"_v914_shadow_open", "_v914_shadow_close", "_v914_shadow_monitor_once", "_v914_shadow_capture"}),
         "v915_learning_callable": all(callable(globals().get(name)) for name in {"_v915_pattern_stats", "_v915_grade", "_v915_update_lifecycle"}),
+        "v916_adaptive_callable": all(callable(globals().get(name)) for name in {"_v916_strategy_stats", "_v916_select_strategy", "_v916_strategy_summary"}),
     }
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base}
 
