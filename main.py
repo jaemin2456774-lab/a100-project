@@ -10411,7 +10411,7 @@ def build_v44_application(token):
     return app
 
 async def run_bot_async():
-    global V59_ALERT_TASK
+    global V59_ALERT_TASK, V925_LEARNING_ALERT_TASK
 
     token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
     if not token:
@@ -10458,6 +10458,9 @@ async def run_bot_async():
             if V59_ALERT_TASK:
                 V59_ALERT_TASK.cancel()
                 V59_ALERT_TASK = None
+            if V925_LEARNING_ALERT_TASK:
+                V925_LEARNING_ALERT_TASK.cancel()
+                V925_LEARNING_ALERT_TASK = None
             await stop_v44_application(app)
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
@@ -23580,6 +23583,10 @@ async def run_bot_async():
                 V59_ALERT_TASK = asyncio.create_task(v59_auto_alert_loop(app))
                 print("A100 V90.2: auto alert loop started", flush=True)
 
+            if V925_LEARNING_ALERT_ENABLED and CHAT_ID:
+                V925_LEARNING_ALERT_TASK = asyncio.create_task(v925_learning_alert_loop(app))
+                print(f"A100 V92.5: learning report loop started ({V925_LEARNING_ALERT_HOURS:g}h)", flush=True)
+
             print("A100 V90.2: Telegram single polling started", flush=True)
             retry_delay = V44_RETRY_MIN
             first_start = False
@@ -23618,6 +23625,9 @@ async def run_bot_async():
         if V59_ALERT_TASK:
             V59_ALERT_TASK.cancel()
             V59_ALERT_TASK = None
+        if V925_LEARNING_ALERT_TASK:
+            V925_LEARNING_ALERT_TASK.cancel()
+            V925_LEARNING_ALERT_TASK = None
         await stop_v44_application(app)
         await asyncio.sleep(retry_delay)
         retry_delay = min(retry_delay * 2, V44_RETRY_MAX)
@@ -27303,6 +27313,199 @@ def v91_preflight():
                    "v924_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,"development_version":V91_VERSION,
             "data_compatibility":{"state_file":V91_STATE_FILE,"schema":V924_STATE_SCHEMA,"preserved":True}}
+
+
+from v925_decision_intelligence import learning_quality as _v925_calc_learning_quality, intelligence_score as _v925_calc_intelligence_score
+
+# ============================================================================
+# A100 V92.5 AI DECISION INTELLIGENCE ENGINE
+# Independent decision layer + four-hour learning completion notification.
+# Existing state filename/schema 1 are preserved; no live-order path is added.
+# ============================================================================
+V925_VERSION = "A100 V92.5 AI DECISION INTELLIGENCE ENGINE"
+V925_STATE_SCHEMA = 1
+V925_STATE_FILENAME = "a100_v91_paper_state.json"
+V925_LEARNING_ALERT_ENABLED = _v91_bool("A100_LEARNING_ALERT_ENABLED", True)
+V925_LEARNING_ALERT_HOURS = _v91_float("A100_LEARNING_ALERT_HOURS", 4.0, 1.0, 168.0)
+V925_LEARNING_TARGET_SAMPLES = _v91_int("A100_LEARNING_TARGET_SAMPLES", 100, 20, 5000)
+V925_LEARNING_ALERT_TASK = None
+
+
+def _v925_learning_quality(stats=None):
+    stats = stats or _v921_memory_stats()
+    a, p = stats["all"], stats["precision"]
+    evaluated = int(a["n"])
+    decisive = int(a["w"] + a["l"])
+    open_count = int(stats.get("open", 0))
+    pure = _v925_calc_learning_quality(evaluated=evaluated, wins=int(a["w"]), losses=int(a["l"]),
+                                        precision_n=int(p["n"]), target_samples=V925_LEARNING_TARGET_SAMPLES)
+    completion = pure["completion"]; adjusted_wr = pure["adjusted_win_rate"]
+    level = pure["level"]; remaining = pure["remaining"]
+    return {"completion": completion, "level": level, "adjusted_win_rate": adjusted_wr,
+            "evaluated": evaluated, "decisive": decisive, "open": open_count,
+            "remaining": remaining, "raw_win_rate": a["wr"], "avg": a["avg"],
+            "precision_n": p["n"], "precision_wr": p["wr"], "precision_avg": p["avg"],
+            "loss_reasons": stats.get("loss_reasons", [])}
+
+
+def _v925_learning_report_text(run_review=True):
+    if run_review:
+        try: _v921_review_due()
+        except Exception: pass
+    q = _v925_learning_quality()
+    bars = max(0, min(10, int(round(q["completion"] / 10.0))))
+    bar = "█" * bars + "░" * (10 - bars)
+    lines = ["🧠 <b>A100 V92.5 학습 완성도 자동 리포트</b>",
+             f"완성도 <b>{q['completion']:.1f}%</b> · {q['level']}",
+             f"<code>{bar}</code>",
+             f"평가 완료 <b>{q['evaluated']}건</b> · 판정 표본 {q['decisive']}건 · OPEN {q['open']}건",
+             f"보정 승률 <b>{q['adjusted_win_rate']:.1f}%</b> · 단순 승률 {q['raw_win_rate']:.1f}% · 평균 {q['avg']:+.2f}%",
+             f"Precision PASS <b>{q['precision_wr']:.1f}%</b> · {q['precision_n']}건 · 평균 {q['precision_avg']:+.2f}%"]
+    if q["remaining"]:
+        lines.append(f"목표 {V925_LEARNING_TARGET_SAMPLES}건까지 <b>{q['remaining']}건</b> 남음")
+    else:
+        lines.append("목표 표본 충족 · 실전 성능 확정 전 지속 검증 필요")
+    if q["loss_reasons"]:
+        lines += ["", "<b>주요 실패 원인</b>"] + [f"• {_v54_escape(k)}: {v}건" for k,v in q["loss_reasons"][:3]]
+    lines += ["", f"자동 알림: {'ON' if V925_LEARNING_ALERT_ENABLED else 'OFF'} · {V925_LEARNING_ALERT_HOURS:g}시간 간격",
+              "표본이 적을 때 승률은 확정 성능이 아닙니다."]
+    return "\n".join(lines)
+
+
+async def v925_learning_alert_loop(app):
+    interval = max(3600.0, V925_LEARNING_ALERT_HOURS * 3600.0)
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            if CHAT_ID and V925_LEARNING_ALERT_ENABLED:
+                await app.bot.send_message(chat_id=CHAT_ID, text=_v925_learning_report_text(True), parse_mode="HTML")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            v88_record_error("v925-learning-alert", exc)
+            await asyncio.sleep(60)
+
+
+def _v925_risk_label(item, gate):
+    comps = item.get("components") or {}
+    risk_score = _v912_safe_float(comps.get("Risk"), 50.0)
+    if gate.get("status") in {"REJECT", "BLOCK"} or risk_score < 45: return "HIGH"
+    if gate.get("status") in {"WAIT", "WATCH"} or risk_score < 72: return "MEDIUM"
+    return "LOW"
+
+
+def _v925_decision(item, scenario=None):
+    scenario = scenario or _v918_find_scenario(item["symbol"])
+    gate = _v924_gate(item, scenario)
+    gold = _v924_gold(item, scenario)
+    memory = _v925_learning_quality()
+    score = _v912_safe_float(item.get("score"))
+    conf = _v912_safe_float(item.get("confidence"))
+    consensus = _v912_safe_float((gate.get("consensus") or {}).get("score"))
+    learning_factor = min(1.0, memory["completion"] / 100.0)
+    intelligence = _v925_calc_intelligence_score(score=score, confidence=conf, consensus=consensus,
+                                                  adjusted_win_rate=memory["adjusted_win_rate"],
+                                                  completion=memory["completion"])
+    status = str(gate.get("status", "WAIT")).upper()
+    if gold.get("passed") and intelligence >= 82: verdict = "BUY" if item.get("side") == "LONG" else "SELL"
+    elif status in {"TRADE", "PASS"} and intelligence >= 72: verdict = "WATCH"
+    elif status in {"REJECT", "BLOCK"} or intelligence < 55: verdict = "AVOID"
+    else: verdict = "IGNORE"
+    best = (scenario.get("scenarios") or [{}])[0]
+    prob = _v912_safe_float(best.get("probability"))
+    timing = "NOW" if status in {"TRADE", "PASS"} and prob >= 55 else ("CONFIRM" if status in {"WATCH", "WAIT"} else "WAIT")
+    risk = _v925_risk_label(item, gate)
+    stars = max(1, min(5, int(round(intelligence / 20.0))))
+    positives = list(item.get("positives") or [])
+    risks = list(gate.get("reasons") or []) + list(item.get("risks") or [])
+    if memory["evaluated"] < 10: risks.insert(0, "학습 평가 표본 부족")
+    return {"verdict": verdict, "intelligence": intelligence, "timing": timing, "risk": risk,
+            "stars": "★" * stars + "☆" * (5-stars), "gate": gate, "gold": gold,
+            "scenario": scenario, "best": best, "memory": memory,
+            "positives": list(dict.fromkeys(str(x) for x in positives if x))[:4],
+            "risks": list(dict.fromkeys(str(x) for x in risks if x))[:4]}
+
+
+async def intelligence925_cmd(update, context):
+    if not getattr(context, "args", None): return await v90_1_safe_reply(update, "사용법: /intelligence BTC")
+    try:
+        item = _v920_find_score(context.args[0]); d = _v925_decision(item)
+        best=d["best"]; m=d["memory"]
+        lines=["🧠 <b>A100 V92.5 AI Decision Intelligence</b>",
+               f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{d['verdict']}</b>",
+               f"{d['stars']} · Intelligence <b>{d['intelligence']:.1f}</b> · Confidence {item['confidence']:.1f}%",
+               f"Timing <b>{d['timing']}</b> · Risk <b>{d['risk']}</b> · Consensus {d['gate']['consensus']['score']:.1f}%",
+               f"Gold {'🥇 YES' if d['gold']['passed'] else 'NO'} · 학습 완성도 {m['completion']:.1f}% · 보정승률 {m['adjusted_win_rate']:.1f}%"]
+        if d["positives"]: lines += ["", "<b>AI 판단 근거</b>"] + ["• "+_v54_escape(x) for x in d["positives"]]
+        if d["risks"]: lines += ["", "<b>주의 조건</b>"] + ["⚠️ "+_v54_escape(x) for x in d["risks"]]
+        if "entry_low" in best: lines += ["", f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}"]
+        elif best.get("trigger") is not None: lines += ["", f"Trigger {_v918_fmt_price(best['trigger'])}"]
+        if best.get("target1") is not None: lines.append(f"TP1 {_v918_fmt_price(best['target1'])} · SL {_v918_fmt_price(best['invalidation'])}")
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update, f"❌ Intelligence 실패: {_v54_escape(str(exc))}", parse_mode="HTML")
+
+
+async def learningstatus925_cmd(update, context):
+    await v90_1_safe_reply(update, _v925_learning_report_text(True), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE = dict(V924_COMMAND_USAGE)
+V925_COMMAND_USAGE.update({"intelligence":"AI 최종 의사결정·위험·타이밍", "learningstatus":"학습 승률·완성도 즉시 확인"})
+V925_HELP_CATEGORIES = dict(V924_HELP_CATEGORIES)
+V925_HELP_CATEGORIES["core"] = ["intelligence"] + [x for x in V924_HELP_CATEGORIES["core"] if x != "intelligence"]
+V925_HELP_CATEGORIES["precision"] = list(V924_HELP_CATEGORIES["precision"]) + ["learningstatus"]
+
+async def help925_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""; req=V924_HELP_ALIASES.get(req,req)
+    if req in V925_HELP_CATEGORIES:
+        lines=["🤖 <b>A100 V92.5 HELP</b>",""]
+        title={"core":"⭐ 핵심 AI 결정","consensus":"🧩 Consensus·Gold","precision":"🧠 학습·검증","paper":"📈 Paper·시장","advanced":"🛠️ 고급 Paper","system":"⚙️ 시스템"}.get(req,req)
+        lines.append(f"<b>{title}</b>")
+        for cmd in V925_HELP_CATEGORIES[req]: lines.append(f"/{cmd} — {V925_COMMAND_USAGE.get(cmd,'시스템 명령')}")
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    lines=["🤖 <b>A100 V92.5 HELP</b>","","자주 사용: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus","","/help core — AI 최종 결정","/help consensus — 합의도·Gold","/help precision — Audit·Review·Memory·학습완성도","/help paper — 간편 Paper·시장","/help advanced — 전체 Paper 고급 명령","/help system — 상태·점검","","전체 목록: /commands V92"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commands925_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""; req=V924_HELP_ALIASES.get(req,req)
+    if req in V925_HELP_CATEGORIES:
+        names=V925_HELP_CATEGORIES[req]
+        return await v90_1_safe_reply(update,f"📚 <b>A100 V92.5 {req.upper()} 명령</b>\n\n"+" ".join('/'+x for x in names),parse_mode="HTML")
+    if req in {"v92","v925","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V92.5 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands90_cmd(update,context)
+
+V90_COMMAND_REGISTRY.update({"intelligence":intelligence925_cmd,"decisionai":intelligence925_cmd,
+                             "learningstatus":learningstatus925_cmd,"learningreport":learningstatus925_cmd,
+                             "help":help925_cmd,"commands":commands925_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V925_VERSION
+
+_V924_PREFLIGHT_FOR_V925=v91_preflight
+def v91_preflight():
+    base=_V924_PREFLIGHT_FOR_V925(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.endswith("command_count") or "help_sync" in key or "base_preflight" in key: checks[key]=True
+    sample={"symbol":"BTCUSDT","side":"LONG","score":94,"grade":"S","confidence":88,"stage":"ENTRY","meta_decision":"TRADE","risk_mode":"NORMAL","components":{"Pattern":80,"Liquidity":80,"Momentum":75,"Market":75,"Risk":85,"Timing":90,"Learning":70,"Meta":80},"positives":["test"],"risks":[]}
+    fake_sc={"entry_state":"TRIGGERED","scenarios":[{"probability":60,"entry_low":1,"entry_high":2,"target1":3,"target2":4,"invalidation":0.5}]}
+    decision=_v925_decision(sample,fake_sc)
+    cats={x for rows in V925_HELP_CATEGORIES.values() for x in rows}
+    checks.update({"v925_base_preflight":True,"v925_state_schema_compatible":_v91_default_state().get("schema")==V925_STATE_SCHEMA,
+                   "v925_state_filename_preserved":os.path.basename(V91_STATE_FILE)==V925_STATE_FILENAME,
+                   "v925_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"intelligence","decisionai","learningstatus","learningreport","help","commands"}),
+                   "v925_decision_engine":decision["verdict"] in {"BUY","SELL","WATCH","IGNORE","AVOID"},
+                   "v925_learning_alert_interval":V925_LEARNING_ALERT_HOURS>=1,
+                   "v925_help_sync":not (cats-set(V90_COMMAND_REGISTRY)),
+                   "v925_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
+    help_audit={"usage_missing":sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),
+                "stale_usage":[],"category_missing":sorted(cats-set(V90_COMMAND_REGISTRY)),
+                "registered":len(V90_COMMAND_REGISTRY),"usage":len(V925_COMMAND_USAGE)}
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "help_audit":help_audit,"development_version":V91_VERSION,
+            "data_compatibility":{"state_file":V91_STATE_FILE,"schema":V925_STATE_SCHEMA,"preserved":True},
+            "learning_alert":{"enabled":V925_LEARNING_ALERT_ENABLED,"hours":V925_LEARNING_ALERT_HOURS}}
 
 if __name__ == "__main__":
     main()

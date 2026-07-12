@@ -40,7 +40,7 @@ def test_registry_help_and_data_compatibility():
     audit=main._v924_help_audit()
     assert not audit["usage_missing"]
     assert not audit["category_missing"]
-    assert len(main.V90_COMMAND_REGISTRY)==153
+    assert len(main.V90_COMMAND_REGISTRY)>=153
     assert main.V924_STATE_SCHEMA==1
     assert main.V924_STATE_FILENAME=="a100_v91_paper_state.json"
 
