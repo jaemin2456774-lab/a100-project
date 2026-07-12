@@ -1,19 +1,9 @@
 {
-  "version": "A100 V96.0 STARTUP OPTIMIZER",
-  "release": "github-clean",
+  "version": "A100 V95.0 AI UNIFIED DASHBOARD",
   "schema": 1,
   "state_file": "a100_v91_paper_state.json",
-  "live_trading": false,
-  "features": [
-    "health-first startup",
-    "lazy background bootstrap",
-    "incremental learning cache",
-    "startup diagnostics",
-    "V95.1 learning accelerator preserved"
-  ],
-  "commands_added": [
-    "startup"
-  ],
-  "paper_max_positions": 30,
-  "shadow_max_positions": 100
+  "file_count": 39,
+  "github_web_upload_safe": true,
+  "live_trading_added": false,
+  "sha256_main": "b33233d6ed04885b34d18ecf796623115697a0210e39a3c5dad51ca2f0b04edd"
 }
