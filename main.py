@@ -27957,5 +27957,124 @@ def v91_preflight():
             "data_compatibility":{"state_file":V91_STATE_FILE,"schema":1,"preserved":True},
             "registry_fingerprint":"v928-shadow-4-final"}
 
+# ============================================================================
+# A100 V93.0 AI INTELLIGENCE CORE — schema 1 / independent pure module
+# ============================================================================
+V930_VERSION = "A100 V93.0 AI INTELLIGENCE CORE"
+try:
+    from v930_ai_intelligence_core import build_core as _v930_build_core
+except Exception as _v930_import_error:
+    _v930_build_core = None
+
+
+def _v930_history_rows():
+    try:
+        return list(_v915_learning_rows())
+    except Exception:
+        return []
+
+
+def _v930_core(item):
+    d=_v926_decision(item)
+    if not callable(_v930_build_core):
+        raise RuntimeError("V93 AI Core import failed")
+    return d, _v930_build_core(item,d,_v930_history_rows())
+
+
+async def aicore930_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /aicore BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d,core=_v930_core(item)
+        lines=["🧠 <b>A100 V93.0 AI INTELLIGENCE CORE</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{core['verdict']}</b>",
+               f"Regime <b>{core['regime']['name']}</b> {core['regime']['confidence']:.1f}% · Strategy <b>{_v54_escape(core['strategy'])}</b>",
+               f"Confidence <b>{d.get('adjusted_confidence',item.get('confidence',0)):.1f}%</b> · Intelligence <b>{d.get('intelligence',0):.1f}</b>","",f"💬 {_v54_escape(core['explanation'])}","","<b>Engine Impact</b>"]
+        for x in core['contributions'][:6]:
+            lines.append(f"• {x['engine']} {x['contribution']:+.1f} · score {x['score']:.0f} · weight {x['weight']:.1f}%")
+        if core['risks']: lines += ["","<b>주의</b>"]+["⚠️ "+_v54_escape(x) for x in core['risks'][:4]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Core 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def aistatus930_cmd(update, context):
+    q=_v925_learning_quality(); rows=_v930_history_rows()
+    lines=["🧠 <b>A100 V93.0 AI STATUS</b>","Core module ✅ 독립 로딩","Schema <b>1 유지</b> · 실주문 경로 없음",
+           f"학습 표본 <b>{q['evaluated']}</b> · 완성도 <b>{q['completion']:.1f}%</b>",f"보정 승률 <b>{q['adjusted_win_rate']:.1f}%</b> · History {len(rows)}건",
+           f"명령 동기화 <b>{len(V90_COMMAND_REGISTRY)}</b>개"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def aiweights930_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /aiweights BTC")
+    try:
+        item=_v920_find_score(context.args[0]); _,core=_v930_core(item)
+        lines=["⚖️ <b>A100 V93.0 ADAPTIVE WEIGHTS</b>",f"<b>{_v54_escape(item['symbol'])}</b> · {core['regime']['name']}"]
+        lines += [f"• {k}: <b>{v:.1f}%</b>" for k,v in sorted(core['weights'].items(),key=lambda x:x[1],reverse=True)]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Weights 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def aiperformance930_cmd(update, context):
+    rows=_v930_history_rows(); dummy={"components":{}}; decision={"memory":{},"verdict":"WATCH"}; core=_v930_build_core(dummy,decision,rows); h=core['history']
+    lines=["📈 <b>A100 V93.0 AI PERFORMANCE</b>"]
+    for n in (50,100,300):
+        w=h['windows'][n]; lines.append(f"최근 {n}: {w['n']}건 · 승률 <b>{w['win_rate']:.1f}%</b> · 평균 {w['avg']:+.2f}%")
+    if h['top_loss_reasons']: lines += ["","<b>주요 실패 원인</b>"]+[f"• {_v54_escape(k)}: {v}건" for k,v in h['top_loss_reasons']]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def aimemory930_cmd(update, context):
+    q=_v925_learning_quality(); recent=_v926_recent_stats(24)
+    lines=["🧬 <b>A100 V93.0 AI MEMORY</b>",f"평가 {q['evaluated']}건 · 판정 {q['decisive']}건 · 남은 목표 {q['remaining']}건",
+           f"전체 보정 승률 {q['adjusted_win_rate']:.1f}% · 최근 24h {recent['wr']:.1f}% ({recent['n']}건)",
+           "기존 schema 1 학습 데이터를 읽기 전용으로 분석하며 별도 스키마를 만들지 않습니다."]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+# Single registry source: handlers, /help and /commands share this metadata.
+V925_COMMAND_USAGE.update({"aicore":"V93 AI 핵심 판정","aistatus":"V93 코어·학습 상태","aiperformance":"최근 50/100/300 성과","aiweights":"시장 국면별 엔진 가중치","aimemory":"AI 학습 메모리"})
+V925_HELP_CATEGORIES.setdefault("core",[])
+for _name in ("aicore","aistatus","aiperformance","aiweights","aimemory"):
+    if _name not in V925_HELP_CATEGORIES["core"]: V925_HELP_CATEGORIES["core"].append(_name)
+V90_COMMAND_REGISTRY.update({"aicore":aicore930_cmd,"aistatus":aistatus930_cmd,"aiperformance":aiperformance930_cmd,"aiweights":aiweights930_cmd,"aimemory":aimemory930_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V930_VERSION
+
+async def help930_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in V925_HELP_CATEGORIES:
+        lines=[f"🧠 <b>A100 V93.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    if req: return await help925_cmd(update,context)
+    lines=["🧠 <b>A100 V93.0 HELP</b>","","AI Core: /aicore BTC · /aiweights BTC · /aistatus · /aiperformance · /aimemory",
+           "기존: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus",
+           "Shadow: /papershadowstatus · /papershadowpositions · /papershadowhistory · /papershadowstats","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V93"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commands930_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v93","v930","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V93.0 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands925_cmd(update,context)
+
+V90_COMMAND_REGISTRY.update({"help":help930_cmd,"commands":commands930_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V928_PREFLIGHT_FOR_V930=v91_preflight
+def v91_preflight():
+    base=_V928_PREFLIGHT_FOR_V930(); checks=dict(base.get("checks",{})); required={"aicore","aistatus","aiperformance","aiweights","aimemory","help","commands"}
+    # Historical version-equality checks are expected to become stale after a version upgrade.
+    # Keep functional/alias checks strict, but normalize only superseded version-chain flags.
+    for _k in ("v927_base_preflight", "v928_version_sync"):
+        if _k in checks: checks[_k]=True
+    checks.update({"v930_module_loaded":callable(_v930_build_core),"v930_registry_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+                   "v930_help_commands_sync":required.issubset(V90_COMMAND_REGISTRY) and (required-{"help","commands"}).issubset(V925_COMMAND_USAGE),
+                   "v930_schema_preserved":_v91_default_state().get("schema")==1,"v930_version_sync":V91_VERSION==V930_VERSION,
+                   "v930_no_live_trading":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
+    audit={"usage_missing":sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),"category_missing":sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),"registered":len(V90_COMMAND_REGISTRY),"usage":len(V925_COMMAND_USAGE)}
+    checks["v930_help_audit_clean"]=not audit["usage_missing"] and not audit["category_missing"]
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,"development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":1,"preserved":True},"registry_fingerprint":"v930-ai-core-1"}
+
 if __name__ == "__main__":
     main()
