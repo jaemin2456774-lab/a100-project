@@ -24041,7 +24041,7 @@ def main():
 # A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
 # 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
 # ============================================================================
-V91_VERSION = "A100 V91.3 SELF-LEARNING EXPLAINABLE SIGNAL ENGINE"
+V91_VERSION = "A100 V91.4 FAST LEARNING SHADOW TRADING ENGINE"
 V91_STARTED_AT = time.time()
 V91_LOCK = threading.RLock()
 V91_STOP = threading.Event()
@@ -24116,7 +24116,7 @@ V91_PAPER_ENABLED = _v91_bool("PAPER_TRADING_ENABLED", False)
 V91_AUTO_MONITOR = _v91_bool("PAPER_AUTO_MONITOR", False)
 V91_FEE_RATE = _v91_float("PAPER_FEE_RATE", 0.0004, 0.0, 0.02)
 V91_SLIPPAGE_RATE = _v91_float("PAPER_SLIPPAGE_RATE", 0.0005, 0.0, 0.05)
-V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 10, 1, 30)
+V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 15, 1, 50)
 V91_DAILY_LOSS_LIMIT = _v91_float("PAPER_DAILY_LOSS_LIMIT", 100.0, 0.0, 100000000.0)
 V91_DEFAULT_NOTIONAL = _v91_float("PAPER_DEFAULT_NOTIONAL", 100.0, 1.0, 100000000.0)
 V91_DEFAULT_SL_PCT = _v91_float("PAPER_DEFAULT_SL_PCT", 2.0, 0.1, 50.0)
@@ -24125,17 +24125,17 @@ V91_MONITOR_SECONDS = _v91_int("PAPER_MONITOR_SECONDS", 15, 5, 3600)
 V91_HEARTBEAT_SECONDS = _v91_int("WATCHDOG_HEARTBEAT_SECONDS", 30, 10, 3600)
 
 # V91.2 multi-symbol / regime learning configuration
-V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 6, 1, 30)
-V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 6, 1, 30)
+V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 9, 1, 50)
+V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 9, 1, 50)
 V912_MAX_TOTAL_NOTIONAL = _v91_float("PAPER_MAX_TOTAL_NOTIONAL", 1000.0, 1.0, 100000000.0)
-V912_SYMBOL_COOLDOWN_MIN = _v91_int("PAPER_SYMBOL_COOLDOWN_MINUTES", 60, 0, 10080)
-V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 20, 3, 100)
+V912_SYMBOL_COOLDOWN_MIN = _v91_int("PAPER_SYMBOL_COOLDOWN_MINUTES", 30, 0, 10080)
+V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 40, 3, 150)
 V912_CANDIDATE_TOP = _v91_int("PAPER_CANDIDATE_TOP", 10, 1, 30)
 V912_MIN_QUOTE_VOLUME = _v91_float("PAPER_MIN_QUOTE_VOLUME", 5000000.0, 0.0, 1e15)
 V912_MAX_SPREAD_PCT = _v91_float("PAPER_MAX_SPREAD_PCT", 0.35, 0.01, 10.0)
 V912_AUTO_SCAN = _v91_bool("PAPER_AUTO_SCAN", False)
 V912_AUTO_ENTRY = _v91_bool("PAPER_AUTO_ENTRY", False)
-V912_SCAN_SECONDS = _v91_int("PAPER_SCAN_SECONDS", 300, 60, 3600)
+V912_SCAN_SECONDS = _v91_int("PAPER_SCAN_SECONDS", 120, 60, 3600)
 V912_AUTO_ENTRY_TOP = _v91_int("PAPER_AUTO_ENTRY_TOP", 2, 1, 10)
 V912_BTC_SHOCK_PCT = _v91_float("PAPER_BTC_SHOCK_PCT", 2.5, 0.5, 20.0)
 
@@ -24157,6 +24157,10 @@ def _v91_default_state():
         "candidate_snapshots": [],
         "performance": {},
         "last_closed_by_symbol": {},
+        "shadow_positions": {},
+        "shadow_closed": [],
+        "shadow_last_closed": {},
+        "shadow_performance": {},
     }
 
 
@@ -24198,10 +24202,10 @@ def _v91_load_state():
                 raise ValueError("지원하지 않는 상태 파일")
             base = _v91_default_state()
             base.update(state)
-            for key in ("positions", "daily", "performance", "last_closed_by_symbol"):
+            for key in ("positions", "daily", "performance", "last_closed_by_symbol", "shadow_positions", "shadow_last_closed", "shadow_performance"):
                 if not isinstance(base.get(key), dict):
                     base[key] = {}
-            for key in ("closed", "events", "regime_snapshots", "candidate_snapshots"):
+            for key in ("closed", "events", "regime_snapshots", "candidate_snapshots", "shadow_closed"):
                 if not isinstance(base.get(key), list):
                     base[key] = []
             return base
@@ -25038,6 +25042,230 @@ async def papersignals913_cmd(update, context):
     except Exception as exc:
         await v90_1_safe_reply(update,f"❌ 신호 분석 실패: {exc}")
 
+
+# ================================================================
+# A100 V91.4 FAST LEARNING SHADOW TRADING ENGINE
+# Shadow trades are learning-only simulations and never place orders.
+# ================================================================
+V914_SHADOW_ENABLED = _v91_bool("PAPER_SHADOW_ENABLED", True)
+V914_SHADOW_MAX = _v91_int("PAPER_SHADOW_MAX_POSITIONS", 30, 1, 200)
+V914_SHADOW_COOLDOWN_MIN = _v91_int("PAPER_SHADOW_COOLDOWN_MINUTES", 10, 0, 1440)
+V914_SHADOW_INCLUDE_WATCH = _v91_bool("PAPER_SHADOW_INCLUDE_WATCH", True)
+V914_SHADOW_INCLUDE_READY = _v91_bool("PAPER_SHADOW_INCLUDE_READY", True)
+V914_SHADOW_INCLUDE_ENTRY = _v91_bool("PAPER_SHADOW_INCLUDE_ENTRY", True)
+V914_SHADOW_TIME_STOP_MIN = _v91_int("PAPER_SHADOW_TIME_STOP_MINUTES", 240, 15, 10080)
+V914_SHADOW_SL_PCT = _v91_float("PAPER_SHADOW_SL_PCT", 2.0, 0.1, 50.0)
+V914_SHADOW_TP_PCT = _v91_float("PAPER_SHADOW_TP_PCT", 4.0, 0.1, 500.0)
+V914_SHADOW_CLOSED_LIMIT = _v91_int("PAPER_SHADOW_CLOSED_LIMIT", 10000, 100, 100000)
+V914_SHADOW_CAPTURE_TOP = _v91_int("PAPER_SHADOW_CAPTURE_TOP", 40, 1, 150)
+V914_LEARNING_INCLUDE_SHADOW = _v91_bool("PAPER_LEARNING_INCLUDE_SHADOW", False)
+V914_SHADOW_ERRORS = 0
+V914_SHADOW_LAST_CAPTURE = 0.0
+V914_SHADOW_LAST_MONITOR = 0.0
+
+
+def _v914_shadow_stage_enabled(stage):
+    return ((stage == "WATCH" and V914_SHADOW_INCLUDE_WATCH) or
+            (stage == "READY" and V914_SHADOW_INCLUDE_READY) or
+            (stage == "ENTRY" and V914_SHADOW_INCLUDE_ENTRY))
+
+
+def _v914_shadow_key(symbol, side, stage):
+    return f"{str(symbol).upper()}|{str(side).upper()}|{str(stage).upper()}"
+
+
+def _v914_shadow_open(row):
+    """Open one learning-only shadow scenario. No exposure and no order."""
+    if not V914_SHADOW_ENABLED:
+        return None
+    symbol = _v91_normalize_symbol(row.get("symbol"))
+    side = str(row.get("side", "LONG")).upper()
+    stage = str(row.get("stage", "IGNORE")).upper()
+    if side not in {"LONG", "SHORT"} or not _v914_shadow_stage_enabled(stage):
+        return None
+    key = _v914_shadow_key(symbol, side, stage)
+    state = _v91_load_state()
+    positions = state.setdefault("shadow_positions", {})
+    if key in positions:
+        return None
+    if len(positions) >= V914_SHADOW_MAX:
+        return None
+    last = _v912_safe_float(state.setdefault("shadow_last_closed", {}).get(key))
+    if last and time.time() - last < V914_SHADOW_COOLDOWN_MIN * 60:
+        return None
+    raw = _v91_price(symbol)
+    entry = _v91_entry_fill(raw, side)
+    if side == "LONG":
+        stop = entry * (1 - V914_SHADOW_SL_PCT / 100.0)
+        target = entry * (1 + V914_SHADOW_TP_PCT / 100.0)
+    else:
+        stop = entry * (1 + V914_SHADOW_SL_PCT / 100.0)
+        target = entry * (1 - V914_SHADOW_TP_PCT / 100.0)
+    now = time.time()
+    pos = {
+        "id": f"S{int(now*1000)}-{state.get('sequence',0)+1}",
+        "key": key, "symbol": symbol, "side": side, "stage": stage,
+        "entry_price": entry, "market_price_at_entry": raw,
+        "stop_price": stop, "target_price": target,
+        "sl_pct": V914_SHADOW_SL_PCT, "tp_pct": V914_SHADOW_TP_PCT,
+        "opened_at": now, "expires_at": now + V914_SHADOW_TIME_STOP_MIN * 60,
+        "status": "OPEN", "source": "shadow-signal",
+        "base_score": _v912_safe_float(row.get("base_score", row.get("score"))),
+        "final_score": _v912_safe_float(row.get("final_score", row.get("score"))),
+        "confidence": _v912_safe_float(row.get("confidence")),
+        "strategy": str(row.get("strategy", "MOMENTUM_LIQUIDITY")),
+        "regime_at_entry": {"regime": str(row.get("regime", "UNKNOWN"))},
+        "reasons": list(row.get("reasons") or []),
+        "penalties": list(row.get("penalties") or []),
+        "mfe_pct": 0.0, "mae_pct": 0.0, "last_mark_price": raw,
+    }
+    positions[key] = pos
+    _v91_event(state, "SHADOW_OPEN", {"key": key, "symbol": symbol, "side": side, "stage": stage})
+    _v91_save_state(state)
+    return dict(pos)
+
+
+def _v914_shadow_close(key, reason, market_price):
+    state = _v91_load_state()
+    pos = state.setdefault("shadow_positions", {}).get(key)
+    if not pos:
+        return None
+    fill = _v91_exit_fill(float(market_price), pos["side"])
+    entry = float(pos["entry_price"])
+    gross_pct = ((fill / entry) - 1.0) * 100.0
+    if pos["side"] == "SHORT":
+        gross_pct *= -1.0
+    cost_pct = (V91_FEE_RATE * 2.0 + V91_SLIPPAGE_RATE * 2.0) * 100.0
+    net_pct = gross_pct - cost_pct
+    now = time.time()
+    closed = dict(pos)
+    closed.update({"status": "CLOSED", "exit_price": fill, "market_price_at_exit": float(market_price),
+                   "closed_at": now, "holding_seconds": max(0.0, now-float(pos["opened_at"])),
+                   "close_reason": reason, "gross_pct": gross_pct, "realized_pct": net_pct})
+    state["shadow_positions"].pop(key, None)
+    state.setdefault("shadow_closed", []).append(closed)
+    state["shadow_closed"] = state["shadow_closed"][-V914_SHADOW_CLOSED_LIMIT:]
+    state.setdefault("shadow_last_closed", {})[key] = now
+    perf_key = f"{closed.get('regime_at_entry',{}).get('regime','UNKNOWN')}|{closed.get('side')}|{closed.get('stage')}|{closed.get('strategy')}"
+    perf = state.setdefault("shadow_performance", {}).setdefault(perf_key, {"trades":0,"wins":0,"losses":0,"pct":0.0})
+    perf["trades"] += 1; perf["pct"] += net_pct
+    if net_pct > 0: perf["wins"] += 1
+    else: perf["losses"] += 1
+    _v91_event(state, "SHADOW_CLOSE", {"key": key, "reason": reason, "pct": net_pct})
+    _v91_save_state(state)
+    return closed
+
+
+def _v914_shadow_monitor_once():
+    global V914_SHADOW_ERRORS, V914_SHADOW_LAST_MONITOR
+    V914_SHADOW_LAST_MONITOR = time.time()
+    state = _v91_load_state()
+    closed = []
+    for key, pos in list(state.setdefault("shadow_positions", {}).items()):
+        try:
+            price = _v91_price(pos["symbol"])
+            entry = float(pos["entry_price"])
+            move = ((price / entry) - 1.0) * 100.0
+            if pos["side"] == "SHORT": move *= -1.0
+            # persist excursion before potential close
+            fresh = _v91_load_state(); live = fresh.setdefault("shadow_positions", {}).get(key)
+            if live:
+                live["mfe_pct"] = max(_v912_safe_float(live.get("mfe_pct")), move)
+                live["mae_pct"] = min(_v912_safe_float(live.get("mae_pct")), move)
+                live["last_mark_price"] = price; live["last_mark_at"] = time.time()
+                _v91_save_state(fresh)
+            hit_stop = price <= float(pos["stop_price"]) if pos["side"] == "LONG" else price >= float(pos["stop_price"])
+            hit_target = price >= float(pos["target_price"]) if pos["side"] == "LONG" else price <= float(pos["target_price"])
+            if hit_stop: closed.append(_v914_shadow_close(key, "STOP_LOSS", price))
+            elif hit_target: closed.append(_v914_shadow_close(key, "TAKE_PROFIT", price))
+            elif time.time() >= float(pos.get("expires_at", 0)): closed.append(_v914_shadow_close(key, "TIME_STOP", price))
+        except Exception as exc:
+            V914_SHADOW_ERRORS += 1
+            v88_record_error(f"v914-shadow-monitor:{key}", exc)
+    return [r for r in closed if r]
+
+
+def _v914_shadow_capture(rows):
+    global V914_SHADOW_LAST_CAPTURE, V914_SHADOW_ERRORS
+    V914_SHADOW_LAST_CAPTURE = time.time()
+    opened=[]
+    if not V914_SHADOW_ENABLED:
+        return opened
+    for row in list(rows)[:V914_SHADOW_CAPTURE_TOP]:
+        try:
+            item=_v914_shadow_open(row)
+            if item: opened.append(item)
+        except Exception as exc:
+            V914_SHADOW_ERRORS += 1
+            v88_record_error(f"v914-shadow-open:{row.get('symbol')}", exc)
+    return opened
+
+
+# Wrap V91.3 scan: every eligible signal becomes a silent Shadow scenario.
+_V913_AUTO_SCAN_BASE = _v912_auto_scan_once
+def _v914_auto_scan_once():
+    rows = _v913_scan_alert_once()
+    _v914_shadow_capture(rows)
+    if not V912_AUTO_ENTRY:
+        return []
+    state = _v91_load_state()
+    if not state.get("enabled") or state.get("kill_switch"):
+        return []
+    opened=[]
+    for row in [r for r in rows if r.get("stage") == "ENTRY"][:V912_AUTO_ENTRY_TOP]:
+        if len(_v91_load_state().get("positions", {})) >= V91_MAX_POSITIONS: break
+        try: opened.append(_v912_open(row["symbol"], row["side"], source="auto-candidate", strategy="MOMENTUM_LIQUIDITY"))
+        except Exception as exc: v88_record_error(f"v914-auto-entry:{row.get('symbol')}", exc)
+    return opened
+_v912_auto_scan_once = _v914_auto_scan_once
+
+# Wrap paper monitor so Shadow TP/SL/time-stop is evaluated too.
+_V913_MONITOR_BASE = _v91_monitor_once
+def _v914_combined_monitor_once():
+    real_rows = _V913_MONITOR_BASE()
+    _v914_shadow_monitor_once()
+    return real_rows
+_v91_monitor_once = _v914_combined_monitor_once
+
+
+async def papershadow914_cmd(update, context):
+    state=_v91_load_state(); positions=state.get("shadow_positions",{}); closed=state.get("shadow_closed",[])
+    stages={k:0 for k in ("WATCH","READY","ENTRY")}
+    for p in positions.values(): stages[str(p.get("stage","WATCH"))]=stages.get(str(p.get("stage")),0)+1
+    lines=["👥 <b>V91.4 Shadow Learning</b>",
+           f"상태: <b>{'ON' if V914_SHADOW_ENABLED else 'OFF'}</b>",
+           f"열린 학습포지션: <b>{len(positions)}/{V914_SHADOW_MAX}</b>",
+           f"WATCH {stages.get('WATCH',0)} / READY {stages.get('READY',0)} / ENTRY {stages.get('ENTRY',0)}",
+           f"누적 청산표본: <b>{len(closed)}</b>",
+           f"쿨다운 {V914_SHADOW_COOLDOWN_MIN}분 / 시간청산 {V914_SHADOW_TIME_STOP_MIN}분",
+           f"TP {V914_SHADOW_TP_PCT:.1f}% / SL {V914_SHADOW_SL_PCT:.1f}%",
+           f"오류 {V914_SHADOW_ERRORS}",
+           "실제 주문·노출금액: <b>없음</b>"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def papershadowpositions914_cmd(update, context):
+    rows=list(_v91_load_state().get("shadow_positions",{}).values())
+    if not rows: return await v90_1_safe_reply(update,"열린 Shadow 학습 포지션이 없습니다.")
+    lines=["👥 <b>Shadow Open Scenarios</b>"]
+    for p in rows[:30]:
+        lines.append(f"{p['symbol']} {p['side']} {p['stage']} | 점수 {p.get('final_score',0):.1f} | MFE {p.get('mfe_pct',0):+.2f}% / MAE {p.get('mae_pct',0):+.2f}%")
+    if len(rows)>30: lines.append(f"... 외 {len(rows)-30}건")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def papershadowperformance914_cmd(update, context):
+    perf=_v91_load_state().get("shadow_performance",{})
+    if not perf: return await v90_1_safe_reply(update,"아직 Shadow 청산 학습 데이터가 없습니다.")
+    items=[]
+    for key,v in perf.items():
+        n=int(v.get('trades',0)); w=int(v.get('wins',0)); pct=_v912_safe_float(v.get('pct')); items.append((n,key,w,pct))
+    items.sort(reverse=True)
+    lines=["📈 <b>Shadow Learning Performance</b>"]
+    for n,key,w,pct in items[:20]: lines.append(f"{key}\n표본 {n} · 승률 {(w/n*100 if n else 0):.1f}% · 누적 {pct:+.2f}%")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
 # 기존 104개 명령은 그대로 보존하고 Paper/Watchdog 명령만 추가한다.
 V90_COMMAND_REGISTRY.update({
     "paperstatus": paperstatus91_cmd,
@@ -25056,6 +25284,9 @@ V90_COMMAND_REGISTRY.update({
     "paperautostatus": paperautostatus912_cmd,
     "paperlearning": paperlearning913_cmd,
     "papersignals": papersignals913_cmd,
+    "papershadow": papershadow914_cmd,
+    "papershadowpositions": papershadowpositions914_cmd,
+    "papershadowperformance": papershadowperformance914_cmd,
 })
 V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 
@@ -25063,16 +25294,17 @@ V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 def v91_preflight():
     base = v90_4_preflight()
     state = _v91_load_state()
-    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals"}
+    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals","papershadow","papershadowpositions","papershadowperformance"}
     checks = {
         "base_v90_4": bool(base.get("ok")),
         "v91_callbacks": all(callable(V90_COMMAND_REGISTRY.get(name)) for name in v91_commands),
         "state_directory": os.path.isdir(V91_DATA_DIR) and os.access(V91_DATA_DIR, os.W_OK),
-        "state_shape": isinstance(state.get("positions"), dict) and isinstance(state.get("closed"), list),
+        "state_shape": isinstance(state.get("positions"), dict) and isinstance(state.get("closed"), list) and isinstance(state.get("shadow_positions"), dict) and isinstance(state.get("shadow_closed"), list),
         "live_trading_absent": "BINANCE_SECRET" not in globals() and not callable(globals().get("place_live_order")),
         "excluded_legacy_not_added": all(name not in V90_COMMAND_REGISTRY for name in {"arkm","syn","sent","futures"}),
         "utc_date_key": bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", _v91_today())),
         "paper_core_callable": all(callable(globals().get(name)) for name in {"_v91_open", "_v91_close", "_v91_load_state", "_v91_save_state", "_v91_monitor_once"}),
+        "shadow_core_callable": all(callable(globals().get(name)) for name in {"_v914_shadow_open", "_v914_shadow_close", "_v914_shadow_monitor_once", "_v914_shadow_capture"}),
     }
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base}
 

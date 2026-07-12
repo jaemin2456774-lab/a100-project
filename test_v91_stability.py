@@ -1,4 +1,4 @@
-"""A100 V91.3 offline regression smoke test.
+"""A100 V91.4 offline regression smoke test.
 No live orders, Telegram polling, Binance network, or real account calls are made.
 """
 from __future__ import annotations
@@ -19,17 +19,17 @@ os.environ["PAPER_MAX_SHORT_POSITIONS"] = "6"
 os.environ["PAPER_MAX_TOTAL_NOTIONAL"] = "1000"
 os.environ["PAPER_SYMBOL_COOLDOWN_MINUTES"] = "60"
 
-with tempfile.TemporaryDirectory(prefix="a100_v913_") as tmp:
+with tempfile.TemporaryDirectory(prefix="a100_v914_") as tmp:
     os.environ["A100_DATA_DIR"] = tmp
-    spec = importlib.util.spec_from_file_location("a100_v913", ROOT / "main.py")
+    spec = importlib.util.spec_from_file_location("a100_v914", ROOT / "main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
     preflight = module.v91_preflight()
     assert preflight["ok"], preflight
-    assert len(module.V90_COMMAND_REGISTRY) == 120
-    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals"):
+    assert len(module.V90_COMMAND_REGISTRY) == 123
+    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals", "papershadow", "papershadowpositions", "papershadowperformance"):
         assert callable(module.V90_COMMAND_REGISTRY.get(command))
 
     module.V78_VALID_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
@@ -85,6 +85,22 @@ with tempfile.TemporaryDirectory(prefix="a100_v913_") as tmp:
     except RuntimeError as exc:
         assert "쿨다운" in str(exc)
 
+
+    # V91.4 Shadow learning: open independent WATCH/READY/ENTRY scenarios without exposure.
+    shadow_row = {"symbol":"SOLUSDT","side":"LONG","stage":"WATCH","strategy":"MOMENTUM_LIQUIDITY",
+                  "regime":"MILD_UPTREND","score":60.0,"base_score":60.0,"final_score":60.0,
+                  "confidence":55.0,"reasons":["test"],"penalties":[]}
+    shadow = module._v914_shadow_open(shadow_row)
+    assert shadow and shadow["stage"] == "WATCH"
+    assert not module._v91_load_state()["positions"]  # shadow does not consume real Paper slots
+    assert len(module._v91_load_state()["shadow_positions"]) == 1
+    prices["SOLUSDT"] = 52.5
+    shadow_closed = module._v914_shadow_monitor_once()
+    assert shadow_closed and shadow_closed[0]["close_reason"] == "TAKE_PROFIT"
+    shadow_state = module._v91_load_state()
+    assert len(shadow_state["shadow_closed"]) == 1
+    assert shadow_state["shadow_performance"]
+
     # Self-learning: create enough synthetic closed samples and verify bounded adjustment/stage/explanations.
     learned = module._v91_load_state()
     sample = dict(learned["closed"][-1])
@@ -101,4 +117,4 @@ with tempfile.TemporaryDirectory(prefix="a100_v913_") as tmp:
     assert explained["stage"] in {"WATCH","READY","ENTRY"}
     assert explained["reasons"]
 
-print("A100 V91.3 self-learning explainable signal smoke test: PASS")
+print("A100 V91.4 fast-learning shadow trading smoke test: PASS")
