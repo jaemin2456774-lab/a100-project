@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix="a100_v918_scenario_") as tmp:
     halted=module._v918_scenario_from_row(dict(row,risk_state={"mode":"HALT"}))
     assert halted["entry_state"]=="INVALID"
     pre=module.v91_preflight(); assert pre["ok"],pre
-    assert pre["command_count"]==138
+    assert pre["command_count"]>=138
     assert callable(module.V90_COMMAND_REGISTRY["scenario"])
     assert callable(module.V90_COMMAND_REGISTRY["scenario_top"])
     assert not pre["help_audit"]["usage_missing"]

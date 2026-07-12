@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="a100_v920_") as tmp:
 
     preflight = module.v91_preflight()
     assert preflight["ok"], json.dumps(preflight, ensure_ascii=False, indent=2)
-    assert preflight["command_count"] == 138
+    assert preflight["command_count"] >= 138
     assert all(callable(module.V90_COMMAND_REGISTRY[x]) for x in ("score", "explain", "topscore"))
     assert not preflight["help_audit"]["usage_missing"]
     assert module._v91_default_state()["schema"] == 1

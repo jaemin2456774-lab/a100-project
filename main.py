@@ -26342,5 +26342,212 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,
             "development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":V920_STATE_SCHEMA,"preserved":True}}
 
+
+# ================================================================
+# A100 V92.1 SELF REVIEW + AI MEMORY + DECISION AUDIT
+# Precision Gate rejects weak/conflicted signals. Existing schema 1 preserved.
+# ================================================================
+V921_BASE_VERSION = "A100 V92.0 AI SCORE & EXPLAINABLE CONFIDENCE ENGINE"
+V921_STATE_SCHEMA = 1
+V921_STATE_FILENAME = "a100_v91_paper_state.json"
+V921_REVIEW_HOURS = _v91_float("A100_REVIEW_HOURS", 24.0, 1.0, 168.0)
+V921_REVIEW_MOVE_PCT = _v91_float("A100_REVIEW_MOVE_PCT", 0.5, 0.0, 20.0)
+V921_AUDIT_DEDUP_HOURS = _v91_float("A100_AUDIT_DEDUP_HOURS", 6.0, 0.25, 72.0)
+V921_AUDIT_MAX = _v91_int("A100_AUDIT_MAX", 2000, 100, 20000)
+V921_PRECISION_SCORE = _v91_float("A100_PRECISION_MIN_SCORE", 85.0, 0.0, 100.0)
+V921_PRECISION_CONFIDENCE = _v91_float("A100_PRECISION_MIN_CONFIDENCE", 78.0, 0.0, 100.0)
+V91_VERSION = "A100 V92.1 SELF REVIEW & AI MEMORY ENGINE"
+
+
+def _v921_precision_gate(item):
+    c=item.get("components") or {}; reasons=[]
+    score=_v912_safe_float(item.get("score")); conf=_v912_safe_float(item.get("confidence"))
+    if score < V921_PRECISION_SCORE: reasons.append(f"점수 {score:.1f}<{V921_PRECISION_SCORE:.1f}")
+    if conf < V921_PRECISION_CONFIDENCE: reasons.append(f"신뢰 {conf:.1f}%<{V921_PRECISION_CONFIDENCE:.1f}%")
+    if str(item.get("stage","")).upper() not in {"ENTRY","READY"}: reasons.append("진입 단계 미도달")
+    if str(item.get("meta_decision","")).upper() == "SKIP": reasons.append("Meta SKIP")
+    if str(item.get("risk_mode","")).upper() == "HALT": reasons.append("Risk HALT")
+    for name,minimum in (("Pattern",65),("Liquidity",60),("Market",55),("Timing",60)):
+        if _v912_safe_float(c.get(name)) < minimum: reasons.append(f"{name} 부족")
+    values=[_v912_safe_float(v) for v in c.values()]
+    dispersion=(sum(abs(v-score) for v in values)/len(values)) if values else 100.0
+    if dispersion > 22.0: reasons.append("엔진 간 의견 불일치")
+    return {"passed":not reasons,"status":"PASS" if not reasons else "WAIT","reasons":reasons[:6],"dispersion":round(dispersion,1)}
+
+
+def _v921_state_lists(state):
+    if not isinstance(state.get("decision_audits"),list): state["decision_audits"]=[]
+    if not isinstance(state.get("ai_memory"),dict): state["ai_memory"]={}
+    return state["decision_audits"],state["ai_memory"]
+
+
+def _v921_record_audit(item, source="manual", now=None, price=None):
+    now=float(now or time.time()); state=_v91_load_state(); audits,_=_v921_state_lists(state)
+    symbol=item["symbol"]; side=item["side"]
+    for row in reversed(audits[-200:]):
+        if row.get("symbol")==symbol and row.get("side")==side and row.get("status")=="OPEN" and now-_v912_safe_float(row.get("created_at")) < V921_AUDIT_DEDUP_HOURS*3600:
+            return row,False
+    entry=float(price if price is not None else _v91_price(symbol)); gate=_v921_precision_gate(item)
+    record={"id":f"D{int(now)}-{symbol}-{side}","created_at":now,"review_due_at":now+V921_REVIEW_HOURS*3600,
+            "symbol":symbol,"side":side,"entry_price":entry,"score":item["score"],"grade":item["grade"],
+            "confidence":item["confidence"],"stage":item.get("stage"),"meta_decision":item.get("meta_decision"),
+            "risk_mode":item.get("risk_mode"),"components":item.get("components",{}),"positives":item.get("positives",[]),
+            "risks":item.get("risks",[]),"precision_gate":gate,"source":source,"status":"OPEN"}
+    audits.append(record); state["decision_audits"]=audits[-V921_AUDIT_MAX:]; _v91_save_state(state)
+    return record,True
+
+
+def _v921_failure_reason(row, directional_return):
+    c=row.get("components") or {}; risks=row.get("risks") or []
+    if _v912_safe_float(c.get("Market")) < 55: return "시장 방향 불일치"
+    if _v912_safe_float(c.get("Timing")) < 60: return "진입 타이밍 부족"
+    if _v912_safe_float(c.get("Liquidity")) < 60: return "유동성·스프레드 부담"
+    if _v912_safe_float(c.get("Pattern")) < 65: return "패턴 표본·기대값 부족"
+    if risks: return str(risks[0])[:120]
+    return "예측 외 시장 변동"
+
+
+def _v921_review_due(now=None, prices=None, force=False):
+    now=float(now or time.time()); state=_v91_load_state(); audits,memory=_v921_state_lists(state); changed=False; reviewed=[]
+    for row in audits:
+        if row.get("status")!="OPEN" or (not force and now < _v912_safe_float(row.get("review_due_at"))): continue
+        try:
+            current=float((prices or {}).get(row["symbol"]) if prices and row["symbol"] in prices else _v91_price(row["symbol"]))
+            entry=max(1e-12,_v912_safe_float(row.get("entry_price"))); raw=(current/entry-1.0)*100.0
+            directional=raw if row.get("side")=="LONG" else -raw
+            outcome="WIN" if directional >= V921_REVIEW_MOVE_PCT else ("LOSS" if directional <= -V921_REVIEW_MOVE_PCT else "FLAT")
+            row.update({"status":"REVIEWED","reviewed_at":now,"exit_price":current,"raw_return_pct":round(raw,4),
+                        "directional_return_pct":round(directional,4),"outcome":outcome})
+            if outcome=="LOSS": row["failure_reason"]=_v921_failure_reason(row,directional)
+            reviewed.append(row); changed=True
+        except Exception as exc:
+            row["last_review_error"]=str(exc)[:200]
+    if changed:
+        reviewed_rows=[x for x in audits if x.get("status")=="REVIEWED"]
+        wins=sum(x.get("outcome")=="WIN" for x in reviewed_rows); losses=sum(x.get("outcome")=="LOSS" for x in reviewed_rows); flats=len(reviewed_rows)-wins-losses
+        memory.update({"reviewed":len(reviewed_rows),"wins":wins,"losses":losses,"flats":flats,
+                       "win_rate":round(wins/max(1,wins+losses)*100.0,2),"updated_at":now})
+        state["decision_audits"]=audits; state["ai_memory"]=memory; _v91_save_state(state)
+    return reviewed,state
+
+
+def _v921_memory_stats(state=None):
+    state=state or _v91_load_state(); audits,_=_v921_state_lists(state); done=[x for x in audits if x.get("status")=="REVIEWED"]
+    def summary(rows):
+        w=sum(x.get("outcome")=="WIN" for x in rows); l=sum(x.get("outcome")=="LOSS" for x in rows); f=len(rows)-w-l
+        return {"n":len(rows),"w":w,"l":l,"f":f,"wr":round(w/max(1,w+l)*100,1),"avg":round(sum(_v912_safe_float(x.get("directional_return_pct")) for x in rows)/max(1,len(rows)),2)}
+    passed=[x for x in done if (x.get("precision_gate") or {}).get("passed")]
+    failed=[x for x in done if not (x.get("precision_gate") or {}).get("passed")]
+    reasons={}
+    for x in done:
+        if x.get("outcome")=="LOSS": reasons[x.get("failure_reason","기타")]=reasons.get(x.get("failure_reason","기타"),0)+1
+    return {"all":summary(done),"precision":summary(passed),"rejected":summary(failed),"open":sum(x.get("status")=="OPEN" for x in audits),
+            "loss_reasons":sorted(reasons.items(),key=lambda z:z[1],reverse=True)[:5]}
+
+
+async def audit921_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /audit BTC")
+    try:
+        item=_v920_find_score(context.args[0]); row,created=_v921_record_audit(item); gate=row["precision_gate"]
+        lines=["🧾 <b>A100 V92.1 Decision Audit</b>",f"<b>{_v54_escape(row['symbol'])}</b> {row['side']} · {row['score']:.1f} {row['grade']} · 신뢰 {row['confidence']:.1f}%",
+               f"기준가 <b>{row['entry_price']:.8g}</b> · 판정대기 {V921_REVIEW_HOURS:g}시간",f"Precision Gate: <b>{gate['status']}</b>"]
+        if gate["reasons"]: lines += ["",*['⚠️ '+_v54_escape(x) for x in gate['reasons']]]
+        lines += ["",("신규 감사 기록 저장" if created else "중복 방지를 위해 기존 OPEN 기록 사용")]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Audit 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def audit_top921_cmd(update, context):
+    try:
+        created=0; skipped=0; lines=["🧾 <b>A100 V92.1 TOP AUDIT</b>"]
+        for item in _v920_scores(force=True)[:V920_SCORE_TOP]:
+            gate=_v921_precision_gate(item)
+            if not gate["passed"]: skipped+=1; continue
+            row,is_new=_v921_record_audit(item,source="top"); created+=int(is_new)
+            lines.append(f"• <b>{_v54_escape(item['symbol'])}</b> {item['side']} · {item['score']:.1f} {item['grade']}")
+        lines += ["",f"신규 저장 {created}건 · Gate 제외 {skipped}건"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ TOP Audit 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def review921_cmd(update, context):
+    try:
+        reviewed,state=_v921_review_due(); stats=_v921_memory_stats(state)
+        lines=["🔄 <b>A100 V92.1 Self Review</b>",f"이번 평가 <b>{len(reviewed)}건</b> · 대기 {stats['open']}건",
+               f"전체 {stats['all']['n']}건 · 승 {stats['all']['w']} / 패 {stats['all']['l']} / 보합 {stats['all']['f']} · 승률 <b>{stats['all']['wr']:.1f}%</b>",
+               f"Precision PASS 승률 <b>{stats['precision']['wr']:.1f}%</b> ({stats['precision']['n']}건)"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Self Review 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def memory921_cmd(update, context):
+    try:
+        _v921_review_due(); s=_v921_memory_stats(); a=s['all']; p=s['precision']; r=s['rejected']
+        lines=["🧠 <b>A100 V92.1 AI Memory</b>",f"평가 완료 {a['n']}건 · OPEN {s['open']}건",
+               f"전체 승률 <b>{a['wr']:.1f}%</b> · 평균 {a['avg']:+.2f}%",
+               f"Precision PASS <b>{p['wr']:.1f}%</b> · {p['n']}건 · 평균 {p['avg']:+.2f}%",
+               f"Gate 제외군 {r['wr']:.1f}% · {r['n']}건 · 평균 {r['avg']:+.2f}%","","<b>주요 실패 원인</b>"]
+        lines += [f"• {_v54_escape(k)}: {v}건" for k,v in s['loss_reasons']] or ["• 아직 평가 데이터 없음"]
+        lines += ["","표본이 적을 때 승률은 확정 성능이 아닙니다."]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Memory 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+# Override V92 displays to expose precision gate without recomputing market data.
+async def score921_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /score BTC")
+    try:
+        item=_v920_find_score(context.args[0]); gate=_v921_precision_gate(item)
+        lines=["🧮 <b>A100 V92.1 SCORE</b>",f"종목: <b>{_v54_escape(item['symbol'])}</b> · {item['side']}",
+               f"종합점수 <b>{item['score']:.1f}</b> · 등급 <b>{item['grade']}</b>",f"Confidence 2.0 <b>{item['confidence']:.1f}%</b> · {item['stage']} · Meta {item['meta_decision']}",
+               f"Precision Gate <b>{gate['status']}</b> · 불일치 {gate['dispersion']:.1f}",""]
+        for name,value in item["components"].items(): lines.append(f"{name:<10} <b>{value:>5.1f}</b>")
+        if gate['reasons']: lines += ["","<b>진입 보류 사유</b>",*['⚠️ '+_v54_escape(x) for x in gate['reasons']]]
+        lines += ["","기록: /audit 종목 · 누적성과: /memory"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Score 분석 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+V921_COMMAND_USAGE=dict(V920_COMMAND_USAGE)
+V921_COMMAND_USAGE.update({"audit":"현재 판단·가격 감사 기록","audit_top":"Precision PASS 상위 후보 일괄 기록","review":"만기 판단 자동 성과 평가","memory":"누적 승률·실패 원인 AI Memory"})
+
+async def help921_cmd(update, context):
+    lines=["🤖 <b>A100 V92.1 HELP</b>","","핵심: /score BTC /audit BTC /audit_top /review /memory","","<b>V91~V92 Paper·AI 명령</b>"]
+    for cmd,desc in V921_COMMAND_USAGE.items(): lines.append(f"/{cmd} — {desc}")
+    lines += ["","/commands — 전체 명령","/commands V92 — V92 명령 포함"]
+    text="\n".join(lines)
+    for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+
+async def commands921_cmd(update, context):
+    requested=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if requested in {"v91","v92","paper","ai","score","점수","memory","review"}:
+        lines=[f"📚 <b>A100 V92 명령 {len(V921_COMMAND_USAGE)}개</b>","", " ".join('/'+x for x in V921_COMMAND_USAGE)]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    return await commands90_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"score":score921_cmd,"audit":audit921_cmd,"audit_top":audit_top921_cmd,"review":review921_cmd,"memory":memory921_cmd,"help":help921_cmd,"commands":commands921_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def _v921_help_audit():
+    registered={x for x in V90_COMMAND_REGISTRY if x.startswith('paper') or x in {'watchdog','scenario','scenario_top','score','explain','topscore','audit','audit_top','review','memory'}}
+    usage=set(V921_COMMAND_USAGE)
+    return {"usage_missing":sorted(registered-usage),"stale_usage":sorted(usage-registered),"registered":len(registered),"usage":len(usage)}
+
+_V920_PREFLIGHT_FOR_V921=v91_preflight
+def v91_preflight():
+    base=_V920_PREFLIGHT_FOR_V921(); checks=dict(base.get("checks",{})); audit=_v921_help_audit(); sample={"score":90,"confidence":85,"stage":"ENTRY","meta_decision":"TRADE","risk_mode":"NORMAL","components":{"Pattern":80,"Liquidity":80,"Momentum":80,"Market":80,"Risk":80,"Timing":80,"Learning":80,"Meta":80}}
+    # Earlier version preflights used exact command totals; new commands legitimately raise the total.
+    for key in list(checks):
+        if key.endswith("command_count"):
+            checks[key]=True
+    checks.update({"v921_base_preflight":True,"v921_state_schema_compatible":_v91_default_state().get("schema")==V921_STATE_SCHEMA,
+                   "v921_state_filename_preserved":os.path.basename(V91_STATE_FILE)==V921_STATE_FILENAME,"v921_command_count":len(V90_COMMAND_REGISTRY)==141,
+                   "v921_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"audit","audit_top","review","memory"}),
+                   "v921_precision_gate":_v921_precision_gate(sample)["passed"],"v921_help_sync":not audit["usage_missing"] and not audit["stale_usage"],
+                   "v921_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,
+            "development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":V921_STATE_SCHEMA,"preserved":True}}
+
 if __name__ == "__main__":
     main()
