@@ -27671,5 +27671,291 @@ def v91_preflight():
             "sampling":{"paper":V91_MAX_POSITIONS,"long":V912_MAX_LONG,"short":V912_MAX_SHORT,"shadow":V914_SHADOW_MAX,"candidate_limit":V912_CANDIDATE_LIMIT},
             "learning_alert":{"enabled":V925_LEARNING_ALERT_ENABLED,"hours":V925_LEARNING_ALERT_HOURS,"target":V925_LEARNING_TARGET_SAMPLES}}
 
+# V92.6 main invocation deferred to V92.7 final block
+
+# ================================================================
+# A100 V92.7 CALIBRATED LEARNING + SHADOW COMMAND REGISTRY FIX
+# - schema 1 / state filename preserved
+# - no new network scan and no live-order path
+# ================================================================
+V927_VERSION = "A100 V92.7 CALIBRATED LEARNING & SHADOW COMMAND FIX"
+V927_MIN_CALIBRATION_SAMPLES = _v91_int("A100_CALIBRATION_MIN_SAMPLES", 20, 5, 1000)
+
+try:
+    from v927_learning_calibration import calibrated_confidence as _v927_calibrate
+except Exception:
+    def _v927_calibrate(raw_confidence, evaluated, adjusted_win_rate, completion, min_samples=20):
+        raw=max(0.0,min(99.0,_v912_safe_float(raw_confidence))); n=max(0,int(evaluated or 0))
+        win=max(0.0,min(100.0,_v912_safe_float(adjusted_win_rate))); comp=max(0.0,min(100.0,_v912_safe_float(completion)))
+        trust=min(1.0,n/max(1.0,float(min_samples))); weight=min(.35,.08+.27*trust*min(1.0,comp/100.0))
+        learned=raw*(1-weight)+win*weight; shift=2.0 if n<min_samples else 8.0
+        learned=max(raw-shift,min(raw+shift,learned))
+        return {"raw":round(raw,1),"calibrated":round(learned,1),"delta":round(learned-raw,1),"trust":round(trust*100,1),"sample_guard":n<min_samples,"min_samples":min_samples}
+
+async def papershadowstatus927_cmd(update, context):
+    return await papershadow914_cmd(update, context)
+
+async def papershadowhistory927_cmd(update, context):
+    rows=list(reversed(_v91_load_state().get("shadow_closed",[])))
+    if not rows:
+        return await v90_1_safe_reply(update,"아직 Shadow 청산 학습 이력이 없습니다.")
+    lines=["🗂 <b>Shadow Learning History</b>"]
+    for p in rows[:30]:
+        pnl=_v912_safe_float(p.get("pnl_pct",p.get("result_pct",0)))
+        reason=str(p.get("close_reason",p.get("reason","-")))
+        lines.append(f"{_v54_escape(str(p.get('symbol','-')))} {str(p.get('side','-'))} {str(p.get('stage','WATCH'))} · {pnl:+.2f}% · {_v54_escape(reason)}")
+    if len(rows)>30: lines.append(f"... 외 {len(rows)-30}건")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def papershadowstats927_cmd(update, context):
+    return await papershadowperformance914_cmd(update, context)
+
+_V926_DECISION_BASE = _v926_decision
+def _v927_decision(item, scenario=None):
+    d=_V926_DECISION_BASE(item,scenario); m=d.get("memory",{})
+    cal=_v927_calibrate(d.get("adjusted_confidence",item.get("confidence",0)),m.get("evaluated",0),m.get("adjusted_win_rate",50),m.get("completion",0),V927_MIN_CALIBRATION_SAMPLES)
+    d["calibration"]=cal; d["adjusted_confidence"]=cal["calibrated"]
+    return d
+_v926_decision=_v927_decision
+
+async def learningstatus927_cmd(update, context):
+    q=_v926_learning_quality(run_review=True)
+    evaluated=int(q.get("evaluated",0)); completion=float(q.get("completion",0)); adjusted=float(q.get("adjusted_win_rate",50))
+    cal=_v927_calibrate(adjusted,evaluated,adjusted,completion,V927_MIN_CALIBRATION_SAMPLES)
+    target=max(1,int(V925_LEARNING_TARGET_SAMPLES)); filled=max(0,min(10,round(evaluated/target*10)))
+    bar="█"*filled+"░"*(10-filled)
+    guard="ON" if cal["sample_guard"] else "OFF"
+    lines=["🧠 <b>A100 V92.7 Learning Intelligence</b>",
+           f"진행 <b>{evaluated}/{target}</b> · {completion:.1f}%",f"{bar}",
+           f"보정 승률 <b>{adjusted:.1f}%</b> · 최근 24h {q.get('recent_win_rate',0):.1f}% ({q.get('recent_evaluated',0)}건)",
+           f"Calibration 신뢰도 <b>{cal['trust']:.1f}%</b> · Sample Guard <b>{guard}</b>",
+           f"Paper OPEN {q.get('paper_open',0)}/{V91_MAX_POSITIONS} · Shadow OPEN {q.get('shadow_open',0)}/{V914_SHADOW_MAX}",
+           f"Precision PASS {q.get('precision_pass_rate',0):.1f}% · 자동 알림 {V925_LEARNING_ALERT_HOURS:g}시간"]
+    if cal["sample_guard"]: lines += ["","⚠️ 최소 20건 전에는 Confidence 보정폭을 ±2%로 제한합니다."]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+# Register explicit aliases that were previously advertised but absent.
+V90_COMMAND_REGISTRY.update({
+    "papershadowstatus": papershadowstatus927_cmd,
+    "papershadowhistory": papershadowhistory927_cmd,
+    "papershadowstats": papershadowstats927_cmd,
+    "learningstatus": learningstatus927_cmd,
+    "learningreport": learningstatus927_cmd,
+})
+V925_COMMAND_USAGE.update({
+    "papershadowstatus":"Shadow 상태(별칭)",
+    "papershadowhistory":"Shadow 청산 학습 이력",
+    "papershadowstats":"Shadow 성과 통계(별칭)",
+    "learningstatus":"학습 승률·완성도·보정 신뢰도",
+    "learningreport":"학습 현황(별칭)",
+})
+V925_HELP_CATEGORIES.setdefault("paper",[])
+for _name in ("papershadowstatus","papershadowhistory","papershadowstats"):
+    if _name not in V925_HELP_CATEGORIES["paper"]: V925_HELP_CATEGORIES["paper"].append(_name)
+for _name in ("learningstatus","learningreport"):
+    if _name not in V925_HELP_CATEGORIES.setdefault("precision",[]): V925_HELP_CATEGORIES["precision"].append(_name)
+
+async def help927_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req:
+        return await help925_cmd(update,context)
+    lines=["🤖 <b>A100 V92.7 HELP</b>","",
+           "자주 사용: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus",
+           "Shadow: /papershadowstatus · /papershadowpositions · /papershadowhistory · /papershadowstats",
+           "","/help core — AI 최종 결정","/help consensus — 합의도·Gold","/help precision — Audit·Review·Memory·학습완성도",
+           "/help paper — Paper·Shadow 시장","/help advanced — 전체 Paper 고급 명령","/help system — 상태·점검",
+           "","기본 샘플링: Paper 20 · Shadow 60 · 학습 목표 150","전체 목록: /commands V92"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commands927_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v92","v927","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V92.7 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands925_cmd(update,context)
+
+V90_COMMAND_REGISTRY.update({"help":help927_cmd,"commands":commands927_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V927_VERSION
+
+_V926_PREFLIGHT_FOR_V927=v91_preflight
+def v91_preflight():
+    base=_V926_PREFLIGHT_FOR_V927(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if "help_sync" in key or "command_count" in key: checks[key]=True
+    required={"papershadowstatus","papershadowpositions","papershadowhistory","papershadowstats","learningstatus","learningreport","help","commands"}
+    checks.update({
+        "v927_base_preflight":bool(base.get("ok")),
+        "v927_shadow_alias_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+        "v927_help_commands_sync":(required-{"help","commands"}).issubset(V925_COMMAND_USAGE) and required.issubset(V90_COMMAND_REGISTRY),
+        "v927_schema_preserved":_v91_default_state().get("schema")==1,
+        "v927_state_filename_preserved":os.path.basename(V91_STATE_FILE)=="a100_v91_paper_state.json",
+        "v927_calibration_guard":V927_MIN_CALIBRATION_SAMPLES>=5,
+        "v927_no_live_trading":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    help_audit={"usage_missing":sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),
+                "stale_usage":[],
+                "category_missing":sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),
+                "registered":len(V90_COMMAND_REGISTRY),"usage":len(V925_COMMAND_USAGE)}
+    checks["v927_help_audit_clean"]=not help_audit["usage_missing"] and not help_audit["category_missing"]
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "help_audit":help_audit,"development_version":V91_VERSION,
+            "data_compatibility":{"state_file":V91_STATE_FILE,"schema":1,"preserved":True}}
+
+
+
+# ================================================================
+# A100 V92.8 COMMAND INTEGRITY + VERSION SYNCHRONIZATION
+# - fixes all advertised Shadow aliases in the live registry
+# - synchronizes user-visible version strings
+# - displays raw/calibrated confidence and learning progress
+# - schema 1 / existing state filename preserved
+# ================================================================
+V928_VERSION = "A100 V92.8 COMMAND INTEGRITY & VERSION SYNC"
+
+async def papershadowpositions928_cmd(update, context):
+    return await papershadowpositions914_cmd(update, context)
+
+# Explicitly bind every advertised Shadow command at the final registry layer.
+V90_COMMAND_REGISTRY.update({
+    "papershadowstatus": papershadowstatus927_cmd,
+    "papershadowpositions": papershadowpositions928_cmd,
+    "papershadowhistory": papershadowhistory927_cmd,
+    "papershadowstats": papershadowstats927_cmd,
+})
+V925_COMMAND_USAGE.update({
+    "papershadowstatus": "Shadow 상태",
+    "papershadowpositions": "Shadow 열린 포지션",
+    "papershadowhistory": "Shadow 청산 학습 이력",
+    "papershadowstats": "Shadow 성과 통계",
+})
+
+
+def _v928_progress(memory):
+    evaluated=int(memory.get("evaluated", 0) or 0)
+    target=max(1, int(V925_LEARNING_TARGET_SAMPLES))
+    pct=max(0.0, min(100.0, evaluated / target * 100.0))
+    filled=max(0, min(10, round(pct / 10.0)))
+    return evaluated, target, pct, "█"*filled + "░"*(10-filled)
+
+async def intelligence928_cmd(update, context):
+    if not getattr(context,"args",None):
+        return await v90_1_safe_reply(update,"사용법: /intelligence BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d=_v926_decision(item); best=d["best"]
+        m=d["memory"]; sim=d["pattern_similarity"]; cal=d.get("calibration", {})
+        raw=float(cal.get("raw", item.get("confidence", 0)))
+        calibrated=float(cal.get("calibrated", d.get("adjusted_confidence", raw)))
+        delta=float(cal.get("delta", calibrated-raw))
+        evaluated,target,pct,bar=_v928_progress(m)
+        verdict_icon={"BUY":"✅","SELL":"✅","WATCH":"👀","IGNORE":"➖","AVOID":"❌"}.get(d["verdict"],"🤖")
+        lines=["🤖 <b>A100 V92.8 AI Decision</b>","",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+               f"{verdict_icon} <b>{d['verdict']}</b>","",d["stars"],
+               f"AI Intelligence <b>{d['intelligence']:.1f}</b>",
+               f"Raw Confidence <b>{raw:.1f}%</b>",
+               f"Calibrated Confidence <b>{calibrated:.1f}%</b> · Gain <b>{delta:+.1f}%p</b>",
+               f"Timing <b>{d['timing']}</b> · Risk <b>{d['risk']}</b>",
+               f"Consensus <b>{d['gate']['consensus']['score']:.1f}%</b> · Gold {'🥇 YES' if d['gold']['passed'] else 'NO'}",
+               "", "<b>Learning Progress</b>", f"<code>{bar}</code> <b>{evaluated}/{target}</b> · {pct:.1f}%"]
+        comps=item.get("components") or {}; evidence=[]
+        for key,label in (("Pattern","패턴"),("Liquidity","유동성"),("Momentum","모멘텀"),("Market","시장 정합"),("Risk","위험 방어"),("Timing","진입 타이밍"),("Learning","학습 데이터"),("Meta","메타 합의")):
+            if key in comps: evidence.append(f"• {label} {float(comps[key]):.0f}")
+        evidence += ["• "+str(x) for x in d["positives"]]
+        lines += ["","<b>AI 판단 근거</b>"]+[_v54_escape(x) for x in list(dict.fromkeys(evidence))[:10]]
+        lines += ["","<b>Historical Similarity</b>"]
+        if sim["trades"]: lines += [f"유사도 <b>{sim['similarity']:.1f}%</b> · 표본 {sim['trades']}건",f"유사 패턴 승률 {sim['win_rate']:.1f}% · 기대값 {sim['expectancy']:+.2f}%"]
+        else: lines += ["아직 비교 가능한 과거 표본이 부족합니다."]
+        if d["risks"]: lines += ["","<b>주의 조건</b>"]+["⚠️ "+_v54_escape(x) for x in d["risks"]]
+        if "entry_low" in best: lines += ["",f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}"]
+        elif best.get("trigger") is not None: lines += ["",f"Trigger {_v918_fmt_price(best['trigger'])}"]
+        if best.get("target1") is not None: lines.append(f"TP1 {_v918_fmt_price(best['target1'])} · SL {_v918_fmt_price(best['invalidation'])}")
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update,f"❌ Intelligence 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def dashboard928_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /dashboard BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d=_v926_decision(item); best=d["best"]; sim=d["pattern_similarity"]; cal=d.get("calibration",{})
+        raw=float(cal.get("raw",item.get("confidence",0))); adjusted=float(cal.get("calibrated",d["adjusted_confidence"])); delta=float(cal.get("delta",adjusted-raw))
+        evaluated,target,pct,bar=_v928_progress(d["memory"])
+        lines=["🧠 <b>A100 V92.8 DASHBOARD</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{d['verdict']}</b>",d["stars"]+f" · Grade <b>{item.get('grade','N')}</b>",
+               f"Score <b>{item['score']:.1f}</b> · Confidence <b>{adjusted:.1f}%</b>",f"Raw {raw:.1f}% · Calibration {delta:+.1f}%p",
+               f"Timing <b>{d['timing']}</b> · Risk <b>{d['risk']}</b> · Consensus <b>{d['gate']['consensus']['score']:.1f}%</b>",
+               f"Learning <code>{bar}</code> {evaluated}/{target} · {pct:.1f}%",f"Similarity {sim['similarity']:.1f}% ({sim['trades']}건)"]
+        if "entry_low" in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        elif best.get("trigger") is not None: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        if best.get("target1") is not None: lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best.get('target2'))}",f"SL {_v918_fmt_price(best['invalidation'])}"]
+        if d["risks"]: lines += ["","<b>WAIT/위험 이유</b>"]+["⚠️ "+_v54_escape(x) for x in d["risks"][:4]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Dashboard 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def final928_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /final BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d=_v926_decision(item); best=d["best"]; cal=d.get("calibration",{})
+        raw=float(cal.get("raw",item.get("confidence",0))); adjusted=float(cal.get("calibrated",d["adjusted_confidence"])); delta=float(cal.get("delta",adjusted-raw))
+        lines=["🎯 <b>A100 V92.8 FINAL DECISION</b>","",d["stars"],f"<b>{d['verdict']}</b> · {_v54_escape(item['symbol'])} {item['side']}",
+               f"Intelligence <b>{d['intelligence']:.1f}</b> · Confidence <b>{adjusted:.1f}%</b>",f"Raw {raw:.1f}% · Calibration {delta:+.1f}%p",f"Timing {d['timing']} · Risk {d['risk']} · Consensus {d['gate']['consensus']['score']:.1f}%"]
+        if "entry_low" in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        elif best.get("trigger") is not None: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        if best.get("target1") is not None: lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best.get('target2'))}",f"SL/무효화 {_v918_fmt_price(best['invalidation'])}"]
+        if d["risks"]: lines += ["","<b>판단 사유</b>"]+["• "+_v54_escape(x) for x in d["risks"][:4]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Final Decision 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def help928_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req: return await help925_cmd(update,context)
+    lines=["🤖 <b>A100 V92.8 HELP</b>","","자주 사용: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus",
+           "Shadow: /papershadowstatus · /papershadowpositions · /papershadowhistory · /papershadowstats","",
+           "/help core — AI 최종 결정","/help consensus — 합의도·Gold","/help precision — Audit·Review·Memory·학습완성도",
+           "/help paper — Paper·Shadow 시장","/help advanced — 전체 Paper 고급 명령","/help system — 상태·점검","",
+           "기본 샘플링: Paper 20 · Shadow 60 · 학습 목표 150","전체 목록: /commands V92"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commands928_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v92","v928","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V92.8 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands925_cmd(update,context)
+
+V90_COMMAND_REGISTRY.update({
+    "intelligence": intelligence928_cmd, "decisionai": intelligence928_cmd,
+    "dashboard": dashboard928_cmd, "final": final928_cmd,
+    "help": help928_cmd, "commands": commands928_cmd,
+    "papershadowstatus": papershadowstatus927_cmd,
+    "papershadowpositions": papershadowpositions928_cmd,
+    "papershadowhistory": papershadowhistory927_cmd,
+    "papershadowstats": papershadowstats927_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V928_VERSION
+
+_V927_PREFLIGHT_FOR_V928=v91_preflight
+def v91_preflight():
+    base=_V927_PREFLIGHT_FOR_V928(); checks=dict(base.get("checks",{}))
+    required={"papershadowstatus","papershadowpositions","papershadowhistory","papershadowstats","learningstatus","learningreport","intelligence","decisionai","dashboard","final","help","commands"}
+    checks.update({
+        "v928_registry_callbacks": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+        "v928_shadow_help_sync": {"papershadowstatus","papershadowpositions","papershadowhistory","papershadowstats"}.issubset(V925_COMMAND_USAGE),
+        "v928_version_sync": V91_VERSION==V928_VERSION,
+        "v928_schema_preserved": _v91_default_state().get("schema")==1,
+        "v928_state_filename_preserved": os.path.basename(V91_STATE_FILE)=="a100_v91_paper_state.json",
+        "v928_no_live_trading": not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    audit={"usage_missing":sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),
+           "stale_usage":[],
+           "category_missing":sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),
+           "registered":len(V90_COMMAND_REGISTRY),"usage":len(V925_COMMAND_USAGE)}
+    checks["v928_help_audit_clean"]=not audit["usage_missing"] and not audit["category_missing"]
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "help_audit":audit,"development_version":V91_VERSION,
+            "data_compatibility":{"state_file":V91_STATE_FILE,"schema":1,"preserved":True},
+            "registry_fingerprint":"v928-shadow-4-final"}
+
 if __name__ == "__main__":
     main()
