@@ -1,7 +1,0 @@
-A100 V90.3 CHANGELOG
-- Fixed Binance symbol self-check false negative.
-- Added automatic symbol refresh with last-good-cache fallback.
-- Added shared per-symbol analysis cache to reduce duplicate API calls.
-- Preserved the complete V90.2 command registry.
-- Enhanced health, self-check and legacy audit commands.
-- Retained single Telegram dispatcher and pending-update preservation.
