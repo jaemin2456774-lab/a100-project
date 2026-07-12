@@ -28984,5 +28984,112 @@ def v91_preflight():
     checks['v980_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v980-market-intelligence-1'}
 
+
+# ============================================================================
+# A100 V99.0 PREDICTIVE INTELLIGENCE — AI score, MTF, entry, explain, history
+# ============================================================================
+V990_VERSION = "A100 V99.0 PREDICTIVE INTELLIGENCE DEVELOPMENT"
+try:
+    from v990_predictive_intelligence import (ai_score as _v990_score, multi_timeframe as _v990_mtf,
+        entry_plan as _v990_entry, explain as _v990_explain, signal_history as _v990_history)
+except Exception:
+    _v990_score=_v990_mtf=_v990_entry=_v990_explain=_v990_history=None
+
+def _v990_bundle(sym):
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data(); p,item=_v980_candidate(sym,rows,cal,r,c)
+    score=_v990_score(p,c,h,e,cal,shadow); mtf=_v990_mtf(p); entry=_v990_entry(p,score); why=_v990_explain(p,score,mtf)
+    history=_v990_history(rows,20)
+    return rows,mem,cal,shadow,h,r,g,c,e,p,item,score,mtf,entry,why,history
+
+async def aiscore990_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiscore BTC')
+    *_,p,item,s,mtf,entry,why,hist=_v990_bundle(context.args[0])
+    lines=["🧠 <b>A100 V99.0 AI SCORE ENGINE</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {p['side']}","",
+      _v980_bar('AI SCORE',s['score'],s['grade']),f"판정 <b>{_v54_escape(s['label'])}</b>",
+      f"Pump {p['probability_v2']:.1f}% · Confidence {p['confidence']:.1f}% · MTF {mtf['alignment']}/4"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def multiframe990_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /multiframe BTC')
+    *_,p,item,s,mtf,entry,why,hist=_v990_bundle(context.args[0])
+    lines=["🕒 <b>A100 V99.0 MULTI-TIMEFRAME AI</b>",f"<b>{_v54_escape(p['symbol'])}</b> · 종합 {mtf['side']} · 정렬 {mtf['alignment']}/4",""]
+    lines += [f"{k} {v['direction']} · Strength {v['strength']:.1f}" for k,v in mtf['frames'].items()]
+    lines += ["",f"MTF Confidence <b>{mtf['confidence']:.1f}%</b>"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def entryzone990_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /entryzone BTC')
+    *_,p,item,s,mtf,z,why,hist=_v990_bundle(context.args[0])
+    lines=["🎯 <b>A100 V99.0 SMART ENTRY ZONE</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {z['side']} · AI {s['score']:.1f} {s['grade']}","",
+      "기준가 대비 상대 구간",f"Entry <b>{z['entry_from']:+.2f}% ~ {z['entry_to']:+.2f}%</b>",f"Stop <b>{z['stop_pct']:.2f}%</b>",
+      f"Target 1 <b>{z['target1_pct']:.2f}%</b> · RR {z['rr1']:.2f}",f"Target 2 <b>{z['target2_pct']:.2f}%</b> · RR {z['rr2']:.2f}","",
+      "※ 실시간 가격을 만들지 않으며 사용자가 확인한 기준가에 적용하는 분석값입니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aiexplain990_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiexplain BTC')
+    *_,p,item,s,mtf,z,why,hist=_v990_bundle(context.args[0])
+    lines=["🔎 <b>A100 V99.0 AI EXPLAIN</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {_v54_escape(why['summary'])}","","강점"]
+    lines += [f"✓ {_v54_escape(x)}" for x in why['positives']]
+    lines += ["","주의"]+[f"• {_v54_escape(x)}" for x in why['cautions']]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def signalhistory990_cmd(update, context):
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data(); x=_v990_history(rows,20)
+    lines=["📚 <b>A100 V99.0 SIGNAL HISTORY</b>","최근 최대 20개 종료·평가 기록",",",
+      f"표본 <b>{x['n']}</b> · 승 <b>{x['wins']}</b> · 패 <b>{x['losses']}</b> · 보류 <b>{x['holds']}</b>",f"결정 표본 승률 <b>{x['win_rate']:.1f}%</b>"]
+    await v90_1_safe_reply(update,'\n'.join(lines).replace('\n,\n','\n\n'),parse_mode='HTML')
+
+async def aiunified990_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiunified BTC')
+    rows,mem,cal,shadow,h,r,g,c,e,p,item,s,mtf,z,why,hist=_v990_bundle(context.args[0])
+    lo,hi=p['expected_move'];move=f"{lo:.1f}~{hi:.1f}%" if hi else '산출 보류'
+    lines=["🧭 <b>A100 V99.0 UNIFIED DASHBOARD 4.0</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {p['side']} · <b>{_v54_escape(s['label'])}</b>","",
+      _v980_bar('AI SCORE',s['score'],s['grade']),_v980_bar('Pump',p['probability_v2'],p['grade_v2']),_v980_bar('Confidence',p['confidence']),
+      _v980_bar('Health',h['overall'],_v980_grade(h['overall'])),_v980_bar('Learning',e['composite'],e['grade']),"",
+      f"MTF <b>{mtf['alignment']}/4</b> · 15M {mtf['frames']['15M']['direction']} · 1H {mtf['frames']['1H']['direction']} · 4H {mtf['frames']['4H']['direction']} · 1D {mtf['frames']['1D']['direction']}",
+      f"Cycle <b>{c['cycle']}</b> · Risk {c['risk']} · {_v54_escape(c['policy'])}",f"예상시간 <b>{p['eta']}</b> · 예상변동 <b>{move}</b>",
+      f"상대 Entry {z['entry_from']:+.2f}%~{z['entry_to']:+.2f}% · Stop {z['stop_pct']:.2f}% · T1 {z['target1_pct']:.2f}%", 
+      f"History {hist['n']}건 · {hist['wins']}승 {hist['losses']}패 {hist['holds']}보류 · 승률 {hist['win_rate']:.1f}%", "",
+      f"핵심 이유: {_v54_escape(' · '.join(why['positives'][:3]))}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'aiscore':'통합 AI 점수·등급·판정','multiframe':'15M·1H·4H·1D 방향 정렬','entryzone':'기준가 대비 상대 진입·손절·목표','aiexplain':'AI 판단 강점과 주의요인','signalhistory':'최근 추천 결과 성과 요약'})
+for _c in ('aiscore','multiframe','entryzone','aiexplain','signalhistory'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'aiscore':aiscore990_cmd,'multiframe':multiframe990_cmd,'entryzone':entryzone990_cmd,'aiexplain':aiexplain990_cmd,
+    'signalhistory':signalhistory990_cmd,'aiunified':aiunified990_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V990_VERSION
+
+async def help990_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🚀 <b>A100 V99.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help980_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🚀 <b>A100 V99.0 HELP</b>","","Predictive: /aiunified BTC · /aiscore BTC · /multiframe BTC · /entryzone BTC · /aiexplain BTC · /signalhistory","Market: /earlypump BTC ETH SOL · /marketcycle · /aiportfolio BTC ETH SOL · /pumpevolution","Learning: /aigrowth · /selfheal · /aicalibration · /aimemorybank · /shadowreplay · /aihealth","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V99"]),parse_mode='HTML')
+
+async def commands990_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v99','v990','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V99.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands980_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help990_cmd,'commands':commands990_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V980_PREFLIGHT_FOR_V990=v91_preflight
+def v91_preflight():
+    base=_V980_PREFLIGHT_FOR_V990();checks=dict(base.get('checks',{}))
+    if 'v980_version_sync' in checks:checks['v980_version_sync']=True
+    required={'aiunified','aiscore','multiframe','entryzone','aiexplain','signalhistory','help','commands'}
+    checks.update({'v990_module_loaded':all(callable(x) for x in (_v990_score,_v990_mtf,_v990_entry,_v990_explain,_v990_history)),
+      'v990_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v990_help_sync':(required-{'help','commands','aiunified'}).issubset(V925_COMMAND_USAGE),
+      'v990_category_sync':(required-{'help','commands','aiunified'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v990_schema_preserved':_v91_default_state().get('schema')==1,'v990_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v990_version_sync':V91_VERSION==V990_VERSION,'v990_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v990_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v990_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v990_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v990-predictive-intelligence-1'}
+
 if __name__ == "__main__":
     main()
