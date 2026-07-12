@@ -1,12 +1,5 @@
-# A100 V97.0 Unified Intelligence Development
-
-Development release based on V96.2 with all earlier functions preserved.
-
-New Telegram commands:
-- `/aiunified BTC`
-- `/earlypump BTC ETH SOL`
-- `/marketregime`
-- `/aigrowth`
-- `/selfheal`
-
-This release is read-only analytics: it does not add live trading execution. Keep the last verified Stable version until runtime Telegram validation is complete.
+# A100 V98.0 Market Intelligence Development
+기준: V97.0. 기존 상태 파일과 Schema 1을 보존하는 Development Release입니다.
+신규 명령: `/marketcycle`, `/aiportfolio`, `/pumpevolution`
+강화 명령: `/aiunified`, `/earlypump`, `/marketregime`, `/aigrowth`
+실거래 주문 경로는 포함하지 않습니다.

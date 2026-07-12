@@ -28851,5 +28851,138 @@ def v91_preflight():
     checks['v970_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v970-unified-intelligence-1'}
 
+
+# ============================================================================
+# A100 V98.0 MARKET INTELLIGENCE — cycle, portfolio, evolution, pump v2
+# ============================================================================
+V980_VERSION = "A100 V98.0 MARKET INTELLIGENCE DEVELOPMENT"
+try:
+    from v980_market_intelligence import (market_cycle as _v980_cycle,
+        pump_probability_v2 as _v980_pump2, evolution_weights as _v980_evolution,
+        portfolio_rank as _v980_portfolio, health_grade as _v980_grade)
+except Exception:
+    _v980_cycle=_v980_pump2=_v980_evolution=_v980_portfolio=_v980_grade=None
+
+def _v980_data():
+    rows,mem,cal,shadow,h,r=_v970_base(); g=_v970_growth(mem,cal,shadow,h)
+    cycle=_v980_cycle(r,mem,g); evo=_v980_evolution(mem)
+    return rows,mem,cal,shadow,h,r,g,cycle,evo
+
+def _v980_bar(label,value,extra=''):
+    return _v950_line(label,value,extra=extra)
+
+def _v980_candidate(sym,rows,cal,r,cycle):
+    p,item=_v970_candidate(sym,rows,cal,r)
+    return _v980_pump2(p,cycle),item
+
+async def marketcycle980_cmd(update, context):
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data()
+    lines=["🌐 <b>A100 V98.0 MARKET CYCLE ENGINE</b>","",
+      f"Cycle <b>{_v54_escape(c['cycle'])}</b> · Risk <b>{c['risk']}</b>",
+      _v980_bar('Cycle Confidence',c['confidence'],c['grade']),
+      _v980_bar('Momentum',c['momentum']),f"전략 <b>{_v54_escape(c['policy'])}</b>",
+      f"Regime {_v54_escape(r['regime'])} · Growth {g['direction']}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def pumpevolution980_cmd(update, context):
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data()
+    w=e['weights'];s=e['scores']
+    lines=["🧬 <b>A100 V98.0 LEARNING EVOLUTION</b>","최근 데이터는 강화하고 오래된 데이터는 완만하게 감쇠합니다.","",
+      _v980_bar('Evolution',e['composite'],e['grade']),
+      f"1D {w['1D']:.1f}% · Score {s['1D']:.1f}",f"7D {w['7D']:.1f}% · Score {s['7D']:.1f}",
+      f"30D {w['30D']:.1f}% · Score {s['30D']:.1f}",f"ALL {w['ALL']:.1f}% · Score {s['ALL']:.1f}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def earlypump980_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /earlypump BTC ETH SOL')
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data(); out=[]
+    for sym in context.args[:10]:
+        try:out.append(_v980_candidate(sym,rows,cal,r,c)[0])
+        except Exception:continue
+    out.sort(key=lambda x:x['probability_v2'],reverse=True)
+    lines=["🚀 <b>A100 V98.0 PUMP PROBABILITY 2.0</b>",f"Cycle <b>{c['cycle']}</b> · Risk {c['risk']}",""]
+    for i,x in enumerate(out,1):
+        lo,hi=x['expected_move']; move=f"{lo:.1f}~{hi:.1f}%" if hi else '산출 보류'
+        lines += [f"{i}. <b>{_v54_escape(x['symbol'])}</b> {x['side']} · <b>{x['probability_v2']:.1f}% {x['grade_v2']}</b> · {x['action_v2']}",
+                  f"   예상시간 {x['eta']} · 예상변동 {move} · 표본 {x['sample']}"]
+    if not out:lines.append('평가 가능한 후보가 없습니다.')
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aiportfolio980_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiportfolio BTC ETH SOL LINK')
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data(); candidates=[]
+    for sym in context.args[:15]:
+        try:candidates.append(_v980_candidate(sym,rows,cal,r,c)[0])
+        except Exception:continue
+    ranked=_v980_portfolio(candidates,c,5)
+    lines=["🏆 <b>A100 V98.0 SMART PORTFOLIO AI</b>",f"Cycle <b>{c['cycle']}</b> · 정책 {_v54_escape(c['policy'])}",""]
+    for i,x in enumerate(ranked,1):
+        lines.append(f"{i}. <b>{_v54_escape(x['symbol'])}</b> {x['side']} · Utility {x['utility']:.1f} {x['portfolio_grade']} · 비중 {x['allocation_pct']:.1f}% · {x['action_v2']}")
+    if not ranked:lines.append('평가 가능한 후보가 없습니다.')
+    lines += ["","※ 비중은 Paper 분석용 상대 비중이며 실주문을 실행하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aiunified980_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiunified BTC')
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data();p,item=_v980_candidate(context.args[0],rows,cal,r,c)
+    lo,hi=p['expected_move'];move=f"{lo:.1f}~{hi:.1f}%" if hi else '산출 보류'
+    lines=["🧭 <b>A100 V98.0 UNIFIED DASHBOARD 3.0</b>",f"<b>{_v54_escape(p['symbol'])}</b> · {p['side']} · <b>{p['action_v2']}</b>","",
+      _v980_bar('Pump',p['probability_v2'],p['grade_v2']),_v980_bar('Confidence',p['confidence']),
+      _v980_bar('AI Health',h['overall'],_v980_grade(h['overall'])),_v980_bar('Learning',e['composite'],e['grade']),
+      _v980_bar('Growth',g['overall'],g['direction']),"",f"Cycle <b>{c['cycle']}</b> · Risk {c['risk']} · {_v54_escape(c['policy'])}",
+      f"예상시간 <b>{p['eta']}</b> · 예상변동 <b>{move}</b>",
+      f"Memory 1D {mem['1D']['win_rate']:.1f}% / 7D {mem['7D']['win_rate']:.1f}% / 30D {mem['30D']['win_rate']:.1f}%",
+      f"Calibration {cal['status']} · Error {cal['error']:+.1f}%p",f"Shadow {shadow['n']}건 · 승률 {shadow['win_rate']:.1f}% · 평균 {shadow['avg']:+.2f}%","",
+      f"Signal V {p['signals']['volume']:.0f} · OI {p['signals']['oi']:.0f} · F {p['signals']['funding_edge']:.0f} · C {p['signals']['compression']:.0f} · M {p['signals']['momentum']:.0f}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def marketregime980_cmd(update, context):
+    return await marketcycle980_cmd(update,context)
+
+async def aigrowth980_cmd(update, context):
+    rows,mem,cal,shadow,h,r,g,c,e=_v980_data()
+    lines=["📈 <b>A100 V98.0 AI GROWTH & EVOLUTION</b>",f"방향 <b>{g['direction']}</b> · Trend {g['trend']:+.1f}","",
+      _v980_bar('Overall',g['overall']),_v980_bar('24H',g['windows']['1D']),_v980_bar('7D',g['windows']['7D']),
+      _v980_bar('30D',g['windows']['30D']),_v980_bar('Evolution',e['composite'],e['grade']),
+      _v980_bar('Calibration',g['calibration']),_v980_bar('Shadow',g['shadow'])]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'marketcycle':'시장 사이클과 전략 전환 분석','aiportfolio':'후보 비교 및 Paper 상대 비중','pumpevolution':'기간별 학습 가중치·감쇠 분석'})
+for _c in ('marketcycle','aiportfolio','pumpevolution'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'aiunified':aiunified980_cmd,'earlypump':earlypump980_cmd,'marketregime':marketregime980_cmd,'aigrowth':aigrowth980_cmd,
+    'marketcycle':marketcycle980_cmd,'aiportfolio':aiportfolio980_cmd,'pumpevolution':pumpevolution980_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V980_VERSION
+
+async def help980_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🚀 <b>A100 V98.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help970_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🚀 <b>A100 V98.0 HELP</b>","","Market AI: /aiunified BTC · /earlypump BTC ETH SOL · /marketcycle · /aiportfolio BTC ETH SOL · /pumpevolution","Learning: /aigrowth · /selfheal · /aicalibration · /aimemorybank · /shadowreplay · /aihealth","Quality: /aiquality BTC · /aisimilarity BTC · /aipattern BTC · /aituning","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V98"]),parse_mode='HTML')
+
+async def commands980_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v98','v980','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V98.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands970_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help980_cmd,'commands':commands980_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V970_PREFLIGHT_FOR_V980=v91_preflight
+def v91_preflight():
+    base=_V970_PREFLIGHT_FOR_V980();checks=dict(base.get('checks',{}))
+    if 'v970_version_sync' in checks:checks['v970_version_sync']=True
+    required={'aiunified','earlypump','marketregime','aigrowth','selfheal','marketcycle','aiportfolio','pumpevolution','help','commands'}
+    checks.update({'v980_module_loaded':all(callable(x) for x in (_v980_cycle,_v980_pump2,_v980_evolution,_v980_portfolio,_v980_grade)),
+      'v980_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v980_help_sync':(required-{'help','commands','selfheal','marketregime','aigrowth','aiunified','earlypump'}).issubset(V925_COMMAND_USAGE),
+      'v980_category_sync':{'marketcycle','aiportfolio','pumpevolution'}.issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v980_schema_preserved':_v91_default_state().get('schema')==1,'v980_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v980_version_sync':V91_VERSION==V980_VERSION,'v980_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v980_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v980_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v980_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v980-market-intelligence-1'}
+
 if __name__ == "__main__":
     main()
