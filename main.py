@@ -29848,5 +29848,66 @@ def v91_preflight():
     audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1060_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1060-real-time-intelligence-1'}
 
+
+# ============================================================================
+# A100 V107.0 AUTONOMOUS MARKET INTELLIGENCE
+# ============================================================================
+V1070_VERSION="A100 V107.0 AUTONOMOUS MARKET INTELLIGENCE DEVELOPMENT"
+try:
+ from v1070_autonomous_market_intelligence import auto_market_scan as _v107_scan,regime_history as _v107_history,confidence_calibration as _v107_cal,signal_lifecycle as _v107_life,strategy_benchmark as _v107_bench,ai_scorecard as _v107_card,autonomous_cycle as _v107_cycle
+except Exception:
+ _v107_scan=_v107_history=_v107_cal=_v107_life=_v107_bench=_v107_card=_v107_cycle=None
+
+def _v107_sync():
+ st,info,live=_v106_sync();d=_v107_cycle(st,_v106_regime,_v106_accuracy);_v101_save(V1010_STATE_FILE,st);info['v107']=d;return st,info,live
+
+async def automarketscan1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['scan'];await v90_1_safe_reply(update,'\n'.join(["🔭 <b>A100 V107.0 AUTO MARKET SCANNER</b>",f"관찰 종목 <b>{x['symbols']}개</b> · 누적 스캔 {x['total']}건",f"이번 신규 {x['added']}건","","※ 저장된 시장·스캐너 관측값만 사용하며 주문을 실행하지 않습니다."]),parse_mode='HTML')
+async def regimehistory1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['regime'];rows=st.get('regime_history_v107',[])[-8:];lines=["🕒 <b>A100 V107.0 REGIME HISTORY</b>",f"기록 {x['total']}건 · 국면 전환 {x['changes']}회 · 신규 {x['added']}건",""]+[f"• {r.get('symbol')} · {r.get('regime')} · {r.get('confidence',0):.1f}%" for r in rows];await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def calibration1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['calibration'];await v90_1_safe_reply(update,'\n'.join(["🎯 <b>A100 V107.0 CONFIDENCE CALIBRATION</b>",f"표본 {x['samples']}건 · 상태 <b>{x['status']}</b>",f"권장 Bias {x['bias']:+.2f} · Brier {x['brier']:.4f}","","※ 제한형 추천값이며 실주문 설정은 변경하지 않습니다."]),parse_mode='HTML')
+async def signallifecycle1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['lifecycle'];await v90_1_safe_reply(update,'\n'.join(["🔄 <b>A100 V107.0 SIGNAL LIFECYCLE</b>",f"전체 {x['total']}개 · 활성 {x['active']} · 종료 {x['closed']}",f"이번 생성 {x['created']} · 갱신 {x['updated']} · 종료전환 {x['closed_now']}"]),parse_mode='HTML')
+async def aiscorecard1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['scorecard'];await v90_1_safe_reply(update,'\n'.join(["🏆 <b>A100 V107.0 AI SCORECARD</b>",f"종합 점수 <b>{x['score']:.1f}</b> · AI Level {x['level']}",f"Experience {x['experience']} · DNA {x['dna']}",f"Accuracy {x['accuracy']:.1f}% · Coverage {x['coverage']}종목",f"Stability {x['stability']:.1f}"]),parse_mode='HTML')
+async def strategybenchmark1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['benchmark'];lines=["📊 <b>A100 V107.0 STRATEGY BENCHMARK</b>",f"비교 전략 {x['strategies']}개 · 최고 {x['best']}",""]+[f"• {r['strategy']} · {r['samples']}건 · 승률 {r['win_rate']:.1f}%" for r in x['rows']];
+ if not x['rows']:lines.append('신뢰 가능한 종료 표본이 아직 없습니다.')
+ await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def autonomousscheduler1070_cmd(update,context):
+ st,info,_=_v107_sync();x=info['v107']['scheduler'];await v90_1_safe_reply(update,'\n'.join(["⏱ <b>A100 V107.0 AUTONOMOUS SCHEDULER</b>",f"상태 <b>{'ON' if x['enabled'] else 'OFF'}</b> · 권장 주기 {x['interval_minutes']}분",f"누적 실행 {x['runs']}회",f"마지막 실행 {time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(x['last_run']))}","","※ 봇의 기존 주기 작업에서 호출 가능한 학습 사이클이며 실주문은 실행하지 않습니다."]),parse_mode='HTML')
+async def autonomousintelligence1070_cmd(update,context):
+ st,info,_=_v107_sync();d=info['v107'];c=d['scorecard'];await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V107.0 AUTONOMOUS MARKET INTELLIGENCE</b>",f"AI Score {c['score']:.1f} · Level {c['level']} · Coverage {c['coverage']}종목",f"Scanner {d['scan']['total']} · Regime History {d['regime']['total']}",f"Lifecycle {d['lifecycle']['total']} · Strategies {d['benchmark']['strategies']}",f"Calibration {d['calibration']['status']} · Bias {d['calibration']['bias']:+.2f}",f"Scheduler ON · Runs {d['scheduler']['runs']}","","※ 자율 관찰·학습·추천 전용이며 실주문 설정을 자동 변경하지 않습니다."]),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'automarketscan':'자율 시장 관찰 스캔','regimehistory':'시장 국면 변화 이력','confidencecalibration':'Confidence 자동 보정 평가','signallifecycle':'신호 전체 생명주기','aiscorecard':'AI 종합 성능 점수판','strategybenchmark':'전략별 성과 비교','autonomousscheduler':'자율 학습 주기 상태','autonomousintelligence':'V107 통합 자율 지능 현황'})
+for _c in ('automarketscan','regimehistory','confidencecalibration','signallifecycle','aiscorecard','strategybenchmark','autonomousscheduler','autonomousintelligence'):
+ if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'automarketscan':automarketscan1070_cmd,'regimehistory':regimehistory1070_cmd,'confidencecalibration':calibration1070_cmd,'signallifecycle':signallifecycle1070_cmd,'aiscorecard':aiscorecard1070_cmd,'strategybenchmark':strategybenchmark1070_cmd,'autonomousscheduler':autonomousscheduler1070_cmd,'autonomousintelligence':autonomousintelligence1070_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1070_VERSION
+
+async def help1070_cmd(update,context):
+ req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+ if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V107.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+ if req:return await help1060_cmd(update,context)
+ await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V107.0 HELP</b>","","Autonomous: /automarketscan · /regimehistory · /autonomousscheduler","Learning: /confidencecalibration · /signallifecycle · /strategybenchmark","Dashboard: /aiscorecard · /autonomousintelligence","","전체 목록: /commands V107"]),parse_mode='HTML')
+async def commands1070_cmd(update,context):
+ req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+ if req in {'v107','v1070','all','전체'}:
+  names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V107.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+  for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+  return
+ return await commands1060_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1070_cmd,'commands':commands1070_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1060_PREFLIGHT_FOR_V1070=v91_preflight
+def v91_preflight():
+ base=_V1060_PREFLIGHT_FOR_V1070();checks=dict(base.get('checks',{}));checks['v1060_version_sync']=True
+ required={'automarketscan','regimehistory','confidencecalibration','signallifecycle','aiscorecard','strategybenchmark','autonomousscheduler','autonomousintelligence','help','commands'}
+ funcs=(_v107_scan,_v107_history,_v107_cal,_v107_life,_v107_bench,_v107_card,_v107_cycle)
+ checks.update({'v1070_module_loaded':all(callable(x) for x in funcs),'v1070_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1070_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1070_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1070_version_sync':V91_VERSION==V1070_VERSION,'v1070_schema_preserved':_v91_default_state().get('schema')==1,'v1070_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1070_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1070_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+ audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1070_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+ return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1070-autonomous-market-intelligence-1'}
+
 if __name__ == "__main__":
     main()
