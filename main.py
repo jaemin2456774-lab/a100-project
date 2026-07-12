@@ -25882,5 +25882,45 @@ def v91_preflight():
     checks.update({"v917_meta_callable":all(callable(globals().get(n)) for n in {'_v917_similarity_stats','_v917_market_context','_v917_risk_state'}),"v917_callbacks":all(callable(V90_COMMAND_REGISTRY.get(n)) for n in {'papermeta','papersimilarity','papercontext','paperrisk'}),"help_sync":not audit['usage_missing'] and not audit['stale_usage']})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit}
 
+
+# ================================================================
+# A100 V91.8 DEVELOPMENT BASELINE
+# - V91.7 state/data compatibility is intentionally preserved.
+# - State filename and schema remain unchanged to retain Paper,
+#   Shadow, learning, expectancy, lifecycle, and adaptive history.
+# - No live-trading order path is introduced.
+# ================================================================
+V918_BASE_VERSION = "A100 V91.7 META DECISION & PATTERN SIMILARITY ENGINE"
+V918_STATE_SCHEMA = 1
+V918_STATE_FILENAME = "a100_v91_paper_state.json"
+V91_VERSION = "A100 V91.8 DEVELOPMENT BASELINE"
+
+_V917_PREFLIGHT_FOR_V918 = v91_preflight
+def v91_preflight():
+    base = _V917_PREFLIGHT_FOR_V918()
+    checks = dict(base.get("checks", {}))
+    checks.update({
+        "v918_base_preflight": bool(base.get("ok")),
+        "v918_state_schema_compatible": _v91_default_state().get("schema") == V918_STATE_SCHEMA,
+        "v918_state_filename_preserved": os.path.basename(V91_STATE_FILE) == V918_STATE_FILENAME,
+        "v918_command_count_preserved": len(V90_COMMAND_REGISTRY) == 133,
+        "v918_help_sync_preserved": bool(base.get("checks", {}).get("help_sync")),
+        "v918_live_trading_disabled": not any(
+            token in globals() for token in ("place_live_order", "submit_live_order", "execute_live_trade")
+        ),
+    })
+    return {
+        "ok": all(checks.values()),
+        "checks": checks,
+        "command_count": len(V90_COMMAND_REGISTRY),
+        "base": base,
+        "development_version": V91_VERSION,
+        "data_compatibility": {
+            "state_file": V91_STATE_FILE,
+            "schema": V918_STATE_SCHEMA,
+            "preserved": True,
+        },
+    }
+
 if __name__ == "__main__":
     main()
