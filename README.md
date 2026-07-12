@@ -1,3 +1,14 @@
+# A100 V115.1 Intelligence Core Stabilization & Dashboard Integration
+
+## 배포 후 검증 순서
+`/versionaudit` → `/intelligencecore` → `/learningdashboard` → `/papertracescan` → `/papertrace` → `/outcomememory` → `/calibration2` → `/memoryaging` → `/regimetransition`
+
+## 핵심 수정
+- `paper_threshold` KeyError 방지용 Threshold Schema Adapter
+- Learning Dashboard의 V115.1 Intelligence Core 통합
+- Paper Trace의 Core Decision 요약
+- Shadow-only/Paper 기준 보존
+
 # A100 V115.0 AI INTELLIGENCE CORE DEVELOPMENT
 
 기준 버전 V114.2를 계승하여 Pattern Memory, Cross-Market Similarity, Market Regime, Dynamic Weight, Drift Detector, Adaptive Threshold를 하나의 Shadow Intelligence Core로 통합한 개발 릴리스입니다.

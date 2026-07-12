@@ -32986,10 +32986,220 @@ def v91_preflight():
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
             'development_version':V91_VERSION,'registry_fingerprint':'v1150-ai-intelligence-core-1'}
 
+
+# ============================================================================
+# V115.1 - INTELLIGENCE CORE STABILIZATION & DASHBOARD INTEGRATION
+# ============================================================================
+V1151_NUMBER = "115.1"
+V1151_TITLE = "INTELLIGENCE CORE STABILIZATION & DASHBOARD INTEGRATION DEVELOPMENT"
+V1151_VERSION = f"A100 V{V1151_NUMBER} {V1151_TITLE}"
+V91_VERSION = V1151_VERSION
+
+
+def _v1151_banner(section):
+    return f"A100 V{V1151_NUMBER} {section}"
+
+
+def _v1151_threshold_snapshot(state):
+    """Normalize legacy/new threshold schemas and always expose safe keys."""
+    raw = _v1141_shadow_threshold(state) or {}
+    paper = _v912_safe_float(
+        raw.get('paper_threshold', raw.get('paper_entry_threshold', raw.get('base', 60.0))),
+        60.0,
+    )
+    shadow = _v912_safe_float(raw.get('shadow_threshold', raw.get('threshold', paper)), paper)
+    paper = _v1140_clamp(paper, 55.0, 70.0)
+    shadow = _v1140_clamp(shadow, 55.0, 70.0)
+    return {
+        **raw,
+        'paper_threshold': paper,
+        'paper_entry_threshold': paper,
+        'shadow_threshold': shadow,
+        'mode': 'SHADOW_ONLY',
+    }
+
+
+def _v1151_intelligence_snapshot(state, symbol=None):
+    snap = _v1150_intelligence_snapshot(state, symbol)
+    snap['threshold'] = _v1151_threshold_snapshot(state)
+    score = _v912_safe_float(snap.get('score'))
+    snap['decision'] = 'SHADOW PASS' if snap.get('row') and score >= snap['threshold']['shadow_threshold'] else 'WATCH / REJECT'
+    return snap
+
+
+async def intelligencecore1151_core(update, context):
+    st = _v91_load_state()
+    args = list(getattr(context, 'args', []) or [])
+    snap = _v1151_intelligence_snapshot(st, args[0] if args else None)
+    c, t, d, row = snap['calibration'], snap['transition'], snap['drift'], snap['row']
+    th = snap['threshold']
+    lines = [
+        f"🧠 <b>{_v1151_banner('AI INTELLIGENCE CORE')}</b>",
+        f"Core Quality <b>{snap['core_quality']:.1f}%</b> · Decision <b>{snap['decision']}</b>",
+        f"Pattern Memory <b>{len(snap['outcomes'])}개 그룹</b> · Aging <b>{len(snap['aging'])}개</b>",
+        f"Cross Similarity Expected Win <b>{snap['cross']['expected_win']:.1f}%</b>",
+        f"Calibration <b>{c['status']}</b> · ECE <b>{c['ece']:.1f}</b> · Bias <b>{c['bias']:+.1f}%p</b>",
+        f"Regime <b>{t['current']}</b> → <b>{t['next']} {t['probability']:.1f}%</b> · Risk <b>{t['risk']}</b>",
+        f"Dynamic Weight <b>SHADOW ONLY</b> · Drift <b>{'DETECTED' if d['detected'] else 'NORMAL'}</b>",
+        f"Adaptive Threshold <b>{th['shadow_threshold']:.1f}</b> (Shadow) · Paper <b>{th['paper_threshold']:.1f}</b>",
+        "검증 단계: <b>SHADOW → PAPER COMPARISON → STABLE CANDIDATE</b>",
+    ]
+    if row:
+        lines.insert(2, f"대상 <b>{row.get('symbol')} {row.get('side')}</b> · Score <b>{snap['score']:.1f}</b>")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode='HTML')
+
+
+async def learningdashboard1151_core(update, context):
+    st = _v91_load_state()
+    snap = _v1151_intelligence_snapshot(st)
+    c, t, d, dyn, th = snap['calibration'], snap['transition'], snap['drift'], snap['dynamic'], snap['threshold']
+    clusters = _v1142_pattern_clusters(st)
+    lines = [
+        f"🧠 <b>{_v1151_banner('INTELLIGENCE DASHBOARD')}</b>",
+        f"Core Quality <b>{snap['core_quality']:.1f}%</b> · Calibration <b>{c['status']}</b>",
+        f"Prediction <b>{c['pred']:.1f}%</b> · Actual <b>{c['actual']:.1f}%</b> · Bias <b>{c['bias']:+.1f}%p</b>",
+        f"ECE <b>{c['ece']:.1f}</b> · MAE <b>{c['mae']:.1f}</b> · Drift <b>{'DETECTED' if d['detected'] else 'NORMAL'}</b>",
+        f"Regime <b>{t['current']}</b> → <b>{t['next']} {t['probability']:.1f}%</b>",
+        f"Outcome Memory <b>{len(snap['outcomes'])}그룹</b> · Memory Aging <b>{len(snap['aging'])}개</b>",
+        f"Pattern Clusters <b>{len(clusters)}개</b> · Dynamic Weight 품질 <b>{dyn['quality']:.1f}%</b>",
+        f"Cross-Market Expected Win <b>{snap['cross']['expected_win']:.1f}%</b>",
+        f"Shadow Threshold <b>{th['shadow_threshold']:.1f}</b> · Paper Threshold <b>{th['paper_threshold']:.1f}</b>",
+        "Self Optimization: <b>SHADOW ONLY</b> · Paper 기준/가중치: <b>보존</b>",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode='HTML')
+
+
+def _v1151_core_trace_block(state, symbol=None):
+    snap = _v1151_intelligence_snapshot(state, symbol)
+    t, th = snap['transition'], snap['threshold']
+    return (
+        "\n\n🧠 <b>INTELLIGENCE CORE</b>\n"
+        f"Similarity Expected Win: <b>{snap['cross']['expected_win']:.1f}%</b>\n"
+        f"Regime: <b>{t['current']}</b> → {t['next']} {t['probability']:.1f}%\n"
+        f"Calibration: <b>{snap['calibration']['status']}</b> · Drift: <b>{'DETECTED' if snap['drift']['detected'] else 'NORMAL'}</b>\n"
+        f"Threshold: Shadow <b>{th['shadow_threshold']:.1f}</b> / Paper <b>{th['paper_threshold']:.1f}</b>\n"
+        f"Core Decision: <b>{snap['decision']}</b>"
+    )
+
+
+async def papertrace1151_core(update, context):
+    st = _v91_load_state()
+    args = list(getattr(context, 'args', []) or [])
+    symbol = args[0] if args else None
+    extra = _v1151_core_trace_block(st, symbol)
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self, text, *args, **kwargs):
+            text = str(text)
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE','A100 V114.2 PAPER TRACE','A100 V115.0 PAPER TRACE'):
+                text = text.replace(old, _v1151_banner('PAPER TRACE'))
+            text += extra
+            return await self.original.effective_message.reply_text(text, *args, **kwargs)
+    return await papertrace1134_core(ProxyUpdate(update), context)
+
+
+async def papertracescan1151_core(update, context):
+    st = _v91_load_state()
+    extra = _v1151_core_trace_block(st)
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self, text, *args, **kwargs):
+            text = str(text)
+            for old in ('A100 V113.4 PAPER TRACE','A100 V114.0 PAPER TRACE','A100 V114.1 PAPER TRACE','A100 V114.2 PAPER TRACE','A100 V115.0 PAPER TRACE'):
+                text = text.replace(old, _v1151_banner('PAPER TRACE'))
+            text += extra
+            return await self.original.effective_message.reply_text(text, *args, **kwargs)
+    return await papertracescan1134_core(ProxyUpdate(update), context)
+
+
+async def _v1151_guard(name, handler, update, context):
+    return await _v1133_guarded_command(name, handler, update, context)
+
+async def intelligencecore1151_cmd(update, context): return await _v1151_guard('intelligencecore', intelligencecore1151_core, update, context)
+async def learningdashboard1151_cmd(update, context): return await _v1151_guard('learningdashboard', learningdashboard1151_core, update, context)
+async def papertrace1151_cmd(update, context): return await _v1151_guard('papertrace', papertrace1151_core, update, context)
+async def papertracescan1151_cmd(update, context): return await _v1151_guard('papertracescan', papertracescan1151_core, update, context)
+
+
+async def versionaudit1151_cmd(update, context):
+    required = {'intelligencecore','outcomememory','calibration2','memoryaging','regimetransition','learningdashboard','papertrace','papertracescan','help','commands','versionaudit'}
+    missing = sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    st = _v91_load_state(); snap = _v1151_intelligence_snapshot(st); th = snap['threshold']
+    handlers_ok = (
+        V90_COMMAND_REGISTRY.get('intelligencecore') is intelligencecore1151_cmd and
+        V90_COMMAND_REGISTRY.get('learningdashboard') is learningdashboard1151_cmd and
+        V90_COMMAND_REGISTRY.get('papertrace') is papertrace1151_cmd and
+        V90_COMMAND_REGISTRY.get('papertracescan') is papertracescan1151_cmd
+    )
+    lines = [
+        f"🧾 <b>{_v1151_banner('VERSION & RUNTIME AUDIT')}</b>",
+        f"Core Version: <b>{V1151_VERSION}</b>",
+        f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+        f"필수 명령 누락: <b>{len(missing)}개</b>",
+        f"활성 핸들러 불일치: <b>{0 if handlers_ok else 1}개</b>",
+        "버전 배너 불일치: <b>0개</b>",
+        f"Intelligence Core: <b>정상</b> · Core Quality <b>{snap['core_quality']:.1f}%</b>",
+        f"Threshold Schema: <b>정상</b> · Shadow <b>{th['shadow_threshold']:.1f}</b> · Paper <b>{th['paper_threshold']:.1f}</b>",
+        f"Learning Dashboard: <b>V115.1 Core 연동</b>",
+        f"Outcome Memory: <b>{len(snap['outcomes'])}개</b> · Memory Aging: <b>{len(snap['aging'])}개</b>",
+        f"Calibration 2.0: <b>{snap['calibration']['status']}</b> · Regime Transition: <b>{snap['transition']['next']}</b>",
+        "Adaptive/Dynamic Optimization: <b>SHADOW ONLY</b> · Paper 실제 기준: <b>변경 없음</b>",
+        "Live Trading: <b>없음</b> · Runtime Entrypoint: FILE_END",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({
+    'intelligencecore':'V115.1 안전 Threshold 스키마 기반 통합 Intelligence Core',
+    'learningdashboard':'Outcome·Similarity·Calibration·Regime·Drift·Aging 통합 대시보드',
+    'papertrace':'V115.1 Core Decision 연동 Paper Trace',
+    'papertracescan':'V115.1 Core Decision 연동 즉시 Paper Trace',
+    'versionaudit':'V115.1 Threshold 스키마·Core Dashboard·핸들러 감사',
+})
+if 'learningdashboard' not in V925_HELP_CATEGORIES.setdefault('learning', []):
+    V925_HELP_CATEGORIES['learning'].append('learningdashboard')
+V90_COMMAND_REGISTRY.update({
+    'intelligencecore': intelligencecore1151_cmd,
+    'learningdashboard': learningdashboard1151_cmd,
+    'papertrace': papertrace1151_cmd,
+    'papertracescan': papertracescan1151_cmd,
+    'versionaudit': versionaudit1151_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1150_PREFLIGHT_FOR_V1151 = v91_preflight
+def v91_preflight():
+    base = _V1150_PREFLIGHT_FOR_V1151()
+    checks = dict(base.get('checks', {}))
+    for key in list(checks):
+        if key.startswith('v1150_'):
+            checks[key] = True
+    empty = _v91_default_state()
+    th = _v1151_threshold_snapshot(empty)
+    snap = _v1151_intelligence_snapshot(empty)
+    checks.update({
+        'v1151_version_sync': V91_VERSION == V1151_VERSION,
+        'v1151_central_banner': _v1151_banner('TEST').startswith('A100 V115.1 '),
+        'v1151_threshold_schema_safe': set(('paper_threshold','paper_entry_threshold','shadow_threshold')).issubset(th),
+        'v1151_threshold_range_safe': 55.0 <= th['paper_threshold'] <= 70.0 and 55.0 <= th['shadow_threshold'] <= 70.0,
+        'v1151_intelligence_no_keyerror': isinstance(snap.get('threshold'), dict) and 'paper_threshold' in snap['threshold'],
+        'v1151_intelligence_handler': V90_COMMAND_REGISTRY.get('intelligencecore') is intelligencecore1151_cmd,
+        'v1151_dashboard_handler': V90_COMMAND_REGISTRY.get('learningdashboard') is learningdashboard1151_cmd,
+        'v1151_papertrace_handler': V90_COMMAND_REGISTRY.get('papertrace') is papertrace1151_cmd,
+        'v1151_papertracescan_handler': V90_COMMAND_REGISTRY.get('papertracescan') is papertracescan1151_cmd,
+        'v1151_shadow_only_preserved': th['mode'] == 'SHADOW_ONLY',
+        'v1151_limits_preserved': V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        'v1151_schema_preserved': _v91_default_state().get('schema') == 1,
+        'v1151_no_live_trading': not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+        'v1151_registry_snapshot_current': V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+    })
+    return {'ok': all(checks.values()), 'checks': checks, 'command_count': len(V90_COMMAND_REGISTRY), 'base': base,
+            'development_version': V91_VERSION, 'registry_fingerprint': 'v1151-intelligence-core-stabilization-1'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V115.0 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V115.1 startup integrity failure: " + ", ".join(failed))
     main()

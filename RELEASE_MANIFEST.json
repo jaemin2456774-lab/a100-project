@@ -1,8 +1,7 @@
 {
-  "release": "A100 V115.0 AI INTELLIGENCE CORE DEVELOPMENT",
-  "base": "A100 V114.2",
-  "generated_utc": "2026-07-12T23:02:52Z",
-  "file_count": 143,
+  "release": "A100 V115.1",
+  "title": "INTELLIGENCE CORE STABILIZATION & DASHBOARD INTEGRATION DEVELOPMENT",
+  "file_count": 146,
   "files": [
     {
       "path": ".gitignore",
@@ -16,8 +15,8 @@
     },
     {
       "path": "README.md",
-      "size": 4832,
-      "sha256": "6b1e136ed260a6dc01ba03eabcbf21c7427f4d308277a96d34d56f6a69d2df3b"
+      "size": 5331,
+      "sha256": "5ceca3cc9fbed01b90cc689f37e6583c53c7c17750cddd3abb0dcb07192621ff"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -108,6 +107,11 @@
       "path": "docs/CHANGELOG_V115_0.md",
       "size": 824,
       "sha256": "cde14274c0c43d92042b503db163b708bcc52468dc46e731378b39b8132d66af"
+    },
+    {
+      "path": "docs/CHANGELOG_V115_1.md",
+      "size": 532,
+      "sha256": "22d219e9a337995e364970491bf656620ef805d01c000efce4137547700fed42"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -340,6 +344,11 @@
       "sha256": "2b41c9f9ad1d9f940a437d2e52087cf8db8f49692433172ec63f29059ca04e1b"
     },
     {
+      "path": "docs/TEST_REPORT_V115_1.md",
+      "size": 310,
+      "sha256": "cc698df07efa7c595ee74c5ed7b0eb36b2ed8691104247c35f78e870fa8dedc1"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -376,8 +385,8 @@
     },
     {
       "path": "main.py",
-      "size": 1535130,
-      "sha256": "e43e4cedd841dce74fad57a0046c290495e8c5ec5e3d7812ad6f77736e68550f"
+      "size": 1547255,
+      "sha256": "0e8876e39761badb7a41a3a9f62b6ca7cbc15793cd93e12dc20db04cce2af19c"
     },
     {
       "path": "pytest.ini",
@@ -491,8 +500,13 @@
     },
     {
       "path": "tests/test_v1150_intelligence_core.py",
-      "size": 832,
-      "sha256": "90b7bbbb9b3f12a41f0ae94045d0d1ffc984ca98ab719426fcef8b24e1148ac3"
+      "size": 831,
+      "sha256": "823e66ac0043c41ef3202ab23257153e4e3e3a70dacfe38262308e16f38a8141"
+    },
+    {
+      "path": "tests/test_v1151_core_stabilization.py",
+      "size": 1010,
+      "sha256": "0eb0043766d0ae7ca0173e15150a61257e7fc6c48bab16427fbffcfb06817c4c"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -721,11 +735,10 @@
     }
   ],
   "safety": {
-    "paper_max_positions": 20,
-    "shadow_max_positions": 60,
-    "adaptive_threshold": "SHADOW_ONLY",
-    "dynamic_weights": "SHADOW_ONLY",
+    "paper_positions": 20,
+    "shadow_positions": 60,
     "live_trading": false,
-    "schema_preserved": true
+    "threshold_mode": "SHADOW_ONLY",
+    "schema": 1
   }
 }
