@@ -1,0 +1,14 @@
+{
+  "version": "A100 V92.4 CONSENSUS & GOLD SIGNAL ENGINE",
+  "base_version": "A100 V92.3 DASHBOARD & ACTION UX ENGINE",
+  "state_file": "a100_v91_paper_state.json",
+  "schema": 1,
+  "command_count": 153,
+  "new_commands": [
+    "consensus",
+    "gold",
+    "gold_top"
+  ],
+  "preflight_ok": true,
+  "live_trading_enabled": false
+}

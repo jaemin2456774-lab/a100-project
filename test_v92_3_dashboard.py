@@ -4,7 +4,7 @@ HERE=Path(__file__).resolve().parent
 SPEC=importlib.util.spec_from_file_location('a100_v923', HERE/'main.py')
 m=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(m)
 
-assert len(m.V90_COMMAND_REGISTRY)==150, len(m.V90_COMMAND_REGISTRY)
+assert len(m.V90_COMMAND_REGISTRY)>=150, len(m.V90_COMMAND_REGISTRY)
 for cmd in ('dashboard','final','coach','topscore','help','commands'):
     assert callable(m.V90_COMMAND_REGISTRY.get(cmd)), cmd
 for alias,target in m.V922_ALIASES.items():

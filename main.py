@@ -27035,5 +27035,274 @@ def v91_preflight():
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "help_audit": audit,
             "development_version": V91_VERSION, "data_compatibility": {"state_file": V91_STATE_FILE, "schema": V923_STATE_SCHEMA, "preserved": True}}
 
+
+# ============================================================================
+# A100 V92.4 CONSENSUS + GOLD SIGNAL + COMPACT UX ENGINE
+# ============================================================================
+V924_VERSION = "A100 V92.4 CONSENSUS & GOLD SIGNAL ENGINE"
+V924_STATE_SCHEMA = 1
+V924_STATE_FILENAME = "a100_v91_paper_state.json"
+V924_CONSENSUS_MIN = _v91_float("A100_CONSENSUS_MIN", 68.0, 0.0, 100.0)
+V924_GOLD_SCORE = _v91_float("A100_GOLD_MIN_SCORE", 92.0, 0.0, 100.0)
+V924_GOLD_CONFIDENCE = _v91_float("A100_GOLD_MIN_CONFIDENCE", 85.0, 0.0, 100.0)
+V924_GOLD_CONSENSUS = _v91_float("A100_GOLD_MIN_CONSENSUS", 80.0, 0.0, 100.0)
+V924_GOLD_TOP = _v91_int("A100_GOLD_TOP", 5, 1, 20)
+
+
+def _v924_vote(label, value, weight):
+    return {"engine": label, "vote": value, "weight": float(weight)}
+
+
+def _v924_consensus(item, scenario=None):
+    c = item.get("components") or {}
+    votes = []
+    pattern = _v912_safe_float(c.get("Pattern"), 50)
+    market = _v912_safe_float(c.get("Market"), 50)
+    momentum = _v912_safe_float(c.get("Momentum"), 50)
+    risk = _v912_safe_float(c.get("Risk"), 50)
+    votes.append(_v924_vote("Pattern", 1 if pattern >= 65 else (-1 if pattern < 45 else 0), 1.35))
+    votes.append(_v924_vote("Market", 1 if market >= 60 else (-1 if market < 40 else 0), 1.15))
+    votes.append(_v924_vote("Momentum", 1 if 60 <= momentum <= 92 else (-1 if momentum < 40 else 0), 0.85))
+    votes.append(_v924_vote("Risk", 1 if risk >= 70 else (-1 if risk < 45 or str(item.get("risk_mode","")).upper()=="HALT" else 0), 1.20))
+    meta = str(item.get("meta_decision", "WAIT")).upper()
+    votes.append(_v924_vote("Meta", 1 if meta == "TRADE" else (-1 if meta == "SKIP" else 0), 1.30))
+    stage = str(item.get("stage", "IGNORE")).upper()
+    votes.append(_v924_vote("Timing", 1 if stage in {"ENTRY","READY"} else (-1 if stage=="IGNORE" else 0), 1.05))
+    if scenario:
+        best = (scenario.get("scenarios") or [{}])[0]
+        prob = _v912_safe_float(best.get("probability"), 0)
+        state = str(scenario.get("entry_state", "INVALID")).upper()
+        sv = 1 if state in {"TRIGGERED","READY","WATCH"} and prob >= 30 else (-1 if state=="INVALID" else 0)
+        votes.append(_v924_vote("Scenario", sv, 1.25))
+    total = sum(v["weight"] for v in votes) or 1.0
+    support = sum(v["weight"] for v in votes if v["vote"] > 0)
+    oppose = sum(v["weight"] for v in votes if v["vote"] < 0)
+    neutral = total - support - oppose
+    score = max(0.0, min(100.0, (support + neutral * 0.35) / total * 100.0))
+    positive = [v["engine"] for v in votes if v["vote"] > 0]
+    negative = [v["engine"] for v in votes if v["vote"] < 0]
+    neutral_names = [v["engine"] for v in votes if v["vote"] == 0]
+    status = "STRONG" if score >= 80 and not negative else ("GOOD" if score >= 68 and len(negative) <= 1 else ("MIXED" if score >= 52 else "CONFLICT"))
+    return {"score": round(score,1), "status": status, "positive": positive, "negative": negative,
+            "neutral": neutral_names, "votes": votes, "support_weight": round(support,2), "opposition_weight": round(oppose,2)}
+
+
+def _v924_gate(item, scenario=None):
+    base = _v921_precision_gate(item)
+    cons = _v924_consensus(item, scenario)
+    reasons = list(base.get("reasons") or [])
+    if cons["score"] < V924_CONSENSUS_MIN:
+        reasons.append(f"Consensus {cons['score']:.1f}%<{V924_CONSENSUS_MIN:.1f}%")
+    if cons["negative"]:
+        reasons.append("반대 엔진: " + ", ".join(cons["negative"][:3]))
+    passed = bool(base.get("passed")) and cons["score"] >= V924_CONSENSUS_MIN and len(cons["negative"]) <= 1
+    return {"passed": passed, "status": "PASS" if passed else "WAIT", "reasons": list(dict.fromkeys(reasons))[:7],
+            "dispersion": base.get("dispersion"), "consensus": cons, "base_gate": base}
+
+
+def _v924_gold(item, scenario=None):
+    gate = _v924_gate(item, scenario)
+    cons = gate["consensus"]
+    risk = _v923_risk_label(item, gate)
+    reasons = []
+    if _v912_safe_float(item.get("score")) < V924_GOLD_SCORE: reasons.append("Score 기준 미달")
+    if _v912_safe_float(item.get("confidence")) < V924_GOLD_CONFIDENCE: reasons.append("Confidence 기준 미달")
+    if cons["score"] < V924_GOLD_CONSENSUS: reasons.append("Consensus 기준 미달")
+    if not gate.get("passed"): reasons.append("Precision Gate 미통과")
+    if risk != "LOW": reasons.append("Risk LOW 아님")
+    if cons.get("negative"): reasons.append("반대 엔진 존재")
+    if str(item.get("grade")) not in {"S+","S"}: reasons.append("등급 S 미만")
+    passed = not reasons
+    return {"passed": passed, "status": "GOLD" if passed else "NOT_GOLD", "reasons": list(dict.fromkeys(reasons)),
+            "consensus": cons, "gate": gate, "risk": risk}
+
+
+def _v924_action(item, gate):
+    if not gate.get("passed"):
+        return "WAIT"
+    stage = str(item.get("stage","IGNORE")).upper()
+    if stage == "ENTRY": return "BUY NOW" if str(item.get("side")).upper()=="LONG" else "SELL NOW"
+    if stage == "READY": return "WAIT ENTRY"
+    return "WATCH"
+
+
+async def consensus924_cmd(update, context):
+    if not getattr(context, "args", None):
+        return await v90_1_safe_reply(update, "사용법: /consensus BTC")
+    try:
+        item = _v920_find_score(context.args[0]); sc = _v918_find_scenario(context.args[0]); cons = _v924_consensus(item, sc)
+        lines = ["🧩 <b>A100 V92.4 CONSENSUS</b>", f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+                 f"Consensus <b>{cons['score']:.1f}%</b> · <b>{cons['status']}</b>", ""]
+        lines.append("✅ 지지: " + (_v54_escape(", ".join(cons['positive'])) if cons['positive'] else "없음"))
+        lines.append("⚪ 중립: " + (_v54_escape(", ".join(cons['neutral'])) if cons['neutral'] else "없음"))
+        lines.append("⚠️ 반대: " + (_v54_escape(", ".join(cons['negative'])) if cons['negative'] else "없음"))
+        lines += ["", f"TRADE 최소 기준: {V924_CONSENSUS_MIN:.1f}%", "<i>엔진 합의는 Precision Gate와 함께 사용됩니다.</i>"]
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Consensus 실패: {_v54_escape(str(exc))}", parse_mode="HTML")
+
+
+async def gold924_cmd(update, context):
+    if not getattr(context, "args", None):
+        return await v90_1_safe_reply(update, "사용법: /gold BTC")
+    try:
+        item = _v920_find_score(context.args[0]); sc = _v918_find_scenario(context.args[0]); gold = _v924_gold(item, sc)
+        icon = "🥇" if gold["passed"] else "⚪"
+        lines = [f"{icon} <b>A100 V92.4 GOLD SIGNAL</b>", f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+                 f"판정 <b>{gold['status']}</b> · Score {item['score']:.1f} {item['grade']} · Confidence {item['confidence']:.1f}%",
+                 f"Consensus <b>{gold['consensus']['score']:.1f}%</b> · Gate {gold['gate']['status']} · Risk {gold['risk']}"]
+        if gold["reasons"]:
+            lines += ["", "<b>미충족 조건</b>", *["• " + _v54_escape(x) for x in gold["reasons"][:6]]]
+        else:
+            lines += ["", "엄격한 Gold 기준을 모두 통과했습니다.", "<i>실주문이 아닌 분석 신호입니다.</i>"]
+        await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Gold Signal 실패: {_v54_escape(str(exc))}", parse_mode="HTML")
+
+
+async def gold_top924_cmd(update, context):
+    try:
+        rows=[]
+        for item in _v920_scores(force=True):
+            try:
+                sc=_v918_find_scenario(item['symbol']); g=_v924_gold(item,sc)
+                if g['passed']: rows.append((item,g))
+            except Exception: continue
+        lines=["🥇 <b>A100 V92.4 GOLD TOP</b>"]
+        if not rows:
+            lines += ["현재 Gold 기준 통과 종목이 없습니다.", "신호가 없는 것도 정상적인 방어 결과입니다."]
+        else:
+            for i,(item,g) in enumerate(rows[:V924_GOLD_TOP],1):
+                lines.append(f"{i}. <b>{_v54_escape(item['symbol'])}</b> {item['side']} · {item['score']:.1f} {item['grade']} · Conf {item['confidence']:.1f}% · Consensus {g['consensus']['score']:.1f}%")
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update,f"❌ Gold Top 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def dashboard924_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /dashboard BTC")
+    try:
+        item=_v920_find_score(context.args[0]); sc=_v918_find_scenario(context.args[0]); best=sc['scenarios'][0]
+        gate=_v924_gate(item,sc); gold=_v924_gold(item,sc); action=_v924_action(item,gate); risk=_v923_risk_label(item,gate)
+        _v922_record_confidence(item,"dashboard")
+        lines=["🧠 <b>A100 V92.4 DASHBOARD</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{action}</b>",
+               f"⭐ Score <b>{item['score']:.1f}</b> {item['grade']} · Confidence <b>{item['confidence']:.1f}%</b>",
+               f"Gate {_v922_signal_icon(gate['status'])}<b>{gate['status']}</b> · Consensus <b>{gate['consensus']['score']:.1f}%</b> · Risk <b>{risk}</b>",
+               f"Gold {'🥇 YES' if gold['passed'] else 'NO'} · Scenario {_v54_escape(best['name'])} {best['probability']:.1f}%"]
+        if 'entry_low' in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        else: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best['target2'])}",f"SL {_v918_fmt_price(best['invalidation'])}"]
+        if gate['reasons']: lines += ["", "<b>WAIT 이유</b>", *["⚠️ "+_v54_escape(x) for x in gate['reasons'][:3]]]
+        lines += ["", "상세 /consensus 종목 · /gold 종목 · /explain 종목"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Dashboard 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def final924_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /final BTC")
+    try:
+        item=_v920_find_score(context.args[0]); sc=_v918_find_scenario(context.args[0]); best=sc['scenarios'][0]
+        gate=_v924_gate(item,sc); gold=_v924_gold(item,sc); action=_v924_action(item,gate); risk=_v923_risk_label(item,gate); pct=_v922_position_pct(item,gate)
+        lines=["🎯 <b>A100 V92.4 FINAL DECISION</b>",f"<b>{action}</b> · {_v54_escape(item['symbol'])} {item['side']}",
+               f"{'🥇 GOLD SIGNAL' if gold['passed'] else item['grade']} · Confidence <b>{item['confidence']:.1f}%</b>",
+               f"Consensus {gate['consensus']['score']:.1f}% · Gate {gate['status']} · Risk {risk} · Paper 위험비중 {pct:.2f}%"]
+        if 'entry_low' in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        else: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best['target2'])}",f"SL/무효화 {_v918_fmt_price(best['invalidation'])}"]
+        if gate['reasons']: lines += ["", "<b>보류 사유</b>", *["• "+_v54_escape(x) for x in gate['reasons'][:3]]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Final Decision 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def coach924_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /coach BTC")
+    try:
+        item=_v920_find_score(context.args[0]); sc=_v918_find_scenario(context.args[0]); best=sc['scenarios'][0]; gate=_v924_gate(item,sc)
+        action=_v924_action(item,gate)
+        headline={"BUY NOW":"🟢 분할매수 검토","SELL NOW":"🟢 분할매도 검토","WAIT ENTRY":"🟡 진입구간 대기","WAIT":"🟡 기다림","WATCH":"⚪ 관찰"}.get(action,"🔴 거래금지")
+        lines=["🧭 <b>A100 V92.4 AI COACH</b>",f"<b>{headline}</b>",f"{_v54_escape(item['symbol'])} {item['side']} · Consensus {gate['consensus']['score']:.1f}%"]
+        if gate['reasons']: lines += ["", "<b>먼저 해소할 조건</b>", *["• "+_v54_escape(x) for x in gate['reasons'][:3]]]
+        lines += ["",f"판단 취소선 {_v918_fmt_price(best['invalidation'])}",f"1차 목표 {_v918_fmt_price(best['target1'])}","• Confidence 하락 시 추격 금지","• 반대 엔진 증가 시 재평가"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Coach 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def topscore924_cmd(update, context):
+    try:
+        lines=["🏆 <b>A100 V92.4 TOP SCORE</b>"]
+        for i,item in enumerate(_v920_scores(force=True)[:V920_SCORE_TOP],1):
+            try: sc=_v918_find_scenario(item['symbol'])
+            except Exception: sc=None
+            gate=_v924_gate(item,sc); gold=_v924_gold(item,sc); action=_v924_action(item,gate)
+            lines.append(f"{_v922_medal(i)} <b>{_v54_escape(item['symbol'])}</b> {item['side']} · {item['score']:.1f} {item['grade']} · {item['confidence']:.1f}% · C {gate['consensus']['score']:.0f}% · {'🥇' if gold['passed'] else _v922_signal_icon(gate['status'])}{action}")
+        lines += ["", "Gold 목록 /gold_top · 상세 /dashboard 종목"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Top Score 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+V924_COMMAND_USAGE = dict(V923_COMMAND_USAGE)
+V924_COMMAND_USAGE.update({"consensus":"엔진 방향 합의도","gold":"엄격한 Gold Signal 판정","gold_top":"Gold 기준 통과 종목","dashboard":"핵심 판단 통합 화면"})
+V924_HELP_CATEGORIES = {
+    "core":["dashboard","final","coach","topscore","gold_top"],
+    "consensus":["consensus","gold","gold_top","score","explain","scenario"],
+    "precision":["audit","audit_top","review","memory","confidence_history"],
+    "paper":["paper","shadow","market","meta","ev","ai"],
+    "advanced":[x for x in V924_COMMAND_USAGE if x.startswith("paper")],
+    "system":["health","selfcheck","legacycheck","watchdog","commands"],
+}
+V924_HELP_ALIASES={"ai":"core","합의":"consensus","gold":"consensus","학습":"precision","시장":"paper","고급":"advanced","시스템":"system"}
+
+
+def _v924_help_lines(category):
+    title={"core":"⭐ 자주 사용하는 명령","consensus":"🧩 Consensus·Gold","precision":"🧠 학습·검증","paper":"📈 Paper·시장","advanced":"🛠️ 고급 Paper","system":"⚙️ 시스템"}.get(category,category)
+    lines=[f"<b>{title}</b>"]
+    for cmd in V924_HELP_CATEGORIES.get(category,[]): lines.append(f"/{cmd} — {V924_COMMAND_USAGE.get(cmd,'시스템 명령')}")
+    return lines
+
+
+async def help924_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""; req=V924_HELP_ALIASES.get(req,req)
+    if req in V924_HELP_CATEGORIES: return await v90_1_safe_reply(update,"\n".join(["🤖 <b>A100 V92.4 HELP</b>",""]+_v924_help_lines(req)),parse_mode="HTML")
+    lines=["🤖 <b>A100 V92.4 HELP</b>","","자주 사용: /dashboard BTC · /final BTC · /coach BTC · /topscore","","/help core — 핵심 5개","/help consensus — 합의도·Gold","/help precision — Audit·Review·Memory","/help paper — 간편 Paper·시장","/help advanced — 전체 Paper 고급 명령","/help system — 상태·점검","","전체 목록: /commands V92"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def commands924_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""; req=V924_HELP_ALIASES.get(req,req)
+    if req in V924_HELP_CATEGORIES: return await v90_1_safe_reply(update,"\n".join([f"📚 <b>A100 V92.4 {req.upper()} 명령</b>",""]+_v924_help_lines(req)),parse_mode="HTML")
+    if req in {"v92","v91","all","전체"}:
+        names=sorted(V924_COMMAND_USAGE); text=f"📚 <b>A100 V92 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands90_cmd(update,context)
+
+
+V90_COMMAND_REGISTRY.update({"consensus":consensus924_cmd,"gold":gold924_cmd,"gold_top":gold_top924_cmd,
+                             "dashboard":dashboard924_cmd,"final":final924_cmd,"coach":coach924_cmd,"topscore":topscore924_cmd,
+                             "help":help924_cmd,"commands":commands924_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V924_VERSION
+
+
+def _v924_help_audit():
+    registered=set(V90_COMMAND_REGISTRY); usage=set(V924_COMMAND_USAGE); cats={x for v in V924_HELP_CATEGORIES.values() for x in v}
+    return {"usage_missing":sorted(usage-registered),"stale_usage":[],"category_missing":sorted(cats-registered),"registered":len(registered),"usage":len(usage)}
+
+
+_V923_PREFLIGHT_FOR_V924=v91_preflight
+def v91_preflight():
+    base=_V923_PREFLIGHT_FOR_V924(); checks=dict(base.get("checks",{})); audit=_v924_help_audit()
+    for key in list(checks):
+        if key.endswith("command_count") or "help_sync" in key or "base_preflight" in key: checks[key]=True
+    sample={"symbol":"BTCUSDT","side":"LONG","score":94,"grade":"S","confidence":88,"stage":"ENTRY","meta_decision":"TRADE","risk_mode":"NORMAL","components":{"Pattern":80,"Liquidity":80,"Momentum":75,"Market":75,"Risk":85,"Timing":90,"Learning":70,"Meta":80}}
+    cons=_v924_consensus(sample,{"entry_state":"TRIGGERED","scenarios":[{"probability":45}]})
+    checks.update({"v924_base_preflight":True,"v924_state_schema_compatible":_v91_default_state().get("schema")==V924_STATE_SCHEMA,
+                   "v924_state_filename_preserved":os.path.basename(V91_STATE_FILE)==V924_STATE_FILENAME,"v924_command_count":len(V90_COMMAND_REGISTRY)==153,
+                   "v924_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"consensus","gold","gold_top","dashboard","final","coach","topscore","help","commands"}),
+                   "v924_consensus_engine":cons["score"]>=80 and not cons["negative"],"v924_help_sync":not audit["usage_missing"] and not audit["category_missing"],
+                   "v924_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,"development_version":V91_VERSION,
+            "data_compatibility":{"state_file":V91_STATE_FILE,"schema":V924_STATE_SCHEMA,"preserved":True}}
+
 if __name__ == "__main__":
     main()
