@@ -1,6 +1,6 @@
 {
-  "release": "A100 V109.0 PAPER LEARNING MODE DEVELOPMENT",
-  "created_at": "2026-07-12T19:53:12Z",
+  "release": "A100 V110.0 PAPER TRACE INTELLIGENCE DEVELOPMENT",
+  "created_at": "2026-07-12T19:59:54Z",
   "files": [
     {
       "path": ".gitignore",
@@ -9,8 +9,8 @@
     },
     {
       "path": "FILE_LIST.txt",
-      "size": 3533,
-      "sha256": "d43a81a4b6bf511ec9616d8a5bd3f9c96cda18e97e92247558e1fa3b6ab453bc"
+      "size": 3687,
+      "sha256": "99016a8d73b9e0ae186d10ea3953a46b2475457d2d272d27978df4566598dd92"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -19,13 +19,13 @@
     },
     {
       "path": "README.md",
-      "size": 213,
-      "sha256": "ec40bd978d1c93b7a86fc5c29e2dbc929fa4248d396f37507420536c12596885"
+      "size": 233,
+      "sha256": "43b482b9663771f0e9bedc1a432d73443519cb7ae11786f05fbcf2bfdccc1b9b"
     },
     {
       "path": "__pycache__/main.cpython-313.pyc",
-      "size": 1990110,
-      "sha256": "dde61df3479d3e2f94d477ab6b67c8a629c56d862591646a61c68851f97bedfd"
+      "size": 2011905,
+      "sha256": "4f85de286c61caee6de274ad88729d41860afe67c224bc777428b67ee2e4f827"
     },
     {
       "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
@@ -71,6 +71,11 @@
       "path": "docs/CHANGELOG_V109_0.md",
       "size": 426,
       "sha256": "5d6882a4dfb78a65857989dccbdf0c9b16a844360f4e950f5cadb271cc779e9a"
+    },
+    {
+      "path": "docs/CHANGELOG_V110_0.md",
+      "size": 418,
+      "sha256": "2ff2979875af616c83ef55fe1477ce5e04fcf37bad0310d2f278026fe6edd4ff"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -243,6 +248,11 @@
       "sha256": "804cd067ecacd83ced0201dca15e1ef42ded19f0dc8024d0f1fef66288566cc6"
     },
     {
+      "path": "docs/TEST_REPORT_V110_0.md",
+      "size": 191,
+      "sha256": "5bc9894afcfe7add304eed9b26738f907ab2562e0cc55de6c491592cc95c5519"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -279,8 +289,8 @@
     },
     {
       "path": "main.py",
-      "size": 1359917,
-      "sha256": "b9016d809eb4a87bc5a2c877371a5a1177432030f147748e8ce75a2ab9fd90d3"
+      "size": 1371853,
+      "sha256": "e895d21ba046c8a74a5aaa23f9a999935ba4947201d3c3fe3275e7e9912cfa7e"
     },
     {
       "path": "railway.json",
@@ -309,13 +319,18 @@
     },
     {
       "path": "tests/.pytest_cache/v/cache/nodeids",
-      "size": 66,
-      "sha256": "4690345cc701fb493958f8712938c53ad3a6de392b245fe9f6faebf3f07e2cea"
+      "size": 115,
+      "sha256": "b51539756e41a6e6068384f13b75e9ba876fbacc8d91ae59d20b6430f1b8650f"
     },
     {
       "path": "tests/__pycache__/test_v1090_paper_learning_mode.cpython-313-pytest-9.0.2.pyc",
       "size": 4245,
       "sha256": "24563f1f2f8a0cfd820eda3ed3d2e5f6435d344a7dc0aec6e267b2d6c913ade9"
+    },
+    {
+      "path": "tests/__pycache__/test_v1100_paper_trace.cpython-313-pytest-9.0.2.pyc",
+      "size": 3177,
+      "sha256": "aa21175f827d0c0bfcf37c7ea76a66e32f7dcb9a9ae77e3331572f4255f3c11b"
     },
     {
       "path": "tests/test_v101_0_closed_loop.py",
@@ -361,6 +376,11 @@
       "path": "tests/test_v1090_paper_learning_mode.py",
       "size": 478,
       "sha256": "1bee6ff4930df0268dd646a8f539a4509f3abd9882cf80d081efb95780e01d51"
+    },
+    {
+      "path": "tests/test_v1100_paper_trace.py",
+      "size": 358,
+      "sha256": "7a8d5472dfbc40f7a45f14436946dbbac04773db089fb8f9890b763463d99a36"
     },
     {
       "path": "tests/test_v91_8_baseline.py",

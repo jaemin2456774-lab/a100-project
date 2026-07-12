@@ -1,3 +1,4 @@
 [
-  "test_v1090_paper_learning_mode.py::test_v109_static_guards"
+  "test_v1090_paper_learning_mode.py::test_v109_static_guards",
+  "test_v1100_paper_trace.py::test_v110_static"
 ]

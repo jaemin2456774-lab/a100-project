@@ -1,3 +1,3 @@
-A100 V109.0 PAPER LEARNING MODE DEVELOPMENT
+A100 V110.0 PAPER TRACE INTELLIGENCE DEVELOPMENT
 
-Paper 학습 모드의 일일 손실 제한을 해제하면서 핵심 안전장치를 유지하고 V108 pattern detector 오류를 수정한 개발 릴리스입니다.
+Paper 후보가 실제 진입으로 이어지지 않는 원인을 Scanner→Stage→Risk Guard→Open 단계별로 기록하고 Telegram에서 확인하는 개발 릴리스입니다.

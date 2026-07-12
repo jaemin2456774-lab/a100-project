@@ -30119,5 +30119,152 @@ def v91_preflight():
     })
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1090-paper-learning-mode-1"}
 
+
+# ============================================================================
+# A100 V110.0 PAPER TRACE INTELLIGENCE
+# Transparent Scanner -> Filter -> Entry decision logging. Paper only.
+# ============================================================================
+V1100_VERSION = "A100 V110.0 PAPER TRACE INTELLIGENCE DEVELOPMENT"
+V110_TRACE_LIMIT = 500
+V110_TRACE_TOP = 20
+
+def _v110_trace_store(state, row):
+    rows=state.setdefault("paper_trace_v110",[])
+    rows.append(row); state["paper_trace_v110"]=rows[-V110_TRACE_LIMIT:]
+
+def _v110_candidate_trace(row, state=None):
+    state=state or _v91_load_state()
+    sym=str(row.get("symbol","UNKNOWN")); side=str(row.get("side","?")).upper()
+    stage=str(row.get("stage","IGNORE")).upper()
+    score=_v912_safe_float(row.get("final_score",row.get("score")))
+    conf=_v912_safe_float(row.get("confidence"))
+    checks=[]; blockers=[]
+    checks.append(("Scanner", True, f"후보 점수 {score:.1f}"))
+    stage_ok=stage=="ENTRY"; checks.append(("Entry Stage",stage_ok,f"{stage} / 기준 {V913_ENTRY_SCORE:.1f}"))
+    if not stage_ok: blockers.append(f"ENTRY 단계 미도달 ({stage}, {score:.1f}점)")
+    conf_ok=conf>0
+    checks.append(("Confidence Data",conf_ok,f"{conf:.1f}%" if conf_ok else "미산출"))
+    enabled=bool(state.get("enabled")); checks.append(("Paper ON",enabled,"ON" if enabled else "OFF"))
+    if not enabled:blockers.append("Paper Trading OFF")
+    kill=bool(state.get("kill_switch")); checks.append(("Kill Switch",not kill,"OFF" if not kill else "ON"))
+    if kill:blockers.append("Kill Switch ON")
+    dup=sym in state.get("positions",{}); checks.append(("Duplicate",not dup,"기존 포지션 있음" if dup else "통과"))
+    if dup:blockers.append("중복 포지션")
+    cap=len(state.get("positions",{}))<V91_MAX_POSITIONS; checks.append(("Position Limit",cap,f"{len(state.get('positions',{}))}/{V91_MAX_POSITIONS}"))
+    if not cap:blockers.append("최대 포지션 한도")
+    last=_v912_safe_float(state.get("last_closed_by_symbol",{}).get(sym)); remain=max(0,V912_SYMBOL_COOLDOWN_MIN*60-(time.time()-last)) if last else 0
+    cool=remain<=0; checks.append(("Cooldown",cool,"통과" if cool else f"{int(remain//60)+1}분 남음"))
+    if not cool:blockers.append("재진입 쿨다운")
+    mode=_v109_paper_mode(state); day=_v91_daily(state)
+    loss_ok= mode=="LEARNING" or not (V91_DAILY_LOSS_LIMIT>0 and _v912_safe_float(day.get("realized_pnl"))<=-V91_DAILY_LOSS_LIMIT)
+    checks.append(("Daily Loss",loss_ok,"LEARNING 우회" if mode=="LEARNING" else f"PnL {_v912_safe_float(day.get('realized_pnl')):+.3f}"))
+    if not loss_ok:blockers.append("일일 손실 한도")
+    try:
+        reg=_v912_regime_snapshot(); shock=bool(reg.get("btc_shock")) and sym!="BTCUSDT"
+        checks.append(("BTC Shock Guard",not shock,reg.get("regime","UNKNOWN")))
+        if shock:blockers.append("BTC 급변동 알트 차단")
+    except Exception as exc:
+        checks.append(("Market Data",False,f"오류 {type(exc).__name__}")); blockers.append("시장 데이터 오류")
+    return {"at":time.time(),"symbol":sym,"side":side,"stage":stage,"score":score,"confidence":conf,"checks":checks,"blockers":blockers,
+            "result":"ELIGIBLE" if not blockers else "NO_ENTRY","reasons":list(row.get("reasons") or []),"penalties":list(row.get("penalties") or [])}
+
+_V109_AUTO_SCAN_BASE=_v912_auto_scan_once
+
+def _v110_auto_scan_once():
+    # Rebuild the original flow with persistent per-candidate trace and exact open errors.
+    rows=_v913_scan_alert_once(); state=_v91_load_state(); traces=[]; opened=[]
+    for row in rows[:V110_TRACE_TOP]: traces.append(_v110_candidate_trace(row,state))
+    if V912_AUTO_ENTRY and state.get("enabled") and not state.get("kill_switch"):
+        for row in [r for r in rows if r.get("stage")=="ENTRY"][:V912_AUTO_ENTRY_TOP]:
+            if len(_v91_load_state().get("positions",{}))>=V91_MAX_POSITIONS: break
+            trace=next((x for x in traces if x["symbol"]==row.get("symbol") and x["side"]==row.get("side")),None)
+            try:
+                pos=_v912_open(row["symbol"],row["side"],source="auto-candidate",strategy="MOMENTUM_LIQUIDITY"); opened.append(pos)
+                if trace: trace["result"]="OPENED"; trace["blockers"]=[]
+            except Exception as exc:
+                if trace:
+                    trace["result"]="OPEN_ERROR"; trace["blockers"].append(str(exc)); trace["open_error"]=type(exc).__name__
+                v88_record_error(f"v110-auto-entry:{row.get('symbol')}",exc)
+    elif not V912_AUTO_ENTRY:
+        for x in traces:
+            if x["result"]=="ELIGIBLE": x["result"]="NO_ENTRY"; x["blockers"].append("자동 진입 설정 OFF")
+    state=_v91_load_state()
+    for x in traces:_v110_trace_store(state,x)
+    state["paper_trace_last_scan_v110"]={"at":time.time(),"candidates":len(rows),"entry_stage":sum(1 for r in rows if r.get('stage')=='ENTRY'),"opened":len(opened)}
+    _v91_save_state(state); return opened
+
+_v912_auto_scan_once=_v110_auto_scan_once
+
+def _v110_latest(symbol=None):
+    st=_v91_load_state(); rows=list(st.get("paper_trace_v110",[]));
+    if symbol:
+        sym=_v91_normalize_symbol(symbol); rows=[x for x in rows if x.get("symbol")==sym]
+    return st, rows[-1] if rows else None
+
+async def papertrace1100_cmd(update,context):
+    args=list(getattr(context,"args",[]) or []); sym=args[0] if args else None
+    st,x=_v110_latest(sym)
+    if not x:
+        return await v90_1_safe_reply(update,"아직 Paper 진입 추적 기록이 없습니다. /papertrace scan 으로 즉시 분석하세요.")
+    lines=["🧭 <b>A100 V110.0 PAPER TRACE</b>",f"<b>{x['symbol']}</b> {x['side']} · {x['stage']} · 점수 {x['score']:.1f} · Confidence {x['confidence']:.1f}%",""]
+    for name,ok,detail in x.get("checks",[]): lines.append(f"{'✅' if ok else '❌'} {name}: {_v54_escape(str(detail))}")
+    lines += ["",f"최종 결과: <b>{x.get('result')}</b>",f"원인: <b>{_v54_escape(', '.join(x.get('blockers') or ['없음']))}</b>"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def papertracescan1100_cmd(update,context):
+    try:
+        _v110_auto_scan_once(); await papertrace1100_cmd(update,context)
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Paper Trace Scan 실패: {type(exc).__name__}: {exc}")
+
+async def paperpipeline1100_cmd(update,context):
+    st=_v91_load_state(); rows=st.get("paper_trace_v110",[])[-100:]
+    scan=st.get("paper_trace_last_scan_v110",{}); counts={}
+    for x in rows:
+        for b in x.get("blockers",[]): counts[b]=counts.get(b,0)+1
+    top=sorted(counts.items(),key=lambda z:z[1],reverse=True)[:8]
+    lines=["🔬 <b>A100 V110.0 SIGNAL PIPELINE</b>",f"최근 추적 {len(rows)}건 · 최신 후보 {scan.get('candidates',0)} · ENTRY {scan.get('entry_stage',0)} · 진입 {scan.get('opened',0)}",f"자동 스캔 {'ON' if V912_AUTO_SCAN else 'OFF'} · 자동 진입 {'ON' if V912_AUTO_ENTRY else 'OFF'}",""]
+    lines += [f"• {_v54_escape(k)}: {v}건" for k,v in top] or ["차단 통계 없음"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def paperentryrate1100_cmd(update,context):
+    st=_v91_load_state(); rows=st.get("paper_trace_v110",[]); n=len(rows); eligible=sum(x.get('result') in {'ELIGIBLE','OPENED'} for x in rows); opened=sum(x.get('result')=='OPENED' for x in rows); entry=sum(x.get('stage')=='ENTRY' for x in rows)
+    lines=["📊 <b>A100 V110.0 PAPER ENTRY RATE</b>",f"추적 후보 {n}건 · ENTRY 단계 {entry}건",f"진입 가능 {eligible}건 · 실제 Paper 진입 {opened}건",f"후보→진입률 {(opened/n*100 if n else 0):.1f}% · ENTRY→진입률 {(opened/entry*100 if entry else 0):.1f}%",f"현재 포지션 {len(st.get('positions',{}))}/{V91_MAX_POSITIONS}"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def thresholdreview1100_cmd(update,context):
+    st=_v91_load_state(); rows=st.get("paper_trace_v110",[])[-200:]; scores=[_v912_safe_float(x.get('score')) for x in rows]
+    near=sum(V913_READY_SCORE<=v<V913_ENTRY_SCORE for v in scores); entry=sum(v>=V913_ENTRY_SCORE for v in scores)
+    recommendation="표본 부족: 현 기준 유지" if len(scores)<30 else ("READY 후보가 많음: Shadow 표본을 더 모은 뒤 ENTRY 기준 재평가" if near>entry*3 else "현재 임계값 유지 권장")
+    await v90_1_safe_reply(update,"\n".join(["⚖️ <b>A100 V110.0 THRESHOLD REVIEW</b>",f"표본 {len(scores)}건 · WATCH {V913_WATCH_SCORE:.1f} · READY {V913_READY_SCORE:.1f} · ENTRY {V913_ENTRY_SCORE:.1f}",f"READY 구간 {near}건 · ENTRY 구간 {entry}건",f"추천: <b>{recommendation}</b>","※ 자동 변경하지 않고 평가만 제공합니다."]),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({"papertrace":"최근 Paper 진입 허용·거부 원인 상세","papertracescan":"즉시 스캔 후 Paper 진입 추적","paperpipeline":"Scanner→Filter→Entry 차단 통계","paperentryrate":"후보 대비 Paper 진입 생성률","thresholdreview":"신호 임계값 제한형 평가"})
+for _c in ("papertrace","papertracescan","paperpipeline","paperentryrate","thresholdreview"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("paper",[]): V925_HELP_CATEGORIES["paper"].append(_c)
+V90_COMMAND_REGISTRY.update({"papertrace":papertrace1100_cmd,"papertracescan":papertracescan1100_cmd,"paperpipeline":paperpipeline1100_cmd,"paperentryrate":paperentryrate1100_cmd,"thresholdreview":thresholdreview1100_cmd})
+V91_VERSION=V1100_VERSION
+
+async def help1100_cmd(update,context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,"\n".join([f"🧠 <b>A100 V110.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode="HTML")
+    if req:return await help1090_cmd(update,context)
+    await v90_1_safe_reply(update,"\n".join(["🧠 <b>A100 V110.0 HELP</b>","","Paper Trace: /papertracescan · /papertrace BTC · /paperpipeline","Statistics: /paperentryrate · /thresholdreview","Learning Mode: /paper · /papermode learning · /paperdiagnosis","Pattern: /patterndetect BTC · /patternlibrary · /shadowhistory","","전체 목록: /commands V110"]),parse_mode="HTML")
+
+async def commands1100_cmd(update,context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v110","v1100","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V110.0 전체 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands1090_cmd(update,context)
+V90_COMMAND_REGISTRY.update({"help":help1100_cmd,"commands":commands1100_cmd}); V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V109_PREFLIGHT_FOR_V110=v91_preflight
+def v91_preflight():
+    base=_V109_PREFLIGHT_FOR_V110(); checks=dict(base.get("checks",{})); checks["v1090_version_sync"]=True
+    req={"papertrace","papertracescan","paperpipeline","paperentryrate","thresholdreview","help","commands"}
+    checks.update({"v110_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in req),"v110_auto_scan_override":_v912_auto_scan_once is _v110_auto_scan_once,"v110_learning_preserved":_v109_paper_mode({})=="LEARNING","v110_limits_preserved":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"v110_schema_preserved":_v91_default_state().get("schema")==1,"v110_no_live_trading":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade")),"v110_version_sync":V91_VERSION==V1100_VERSION})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1100-paper-trace-1"}
+
 if __name__ == "__main__":
     main()
