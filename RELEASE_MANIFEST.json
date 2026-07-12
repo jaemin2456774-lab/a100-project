@@ -1,18 +1,16 @@
 {
-  "release": "A100 V103.0 AUTONOMOUS EVOLUTION DEVELOPMENT",
-  "baseline": "A100 V102.0 EVOLUTION ENGINE DEVELOPMENT",
-  "generated_at": 1783882375.2705922,
-  "file_count": 82,
+  "release": "A100 V104.0 EXPERIENCE INTELLIGENCE DEVELOPMENT",
+  "baseline": "A100 V103.0 AUTONOMOUS EVOLUTION DEVELOPMENT",
+  "generated_at": 1783882780.7524571,
+  "file_count": 88,
+  "focused_tests": "6 passed",
+  "preflight_ok": true,
+  "command_count": 212,
   "files": [
     {
       "path": ".gitignore",
       "size": 167,
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
-    },
-    {
-      "path": "FILE_LIST.txt",
-      "size": 2285,
-      "sha256": "b75ae5790a0bb629638ee4913a13a19bd09e35aab11760d779bdd602525579da"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -21,8 +19,8 @@
     },
     {
       "path": "README.md",
-      "size": 434,
-      "sha256": "186d614b7e43c2091848342edff12532b8c56f13319ceb6f561bf002732bf16b"
+      "size": 300,
+      "sha256": "936403e3f2430644097f0f7ec6dcee3fe1f57e129efe23e828c99988167617bc"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -38,6 +36,11 @@
       "path": "docs/CHANGELOG_V103_0.md",
       "size": 755,
       "sha256": "2092d1ad869e1c57d209134ac6576be94d575f2f343d729d788ee2ab891d1029"
+    },
+    {
+      "path": "docs/CHANGELOG_V104_0.md",
+      "size": 469,
+      "sha256": "bb59c592544d5b7ff954a5c4c7fe715ffecc23a1b8dc7c4accfa470f4261f608"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -88,6 +91,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V103_0.md",
       "size": 334,
       "sha256": "a9b57dd1be612490f19e3bda9bbe5a1746435fb013c78e606010f8144a0301da"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V104_0.md",
+      "size": 176,
+      "sha256": "9a5a858d7dfd96ad0b3bf8f42351ca9de36de44ea0e875b51a2bf29771e18426"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -150,6 +158,11 @@
       "sha256": "e8b81b23780f4df098f62ec9ae989e246184b08eab4fcf721c843102e21ce966"
     },
     {
+      "path": "docs/TEST_REPORT_V104_0.md",
+      "size": 689,
+      "sha256": "1634361b18aef4c730485e945101a7c0735ce99274d32fd90b87fc386013938c"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -186,8 +199,8 @@
     },
     {
       "path": "main.py",
-      "size": 1306683,
-      "sha256": "1a60c5dd15ef6bb45242e0b185d52e9b5b7706470e89340f4c73beeca6eab28f"
+      "size": 1316737,
+      "sha256": "29d21caff9bd470170581ec6f424d701c707726a75deff48949c38cf26ece531"
     },
     {
       "path": "railway.json",
@@ -213,6 +226,11 @@
       "path": "tests/test_v103_0_autonomous_evolution.py",
       "size": 1733,
       "sha256": "fa34d38eecdf6aedbfd55be6877a27e07cc488fc6cfd4de70ff6c14bc4cd0b40"
+    },
+    {
+      "path": "tests/test_v104_0_experience_intelligence.py",
+      "size": 1554,
+      "sha256": "17bcfd2419ddb79bd81e74b68748b68bb24dfb6aeb7643d4359bdde2889a190b"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -350,6 +368,11 @@
       "sha256": "a2eae88c18ae57b355e699b02d578fb1555bbec2d60a96ebe65b30c892650ebb"
     },
     {
+      "path": "v1040_experience_intelligence.py",
+      "size": 8308,
+      "sha256": "346864f14f5231aa350fbfdd9c0c32366ef59fbaf99d109d0e328629eb3c816d"
+    },
+    {
       "path": "v925_decision_intelligence.py",
       "size": 1755,
       "sha256": "710c090da8fdc27116e48941c24ee4f2dca0114f3513ca9c082c58ca45fd8d19"
@@ -414,17 +437,5 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ],
-  "tests": {
-    "focused_passed": 6,
-    "preflight": true,
-    "commands": 205
-  },
-  "safety": {
-    "live_trading_added": false,
-    "paper_limit": 20,
-    "shadow_limit": 60,
-    "schema": 1,
-    "data_preserved": true
-  }
+  ]
 }

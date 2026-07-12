@@ -1,7 +1,3 @@
-# A100 V103.0 Autonomous Evolution Development
+# A100 V104.0 EXPERIENCE INTELLIGENCE DEVELOPMENT
 
-기준: V102.0 Evolution Engine Development
-
-확장 종료 판정, Fuzzy DNA, 설명형 False Filter, 제한형 Self Calibration, Outcome Replay를 추가한 개발 릴리스입니다. 기존 Paper/Shadow/학습 데이터 경로를 보존하며 실주문을 실행하지 않습니다.
-
-주요 명령: `/evolution`, `/aigrowth`, `/replay`, `/dnalearn`, `/outcomelog`, `/falsefilter BTC`
+V103 기반 데이터 보존 개발 릴리스입니다. 경험은행, 교차종목 학습, MASTER DNA, 다중 기억창, Confidence Forecast, Explain AI, 제한형 Self Optimization을 추가합니다. 실주문 기능은 포함하지 않습니다.

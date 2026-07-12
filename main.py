@@ -29600,5 +29600,99 @@ def v91_preflight():
     checks['v1030_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1030-autonomous-evolution-1'}
 
+
+# ============================================================================
+# A100 V104.0 EXPERIENCE INTELLIGENCE — experience, transfer, memory, explain
+# ============================================================================
+V1040_VERSION = "A100 V104.0 EXPERIENCE INTELLIGENCE DEVELOPMENT"
+try:
+    from v1040_experience_intelligence import (capture_experiences as _v104_capture_exp,
+        cross_coin_learning as _v104_cross, build_master_dna as _v104_master,
+        memory_windows as _v104_memory, confidence_forecast as _v104_forecast,
+        explain_ai as _v104_explain, self_optimize as _v104_optimize,
+        experience_summary as _v104_summary)
+except Exception:
+    _v104_capture_exp=_v104_cross=_v104_master=_v104_memory=None
+    _v104_forecast=_v104_explain=_v104_optimize=_v104_summary=None
+
+def _v104_sync():
+    st,info,live=_v103_sync();cap=_v104_capture_exp(st);masters=_v104_master(st);opt=_v104_optimize(st);summary=_v104_summary(st)
+    _v101_save(V1010_STATE_FILE,st);info.update({'experience_added':cap['added'],'experience':summary,'master_dna_v104':len(masters),'optimization_v104':opt})
+    return st,info,live
+
+def _v104_symbol(symbol):
+    rec,created,info,fs=_v103_capture_symbol(symbol);st=_v101_load(V1010_STATE_FILE);_v104_capture_exp(st);_v104_master(st)
+    transfer=_v104_cross(st,rec);forecast=_v104_forecast(st,rec);explain=_v104_explain(st,rec);_v104_optimize(st);_v101_save(V1010_STATE_FILE,st)
+    return rec,created,info,fs,transfer,forecast,explain
+
+async def experience1040_cmd(update, context):
+    st,info,_=_v104_sync();s=info['experience'];m=s['memory']
+    lines=["🧠 <b>A100 V104.0 EXPERIENCE BANK</b>",f"경험 <b>{s['total']}건</b> · 결정 {s['decided']}건 · 종목 {s['symbols']}개",f"이번 신규 저장 {info['experience_added']}건 · MASTER DNA {s['master_dna']}개","",f"최근100 승률 {m['recent_100']['win_rate']:.1f}% · 평균수익 {m['recent_100']['avg_return']:+.2f}%",f"전체 승률 {m['all']['win_rate']:.1f}% · 평균수익 {m['all']['avg_return']:+.2f}%","","※ 종료된 실제 추적 표본만 저장하며 가상 승패를 생성하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def crosslearn1040_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /crosslearn BTC')
+    rec,_,_,_,x,_,_=_v104_symbol(context.args[0]);src=' · '.join(f"{k} {v}" for k,v in x['source_symbols'].items()) or '없음'
+    lines=["🌐 <b>A100 V104.0 CROSS COIN LEARNING</b>",f"<b>{_v54_escape(rec['symbol'])}</b> · {rec['side']}",f"유사 타종목 표본 <b>{x['samples']}건</b> · 가중 승률 {x['weighted_win_rate']:.1f}%",f"평균 유사도 {x['avg_similarity']:.1f}% · Confidence 보정 {x['confidence_adjustment']:+.2f}","",f"근거 종목: {_v54_escape(src)}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def masterdna1040_cmd(update, context):
+    st,info,_=_v104_sync();rows=st.get('master_dna_v104',[]);lines=["🧬 <b>A100 V104.0 MASTER DNA</b>",f"통합 DNA <b>{len(rows)}개</b>",""]
+    if not rows:lines.append("통합에 필요한 Fuzzy DNA 표본이 부족합니다.")
+    for i,x in enumerate(rows[:10],1):lines.append(f"{i}. <b>{x['id']}</b> · {x['status']} · {x['samples']}건 · 승률 {x['win_rate']:.1f}%\n   {_v54_escape(x['signature'])}")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def memoryscope1040_cmd(update, context):
+    st,info,_=_v104_sync();m=info['experience']['memory'];lines=["🗃️ <b>A100 V104.0 AI MEMORY SCOPE</b>"]
+    for key,label in [('recent_100','최근 100'),('recent_1000','최근 1000'),('all','전체')]:
+        x=m[key];lines.append(f"{label}: <b>{x['samples']}건</b> · 승률 {x['win_rate']:.1f}% · 평균 {x['avg_return']:+.2f}%")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def confidenceforecast1040_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /confidenceforecast BTC')
+    rec,_,_,_,_,f,_=_v104_symbol(context.args[0]);lines=["📈 <b>A100 V104.0 CONFIDENCE FORECAST</b>",f"<b>{_v54_escape(rec['symbol'])}</b> · {rec['side']}",f"현재 <b>{f['current']:.1f}%</b> → 예상 <b>{f['forecast']:.1f}%</b> · {f['direction']}",f"근거 표본 {f['basis_samples']}건 · 창별 승률 {' / '.join(str(x) for x in f['window_rates'])}"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def explainai1040_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /explainai BTC')
+    rec,_,_,_,_,_,e=_v104_symbol(context.args[0]);lines=["🔎 <b>A100 V104.0 EXPLAIN AI</b>",f"<b>{_v54_escape(rec['symbol'])}</b> · {rec['side']}",f"기본 {e['base_confidence']:.1f} · 특징 {e['feature_adjustment']:+.2f} · 교차학습 {e['cross_coin_adjustment']:+.2f}",f"추정 Confidence <b>{e['estimated_confidence']:.1f}%</b>",""]
+    for x in e['parts'][:6]:lines.append(f"• {x['feature']} {x['value']:.0f} → {x['contribution']:+.2f} ({x['effect']})")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def selfoptimize1040_cmd(update, context):
+    st,info,_=_v104_sync();o=info['optimization_v104'];p=o.get('parameters',{});status='UPDATED' if o.get('changed') else o.get('reason','STABLE')
+    lines=["⚙️ <b>A100 V104.0 SELF OPTIMIZATION</b>",f"상태 <b>{status}</b> · 표본 {o.get('samples',0)}건",f"Confidence {p.get('confidence_bias',0):+.2f} · False Risk {p.get('false_risk_bias',0):+.2f}",f"TP ×{p.get('tp_multiplier',1):.3f} · SL ×{p.get('sl_multiplier',1):.3f} · Position ×{p.get('position_multiplier',1):.3f}","","※ 추천 평가용 제한 보정이며 실주문 설정은 변경하지 않습니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'experience':'종료 표본 경험은행 및 누적 통계','crosslearn':'타종목 유사 경험 전이','masterdna':'Fuzzy DNA 통합 MASTER DNA','memoryscope':'최근100·1000·전체 기억 성과','confidenceforecast':'Confidence 단기 방향 예측','explainai':'특징별 판단 기여도','selfoptimize':'제한형 추천 파라미터 최적화'})
+for _c in ('experience','crosslearn','masterdna','memoryscope','confidenceforecast','explainai','selfoptimize'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'experience':experience1040_cmd,'crosslearn':crosslearn1040_cmd,'masterdna':masterdna1040_cmd,'memoryscope':memoryscope1040_cmd,'confidenceforecast':confidenceforecast1040_cmd,'explainai':explainai1040_cmd,'selfoptimize':selfoptimize1040_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1040_VERSION
+
+async def help1040_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V104.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help1030_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V104.0 HELP</b>","","Experience: /experience · /crosslearn BTC · /masterdna · /memoryscope","Forecast: /confidenceforecast BTC · /explainai BTC · /selfoptimize","Autonomous: /evolution · /aigrowth · /replay · /dnalearn · /outcomelog","Filter: /falsefilter BTC · /confidenceevolution","","전체 목록: /commands V104"]),parse_mode='HTML')
+
+async def commands1040_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v104','v1040','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V104.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands1030_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1040_cmd,'commands':commands1040_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1030_PREFLIGHT_FOR_V1040=v91_preflight
+def v91_preflight():
+    base=_V1030_PREFLIGHT_FOR_V1040();checks=dict(base.get('checks',{}));checks['v1030_version_sync']=True
+    required={'experience','crosslearn','masterdna','memoryscope','confidenceforecast','explainai','selfoptimize','help','commands'}
+    funcs=(_v104_capture_exp,_v104_cross,_v104_master,_v104_memory,_v104_forecast,_v104_explain,_v104_optimize,_v104_summary)
+    checks.update({'v1040_module_loaded':all(callable(x) for x in funcs),'v1040_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1040_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1040_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1040_version_sync':V91_VERSION==V1040_VERSION,'v1040_schema_preserved':_v91_default_state().get('schema')==1,'v1040_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1040_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1040_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1040_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1040-experience-intelligence-1'}
+
 if __name__ == "__main__":
     main()
