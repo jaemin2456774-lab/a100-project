@@ -29190,5 +29190,140 @@ def v91_preflight():
     checks['v1000_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1000-learning-intelligence-1'}
 
+
+# ============================================================================
+# A100 V101.0 CLOSED LOOP LEARNING CORE — capture, reconcile, bounded learning
+# ============================================================================
+V1010_VERSION = "A100 V101.0 CLOSED LOOP LEARNING DEVELOPMENT"
+V1010_STATE_FILE = os.path.join(V91_DATA_DIR, "a100_v101_learning_state.json")
+try:
+    from v1010_closed_loop_learning import (load_state as _v101_load, save_state as _v101_save,
+        capture_signal as _v101_capture, reconcile_outcomes as _v101_reconcile,
+        learn as _v101_learn, summary as _v101_summary)
+except Exception:
+    _v101_load=_v101_save=_v101_capture=_v101_reconcile=_v101_learn=_v101_summary=None
+
+
+def _v101_outcomes():
+    state=_v91_load_state()
+    real=[dict(x,sample_type='PAPER') for x in state.get('closed',[]) if isinstance(x,dict)]
+    shadow=[dict(x,sample_type='SHADOW') for x in state.get('shadow_closed',[]) if isinstance(x,dict)]
+    return real+shadow
+
+
+def _v101_sync(do_learn=True):
+    st=_v101_load(V1010_STATE_FILE)
+    matched=_v101_reconcile(st,_v101_outcomes())
+    info=_v101_learn(st) if do_learn else _v101_summary(st)
+    _v101_save(V1010_STATE_FILE,st)
+    info['matched_now']=matched
+    return st,info
+
+
+def _v101_capture_symbol(symbol):
+    rows,mem,cal,shadow,h,r,g,c,e,tm,d,v,ready,p,item,s,mtf,z,why,hist,b=_v1000_bundle(symbol)
+    st=_v101_load(V1010_STATE_FILE)
+    rec,created=_v101_capture(st,p,b,mtf,z,why.get('positives',[]))
+    _v101_reconcile(st,_v101_outcomes()); info=_v101_learn(st); _v101_save(V1010_STATE_FILE,st)
+    return rec,created,info
+
+
+async def learningcore1010_cmd(update, context):
+    if not getattr(context,'args',None): return await v90_1_safe_reply(update,'사용법: /learningcore BTC')
+    rec,created,info=_v101_capture_symbol(context.args[0])
+    lines=["🧠 <b>A100 V101.0 CLOSED LOOP CORE</b>",
+      f"<b>{_v54_escape(rec['symbol'])}</b> · {rec['side']} · {'신규 저장' if created else '중복 방지·기존 신호 유지'}",
+      f"Signal ID <code>{rec['id']}</code> · 상태 <b>{rec['status']}</b>",
+      f"AI Score {rec['ai_score']:.1f} · Confidence {rec['confidence']:.1f}% · Pump {rec['pump']:.1f}%","",
+      f"누적 {info['total']}건 · 추적 중 {info['open']} · {info['wins']}승 {info['losses']}패 {info['holds']}보류 · 승률 <b>{info['win_rate']:.1f}%</b>",
+      f"자동 제외 전략 {len(info['blacklist'])}개 · 실주문 경로 변경 없음"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def autotrack1010_cmd(update, context):
+    st,info=_v101_sync(True)
+    lines=["🔄 <b>A100 V101.0 AUTO RESULT TRACKER</b>",
+      f"이번 동기화 매칭 <b>{info['matched_now']}건</b>",
+      f"전체 신호 {info['total']} · 추적 중 {info['open']}",
+      f"결과 {info['wins']}승 {info['losses']}패 {info['holds']}보류 · 결정 승률 <b>{info['win_rate']:.1f}%</b>","",
+      "추천 → 저장 → Paper/Shadow 종료결과 매칭 → 가중치 학습 완료",
+      "※ 네트워크 주문·실거래 변경 없이 기존 종료 기록만 학습합니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def weightboard1010_cmd(update, context):
+    _,info=_v101_sync(True)
+    labels={'volume':'거래량','oi':'OI','funding':'Funding','compression':'압축','momentum':'Momentum','pattern':'Pattern','cycle':'Cycle','mtf':'MTF'}
+    lines=["⚖️ <b>A100 V101.0 LEARNING WEIGHTS</b>",f"결정 승률 {info['win_rate']:.1f}% · 표본 {info['wins']+info['losses']}건",""]
+    for k,v in sorted(info['weights'].items(),key=lambda x:x[1],reverse=True):
+        lines.append(f"{labels.get(k,k)} <b>{v:.3f}x</b>")
+    lines += ["",f"Blacklisted Strategies <b>{len(info['blacklist'])}</b>"]
+    lines += [f"• {_v54_escape(x)}" for x in info['blacklist'][:10]] or ["• 없음"]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def strategyboard1010_cmd(update, context):
+    _,info=_v101_sync(True)
+    rows=sorted(info['strategies'].items(),key=lambda x:(x[1].get('status')=='DISABLED',-x[1].get('win_rate',0),-x[1].get('n',0)))
+    lines=["📊 <b>A100 V101.0 STRATEGY RANKING</b>"]
+    if not rows: lines.append("결정 표본이 아직 없습니다.")
+    for i,(name,x) in enumerate(rows[:15],1):
+        lines.append(f"{i}. <b>{_v54_escape(name)}</b> · {x['status']} · {x['n']}건 · 승률 {x['win_rate']:.1f}% · 평균 {x['avg_return']:+.3f}%")
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+_AIUNIFIED1000_FOR_V1010=aiunified1000_cmd
+async def aiunified1010_cmd(update, context):
+    # Main dashboard use becomes the safe recommendation-capture point.
+    if getattr(context,'args',None):
+        try: _v101_capture_symbol(context.args[0])
+        except Exception as exc: v88_record_error('v1010-dashboard-capture',exc)
+    return await _AIUNIFIED1000_FOR_V1010(update,context)
+
+V925_COMMAND_USAGE.update({'learningcore':'추천 저장·결과 추적·학습 통합','autotrack':'Paper/Shadow 종료결과 자동 매칭','weightboard':'학습 지표별 가중치','strategyboard':'전략 승률 순위·자동 제외'})
+for _c in ('learningcore','autotrack','weightboard','strategyboard'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]): V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'learningcore':learningcore1010_cmd,'autotrack':autotrack1010_cmd,
+    'weightboard':weightboard1010_cmd,'strategyboard':strategyboard1010_cmd,'aiunified':aiunified1010_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY); V91_VERSION=V1010_VERSION
+
+async def help1010_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V101.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help1000_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V101.0 HELP</b>","","Closed Loop: /learningcore BTC · /autotrack · /weightboard · /strategyboard","Main: /aiunified BTC · /truememory · /learningloop · /scorebreakdown BTC","Predictive: /aiscore BTC · /multiframe BTC · /entryzone BTC · /aiexplain BTC · /signalhistory","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V101"]),parse_mode='HTML')
+
+async def commands1010_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v101','v1010','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V101.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands1000_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1010_cmd,'commands':commands1010_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1000_PREFLIGHT_FOR_V1010=v91_preflight
+def v91_preflight():
+    base=_V1000_PREFLIGHT_FOR_V1010();checks=dict(base.get('checks',{}))
+    if 'v1000_version_sync' in checks: checks['v1000_version_sync']=True
+    required={'aiunified','learningcore','autotrack','weightboard','strategyboard','help','commands'}
+    checks.update({'v1010_module_loaded':all(callable(x) for x in (_v101_load,_v101_save,_v101_capture,_v101_reconcile,_v101_learn,_v101_summary)),
+      'v1010_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+      'v1010_help_sync':(required-{'help','commands','aiunified'}).issubset(V925_COMMAND_USAGE),
+      'v1010_category_sync':(required-{'help','commands','aiunified'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v1010_schema_preserved':_v91_default_state().get('schema')==1,
+      'v1010_learning_state_separate':os.path.basename(V1010_STATE_FILE)=='a100_v101_learning_state.json',
+      'v1010_version_sync':V91_VERSION==V1010_VERSION,'v1010_paper_limit_unchanged':V91_MAX_POSITIONS==20,
+      'v1010_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v1010_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],
+      'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),
+      'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v1010_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
+      'help_audit':audit,'development_version':V91_VERSION,
+      'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},
+      'registry_fingerprint':'v1010-closed-loop-learning-1'}
+
 if __name__ == "__main__":
     main()
