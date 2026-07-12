@@ -1,4 +1,12 @@
-# A100 V113.1 Command Integrity & Version Sync Development
+# A100 V113.2 Post-Deployment Verification & Test Integrity Development
+
+## 핵심 변경
+- `/versionaudit` 런타임 검증 확장: 명령 누락, 활성 핸들러, 큐 만료 정리, 실행 성공률, 최근 명령 감사
+- `/entrytrace`, `/paperqueue`, `/entryexecution` 표준 예외 처리 및 실행 감사 로그
+- 6시간 이상 정체된 활성 Paper Entry Queue 자동 `EXPIRED` 처리
+- 테스트 루트 경로 정상화 및 최신 유지보수 회귀군 기본 실행
+- Paper-only 원칙, 기존 데이터 스키마, Paper 20개, Shadow 60개 유지
+
 
 ## Critical hotfix
 - Moved the executable `__main__` block to the physical end of `main.py`.

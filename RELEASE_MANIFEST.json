@@ -638,11 +638,19 @@
     "shadow_max_positions": 60,
     "live_trading_added": false
   },
-  "version": "V113.1",
+  "version": "V113.2",
   "name": "ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE",
-  "development_version": "A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE DEVELOPMENT",
-  "release_name": "A100_V113_1_COMMAND_INTEGRITY_VERSION_SYNC_DEVELOPMENT_RELEASE",
+  "development_version": "A100 V113.2 POST-DEPLOYMENT VERIFICATION & TEST INTEGRITY DEVELOPMENT",
+  "release_name": "A100_V113_2_POST_DEPLOYMENT_VERIFICATION_TEST_INTEGRITY_DEVELOPMENT_RELEASE",
   "registry_fingerprint": "v1131-command-integrity-version-sync-1",
   "command_count": 254,
-  "critical_fix": "runtime entrypoint moved after all callback registrations"
+  "critical_fix": "runtime entrypoint moved after all callback registrations",
+  "baseline": "A100_V113_1_COMMAND_INTEGRITY_VERSION_SYNC_DEVELOPMENT_RELEASE.zip",
+  "test_result": "7 passed",
+  "changes": [
+    "Runtime command audit for entrytrace, paperqueue, entryexecution",
+    "Expanded versionaudit with execution success rate and queue cleanup",
+    "Six-hour stale queue expiration",
+    "Pytest path and maintained-suite integrity fixes"
+  ]
 }

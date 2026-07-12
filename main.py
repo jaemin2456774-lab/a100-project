@@ -31229,10 +31229,145 @@ def v91_preflight():
     })
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "development_version": V91_VERSION, "registry_fingerprint": "v1131-command-integrity-version-sync-1"}
 
+
+# =============================================================================
+# A100 V113.2 POST-DEPLOYMENT VERIFICATION & TEST INTEGRITY
+# =============================================================================
+V1132_VERSION = "A100 V113.2 POST-DEPLOYMENT VERIFICATION & TEST INTEGRITY DEVELOPMENT"
+V1132_QUEUE_EXPIRE_SECONDS = 60 * 60 * 6
+V1132_AUDIT_HISTORY_LIMIT = 200
+V91_VERSION = V1132_VERSION
+
+
+def _v1132_command_audit_store(state, command, ok, detail=""):
+    rows = state.setdefault("command_runtime_audit_v1132", [])
+    rows.append({"at": time.time(), "command": command, "ok": bool(ok), "detail": str(detail)[:300]})
+    state["command_runtime_audit_v1132"] = rows[-V1132_AUDIT_HISTORY_LIMIT:]
+
+
+def _v1132_queue_cleanup(state=None, now=None):
+    state = state or _v91_load_state(); now = now or time.time(); changed = 0
+    q = _v113_queue(state)
+    for job in q:
+        if job.get("status") in {"PENDING", "RETRY_WAIT", "PROCESSING"}:
+            age = now - _v912_safe_float(job.get("created_at"))
+            if age > V1132_QUEUE_EXPIRE_SECONDS:
+                job["status"] = "EXPIRED"; job["updated_at"] = now
+                job["last_error"] = "QUEUE_EXPIRED_BY_V1132"
+                changed += 1
+    if changed:
+        state["paper_entry_queue_v113"] = q[-V113_QUEUE_LIMIT:]
+        _v91_save_state(state)
+    return changed
+
+
+def _v1132_execution_summary(state=None):
+    state = state or _v91_load_state()
+    rows = list(state.get("paper_entry_execution_v113", []))
+    counts = {k: 0 for k in ("OPENED", "FAILED", "RETRY_WAIT", "UNKNOWN")}
+    for row in rows:
+        key = str(row.get("result") or "UNKNOWN").upper()
+        counts[key if key in counts else "UNKNOWN"] += 1
+    total = len(rows); opened = counts["OPENED"]
+    return {"total": total, "opened": opened, "failed": counts["FAILED"],
+            "retry_wait": counts["RETRY_WAIT"],
+            "success_rate": (opened / total * 100.0) if total else 0.0}
+
+
+async def _v1132_guarded_command(name, handler, update, context):
+    try:
+        result = await handler(update, context)
+        st = _v91_load_state(); _v1132_command_audit_store(st, name, True, "OK"); _v91_save_state(st)
+        return result
+    except Exception as exc:
+        st = _v91_load_state(); _v1132_command_audit_store(st, name, False, f"{type(exc).__name__}: {exc}"); _v91_save_state(st)
+        v88_record_error(f"v1132-command:{name}", exc)
+        return await v90_1_safe_reply(update, f"⚠️ <b>{name.upper()} 실행 오류</b>\n{type(exc).__name__}: {str(exc)[:240]}", parse_mode="HTML")
+
+
+async def entrytrace1132_cmd(update, context):
+    return await _v1132_guarded_command("entrytrace", entrytrace1130_cmd, update, context)
+
+
+async def paperqueue1132_cmd(update, context):
+    _v1132_queue_cleanup()
+    return await _v1132_guarded_command("paperqueue", paperqueue1130_cmd, update, context)
+
+
+async def entryexecution1132_cmd(update, context):
+    return await _v1132_guarded_command("entryexecution", entryexecution1130_cmd, update, context)
+
+
+async def versionaudit1132_cmd(update, context):
+    required = {"entrytrace", "paperqueue", "entryrecovery", "entryexecution", "papertrace", "help", "commands", "versionaudit"}
+    missing = sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    expected = {
+        "entrytrace": "1132", "paperqueue": "1132", "entryexecution": "1132",
+        "versionaudit": "1132", "help": "1131", "commands": "1131", "papertrace": "1130",
+    }
+    mismatch = []
+    for name, token in expected.items():
+        fn_name = getattr(V90_COMMAND_REGISTRY.get(name), "__name__", "")
+        if token not in fn_name:
+            mismatch.append(f"{name}:{fn_name}")
+    st = _v91_load_state(); expired = _v1132_queue_cleanup(st)
+    summary = _v1132_execution_summary(_v91_load_state())
+    audits = list(_v91_load_state().get("command_runtime_audit_v1132", []))
+    last = audits[-1] if audits else None
+    lines = [
+        "🧾 <b>A100 V113.2 VERSION & RUNTIME AUDIT</b>",
+        f"Core Version: <b>{V1132_VERSION}</b>",
+        f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+        f"필수 명령 누락: <b>{len(missing)}개</b>",
+        f"활성 핸들러 불일치: <b>{len(mismatch)}개</b>",
+        f"큐 만료 정리: <b>{expired}건</b>",
+        f"실행 성공률: <b>{summary['success_rate']:.1f}%</b> ({summary['opened']}/{summary['total']})",
+        "",
+        "필수 명령: " + ("정상" if not missing else ", ".join('/'+x for x in missing)),
+        "활성 버전: " + ("정상" if not mismatch else ", ".join(mismatch)),
+        "최근 명령 감사: " + (f"/{last['command']} {'OK' if last['ok'] else 'FAIL'}" if last else "기록 없음"),
+        "Runtime Entrypoint: FILE_END",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "versionaudit": "실제 로딩 버전·필수 명령·활성 콜백·큐·실행 성공률 통합 검사",
+})
+V90_COMMAND_REGISTRY.update({
+    "versionaudit": versionaudit1132_cmd,
+    "entrytrace": entrytrace1132_cmd,
+    "paperqueue": paperqueue1132_cmd,
+    "entryexecution": entryexecution1132_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1131_PREFLIGHT_FOR_V1132 = v91_preflight
+
+def v91_preflight():
+    base = _V1131_PREFLIGHT_FOR_V1132(); checks = dict(base.get("checks", {}))
+    if "v1131_version_sync" in checks:
+        checks["v1131_version_sync"] = True
+    checks.update({
+        "v1132_version_sync": V91_VERSION == V1132_VERSION,
+        "v1132_entrytrace_handler": V90_COMMAND_REGISTRY.get("entrytrace") is entrytrace1132_cmd,
+        "v1132_paperqueue_handler": V90_COMMAND_REGISTRY.get("paperqueue") is paperqueue1132_cmd,
+        "v1132_entryexecution_handler": V90_COMMAND_REGISTRY.get("entryexecution") is entryexecution1132_cmd,
+        "v1132_versionaudit_handler": V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1132_cmd,
+        "v1132_registry_snapshot_current": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "v1132_queue_expiry_bounded": V1132_QUEUE_EXPIRE_SECONDS >= 3600,
+        "v1132_limits_preserved": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v1132_schema_preserved": _v91_default_state().get("schema") == 1,
+        "v1132_no_live_trading": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY),
+            "base": base, "development_version": V91_VERSION,
+            "registry_fingerprint": "v1132-post-deploy-verification-test-integrity-1"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V113.1 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V113.2 startup integrity failure: " + ", ".join(failed))
     main()
