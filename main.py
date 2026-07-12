@@ -30789,3 +30789,340 @@ def v91_preflight():
 
 if __name__ == "__main__":
     main()
+
+# ============================================================================
+# A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE
+# Closes the calibrated ENTRY -> Paper position gap with a persistent queue,
+# exact execution tracing, one controlled retry, and LEARNING-mode auto entry.
+# Paper-only: no live-order path and no schema migration.
+# ============================================================================
+V1130_VERSION = "A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE DEVELOPMENT"
+V113_QUEUE_LIMIT = 200
+V113_EXECUTION_LIMIT = 500
+V113_RETRY_DELAY_SECONDS = 8
+V113_MAX_RETRIES = 1
+
+
+def _v113_effective_auto_entry(state=None):
+    state = state or _v91_load_state()
+    # LEARNING mode is explicitly a data-collection mode. It may create Paper
+    # positions even when the legacy PAPER_AUTO_ENTRY env flag is false.
+    # PROTECTED mode continues to obey the environment setting.
+    return _v109_paper_mode(state) == "LEARNING" or bool(V912_AUTO_ENTRY)
+
+
+def _v113_queue(state):
+    q = state.get("paper_entry_queue_v113")
+    if not isinstance(q, list):
+        q = []
+        state["paper_entry_queue_v113"] = q
+    return q
+
+
+def _v113_execution_store(state, row):
+    rows = state.setdefault("paper_entry_execution_v113", [])
+    rows.append(row)
+    state["paper_entry_execution_v113"] = rows[-V113_EXECUTION_LIMIT:]
+
+
+def _v113_job_key(row):
+    return f"{row.get('symbol')}|{str(row.get('side')).upper()}"
+
+
+def _v113_enqueue(state, row, trace):
+    q = _v113_queue(state)
+    key = _v113_job_key(row)
+    # Do not duplicate active queue jobs or already-open symbols.
+    if any(x.get("key") == key and x.get("status") in {"PENDING", "RETRY_WAIT", "PROCESSING"} for x in q):
+        return None, "QUEUE_DUPLICATE"
+    if row.get("symbol") in state.get("positions", {}):
+        return None, "POSITION_DUPLICATE"
+    now = time.time()
+    state["paper_entry_sequence_v113"] = int(state.get("paper_entry_sequence_v113", 0)) + 1
+    job = {
+        "id": f"PE-{int(now)}-{state['paper_entry_sequence_v113']}",
+        "key": key,
+        "created_at": now,
+        "updated_at": now,
+        "next_attempt_at": now,
+        "status": "PENDING",
+        "attempts": 0,
+        "symbol": row.get("symbol"),
+        "side": str(row.get("side", "LONG")).upper(),
+        "strategy": row.get("strategy") or "MOMENTUM_LIQUIDITY",
+        "raw_score": _v912_safe_float(row.get("raw_score", row.get("final_score"))),
+        "calibrated_score": _v912_safe_float(row.get("calibrated_score", row.get("final_score"))),
+        "confidence": _v912_safe_float(row.get("confidence")),
+        "learning_boost": bool(row.get("learning_boost_entry")),
+        "last_error": "",
+        "trace_result": trace.get("result") if trace else "UNKNOWN",
+    }
+    q.append(job)
+    state["paper_entry_queue_v113"] = q[-V113_QUEUE_LIMIT:]
+    return job, "ENQUEUED"
+
+
+def _v113_is_retryable(exc):
+    text = str(exc).lower()
+    permanent = (
+        "중복", "한도 도달", "쿨다운", "kill switch", "paper trading off",
+        "btc 급변동", "잘못된 심볼", "유효 심볼", "총 노출금액"
+    )
+    return not any(x in text for x in permanent)
+
+
+def _v113_process_queue(force=False, max_jobs=None):
+    state = _v91_load_state(); q = _v113_queue(state)
+    now = time.time(); processed = []; max_jobs = max_jobs or V912_AUTO_ENTRY_TOP
+    due = [x for x in q if x.get("status") in {"PENDING", "RETRY_WAIT"} and (force or _v912_safe_float(x.get("next_attempt_at")) <= now)]
+    for job in due[:max_jobs]:
+        # Re-check all hard guards immediately before creation.
+        if len(_v91_load_state().get("positions", {})) >= V91_MAX_POSITIONS:
+            break
+        job["status"] = "PROCESSING"; job["updated_at"] = time.time(); job["attempts"] = int(job.get("attempts", 0)) + 1
+        _v91_save_state(state)
+        event = {
+            "at": time.time(), "job_id": job.get("id"), "symbol": job.get("symbol"),
+            "side": job.get("side"), "attempt": job.get("attempts"),
+            "score": job.get("calibrated_score"), "confidence": job.get("confidence"),
+            "result": "UNKNOWN", "reason": "",
+        }
+        try:
+            pos = _v912_open(job["symbol"], job["side"], source="v113-entry-queue", strategy=job.get("strategy") or "MOMENTUM_LIQUIDITY")
+            job["status"] = "OPENED"; job["opened_at"] = time.time(); job["position_id"] = pos.get("id", "") if isinstance(pos, dict) else ""
+            event["result"] = "OPENED"; event["reason"] = "Paper 포지션 생성 성공"
+        except Exception as exc:
+            retryable = _v113_is_retryable(exc)
+            job["last_error"] = f"{type(exc).__name__}: {exc}"; job["updated_at"] = time.time()
+            if retryable and int(job.get("attempts", 0)) <= V113_MAX_RETRIES:
+                job["status"] = "RETRY_WAIT"; job["next_attempt_at"] = time.time() + V113_RETRY_DELAY_SECONDS
+                event["result"] = "RETRY_WAIT"; event["reason"] = job["last_error"]
+            else:
+                job["status"] = "FAILED"; event["result"] = "FAILED"; event["reason"] = job["last_error"]
+            v88_record_error(f"v113-entry:{job.get('symbol')}", exc)
+        state = _v91_load_state(); q2 = _v113_queue(state)
+        for i, old in enumerate(q2):
+            if old.get("id") == job.get("id"):
+                q2[i] = dict(job); break
+        _v113_execution_store(state, event); state["paper_entry_queue_v113"] = q2[-V113_QUEUE_LIMIT:]
+        _v91_save_state(state); processed.append(event)
+        state = _v91_load_state(); q = _v113_queue(state)
+    return processed
+
+
+def _v113_auto_scan_once():
+    # Scanner and V112 calibration run first.
+    _v111_apply_thresholds(_v91_load_state())
+    rows = _v913_scan_alert_once()
+    state = _v91_load_state(); traces = []
+    for row in rows[:V110_TRACE_TOP]:
+        traces.append(_v110_candidate_trace(row, state))
+
+    effective = _v113_effective_auto_entry(state)
+    queued = 0
+    if effective and state.get("enabled") and not state.get("kill_switch"):
+        for row in [r for r in rows if str(r.get("stage")).upper() == "ENTRY"][:V912_AUTO_ENTRY_TOP]:
+            trace = next((x for x in traces if x.get("symbol") == row.get("symbol") and x.get("side") == row.get("side")), None)
+            if trace and trace.get("blockers"):
+                continue
+            state = _v91_load_state(); job, status = _v113_enqueue(state, row, trace or {})
+            if job:
+                queued += 1
+                if trace:
+                    trace["result"] = "QUEUED"; trace["queue_job_id"] = job["id"]
+                _v91_save_state(state)
+    else:
+        reason = "Paper OFF/Kill Switch" if not state.get("enabled") or state.get("kill_switch") else "자동 진입 설정 OFF(PROTECTED)"
+        for x in traces:
+            if x.get("result") == "ELIGIBLE":
+                x["result"] = "NO_ENTRY"; x.setdefault("blockers", []).append(reason)
+
+    processed = _v113_process_queue(force=False, max_jobs=V912_AUTO_ENTRY_TOP) if effective else []
+    state = _v91_load_state()
+    # Map execution outcomes back into current traces.
+    for event in processed:
+        trace = next((x for x in traces if x.get("symbol") == event.get("symbol") and x.get("side") == event.get("side")), None)
+        if trace:
+            trace["paper_create"] = event.get("result")
+            trace["execution_reason"] = event.get("reason")
+            trace["result"] = "OPENED" if event.get("result") == "OPENED" else event.get("result")
+            if event.get("result") == "OPENED": trace["blockers"] = []
+    for x in traces: _v110_trace_store(state, x)
+    state["paper_trace_last_scan_v110"] = {
+        "at": time.time(), "candidates": len(rows),
+        "entry_stage": sum(1 for r in rows if str(r.get("stage")).upper() == "ENTRY"),
+        "queued": queued, "opened": sum(1 for e in processed if e.get("result") == "OPENED"),
+        "effective_auto_entry": effective,
+    }
+    state["entry_execution_status_v113"] = {
+        "at": time.time(), "effective_auto_entry": effective, "queued": queued,
+        "processed": len(processed), "opened": sum(1 for e in processed if e.get("result") == "OPENED"),
+    }
+    _v91_save_state(state)
+    return [e for e in processed if e.get("result") == "OPENED"]
+
+
+# All periodic and manual scan paths now use the V113 execution pipeline.
+_v110_auto_scan_once = _v113_auto_scan_once
+_v912_auto_scan_once = _v113_auto_scan_once
+
+
+def _v113_latest_execution(symbol=None):
+    st = _v91_load_state(); rows = list(st.get("paper_entry_execution_v113", []))
+    if symbol:
+        sym = _v91_normalize_symbol(symbol); rows = [x for x in rows if x.get("symbol") == sym]
+    return st, (rows[-1] if rows else None)
+
+
+async def entrytrace1130_cmd(update, context):
+    args = list(getattr(context, "args", []) or []); sym = args[0] if args else None
+    st, x = _v113_latest_execution(sym)
+    if not x:
+        return await v90_1_safe_reply(update, "아직 ENTRY 실행 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    lines = [
+        "🚦 <b>A100 V113.0 ENTRY EXECUTION TRACE</b>",
+        f"<b>{x.get('symbol')}</b> {x.get('side')} · 점수 {x.get('score',0):.1f} · Confidence {x.get('confidence',0):.1f}%",
+        f"시도 {x.get('attempt',0)}회 · Paper Create <b>{x.get('result')}</b>",
+        f"원인: <b>{_v54_escape(str(x.get('reason') or '없음'))}</b>",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def paperqueue1130_cmd(update, context):
+    st = _v91_load_state(); q = _v113_queue(st); counts = {}
+    for x in q: counts[x.get("status", "UNKNOWN")] = counts.get(x.get("status", "UNKNOWN"), 0) + 1
+    pending = [x for x in q if x.get("status") in {"PENDING", "RETRY_WAIT", "PROCESSING"}]
+    lines = [
+        "📥 <b>A100 V113.0 PAPER ENTRY QUEUE</b>",
+        f"대기 {counts.get('PENDING',0)} · 재시도 {counts.get('RETRY_WAIT',0)} · 처리중 {counts.get('PROCESSING',0)}",
+        f"생성 {counts.get('OPENED',0)} · 실패 {counts.get('FAILED',0)}",
+        f"Effective Auto Entry: <b>{'ON' if _v113_effective_auto_entry(st) else 'OFF'}</b> · Mode {_v109_paper_mode(st)}",
+        "",
+    ]
+    for x in pending[-8:]:
+        lines.append(f"• {x.get('symbol')} {x.get('side')} · {x.get('status')} · 시도 {x.get('attempts',0)}")
+    if not pending: lines.append("현재 대기 작업 없음")
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def entryrecovery1130_cmd(update, context):
+    events = _v113_process_queue(force=True, max_jobs=V912_AUTO_ENTRY_TOP)
+    opened = sum(1 for x in events if x.get("result") == "OPENED")
+    retry = sum(1 for x in events if x.get("result") == "RETRY_WAIT")
+    failed = sum(1 for x in events if x.get("result") == "FAILED")
+    await v90_1_safe_reply(update, "\n".join([
+        "🔁 <b>A100 V113.0 ENTRY RECOVERY</b>",
+        f"처리 {len(events)}건 · 생성 {opened} · 재시도 대기 {retry} · 실패 {failed}",
+        "※ 안전장치를 우회하지 않으며 대기 중 작업만 다시 평가합니다.",
+    ]), parse_mode="HTML")
+
+
+async def entryexecution1130_cmd(update, context):
+    st = _v91_load_state(); rows = st.get("paper_entry_execution_v113", [])[-100:]
+    counts = {}; reasons = {}
+    for x in rows:
+        counts[x.get("result", "UNKNOWN")] = counts.get(x.get("result", "UNKNOWN"), 0) + 1
+        if x.get("result") != "OPENED":
+            r = str(x.get("reason") or "미상"); reasons[r] = reasons.get(r, 0) + 1
+    top = sorted(reasons.items(), key=lambda z:z[1], reverse=True)[:5]
+    lines = [
+        "🧩 <b>A100 V113.0 ENTRY EXECUTION DASHBOARD</b>",
+        f"최근 {len(rows)}건 · 생성 {counts.get('OPENED',0)} · 재시도 {counts.get('RETRY_WAIT',0)} · 실패 {counts.get('FAILED',0)}",
+        f"Paper Mode {_v109_paper_mode(st)} · Auto Entry {'ON' if _v113_effective_auto_entry(st) else 'OFF'}",
+        "",
+    ]
+    lines += [f"• {_v54_escape(k)}: {v}건" for k,v in top] or ["실패 원인 없음"]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+# Upgrade Paper trace output with explicit queue/execution state.
+async def papertrace1130_cmd(update, context):
+    args = list(getattr(context, "args", []) or []); sym = args[0] if args else None
+    st, x = _v110_latest(sym)
+    if not x:
+        return await v90_1_safe_reply(update, "아직 Paper 진입 추적 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    raw = _v912_safe_float(x.get("raw_score", x.get("score"))); cal = _v912_safe_float(x.get("calibrated_score", x.get("score")))
+    lines = [
+        "🧭 <b>A100 V113.0 PAPER TRACE</b>",
+        f"<b>{x['symbol']}</b> {x['side']} · {x['stage']} · 원점수 {raw:.1f} → 보정 {cal:.1f}",
+        f"Confidence {x.get('confidence',0):.1f}% · Learning Boost {'YES' if x.get('learning_boost_entry') else 'NO'}", ""
+    ]
+    for name, ok, detail in x.get("checks", []): lines.append(f"{'✅' if ok else '❌'} {name}: {_v54_escape(str(detail))}")
+    lines += [
+        "", f"ENTRY PASS: <b>{'YES' if x.get('stage') == 'ENTRY' else 'NO'}</b>",
+        f"Queue: <b>{'YES' if x.get('queue_job_id') else 'NO'}</b>",
+        f"Paper Create: <b>{x.get('paper_create','NOT_ATTEMPTED')}</b>",
+        f"최종 결과: <b>{x.get('result')}</b>",
+        f"원인: <b>{_v54_escape(str(x.get('execution_reason') or ', '.join(x.get('blockers') or ['없음'])))}</b>",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "entrytrace": "ENTRY 통과 후 Paper 생성 시도·실패 원인 상세",
+    "paperqueue": "Paper 생성 대기·재시도·성공 큐 현황",
+    "entryrecovery": "대기 또는 재시도 Paper 작업 즉시 재평가",
+    "entryexecution": "ENTRY 실행 성공률과 실패 원인 대시보드",
+    "papertrace": "V113 Scanner→ENTRY→Queue→Paper Create 전체 추적",
+})
+for _c in ("entrytrace", "paperqueue", "entryrecovery", "entryexecution"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("paper", []): V925_HELP_CATEGORIES["paper"].append(_c)
+V90_COMMAND_REGISTRY.update({
+    "entrytrace": entrytrace1130_cmd,
+    "paperqueue": paperqueue1130_cmd,
+    "entryrecovery": entryrecovery1130_cmd,
+    "entryexecution": entryexecution1130_cmd,
+    "papertrace": papertrace1130_cmd,
+})
+V91_VERSION = V1130_VERSION
+
+
+async def help1130_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update, "\n".join([f"🧠 <b>A100 V113.0 HELP · {req.upper()}</b>", ""] + [f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]), parse_mode="HTML")
+    if req: return await help1120_cmd(update, context)
+    await v90_1_safe_reply(update, "\n".join([
+        "🧠 <b>A100 V113.0 HELP</b>", "",
+        "Execution: /papertracescan · /papertrace BTC · /entrytrace BTC",
+        "Queue: /paperqueue · /entryrecovery · /entryexecution",
+        "Calibration: /scorecalibration · /scorebreakdown BTC · /learningboost",
+        "Learning: /learningstatus · /adaptivethreshold · /thresholdreview", "",
+        "전체 목록: /commands V113",
+    ]), parse_mode="HTML")
+
+
+async def commands1130_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in {"v113", "v1130", "all", "전체"}:
+        names = sorted(V925_COMMAND_USAGE)
+        text = f"📚 <b>A100 V113.0 전체 명령 {len(names)}개</b>\n\n" + " ".join("/" + x for x in names)
+        for i in range(0, len(text), 3800): await v90_1_safe_reply(update, text[i:i+3800], parse_mode="HTML")
+        return
+    return await commands1120_cmd(update, context)
+
+
+V90_COMMAND_REGISTRY.update({"help": help1130_cmd, "commands": commands1130_cmd})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V112_PREFLIGHT_FOR_V113 = v91_preflight
+
+def v91_preflight():
+    base = _V112_PREFLIGHT_FOR_V113(); checks = dict(base.get("checks", {}))
+    # Earlier version-sync/override checks are expected to be superseded by V113.
+    for key in list(checks):
+        if key in {"v111_scan_override", "v112_version_sync"}:
+            checks[key] = True
+    req = {"entrytrace", "paperqueue", "entryrecovery", "entryexecution", "papertrace", "help", "commands"}
+    checks.update({
+        "v113_callbacks": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in req),
+        "v113_scan_override": _v912_auto_scan_once is _v113_auto_scan_once and _v110_auto_scan_once is _v113_auto_scan_once,
+        "v113_learning_auto_entry": _v113_effective_auto_entry({"paper_mode":"LEARNING"}) is True,
+        "v113_protected_respects_env": _v113_effective_auto_entry({"paper_mode":"PROTECTED"}) == bool(V912_AUTO_ENTRY),
+        "v113_retry_bounded": V113_MAX_RETRIES == 1 and V113_RETRY_DELAY_SECONDS >= 5,
+        "v113_limits_preserved": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v113_schema_preserved": _v91_default_state().get("schema") == 1,
+        "v113_no_live_trading": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+        "v113_version_sync": V91_VERSION == V1130_VERSION,
+    })
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "development_version": V91_VERSION, "registry_fingerprint": "v1130-entry-execution-queue-1"}

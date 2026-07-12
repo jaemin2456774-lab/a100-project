@@ -637,5 +637,8 @@
     "paper_max_positions": 20,
     "shadow_max_positions": 60,
     "live_trading_added": false
-  }
+  },
+  "version": "V113.0",
+  "name": "ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE",
+  "development_version": "A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE DEVELOPMENT"
 }
