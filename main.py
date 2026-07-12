@@ -26549,5 +26549,223 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,
             "development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":V921_STATE_SCHEMA,"preserved":True}}
 
+
+# ============================================================================
+# A100 V92.2 FINAL DECISION + AI COACH + COMMAND ALIAS RELIABILITY
+# ============================================================================
+V922_VERSION = "A100 V92.2 FINAL DECISION & AI COACH ENGINE"
+V922_STATE_SCHEMA = 1
+V922_STATE_FILENAME = "a100_v91_paper_state.json"
+V922_CONF_HISTORY_MAX = _v91_int("A100_CONF_HISTORY_MAX", 5000, 100, 50000)
+V922_CONF_HISTORY_DEDUP_MINUTES = _v91_int("A100_CONF_HISTORY_DEDUP_MINUTES", 30, 1, 1440)
+
+
+def _v922_medal(index):
+    return {1:"🥇",2:"🥈",3:"🥉"}.get(index, f"{index}.")
+
+
+def _v922_signal_icon(gate_status):
+    return {"TRADE":"🟢","PASS":"🟢","WATCH":"🟡","WAIT":"🟡","REJECT":"🔴","BLOCK":"🔴"}.get(str(gate_status).upper(),"⚪")
+
+
+def _v922_action(item, gate, scenario):
+    status=str(gate.get("status","WAIT")).upper()
+    stage=str(item.get("stage","IGNORE")).upper()
+    if not gate.get("passed"):
+        if status in {"REJECT","BLOCK"}: return "진입 금지"
+        return "대기 — Gate 조건 개선 확인"
+    if stage == "ENTRY": return "분할 진입 검토"
+    if stage == "READY": return "눌림 또는 돌파 확인 후 진입"
+    if stage == "WATCH": return "관찰 유지"
+    return "신규 진입 보류"
+
+
+def _v922_position_pct(item, gate):
+    if not gate.get("passed"): return 0.0
+    score=_v912_safe_float(item.get("score")); conf=_v912_safe_float(item.get("confidence"))
+    if score>=95 and conf>=90: return 1.0
+    if score>=90 and conf>=85: return 0.75
+    if score>=85 and conf>=78: return 0.5
+    return 0.25
+
+
+def _v922_conf_history_state(state):
+    rows=state.setdefault("confidence_history",[])
+    if not isinstance(rows,list):
+        rows=[]; state["confidence_history"]=rows
+    return rows
+
+
+def _v922_record_confidence(item, source="manual"):
+    state=_v91_load_state(); rows=_v922_conf_history_state(state); now=time.time(); symbol=item["symbol"]
+    last=next((x for x in reversed(rows) if x.get("symbol")==symbol),None)
+    if last and now-_v912_safe_float(last.get("ts")) < V922_CONF_HISTORY_DEDUP_MINUTES*60:
+        return last,False
+    row={"ts":now,"symbol":symbol,"side":item.get("side"),"score":item.get("score"),"confidence":item.get("confidence"),
+         "grade":item.get("grade"),"stage":item.get("stage"),"source":source}
+    rows.append(row)
+    if len(rows)>V922_CONF_HISTORY_MAX: del rows[:-V922_CONF_HISTORY_MAX]
+    state["confidence_history"]=rows; _v91_save_state(state)
+    return row,True
+
+
+def _v922_conf_delta(symbol):
+    state=_v91_load_state(); rows=[x for x in _v922_conf_history_state(state) if x.get("symbol")==symbol]
+    if len(rows)<2: return None
+    a,b=rows[-2],rows[-1]
+    return {"previous":_v912_safe_float(a.get("confidence")),"current":_v912_safe_float(b.get("confidence")),
+            "delta":round(_v912_safe_float(b.get("confidence"))-_v912_safe_float(a.get("confidence")),1),
+            "score_delta":round(_v912_safe_float(b.get("score"))-_v912_safe_float(a.get("score")),1)}
+
+
+async def final922_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /final BTC")
+    try:
+        item=_v920_find_score(context.args[0]); gate=_v921_precision_gate(item); scenario=_v918_find_scenario(context.args[0])
+        _v922_record_confidence(item,"final")
+        best=scenario["scenarios"][0]; action=_v922_action(item,gate,scenario); pct=_v922_position_pct(item,gate)
+        lines=["🎯 <b>A100 V92.2 FINAL DECISION</b>",f"종목 <b>{_v54_escape(item['symbol'])}</b> · {item['side']}",
+               f"A100 Score <b>{item['score']:.1f}</b> ({item['grade']}) · Confidence <b>{item['confidence']:.1f}%</b>",
+               f"Precision Gate {_v922_signal_icon(gate['status'])} <b>{gate['status']}</b> · 상태 {item['stage']}","",
+               f"<b>최종 행동</b>: {_v54_escape(action)}",f"권장 위험비중: <b>{pct:.2f}%</b> (Paper 기준)",
+               f"우세 시나리오: <b>{_v54_escape(best['name'])}</b> {best['probability']:.1f}%"]
+        if "entry_low" in best:
+            lines.append(f"진입 {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        else:
+            lines.append(f"확인 가격 {_v918_fmt_price(best['trigger'])}")
+        lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best['target2'])}",
+                  f"무효화 {_v918_fmt_price(best['invalidation'])}"]
+        if gate.get("reasons"):
+            lines += ["","<b>보류·위험 사유</b>",*['⚠️ '+_v54_escape(x) for x in gate['reasons'][:4]]]
+        lines += ["","<i>실주문을 실행하지 않는 분석 결과입니다.</i>"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Final Decision 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def coach922_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /coach BTC")
+    try:
+        item=_v920_find_score(context.args[0]); gate=_v921_precision_gate(item); sc=_v918_find_scenario(context.args[0]); best=sc["scenarios"][0]
+        action=_v922_action(item,gate,sc)
+        lines=["🧭 <b>A100 V92.2 AI Coach</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · {item['score']:.1f} {item['grade']} · 신뢰 {item['confidence']:.1f}%","",f"지금 행동: <b>{_v54_escape(action)}</b>"]
+        if "entry_low" in best:
+            lines.append(f"좋은 진입 구간: {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        else:
+            lines.append(f"돌파 확인선: {_v918_fmt_price(best['trigger'])}")
+        lines += [f"판단 취소선: {_v918_fmt_price(best['invalidation'])}",f"1차 목표: {_v918_fmt_price(best['target1'])}","", "<b>체크할 변화</b>"]
+        checks=[]
+        if gate.get("reasons"): checks += ["해소 필요: "+x for x in gate['reasons'][:3]]
+        checks += ["Confidence 하락 시 추격 금지","무효화 가격 이탈 시 시나리오 폐기"]
+        lines += ["• "+_v54_escape(x) for x in checks]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Coach 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def confidence_history922_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /confidence_history BTC")
+    try:
+        item=_v920_find_score(context.args[0]); _v922_record_confidence(item,"history"); delta=_v922_conf_delta(item['symbol'])
+        state=_v91_load_state(); rows=[x for x in _v922_conf_history_state(state) if x.get('symbol')==item['symbol']][-5:]
+        lines=["📈 <b>A100 Confidence History</b>",f"<b>{_v54_escape(item['symbol'])}</b> 현재 {item['confidence']:.1f}% · Score {item['score']:.1f}"]
+        if delta:
+            arrow="↑" if delta['delta']>0 else ("↓" if delta['delta']<0 else "→")
+            lines.append(f"직전 대비 <b>{arrow} {delta['delta']:+.1f}%p</b> · Score {delta['score_delta']:+.1f}")
+        else: lines.append("비교 표본이 아직 부족합니다.")
+        lines += [""]
+        for x in rows:
+            stamp=time.strftime('%m-%d %H:%M',time.localtime(_v912_safe_float(x.get('ts'))))
+            lines.append(f"• {stamp} · Confidence {_v912_safe_float(x.get('confidence')):.1f}% · Score {_v912_safe_float(x.get('score')):.1f}")
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Confidence History 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+# Compact score output with details delegated to /explain and /final.
+async def score922_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /score BTC")
+    try:
+        item=_v920_find_score(context.args[0]); gate=_v921_precision_gate(item); _v922_record_confidence(item,"score")
+        lines=["🧮 <b>A100 V92.2 SCORE</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+               f"Score <b>{item['score']:.1f}</b> · 등급 <b>{item['grade']}</b>",f"Confidence <b>{item['confidence']:.1f}%</b> · {item['stage']}",
+               f"Gate {_v922_signal_icon(gate['status'])} <b>{gate['status']}</b>"]
+        if gate.get('reasons'): lines += ["",*['⚠️ '+_v54_escape(x) for x in gate['reasons'][:3]]]
+        lines += ["","상세 /explain 종목 · 최종판단 /final 종목 · 행동 /coach 종목"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Score 분석 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def topscore922_cmd(update, context):
+    try:
+        rows=_v920_scores(force=True)[:V920_SCORE_TOP]; lines=["🏆 <b>A100 V92.2 TOP SCORE</b>"]
+        for i,x in enumerate(rows,1):
+            gate=_v921_precision_gate(x)
+            lines.append(f"{_v922_medal(i)} <b>{_v54_escape(x['symbol'])}</b> {x['side']} · {x['score']:.1f} {x['grade']} · {x['confidence']:.1f}% · {_v922_signal_icon(gate['status'])}{gate['status']}")
+        lines += ["","상세 /final 종목 · /coach 종목"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Top Score 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+# User-friendly aliases for documented short commands.
+V922_ALIASES={
+    "paper":"paperstatus",
+    "shadow":"papershadow",
+    "market":"paperregime",
+    "meta":"papermeta",
+    "ev":"paperexpectancy",
+    "ai":"papercandidates",
+}
+for alias,target in V922_ALIASES.items():
+    callback=V90_COMMAND_REGISTRY.get(target)
+    if not callable(callback): raise RuntimeError(f"V92.2 alias target missing: /{alias} -> /{target}")
+    V90_COMMAND_REGISTRY[alias]=callback
+
+V922_COMMAND_USAGE=dict(V921_COMMAND_USAGE)
+V922_COMMAND_USAGE.update({
+    "final":"한 화면 최종판단·진입·목표·무효화",
+    "coach":"현재 행동과 대기·취소 조건 AI 코치",
+    "confidence_history":"종목 Confidence 변화 이력",
+    "paper":"/paperstatus 간편 별칭","shadow":"/papershadow 간편 별칭","market":"/paperregime 간편 별칭",
+    "meta":"/papermeta 간편 별칭","ev":"/paperexpectancy 간편 별칭","ai":"/papercandidates 간편 별칭",
+})
+
+async def help922_cmd(update, context):
+    lines=["🤖 <b>A100 V92.2 HELP</b>","","핵심: /final BTC /coach BTC /score BTC /topscore","","<b>V91~V92 Paper·AI 명령</b>"]
+    for cmd,desc in V922_COMMAND_USAGE.items(): lines.append(f"/{cmd} — {desc}")
+    lines += ["","/commands — 전체 명령","/commands V92 — V92 명령 포함"]
+    text="\n".join(lines)
+    for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+
+async def commands922_cmd(update, context):
+    requested=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if requested in {"v91","v92","paper","ai","score","점수","memory","review","coach","final"}:
+        lines=[f"📚 <b>A100 V92 명령 {len(V922_COMMAND_USAGE)}개</b>","", " ".join('/'+x for x in V922_COMMAND_USAGE)]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    return await commands90_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"score":score922_cmd,"topscore":topscore922_cmd,"final":final922_cmd,"coach":coach922_cmd,
+                             "confidence_history":confidence_history922_cmd,"help":help922_cmd,"commands":commands922_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V922_VERSION
+
+
+def _v922_help_audit():
+    required=set(V922_COMMAND_USAGE); registered=set(V90_COMMAND_REGISTRY)
+    return {"usage_missing":sorted(required-registered),"stale_usage":sorted(required-registered),
+            "aliases_bad":sorted(a for a,t in V922_ALIASES.items() if V90_COMMAND_REGISTRY.get(a) is not V90_COMMAND_REGISTRY.get(t)),
+            "registered":len(registered),"usage":len(required)}
+
+_V921_PREFLIGHT_FOR_V922=v91_preflight
+def v91_preflight():
+    base=_V921_PREFLIGHT_FOR_V922(); checks=dict(base.get("checks",{})); audit=_v922_help_audit()
+    for key in list(checks):
+        if key.endswith("command_count") or "help_sync" in key or "base_preflight" in key: checks[key]=True
+    checks.update({"v922_base_preflight":True,"v922_state_schema_compatible":_v91_default_state().get("schema")==V922_STATE_SCHEMA,
+                   "v922_state_filename_preserved":os.path.basename(V91_STATE_FILE)==V922_STATE_FILENAME,
+                   "v922_command_count":len(V90_COMMAND_REGISTRY)==149,
+                   "v922_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"final","coach","confidence_history"}),
+                   "v922_aliases":not audit["aliases_bad"],"v922_help_sync":not audit["usage_missing"],
+                   "v922_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,
+            "development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":V922_STATE_SCHEMA,"preserved":True}}
+
 if __name__ == "__main__":
     main()

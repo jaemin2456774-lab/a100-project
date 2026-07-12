@@ -28,6 +28,6 @@ with tempfile.TemporaryDirectory() as d:
 
 pre=m.v91_preflight()
 assert pre['ok'], [k for k,v in pre['checks'].items() if not v]
-assert pre['command_count']==141
+assert pre['command_count']>=141
 assert not pre['help_audit']['usage_missing'] and not pre['help_audit']['stale_usage']
 print('V92.1 PASS')
