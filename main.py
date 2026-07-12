@@ -1,5 +1,6 @@
 
 import os, time, asyncio, threading, traceback, requests, math, json
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import Any, Dict, List
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -24040,7 +24041,7 @@ def main():
 # A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
 # 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
 # ============================================================================
-V91_VERSION = "A100 V91.0 AUDITED PAPER TRADING ENGINE"
+V91_VERSION = "A100 V91.1 PAPER STABILITY ENGINE"
 V91_STARTED_AT = time.time()
 V91_LOCK = threading.RLock()
 V91_STOP = threading.Event()
@@ -24216,7 +24217,8 @@ def _v91_save_state(state):
 
 
 def _v91_today():
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    """UTC date key without relying on datetime global state."""
+    return time.strftime("%Y-%m-%d", time.gmtime())
 
 
 def _v91_daily(state):
@@ -24559,6 +24561,8 @@ def v91_preflight():
         "state_shape": isinstance(state.get("positions"), dict) and isinstance(state.get("closed"), list),
         "live_trading_absent": "BINANCE_SECRET" not in globals() and not callable(globals().get("place_live_order")),
         "excluded_legacy_not_added": all(name not in V90_COMMAND_REGISTRY for name in {"arkm","syn","sent","futures"}),
+        "utc_date_key": bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", _v91_today())),
+        "paper_core_callable": all(callable(globals().get(name)) for name in {"_v91_open", "_v91_close", "_v91_load_state", "_v91_save_state", "_v91_monitor_once"}),
     }
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base}
 
