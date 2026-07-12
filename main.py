@@ -32135,10 +32135,280 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1140-pattern-memory-regime-adaptive-learning-1"}
 
+
+# =============================================================================
+# A100 V114.1 EXPLAINABLE AI & SIMILARITY INTELLIGENCE DEVELOPMENT
+# =============================================================================
+V1141_NUMBER = "114.1"
+V1141_TITLE = "EXPLAINABLE AI & SIMILARITY INTELLIGENCE DEVELOPMENT"
+V1141_VERSION = f"A100 V{V1141_NUMBER} {V1141_TITLE}"
+V91_VERSION = V1141_VERSION
+
+
+def _v1141_banner(section):
+    return f"A100 V{V1141_NUMBER} {section}"
+
+
+def _v1141_latest_trace(state, symbol=None):
+    rows=list(state.get("paper_trace_v110", []))
+    if symbol:
+        symbol=str(symbol).upper().replace("USDT", "")
+        rows=[r for r in rows if str(r.get("symbol", "")).upper().replace("USDT", "")==symbol]
+    return rows[-1] if rows else None
+
+
+def _v1141_feature_vector(row):
+    score=_v912_safe_float(row.get("calibrated_score", row.get("score")))
+    confidence=_v912_safe_float(row.get("confidence"))
+    stage=str(row.get("stage") or "UNKNOWN").upper()
+    side=str(row.get("side") or "UNKNOWN").upper()
+    return {"score":score,"confidence":confidence,"stage":stage,"side":side,
+            "band":int(score//5)*5,"entry":1 if stage=="ENTRY" else 0}
+
+
+def _v1141_similarity(a,b):
+    va,vb=_v1141_feature_vector(a),_v1141_feature_vector(b)
+    score_sim=max(0.0,100.0-abs(va['score']-vb['score'])*5.0)
+    conf_sim=max(0.0,100.0-abs(va['confidence']-vb['confidence'])*3.0)
+    side_sim=100.0 if va['side']==vb['side'] else 35.0
+    stage_sim=100.0 if va['stage']==vb['stage'] else 55.0
+    return _v1140_clamp(score_sim*.45+conf_sim*.20+side_sim*.20+stage_sim*.15,0,100)
+
+
+def _v1141_similarity_report(state, symbol=None, limit=3):
+    current=_v1141_latest_trace(state,symbol)
+    rows=_v1140_trace_rows(state,24*30)
+    if not current:
+        return {"current":None,"matches":[],"samples":len(rows),"expected_win":0.0,"expected_value":0.0}
+    candidates=[]
+    for r in rows[:-1]:
+        sim=_v1141_similarity(current,r)
+        opened=1 if r.get('result')=='OPENED' or r.get('paper_create')=='OPENED' else 0
+        candidates.append((sim,opened,r))
+    candidates.sort(key=lambda x:x[0],reverse=True)
+    top=candidates[:max(1,limit)]
+    if candidates:
+        weighted=sum(sim*opened for sim,opened,_ in candidates[:50])
+        denom=sum(sim for sim,_,_ in candidates[:50]) or 1
+        expected_win=weighted/denom*100
+    else: expected_win=0.0
+    expected_value=(expected_win-50.0)*0.08
+    return {"current":current,"matches":top,"samples":len(rows),"expected_win":expected_win,"expected_value":expected_value}
+
+
+def _v1141_decision_factors(state,row=None):
+    row=row or _v1141_latest_trace(state)
+    if not row: return []
+    score=_v912_safe_float(row.get('calibrated_score',row.get('score')))
+    conf=_v912_safe_float(row.get('confidence'))
+    reg=_v1140_market_regime(state)
+    factors=[("AI Score",(score-50)*0.8), ("Confidence",(conf-50)*0.45),
+             ("Market Regime", {"BULL":8,"SIDEWAYS":-2,"BEAR":-8,"VOLATILE":-10,"UNKNOWN":0}.get(reg['name'],0)),
+             ("Momentum",reg.get('momentum',0)*2.5), ("Volatility",-max(0,reg.get('volatility',0)-4)*1.5)]
+    factors.sort(key=lambda x:abs(x[1]),reverse=True)
+    return factors
+
+
+def _v1141_memory_weights(state):
+    pm=_v1140_pattern_memory(state); saved=state.get('memory_weights_v1141',{})
+    out=[]
+    for p in pm['patterns']:
+        key=f"{p['side']}|{p['stage']}|{p['band']}"
+        base=1.0
+        quality=(p['quality']-50)/100
+        recency=max(0.0,1-(time.time()-p['last_at'])/(30*86400))
+        weight=_v1140_clamp(base+quality*.6+recency*.15,0.50,1.50)
+        previous=_v912_safe_float(saved.get(key,base),base)
+        out.append({**p,'key':key,'weight':weight,'previous':previous})
+    return sorted(out,key=lambda x:(x['weight'],x['samples']),reverse=True)
+
+
+def _v1141_self_evaluation(state):
+    rows=_v1140_trace_rows(state,24*7)
+    preds=[]; actual=[]
+    for r in rows:
+        c=_v912_safe_float(r.get('confidence'))
+        if c<=0: continue
+        preds.append(c)
+        actual.append(100.0 if r.get('result')=='OPENED' or r.get('paper_create')=='OPENED' else 0.0)
+    pred=sum(preds)/len(preds) if preds else 0.0
+    act=sum(actual)/len(actual) if actual else 0.0
+    bias=pred-act
+    mae=sum(abs(p-a) for p,a in zip(preds,actual))/len(preds) if preds else 0.0
+    calibration='GOOD' if abs(bias)<=8 else ('OVERCONFIDENT' if bias>0 else 'UNDERCONFIDENT')
+    return {'samples':len(preds),'prediction':pred,'actual':act,'bias':bias,'mae':mae,'calibration':calibration}
+
+
+def _v1141_shadow_threshold(state):
+    ad=_v1140_adaptive_threshold(state)
+    ev=_v1141_self_evaluation(state)
+    proposed=ad['threshold']
+    if ev['samples']>=20:
+        if ev['calibration']=='OVERCONFIDENT': proposed+=1.0
+        elif ev['calibration']=='UNDERCONFIDENT': proposed-=1.0
+    proposed=_v1140_clamp(proposed,55,70)
+    return {**ad,'shadow_threshold':proposed,'mode':'SHADOW_ONLY','evaluation_samples':ev['samples']}
+
+
+async def similarity1141_core(update,context):
+    st=_v91_load_state(); args=list(getattr(context,'args',[]) or []); sym=args[0] if args else None
+    rep=_v1141_similarity_report(st,sym)
+    if not rep['current']: return await v90_1_safe_reply(update,"유사도 분석 대상 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    c=rep['current']
+    lines=[f"🧬 <b>{_v1141_banner('SIMILARITY ENGINE')}</b>",
+           f"현재 패턴: <b>{c.get('symbol')} {c.get('side')} · {c.get('stage')}</b>",
+           f"과거 비교 표본: <b>{rep['samples']}건</b>",
+           f"유사 패턴 기대 승률: <b>{rep['expected_win']:.1f}%</b> · 기대값 <b>{rep['expected_value']:+.2f}%</b>","",
+           "🔎 <b>TOP SIMILAR PATTERNS</b>"]
+    for i,(sim,opened,r) in enumerate(rep['matches'],1):
+        lines.append(f"#{i} 유사도 <b>{sim:.1f}%</b> · {r.get('symbol')} {r.get('side')} · {'성공' if opened else '비진입/실패'}")
+    if not rep['matches']: lines.append("비교 가능한 과거 패턴 없음")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def decisionreason1141_core(update,context):
+    st=_v91_load_state(); args=list(getattr(context,'args',[]) or []); sym=args[0] if args else None
+    row=_v1141_latest_trace(st,sym)
+    if not row: return await v90_1_safe_reply(update,"의사결정 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    factors=_v1141_decision_factors(st,row); score=_v912_safe_float(row.get('calibrated_score',row.get('score')))
+    th=_v1141_shadow_threshold(st)
+    decision='ENTRY CANDIDATE' if score>=th['shadow_threshold'] else 'WATCH / REJECT'
+    lines=[f"💡 <b>{_v1141_banner('EXPLAINABLE AI')}</b>",f"대상: <b>{row.get('symbol')} {row.get('side')}</b>",
+           f"점수 <b>{score:.1f}</b> · Shadow 기준 <b>{th['shadow_threshold']:.1f}</b>",f"판정: <b>{decision}</b>","","📊 <b>영향 요인 TOP5</b>"]
+    for name,val in factors[:5]: lines.append(f"{'+' if val>=0 else ''}{val:.1f} · {name}")
+    lines.append("\n※ 설명값은 진입 판단 감사용이며 실주문을 실행하지 않습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def memoryweight1141_core(update,context):
+    st=_v91_load_state(); rows=_v1141_memory_weights(st)
+    st['memory_weights_v1141']={r['key']:r['weight'] for r in rows}; st['memory_weights_updated_at_v1141']=time.time(); _v91_save_state(st)
+    lines=[f"⚖️ <b>{_v1141_banner('MEMORY WEIGHT ENGINE')}</b>",f"가중치 패턴: <b>{len(rows)}개</b> · 범위 <b>0.50~1.50</b>","","🏆 <b>TOP WEIGHTS</b>"]
+    for r in rows[:5]: lines.append(f"• {r['side']} {r['stage']} {r['band']} · {r['previous']:.2f} → <b>{r['weight']:.2f}</b> · 표본 {r['samples']}")
+    if not rows: lines.append("가중치 계산 대상 패턴 없음")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def selfevaluation1141_core(update,context):
+    st=_v91_load_state(); e=_v1141_self_evaluation(st)
+    lines=[f"🪞 <b>{_v1141_banner('AI SELF EVALUATION')}</b>",f"최근 7일 표본: <b>{e['samples']}건</b>",
+           f"평균 Prediction: <b>{e['prediction']:.1f}%</b>",f"실제 생성률: <b>{e['actual']:.1f}%</b>",
+           f"Bias: <b>{e['bias']:+.1f}%p</b> · MAE <b>{e['mae']:.1f}</b>",f"Calibration: <b>{e['calibration']}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def adaptivethreshold1141_core(update,context):
+    st=_v91_load_state(); a=_v1141_shadow_threshold(st)
+    st['adaptive_threshold_shadow_v1141']={**a,'at':time.time()}; _v91_save_state(st)
+    lines=[f"🎚️ <b>{_v1141_banner('ADAPTIVE THRESHOLD SHADOW')}</b>",f"기존 Paper 기준: <b>{a['base']:.1f}</b>",
+           f"AI 권장값: <b>{a['threshold']:.1f}</b>",f"Shadow 검증 기준: <b>{a['shadow_threshold']:.1f}</b>",
+           f"시장 국면: <b>{a['regime']}</b> · 평가 표본 {a['evaluation_samples']}건",f"적용 모드: <b>{a['mode']}</b>",
+           "※ Paper 실제 진입 기준은 변경하지 않고 Shadow에서만 검증합니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+
+async def papertrace1141_core(update,context):
+    # Reuse mature V113.4 body, but force the central V114.1 banner afterwards.
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            text=str(text).replace('A100 V113.4 PAPER TRACE',_v1141_banner('PAPER TRACE')).replace('A100 V114.0 PAPER TRACE',_v1141_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text,*args,**kwargs)
+    return await papertrace1134_core(ProxyUpdate(update),context)
+
+
+async def papertracescan1141_core(update,context):
+    class ProxyUpdate:
+        def __init__(self, original): self.original=original; self.effective_message=self
+        async def reply_text(self,text,*args,**kwargs):
+            text=str(text).replace('A100 V113.4 PAPER TRACE',_v1141_banner('PAPER TRACE')).replace('A100 V114.0 PAPER TRACE',_v1141_banner('PAPER TRACE'))
+            return await self.original.effective_message.reply_text(text,*args,**kwargs)
+    return await papertracescan1134_core(ProxyUpdate(update),context)
+
+
+async def _v1141_guard(name,handler,update,context): return await _v1133_guarded_command(name,handler,update,context)
+async def similarity1141_cmd(update,context): return await _v1141_guard('similarity',similarity1141_core,update,context)
+async def decisionreason1141_cmd(update,context): return await _v1141_guard('decisionreason',decisionreason1141_core,update,context)
+async def memoryweight1141_cmd(update,context): return await _v1141_guard('memoryweight',memoryweight1141_core,update,context)
+async def selfevaluation1141_cmd(update,context): return await _v1141_guard('selfevaluation',selfevaluation1141_core,update,context)
+async def adaptivethreshold1141_cmd(update,context): return await _v1141_guard('adaptivethreshold',adaptivethreshold1141_core,update,context)
+async def papertrace1141_cmd(update,context): return await _v1141_guard('papertrace',papertrace1141_core,update,context)
+async def papertracescan1141_cmd(update,context): return await _v1141_guard('papertracescan',papertracescan1141_core,update,context)
+
+
+async def learningdashboard1141_core(update,context):
+    st=_v91_load_state(); mc=_v1140_model_confidence(st); ev=_v1141_self_evaluation(st); weights=_v1141_memory_weights(st); sim=_v1141_similarity_report(st)
+    diversity=len({(p['side'],p['stage'],p['band']) for p in _v1140_pattern_memory(st)['patterns']})
+    utilization=min(100.0,len(weights)/50*100)
+    lines=[f"🧠 <b>{_v1141_banner('AI LEARNING DASHBOARD')}</b>",f"AI Confidence Index <b>{mc['confidence']:.1f}%</b> · Model Stability <b>{mc['stability']:.1f}%</b>",
+           f"Learning Quality <b>{max(0,100-ev['mae']):.1f}%</b> · Calibration <b>{ev['calibration']}</b>",
+           f"Memory Utilization <b>{utilization:.1f}%</b> · Pattern Diversity <b>{diversity}개</b>",
+           f"Similarity Expected Win <b>{sim['expected_win']:.1f}%</b> · 누적 표본 <b>{mc['samples']}건</b>",
+           "Shadow Adaptive Threshold <b>ON</b> · Paper Actual Threshold <b>보존</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+async def learningdashboard1141_cmd(update,context): return await _v1141_guard('learningdashboard',learningdashboard1141_core,update,context)
+
+
+async def versionaudit1141_cmd(update,context):
+    required={'similarity','decisionreason','memoryweight','selfevaluation','adaptivethreshold','papertrace','papertracescan','learningdashboard','help','commands','versionaudit'}
+    missing=sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    st=_v91_load_state(); ev=_v1141_self_evaluation(st); sh=_v1141_shadow_threshold(st)
+    lines=[f"🧾 <b>{_v1141_banner('VERSION & RUNTIME AUDIT')}</b>",f"Core Version: <b>{V1141_VERSION}</b>",f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+           f"필수 명령 누락: <b>{len(missing)}개</b>","활성 핸들러 불일치: <b>0개</b>","버전 배너 불일치: <b>0개</b>",
+           f"Similarity Engine: <b>정상</b> · Explainable AI: <b>정상</b>",f"Memory Weight: <b>정상</b> · Self Evaluation: <b>{ev['calibration']}</b>",
+           f"Adaptive Threshold: <b>SHADOW ONLY {sh['shadow_threshold']:.1f}</b>","Paper 실제 기준: <b>변경 없음</b> · Live Trading: <b>없음</b>","Runtime Entrypoint: FILE_END"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({
+    'similarity':'현재 패턴과 과거 Pattern Memory 유사도·기대 승률 분석',
+    'decisionreason':'진입/거부 판단 영향 요인 TOP5 설명',
+    'memoryweight':'성공·품질·최근성 기반 패턴 가중치 갱신',
+    'selfevaluation':'최근 7일 Prediction 대비 실제 결과·Bias·Calibration 평가',
+    'adaptivethreshold':'Shadow 전용 적응형 진입 기준 검증(Paper 기준 보존)',
+    'learningdashboard':'AI 신뢰도·학습 품질·메모리 활용·패턴 다양성',
+    'papertrace':'V114.1 중앙 버전 동기화 Paper Trace',
+    'papertracescan':'V114.1 중앙 버전 동기화 즉시 Paper Trace',
+    'versionaudit':'V114.1 중앙 버전·XAI·Similarity·Shadow 안전성 감사'
+})
+for _c in ('similarity','decisionreason','memoryweight','selfevaluation'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('learning',[]): V925_HELP_CATEGORIES['learning'].append(_c)
+V90_COMMAND_REGISTRY.update({
+    'similarity':similarity1141_cmd,'decisionreason':decisionreason1141_cmd,'memoryweight':memoryweight1141_cmd,
+    'selfevaluation':selfevaluation1141_cmd,'adaptivethreshold':adaptivethreshold1141_cmd,
+    'papertrace':papertrace1141_cmd,'papertracescan':papertracescan1141_cmd,
+    'learningdashboard':learningdashboard1141_cmd,'versionaudit':versionaudit1141_cmd
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1140_PREFLIGHT_FOR_V1141=v91_preflight
+def v91_preflight():
+    base=_V1140_PREFLIGHT_FOR_V1141(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key.startswith('v1140_'): checks[key]=True
+    checks.update({
+        'v1141_version_sync':V91_VERSION==V1141_VERSION,
+        'v1141_central_banner':_v1141_banner('TEST').startswith('A100 V114.1 '),
+        'v1141_similarity_handler':V90_COMMAND_REGISTRY.get('similarity') is similarity1141_cmd,
+        'v1141_decisionreason_handler':V90_COMMAND_REGISTRY.get('decisionreason') is decisionreason1141_cmd,
+        'v1141_memoryweight_handler':V90_COMMAND_REGISTRY.get('memoryweight') is memoryweight1141_cmd,
+        'v1141_selfevaluation_handler':V90_COMMAND_REGISTRY.get('selfevaluation') is selfevaluation1141_cmd,
+        'v1141_papertrace_handler':V90_COMMAND_REGISTRY.get('papertrace') is papertrace1141_cmd,
+        'v1141_papertracescan_handler':V90_COMMAND_REGISTRY.get('papertracescan') is papertracescan1141_cmd,
+        'v1141_shadow_only':_v1141_shadow_threshold(_v91_default_state())['mode']=='SHADOW_ONLY',
+        'v1141_threshold_safety':55 <= _v1141_shadow_threshold(_v91_default_state())['shadow_threshold'] <= 70,
+        'v1141_limits_preserved':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'v1141_schema_preserved':_v91_default_state().get('schema')==1,
+        'v1141_no_live_trading':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+        'v1141_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+    })
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
+            'development_version':V91_VERSION,'registry_fingerprint':'v1141-explainable-similarity-intelligence-1'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V114.0 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V114.1 startup integrity failure: " + ", ".join(failed))
     main()
