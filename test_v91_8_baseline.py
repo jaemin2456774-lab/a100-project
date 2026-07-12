@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix="a100_v918_") as tmp:
     spec.loader.exec_module(module)
 
     assert module.V920_BASE_VERSION == "A100 V91.8 SCENARIO DECISION ENGINE"
-    assert module.V91_VERSION.startswith("A100 V92.5")
+    assert module.V91_VERSION.startswith("A100 V92.6")
     assert len(module.V90_COMMAND_REGISTRY) >= 138
     assert module.V91_STATE_FILE.endswith("a100_v91_paper_state.json")
     assert module._v91_default_state()["schema"] == 1

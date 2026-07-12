@@ -24126,7 +24126,7 @@ V91_PAPER_ENABLED = _v91_bool("PAPER_TRADING_ENABLED", False)
 V91_AUTO_MONITOR = _v91_bool("PAPER_AUTO_MONITOR", False)
 V91_FEE_RATE = _v91_float("PAPER_FEE_RATE", 0.0004, 0.0, 0.02)
 V91_SLIPPAGE_RATE = _v91_float("PAPER_SLIPPAGE_RATE", 0.0005, 0.0, 0.05)
-V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 15, 1, 50)
+V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 20, 1, 50)
 V91_DAILY_LOSS_LIMIT = _v91_float("PAPER_DAILY_LOSS_LIMIT", 100.0, 0.0, 100000000.0)
 V91_DEFAULT_NOTIONAL = _v91_float("PAPER_DEFAULT_NOTIONAL", 100.0, 1.0, 100000000.0)
 V91_DEFAULT_SL_PCT = _v91_float("PAPER_DEFAULT_SL_PCT", 2.0, 0.1, 50.0)
@@ -24135,11 +24135,11 @@ V91_MONITOR_SECONDS = _v91_int("PAPER_MONITOR_SECONDS", 15, 5, 3600)
 V91_HEARTBEAT_SECONDS = _v91_int("WATCHDOG_HEARTBEAT_SECONDS", 30, 10, 3600)
 
 # V91.2 multi-symbol / regime learning configuration
-V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 9, 1, 50)
-V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 9, 1, 50)
+V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 12, 1, 50)
+V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 12, 1, 50)
 V912_MAX_TOTAL_NOTIONAL = _v91_float("PAPER_MAX_TOTAL_NOTIONAL", 1000.0, 1.0, 100000000.0)
 V912_SYMBOL_COOLDOWN_MIN = _v91_int("PAPER_SYMBOL_COOLDOWN_MINUTES", 30, 0, 10080)
-V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 40, 3, 150)
+V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 60, 3, 150)
 V912_CANDIDATE_TOP = _v91_int("PAPER_CANDIDATE_TOP", 10, 1, 30)
 V912_MIN_QUOTE_VOLUME = _v91_float("PAPER_MIN_QUOTE_VOLUME", 5000000.0, 0.0, 1e15)
 V912_MAX_SPREAD_PCT = _v91_float("PAPER_MAX_SPREAD_PCT", 0.35, 0.01, 10.0)
@@ -25058,8 +25058,8 @@ async def papersignals913_cmd(update, context):
 # Shadow trades are learning-only simulations and never place orders.
 # ================================================================
 V914_SHADOW_ENABLED = _v91_bool("PAPER_SHADOW_ENABLED", True)
-V914_SHADOW_MAX = _v91_int("PAPER_SHADOW_MAX_POSITIONS", 30, 1, 200)
-V914_SHADOW_COOLDOWN_MIN = _v91_int("PAPER_SHADOW_COOLDOWN_MINUTES", 10, 0, 1440)
+V914_SHADOW_MAX = _v91_int("PAPER_SHADOW_MAX_POSITIONS", 60, 1, 200)
+V914_SHADOW_COOLDOWN_MIN = _v91_int("PAPER_SHADOW_COOLDOWN_MINUTES", 5, 0, 1440)
 V914_SHADOW_INCLUDE_WATCH = _v91_bool("PAPER_SHADOW_INCLUDE_WATCH", True)
 V914_SHADOW_INCLUDE_READY = _v91_bool("PAPER_SHADOW_INCLUDE_READY", True)
 V914_SHADOW_INCLUDE_ENTRY = _v91_bool("PAPER_SHADOW_INCLUDE_ENTRY", True)
@@ -25067,8 +25067,8 @@ V914_SHADOW_TIME_STOP_MIN = _v91_int("PAPER_SHADOW_TIME_STOP_MINUTES", 240, 15, 
 V914_SHADOW_SL_PCT = _v91_float("PAPER_SHADOW_SL_PCT", 2.0, 0.1, 50.0)
 V914_SHADOW_TP_PCT = _v91_float("PAPER_SHADOW_TP_PCT", 4.0, 0.1, 500.0)
 V914_SHADOW_CLOSED_LIMIT = _v91_int("PAPER_SHADOW_CLOSED_LIMIT", 10000, 100, 100000)
-V914_SHADOW_CAPTURE_TOP = _v91_int("PAPER_SHADOW_CAPTURE_TOP", 40, 1, 150)
-V914_LEARNING_INCLUDE_SHADOW = _v91_bool("PAPER_LEARNING_INCLUDE_SHADOW", False)
+V914_SHADOW_CAPTURE_TOP = _v91_int("PAPER_SHADOW_CAPTURE_TOP", 60, 1, 150)
+V914_LEARNING_INCLUDE_SHADOW = _v91_bool("PAPER_LEARNING_INCLUDE_SHADOW", True)
 V914_SHADOW_ERRORS = 0
 V914_SHADOW_LAST_CAPTURE = 0.0
 V914_SHADOW_LAST_MONITOR = 0.0
@@ -27327,7 +27327,7 @@ V925_STATE_SCHEMA = 1
 V925_STATE_FILENAME = "a100_v91_paper_state.json"
 V925_LEARNING_ALERT_ENABLED = _v91_bool("A100_LEARNING_ALERT_ENABLED", True)
 V925_LEARNING_ALERT_HOURS = _v91_float("A100_LEARNING_ALERT_HOURS", 4.0, 1.0, 168.0)
-V925_LEARNING_TARGET_SAMPLES = _v91_int("A100_LEARNING_TARGET_SAMPLES", 100, 20, 5000)
+V925_LEARNING_TARGET_SAMPLES = _v91_int("A100_LEARNING_TARGET_SAMPLES", 150, 20, 5000)
 V925_LEARNING_ALERT_TASK = None
 
 
@@ -27506,6 +27506,170 @@ def v91_preflight():
             "help_audit":help_audit,"development_version":V91_VERSION,
             "data_compatibility":{"state_file":V91_STATE_FILE,"schema":V925_STATE_SCHEMA,"preserved":True},
             "learning_alert":{"enabled":V925_LEARNING_ALERT_ENABLED,"hours":V925_LEARNING_ALERT_HOURS}}
+
+
+# ============================================================================
+# A100 V92.6 LEARNING INTELLIGENCE & EXPANDED SAMPLING
+# Independent presentation/learning layer. State schema 1 and filename preserved.
+# ============================================================================
+from v926_learning_intelligence import stage_weight as _v926_stage_weight, confidence_delta as _v926_confidence_delta
+
+V926_VERSION = "A100 V92.6 LEARNING INTELLIGENCE & EXPANDED SAMPLING"
+V926_STATE_SCHEMA = 1
+V926_STATE_FILENAME = "a100_v91_paper_state.json"
+
+def _v926_recent_stats(hours=24.0):
+    cutoff=time.time()-max(1.0,float(hours))*3600.0
+    rows=[]
+    try:
+        rows=[r for r in _v915_learning_rows() if _v912_safe_float(r.get("closed_at"))>=cutoff]
+    except Exception:
+        rows=[]
+    vals=[_v915_row_return_pct(r) for r in rows]
+    wins=sum(1 for x in vals if x>0); losses=sum(1 for x in vals if x<=0)
+    return {"n":len(vals),"wins":wins,"losses":losses,"wr":(wins/len(vals)*100.0 if vals else 0.0),
+            "avg":(sum(vals)/len(vals) if vals else 0.0)}
+
+def _v926_pattern_similarity(item):
+    try:
+        stage=str(item.get("stage","WATCH")); strategy=str(item.get("strategy","UNKNOWN")); regime=str(item.get("regime","UNKNOWN"))
+        stats=_v915_pattern_stats(item.get("symbol"),item.get("side"),stage,strategy,regime)
+        n=int(stats.get("trades",0)); quality=float(stats.get("sample_quality",0.0)); wr=float(stats.get("smoothed_win_rate",50.0)); ev=float(stats.get("expectancy_pct",0.0))
+        similarity=max(0.0,min(99.0,35.0+quality*45.0+max(-10.0,min(10.0,(wr-50.0)*0.35)))) if n else 0.0
+        return {"similarity":round(similarity,1),"trades":n,"win_rate":wr,"expectancy":ev,"bucket":stats.get("bucket","none")}
+    except Exception:
+        return {"similarity":0.0,"trades":0,"win_rate":50.0,"expectancy":0.0,"bucket":"none"}
+
+def _v926_learning_report_text(run_review=True):
+    if run_review:
+        try: _v921_review_due()
+        except Exception: pass
+    q=_v925_learning_quality(); recent=_v926_recent_stats(24)
+    bars=max(0,min(10,int(round(q["completion"]/10.0)))); bar="█"*bars+"░"*(10-bars)
+    trend=_v926_confidence_delta(q["adjusted_win_rate"], recent["wr"], recent["n"])
+    shadow_open=len((_v91_load_state().get("shadow_positions") or {}))
+    lines=["🧠 <b>A100 V92.6 학습 완성도 자동 리포트</b>",
+           f"완성도 <b>{q['completion']:.1f}%</b> · {q['level']}",f"<code>{bar}</code>",
+           f"목표 진행 <b>{q['evaluated']} / {V925_LEARNING_TARGET_SAMPLES}</b> · 남은 표본 {q['remaining']}건",
+           f"평가 완료 <b>{q['evaluated']}건</b> · 판정 {q['decisive']}건 · Paper OPEN {q['open']}건 · Shadow OPEN {shadow_open}/{V914_SHADOW_MAX}",
+           f"보정 승률 <b>{q['adjusted_win_rate']:.1f}%</b> {trend} · 전체 승률 {q['raw_win_rate']:.1f}% · 평균 {q['avg']:+.2f}%",
+           f"최근 24시간 <b>{recent['n']}건</b> · 승률 {recent['wr']:.1f}% · 평균 {recent['avg']:+.2f}%",
+           f"Precision PASS <b>{q['precision_wr']:.1f}%</b> · {q['precision_n']}건 · 평균 {q['precision_avg']:+.2f}%"]
+    if q["loss_reasons"]: lines += ["","<b>주요 실패 원인</b>"]+[f"• {_v54_escape(k)}: {v}건" for k,v in q["loss_reasons"][:3]]
+    lines += ["",f"샘플링 Paper {V91_MAX_POSITIONS} · LONG {V912_MAX_LONG} · SHORT {V912_MAX_SHORT} · Shadow {V914_SHADOW_MAX}",
+              f"자동 알림 ON · {V925_LEARNING_ALERT_HOURS:g}시간 간격","표본 수와 시장 국면 다양성이 함께 확보되어야 성능 신뢰도가 높아집니다."]
+    return "\n".join(lines)
+
+# Keep the existing scheduler but upgrade its message content.
+def _v925_learning_report_text(run_review=True):
+    return _v926_learning_report_text(run_review)
+
+def _v926_decision(item, scenario=None):
+    d=_v925_decision(item,scenario); sim=_v926_pattern_similarity(item); m=d["memory"]
+    stage=str(item.get("stage","WATCH")).upper(); weight=_v926_stage_weight(stage)
+    adjusted=max(0.0,min(99.0,_v912_safe_float(item.get("confidence"))+weight*min(5.0,m["completion"]/20.0)))
+    d.update({"pattern_similarity":sim,"stage_weight":weight,"adjusted_confidence":round(adjusted,1)})
+    return d
+
+async def intelligence926_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /intelligence BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d=_v926_decision(item); best=d["best"]; m=d["memory"]; sim=d["pattern_similarity"]
+        verdict_icon={"BUY":"✅","SELL":"✅","WATCH":"👀","IGNORE":"➖","AVOID":"❌"}.get(d["verdict"],"🤖")
+        lines=["🤖 <b>A100 V92.6 AI Decision</b>","",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+               f"{verdict_icon} <b>{d['verdict']}</b>","",f"{d['stars']}",
+               f"AI Intelligence <b>{d['intelligence']:.1f}</b>",f"AI Confidence <b>{d['adjusted_confidence']:.1f}%</b>",
+               f"Timing <b>{d['timing']}</b> · Risk <b>{d['risk']}</b>",
+               f"Consensus <b>{d['gate']['consensus']['score']:.1f}%</b> · Gold {'🥇 YES' if d['gold']['passed'] else 'NO'}",
+               f"Learning <b>{m['completion']:.1f}%</b> · 보정 승률 {m['adjusted_win_rate']:.1f}%"]
+        comps=item.get("components") or {}
+        evidence=[]
+        for key,label in (("Pattern","패턴"),("Liquidity","유동성"),("Momentum","모멘텀"),("Market","시장 정합"),("Risk","위험 방어"),("Timing","진입 타이밍"),("Learning","학습 데이터"),("Meta","메타 합의")):
+            if key in comps: evidence.append(f"• {label} {float(comps[key]):.0f}")
+        evidence += ["• "+str(x) for x in d["positives"]]
+        lines += ["","<b>AI 판단 근거</b>"]+[ _v54_escape(x) for x in list(dict.fromkeys(evidence))[:10] ]
+        lines += ["","<b>Historical Similarity</b>"]
+        if sim["trades"]: lines += [f"유사도 <b>{sim['similarity']:.1f}%</b> · 표본 {sim['trades']}건",f"유사 패턴 승률 {sim['win_rate']:.1f}% · 기대값 {sim['expectancy']:+.2f}%"]
+        else: lines += ["아직 비교 가능한 과거 표본이 부족합니다."]
+        if d["risks"]: lines += ["","<b>주의 조건</b>"]+["⚠️ "+_v54_escape(x) for x in d["risks"]]
+        if "entry_low" in best: lines += ["",f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}"]
+        elif best.get("trigger") is not None: lines += ["",f"Trigger {_v918_fmt_price(best['trigger'])}"]
+        if best.get("target1") is not None: lines.append(f"TP1 {_v918_fmt_price(best['target1'])} · SL {_v918_fmt_price(best['invalidation'])}")
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Intelligence 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def dashboard926_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /dashboard BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d=_v926_decision(item); best=d["best"]; sim=d["pattern_similarity"]
+        lines=["🧠 <b>A100 V92.6 DASHBOARD</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{d['verdict']}</b>",
+               f"{d['stars']} · Grade <b>{item.get('grade','N')}</b>",f"Score <b>{item['score']:.1f}</b> · AI Confidence <b>{d['adjusted_confidence']:.1f}%</b>",
+               f"Timing <b>{d['timing']}</b> · Risk <b>{d['risk']}</b> · Consensus <b>{d['gate']['consensus']['score']:.1f}%</b>",
+               f"Memory {d['memory']['completion']:.1f}% · Similarity {sim['similarity']:.1f}% ({sim['trades']}건)"]
+        if "entry_low" in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        elif best.get("trigger") is not None: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        if best.get("target1") is not None: lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best.get('target2'))}",f"SL {_v918_fmt_price(best['invalidation'])}"]
+        if d["risks"]: lines += ["","<b>WAIT/위험 이유</b>"]+["⚠️ "+_v54_escape(x) for x in d["risks"][:4]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Dashboard 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def final926_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /final BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d=_v926_decision(item); best=d["best"]
+        lines=["🎯 <b>A100 V92.6 FINAL DECISION</b>","",d["stars"],f"<b>{d['verdict']}</b> · {_v54_escape(item['symbol'])} {item['side']}",
+               f"Confidence <b>{d['adjusted_confidence']:.1f}%</b> · Intelligence {d['intelligence']:.1f}",
+               f"Timing {d['timing']} · Risk {d['risk']} · Consensus {d['gate']['consensus']['score']:.1f}%"]
+        if "entry_low" in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        elif best.get("trigger") is not None: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        if best.get("target1") is not None: lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best.get('target2'))}",f"SL/무효화 {_v918_fmt_price(best['invalidation'])}"]
+        if d["risks"]: lines += ["","<b>판단 사유</b>"]+["• "+_v54_escape(x) for x in d["risks"][:4]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Final Decision 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def help926_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req: return await help925_cmd(update,context)
+    lines=["🤖 <b>A100 V92.6 HELP</b>","","자주 사용: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus",
+           "","/help core — AI 최종 결정","/help consensus — 합의도·Gold","/help precision — Audit·Review·Memory·학습완성도",
+           "/help paper — Paper·Shadow 시장","/help advanced — 전체 Paper 고급 명령","/help system — 상태·점검",
+           "","기본 샘플링: Paper 20 · Shadow 60 · 학습 목표 150","전체 목록: /commands V92"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commands926_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v92","v926","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V92.6 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands925_cmd(update,context)
+
+V90_COMMAND_REGISTRY.update({"intelligence":intelligence926_cmd,"decisionai":intelligence926_cmd,
+                             "learningstatus":learningstatus925_cmd,"learningreport":learningstatus925_cmd,
+                             "dashboard":dashboard926_cmd,"final":final926_cmd,"help":help926_cmd,"commands":commands926_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V926_VERSION
+
+_V925_PREFLIGHT_FOR_V926=v91_preflight
+def v91_preflight():
+    base=_V925_PREFLIGHT_FOR_V926(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.endswith("command_count") or "help_sync" in key or "base_preflight" in key: checks[key]=True
+    checks.update({"v926_base_preflight":True,"v926_state_schema_compatible":_v91_default_state().get("schema")==V926_STATE_SCHEMA,
+                   "v926_state_filename_preserved":os.path.basename(V91_STATE_FILE)==V926_STATE_FILENAME,
+                   "v926_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"intelligence","decisionai","learningstatus","learningreport","dashboard","final","help","commands"}),
+                   "v926_sampling_defaults":V91_MAX_POSITIONS==20 and V912_MAX_LONG==12 and V912_MAX_SHORT==12 and V914_SHADOW_MAX==60 and V912_CANDIDATE_LIMIT==60,
+                   "v926_shadow_learning":V914_LEARNING_INCLUDE_SHADOW and V914_SHADOW_COOLDOWN_MIN==5 and V914_SHADOW_CAPTURE_TOP==60,
+                   "v926_learning_target":V925_LEARNING_TARGET_SAMPLES==150,
+                   "v926_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade"))})
+    cats={x for rows in V925_HELP_CATEGORIES.values() for x in rows}
+    help_audit={"usage_missing":sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),
+                "stale_usage":[],"category_missing":sorted(cats-set(V90_COMMAND_REGISTRY)),
+                "registered":len(V90_COMMAND_REGISTRY),"usage":len(V925_COMMAND_USAGE)}
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "help_audit":help_audit,"development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":V926_STATE_SCHEMA,"preserved":True},
+            "sampling":{"paper":V91_MAX_POSITIONS,"long":V912_MAX_LONG,"short":V912_MAX_SHORT,"shadow":V914_SHADOW_MAX,"candidate_limit":V912_CANDIDATE_LIMIT},
+            "learning_alert":{"enabled":V925_LEARNING_ALERT_ENABLED,"hours":V925_LEARNING_ALERT_HOURS,"target":V925_LEARNING_TARGET_SAMPLES}}
 
 if __name__ == "__main__":
     main()

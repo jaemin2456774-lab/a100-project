@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory(prefix="a100_v925_") as tmp:
     spec=importlib.util.spec_from_file_location("a100_v925",ROOT/"main.py")
     module=importlib.util.module_from_spec(spec); assert spec.loader
     spec.loader.exec_module(module)
-    assert module.V91_VERSION.startswith("A100 V92.5")
+    assert module.V91_VERSION.startswith("A100 V92.6")
     assert module._v91_default_state()["schema"]==1
     assert module.V91_STATE_FILE.endswith("a100_v91_paper_state.json")
     for command in ("intelligence","decisionai","learningstatus","learningreport"):
