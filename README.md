@@ -1,4 +1,13 @@
-# A100 V113.0 Entry Execution & Paper Queue Intelligence Development
+# A100 V113.1 Command Integrity & Version Sync Development
+
+## Critical hotfix
+- Moved the executable `__main__` block to the physical end of `main.py`.
+- Ensures V113 queue/execution commands are registered before the Telegram application starts.
+- Added `/versionaudit` for runtime callback/version verification.
+- Startup now fails fast when required callbacks, registry snapshot, version, limits, or schema checks fail.
+- Active `/help` and `/commands` outputs are synchronized to V113.1.
+
+# A100 V113.1 Entry Execution & Paper Queue Intelligence Development
 
 # A100 V112.0 Score Calibration & Learning Boost Development
 
@@ -20,7 +29,7 @@ V111.0을 기준으로 Paper LEARNING 모드의 후보 점수 분포를 보정�
 - 실주문 기능 및 실주문 기준 변경 없음
 
 
-## V113.0 핵심 변경
+## V113.1 핵심 변경
 - LEARNING 모드에서는 legacy PAPER_AUTO_ENTRY 값과 무관하게 Paper 자동 진입 파이프라인 활성화
 - ENTRY 통과 후보를 영구 Paper Queue에 저장
 - Scanner → ENTRY → Queue → Paper Create 전 과정 추적

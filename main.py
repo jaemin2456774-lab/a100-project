@@ -30787,8 +30787,7 @@ def v91_preflight():
             "base": base, "development_version": V91_VERSION,
             "registry_fingerprint": "v1120-score-calibration-learning-boost-1"}
 
-if __name__ == "__main__":
-    main()
+# V113.1: runtime entrypoint moved to the physical end of file so all late-version callbacks are registered before startup.
 
 # ============================================================================
 # A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE
@@ -31126,3 +31125,114 @@ def v91_preflight():
         "v113_version_sync": V91_VERSION == V1130_VERSION,
     })
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "development_version": V91_VERSION, "registry_fingerprint": "v1130-entry-execution-queue-1"}
+
+
+# =============================================================================
+# A100 V113.1 COMMAND INTEGRITY & VERSION SYNC HOTFIX
+# =============================================================================
+V1131_VERSION = "A100 V113.1 COMMAND INTEGRITY & VERSION SYNC DEVELOPMENT"
+V91_VERSION = V1131_VERSION
+
+async def versionaudit1131_cmd(update, context):
+    required = {"entrytrace", "paperqueue", "entryrecovery", "entryexecution", "papertrace", "help", "commands", "versionaudit"}
+    missing = sorted(x for x in required if not callable(V90_COMMAND_REGISTRY.get(x)))
+    legacy_active = []
+    active = {
+        "paper": V90_COMMAND_REGISTRY.get("paper"),
+        "papertrace": V90_COMMAND_REGISTRY.get("papertrace"),
+        "help": V90_COMMAND_REGISTRY.get("help"),
+        "commands": V90_COMMAND_REGISTRY.get("commands"),
+    }
+    for name, fn in active.items():
+        fn_name = getattr(fn, "__name__", "")
+        if name == "papertrace" and "1130" not in fn_name:
+            legacy_active.append(f"{name}:{fn_name}")
+        if name in {"help", "commands"} and "1131" not in fn_name:
+            legacy_active.append(f"{name}:{fn_name}")
+    lines = [
+        "🧾 <b>A100 V113.1 VERSION & COMMAND AUDIT</b>",
+        f"Core Version: <b>{V1131_VERSION}</b>",
+        f"등록 명령: <b>{len(V90_COMMAND_REGISTRY)}개</b>",
+        f"필수 명령 누락: <b>{len(missing)}개</b>",
+        f"활성 핸들러 불일치: <b>{len(legacy_active)}개</b>",
+        "",
+        "필수 명령: " + ("정상" if not missing else ", ".join('/'+x for x in missing)),
+        "활성 버전: " + ("정상" if not legacy_active else ", ".join(legacy_active)),
+        "Runtime Entrypoint: FILE_END",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+async def help1131_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in V925_HELP_CATEGORIES:
+        rows = [f"🧠 <b>A100 V113.1 HELP · {req.upper()}</b>", ""]
+        rows += [f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]
+        return await v90_1_safe_reply(update, "\n".join(rows), parse_mode="HTML")
+    if req:
+        return await help1130_cmd(update, context)
+    await v90_1_safe_reply(update, "\n".join([
+        "🧠 <b>A100 V113.1 HELP</b>", "",
+        "Execution: /papertracescan · /papertrace BTC · /entrytrace BTC",
+        "Queue: /paperqueue · /entryrecovery · /entryexecution",
+        "Integrity: /versionaudit",
+        "Calibration: /scorecalibration · /scorebreakdown BTC · /learningboost",
+        "Learning: /learningstatus · /adaptivethreshold · /thresholdreview", "",
+        "전체 목록: /commands V1131",
+    ]), parse_mode="HTML")
+
+async def commands1131_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in {"v113", "v1130", "v1131", "all", "전체", ""}:
+        names = sorted(V925_COMMAND_USAGE)
+        text = f"📚 <b>A100 V113.1 전체 명령 {len(names)}개</b>\n\n" + " ".join("/" + x for x in names)
+        for i in range(0, len(text), 3800):
+            await v90_1_safe_reply(update, text[i:i+3800], parse_mode="HTML")
+        return
+    return await commands1130_cmd(update, context)
+
+V925_COMMAND_USAGE.update({
+    "versionaudit": "실제 로딩 버전·필수 명령·활성 콜백 무결성 검사",
+})
+if "versionaudit" not in V925_HELP_CATEGORIES.setdefault("status", []):
+    V925_HELP_CATEGORIES["status"].append("versionaudit")
+V90_COMMAND_REGISTRY.update({
+    "versionaudit": versionaudit1131_cmd,
+    "help": help1131_cmd,
+    "commands": commands1131_cmd,
+    "papertrace": papertrace1130_cmd,
+    "entrytrace": entrytrace1130_cmd,
+    "paperqueue": paperqueue1130_cmd,
+    "entryrecovery": entryrecovery1130_cmd,
+    "entryexecution": entryexecution1130_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V113_PREFLIGHT_FOR_V1131 = v91_preflight
+
+def v91_preflight():
+    base = _V113_PREFLIGHT_FOR_V1131(); checks = dict(base.get("checks", {}))
+    for key in list(checks):
+        if key == "v113_version_sync":
+            checks[key] = True
+    required = {"entrytrace", "paperqueue", "entryrecovery", "entryexecution", "papertrace", "versionaudit", "help", "commands"}
+    checks.update({
+        "v1131_callbacks_complete": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+        "v1131_help_usage_complete": required.issubset(set(V925_COMMAND_USAGE) | {"help", "commands"}),
+        "v1131_registry_snapshot_current": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "v1131_active_trace_handler": V90_COMMAND_REGISTRY.get("papertrace") is papertrace1130_cmd,
+        "v1131_active_help_handler": V90_COMMAND_REGISTRY.get("help") is help1131_cmd,
+        "v1131_active_commands_handler": V90_COMMAND_REGISTRY.get("commands") is commands1131_cmd,
+        "v1131_version_sync": V91_VERSION == V1131_VERSION,
+        "v1131_limits_preserved": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v1131_schema_preserved": _v91_default_state().get("schema") == 1,
+        "v1131_no_live_trading": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "development_version": V91_VERSION, "registry_fingerprint": "v1131-command-integrity-version-sync-1"}
+
+# IMPORTANT: this must remain the final executable block in the file.
+if __name__ == "__main__":
+    audit = v91_preflight()
+    if not audit.get("ok"):
+        failed = [k for k, v in audit.get("checks", {}).items() if not v]
+        raise RuntimeError("V113.1 startup integrity failure: " + ", ".join(failed))
+    main()

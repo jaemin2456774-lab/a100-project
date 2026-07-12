@@ -638,7 +638,11 @@
     "shadow_max_positions": 60,
     "live_trading_added": false
   },
-  "version": "V113.0",
+  "version": "V113.1",
   "name": "ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE",
-  "development_version": "A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE DEVELOPMENT"
+  "development_version": "A100 V113.0 ENTRY EXECUTION & PAPER QUEUE INTELLIGENCE DEVELOPMENT",
+  "release_name": "A100_V113_1_COMMAND_INTEGRITY_VERSION_SYNC_DEVELOPMENT_RELEASE",
+  "registry_fingerprint": "v1131-command-integrity-version-sync-1",
+  "command_count": 254,
+  "critical_fix": "runtime entrypoint moved after all callback registrations"
 }
