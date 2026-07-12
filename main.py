@@ -26088,7 +26088,7 @@ def v91_preflight():
         "v918_base_preflight": bool(base.get("ok")),
         "v918_state_schema_compatible": _v91_default_state().get("schema") == V918_STATE_SCHEMA,
         "v918_state_filename_preserved": os.path.basename(V91_STATE_FILE) == V918_STATE_FILENAME,
-        "v918_command_count": len(V90_COMMAND_REGISTRY) == 135,
+        "v918_command_count": len(V90_COMMAND_REGISTRY) >= 135,
         "v918_callbacks": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"scenario","scenario_top"}),
         "v918_scenario_callable": all(callable(globals().get(x)) for x in {"_v918_scenario_from_row","_v918_scenarios","_v918_find_scenario"}),
         "v918_help_sync": not audit["usage_missing"] and not audit["stale_usage"],
@@ -26097,6 +26097,250 @@ def v91_preflight():
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base,
             "help_audit": audit, "development_version": V91_VERSION,
             "data_compatibility": {"state_file": V91_STATE_FILE, "schema": V918_STATE_SCHEMA, "preserved": True}}
+
+
+# ================================================================
+# A100 V92.0 AI SCORE + EXPLAIN AI + CONFIDENCE 2.0
+# Reuses V91.8 enriched candidates and scenario cache. No schema change.
+# ================================================================
+V920_BASE_VERSION = "A100 V91.8 SCENARIO DECISION ENGINE"
+V920_STATE_SCHEMA = 1
+V920_STATE_FILENAME = "a100_v91_paper_state.json"
+V920_SCORE_CACHE_TTL = _v91_int("A100_SCORE_CACHE_SECONDS", 120, 15, 3600)
+V920_SCORE_TOP = _v91_int("A100_SCORE_TOP", 10, 1, 30)
+V920_SCORE_CACHE = {}
+V91_VERSION = "A100 V92.0 AI SCORE & EXPLAINABLE CONFIDENCE ENGINE"
+
+
+def _v920_clamp(value, low=0.0, high=100.0):
+    return max(low, min(high, _v912_safe_float(value)))
+
+
+def _v920_grade(score):
+    x = _v920_clamp(score)
+    if x >= 95: return "S+"
+    if x >= 90: return "S"
+    if x >= 85: return "A+"
+    if x >= 80: return "A"
+    if x >= 70: return "B"
+    return "C"
+
+
+def _v920_component_scores(row):
+    side = str(row.get("side", "LONG")).upper()
+    change = _v912_safe_float(row.get("change_24h"))
+    qv = max(0.0, _v912_safe_float(row.get("quote_volume")))
+    spread = max(0.0, _v912_safe_float(row.get("spread_pct"), 999.0))
+    sim = row.get("similarity_stats") or {}
+    stats = row.get("stats") or {}
+    ctx = row.get("market_context") or {}
+    risk = row.get("risk_state") or {}
+
+    # Every component is derived from data already present in the enriched row.
+    liquidity = 35.0 + min(55.0, max(0.0, math.log10(max(qv, 1.0)) - 6.0) * 18.0)
+    liquidity -= min(30.0, spread * 35.0)
+
+    abs_change = abs(change)
+    if abs_change <= 2.0: momentum = 48.0 + abs_change * 8.0
+    elif abs_change <= 9.0: momentum = 64.0 + (abs_change - 2.0) * 4.2
+    elif abs_change <= 14.0: momentum = 93.4 - (abs_change - 9.0) * 5.0
+    else: momentum = 68.4 - (abs_change - 14.0) * 4.0
+
+    sim_n = int(_v912_safe_float(sim.get("trades")))
+    sim_wr = _v912_safe_float(sim.get("win_rate"), 50.0)
+    sim_ev = _v912_safe_float(sim.get("expectancy_pct"))
+    sim_quality = _v912_safe_float(sim.get("avg_similarity"))
+    pattern = 42.0 + (sim_wr - 50.0) * 0.65 + sim_ev * 7.0
+    pattern += min(18.0, sim_n * 0.7) + sim_quality * 12.0
+
+    market_score = _v912_safe_float(ctx.get("score"), 50.0)
+    market = market_score if side == "LONG" else 100.0 - market_score
+
+    risk_mode = str(risk.get("mode", "NORMAL")).upper()
+    risk_score = {"AGGRESSIVE": 92.0, "NORMAL": 82.0, "DEFENSIVE": 55.0, "HALT": 10.0}.get(risk_mode, 65.0)
+    risk_score -= min(25.0, _v912_safe_float(risk.get("max_drawdown_pct")) * 2.0)
+    risk_score -= min(15.0, _v912_safe_float(risk.get("max_loss_streak")) * 3.0)
+
+    stage = str(row.get("stage", "IGNORE")).upper()
+    decision = str(row.get("meta_decision", "WAIT")).upper()
+    timing = {"ENTRY": 90.0, "READY": 78.0, "WATCH": 62.0, "IGNORE": 35.0}.get(stage, 45.0)
+    if decision == "TRADE": timing += 7.0
+    elif decision == "SKIP": timing -= 20.0
+    if abs_change >= 15.0: timing -= 30.0
+
+    learning_n = int(_v912_safe_float(stats.get("trades")))
+    learning_wr = _v912_safe_float(stats.get("win_rate"), 50.0)
+    learning_avg = _v912_safe_float(stats.get("avg_pnl"))
+    learning = 45.0 + (learning_wr - 50.0) * 0.55 + learning_avg * 4.0 + min(25.0, learning_n * 0.8)
+
+    meta = 50.0 + _v912_safe_float(row.get("meta_adjust")) * 4.0
+    meta += (_v912_safe_float(row.get("final_score"), 50.0) - 50.0) * 0.55
+
+    return {
+        "Pattern": round(_v920_clamp(pattern), 1),
+        "Liquidity": round(_v920_clamp(liquidity), 1),
+        "Momentum": round(_v920_clamp(momentum), 1),
+        "Market": round(_v920_clamp(market), 1),
+        "Risk": round(_v920_clamp(risk_score), 1),
+        "Timing": round(_v920_clamp(timing), 1),
+        "Learning": round(_v920_clamp(learning), 1),
+        "Meta": round(_v920_clamp(meta), 1),
+    }
+
+
+V920_SCORE_WEIGHTS = {
+    "Pattern": 0.20, "Liquidity": 0.13, "Momentum": 0.13, "Market": 0.10,
+    "Risk": 0.14, "Timing": 0.14, "Learning": 0.08, "Meta": 0.08,
+}
+
+
+def _v920_explain_reasons(row, components):
+    positives, risks = [], []
+    sim = row.get("similarity_stats") or {}
+    risk = row.get("risk_state") or {}
+    if components["Pattern"] >= 75:
+        positives.append(f"유사패턴 {int(_v912_safe_float(sim.get('trades')))}건 · 승률 {_v912_safe_float(sim.get('win_rate'),50):.1f}%")
+    elif components["Pattern"] < 55:
+        risks.append("유사패턴 표본 또는 기대값 부족")
+    if components["Liquidity"] >= 75: positives.append("거래대금·스프레드 유동성 양호")
+    elif components["Liquidity"] < 55: risks.append("유동성 또는 스프레드 부담")
+    if components["Momentum"] >= 75: positives.append("과열 전 적정 모멘텀 구간")
+    elif abs(_v912_safe_float(row.get("change_24h"))) >= 15: risks.append("24시간 변동 과열로 추격 위험")
+    if components["Market"] >= 70: positives.append("BTC 시장 국면과 방향 정합")
+    elif components["Market"] < 45: risks.append("시장 국면과 후보 방향 불일치")
+    if str(risk.get("mode", "NORMAL")).upper() == "HALT": risks.append("성과 위험 HALT 상태")
+    elif components["Risk"] >= 75: positives.append("현재 성과 위험 제한 범위")
+    if str(row.get("meta_decision", "WAIT")).upper() == "TRADE": positives.append("Meta Decision 거래 조건 충족")
+    elif str(row.get("meta_decision", "WAIT")).upper() == "SKIP": risks.append("Meta Decision 진입 보류")
+    positives.extend(str(x) for x in (row.get("reasons") or [])[:2] if x)
+    risks.extend(str(x) for x in (row.get("penalties") or [])[:2] if x)
+    # Stable order with duplicates removed.
+    positives = list(dict.fromkeys(positives))[:5]
+    risks = list(dict.fromkeys(risks))[:5]
+    return positives, risks
+
+
+def _v920_score_from_row(row):
+    components = _v920_component_scores(row)
+    raw = sum(components[k] * V920_SCORE_WEIGHTS[k] for k in V920_SCORE_WEIGHTS)
+    # Preserve continuity with the proven V91 final score without letting it dominate.
+    legacy = _v912_safe_float(row.get("final_score"), 50.0)
+    total = _v920_clamp(raw * 0.78 + legacy * 0.22)
+    sample_n = int(_v912_safe_float((row.get("similarity_stats") or {}).get("trades")))
+    dispersion = sum(abs(v - total) for v in components.values()) / max(1, len(components))
+    data_quality = min(100.0, 45.0 + sample_n * 1.4 + min(20.0, math.log10(max(_v912_safe_float(row.get("quote_volume")),1.0))*3.0))
+    confidence = _v920_clamp(total * 0.62 + data_quality * 0.28 + max(0.0, 20.0 - dispersion) * 0.5)
+    positives, risks = _v920_explain_reasons(row, components)
+    contribution_total = sum(components[k] * V920_SCORE_WEIGHTS[k] for k in V920_SCORE_WEIGHTS) or 1.0
+    confidence_breakdown = {k: round(components[k] * V920_SCORE_WEIGHTS[k] / contribution_total * 100.0, 1) for k in V920_SCORE_WEIGHTS}
+    return {
+        "symbol": str(row.get("symbol", "")).upper(), "side": str(row.get("side", "LONG")).upper(),
+        "score": round(total, 1), "grade": _v920_grade(total), "confidence": round(confidence, 1),
+        "components": components, "confidence_breakdown": confidence_breakdown,
+        "positives": positives, "risks": risks, "stage": row.get("stage", "IGNORE"),
+        "meta_decision": row.get("meta_decision", "WAIT"), "risk_mode": (row.get("risk_state") or {}).get("mode", "NORMAL"),
+        "legacy_score": round(legacy, 1), "generated_at": time.time(),
+    }
+
+
+def _v920_scores(force=False):
+    cached = V920_SCORE_CACHE.get("all")
+    if not force and cached and time.time() - cached[0] <= V920_SCORE_CACHE_TTL:
+        return list(cached[1])
+    rows = _v913_enriched_candidates(force=force)
+    result = [_v920_score_from_row(row) for row in rows]
+    result.sort(key=lambda x: (x["score"], x["confidence"]), reverse=True)
+    V920_SCORE_CACHE["all"] = (time.time(), result)
+    return list(result)
+
+
+def _v920_find_score(symbol, force=False):
+    pair = _v91_normalize_symbol(symbol)
+    for item in _v920_scores(force=force):
+        if item.get("symbol") == pair: return item
+    raise RuntimeError(f"{pair}는 현재 후보 목록에 없습니다. /topscore 로 현재 후보를 확인하세요.")
+
+
+async def score920_cmd(update, context):
+    if not getattr(context, "args", None): return await v90_1_safe_reply(update, "사용법: /score BTC")
+    try:
+        item = _v920_find_score(context.args[0])
+        lines=[f"🧮 <b>A100 V92.0 SCORE</b>", f"종목: <b>{_v54_escape(item['symbol'])}</b> · {item['side']}",
+               f"종합점수 <b>{item['score']:.1f}</b> · 등급 <b>{item['grade']}</b>",
+               f"Confidence 2.0 <b>{item['confidence']:.1f}%</b> · {item['stage']} · Meta {item['meta_decision']}", ""]
+        for name,value in item["components"].items(): lines.append(f"{name:<10} <b>{value:>5.1f}</b>")
+        lines += ["", "<i>기존 분석 결과를 재사용하며 실주문을 실행하지 않습니다.</i>"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Score 분석 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def explain920_cmd(update, context):
+    if not getattr(context, "args", None): return await v90_1_safe_reply(update, "사용법: /explain BTC")
+    try:
+        item = _v920_find_score(context.args[0])
+        lines=["🔎 <b>A100 V92.0 Explain AI</b>", f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · {item['score']:.1f} {item['grade']} · 신뢰 {item['confidence']:.1f}%", "", "<b>긍정 근거</b>"]
+        lines += [f"✅ {_v54_escape(x)}" for x in item["positives"]] or ["• 뚜렷한 우위 근거 부족"]
+        lines += ["", "<b>위험·감점</b>"]
+        lines += [f"⚠️ {_v54_escape(x)}" for x in item["risks"]] or ["• 중대한 감점 없음"]
+        lines += ["", "<b>Confidence 구성</b>"]
+        lines += [f"{k} {v:.1f}%" for k,v in item["confidence_breakdown"].items()]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Explain 분석 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+async def topscore920_cmd(update, context):
+    try:
+        rows=_v920_scores(force=True)[:V920_SCORE_TOP]
+        lines=["🏆 <b>A100 V92.0 TOP SCORE</b>"]
+        for i,x in enumerate(rows,1):
+            lines.append(f"{i}. <b>{_v54_escape(x['symbol'])}</b> {x['side']} · {x['score']:.1f} {x['grade']} · 신뢰 {x['confidence']:.1f}% · {x['stage']}")
+        lines += ["", "상세: /score 종목 · /explain 종목"]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ Top Score 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+
+V920_COMMAND_USAGE = dict(V918_COMMAND_USAGE)
+V920_COMMAND_USAGE.update({"score":"A100 종합점수·등급·세부점수", "explain":"추천 근거·위험·Confidence 구성", "topscore":"A100 Score 상위 후보"})
+
+async def help920_cmd(update, context):
+    lines=["🤖 <b>A100 V92.0 HELP</b>","","핵심: /score BTC /explain BTC /topscore /scenario BTC","","<b>V91~V92 Paper·AI 명령</b>"]
+    for cmd,desc in V920_COMMAND_USAGE.items(): lines.append(f"/{cmd} — {desc}")
+    lines += ["","/commands — 전체 명령", "/commands V92 — V92 명령 포함"]
+    text="\n".join(lines)
+    for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+
+async def commands920_cmd(update, context):
+    requested=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if requested in {"v91","v92","paper","ai","score","점수"}:
+        lines=[f"📚 <b>A100 V92 명령 {len(V920_COMMAND_USAGE)}개</b>","", " ".join('/'+x for x in V920_COMMAND_USAGE)]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    return await commands90_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"score":score920_cmd,"explain":explain920_cmd,"topscore":topscore920_cmd,"help":help920_cmd,"commands":commands920_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def _v920_help_audit():
+    registered={x for x in V90_COMMAND_REGISTRY if x.startswith('paper') or x in {'watchdog','scenario','scenario_top','score','explain','topscore'}}
+    usage=set(V920_COMMAND_USAGE)
+    return {"usage_missing":sorted(registered-usage),"stale_usage":sorted(usage-registered),"registered":len(registered),"usage":len(usage)}
+
+_V918_PREFLIGHT_FOR_V920 = v91_preflight
+def v91_preflight():
+    base=_V918_PREFLIGHT_FOR_V920(); checks=dict(base.get("checks",{})); audit=_v920_help_audit()
+    checks.update({
+        "v920_base_preflight":bool(base.get("ok")),
+        "v920_state_schema_compatible":_v91_default_state().get("schema")==V920_STATE_SCHEMA,
+        "v920_state_filename_preserved":os.path.basename(V91_STATE_FILE)==V920_STATE_FILENAME,
+        "v920_command_count":len(V90_COMMAND_REGISTRY)==138,
+        "v920_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in {"score","explain","topscore"}),
+        "v920_score_callable":all(callable(globals().get(x)) for x in {"_v920_component_scores","_v920_score_from_row","_v920_scores"}),
+        "v920_weights_sum":abs(sum(V920_SCORE_WEIGHTS.values())-1.0)<1e-9,
+        "v920_help_sync":not audit["usage_missing"] and not audit["stale_usage"],
+        "v920_live_trading_disabled":not any(token in globals() for token in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"help_audit":audit,
+            "development_version":V91_VERSION,"data_compatibility":{"state_file":V91_STATE_FILE,"schema":V920_STATE_SCHEMA,"preserved":True}}
 
 if __name__ == "__main__":
     main()

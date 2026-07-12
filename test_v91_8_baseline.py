@@ -18,8 +18,9 @@ with tempfile.TemporaryDirectory(prefix="a100_v918_") as tmp:
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
-    assert module.V91_VERSION == "A100 V91.8 SCENARIO DECISION ENGINE"
-    assert len(module.V90_COMMAND_REGISTRY) == 135
+    assert module.V920_BASE_VERSION == "A100 V91.8 SCENARIO DECISION ENGINE"
+    assert module.V91_VERSION == "A100 V92.0 AI SCORE & EXPLAINABLE CONFIDENCE ENGINE"
+    assert len(module.V90_COMMAND_REGISTRY) == 138
     assert module.V91_STATE_FILE.endswith("a100_v91_paper_state.json")
     assert module._v91_default_state()["schema"] == 1
 
@@ -38,4 +39,4 @@ with tempfile.TemporaryDirectory(prefix="a100_v918_") as tmp:
     assert preflight["ok"], json.dumps(preflight, ensure_ascii=False, indent=2)
     assert preflight["data_compatibility"]["preserved"] is True
 
-print("A100 V91.8 development baseline compatibility test: PASS")
+print("A100 V92.0 backward data compatibility test: PASS")
