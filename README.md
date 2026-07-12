@@ -1,3 +1,7 @@
+# A100 V96.0 Startup Optimizer
+
+Health-first Railway startup, delayed Paper/Shadow initialization, and incremental AI learning cache.
+
 # A100 V95.0 AI Unified Dashboard
 
 GitHub clean release. Upload the contents of this folder to the repository root.

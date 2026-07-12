@@ -28517,5 +28517,162 @@ def v91_preflight():
     checks['v951_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v951-paper-learning-accelerator-1'}
 
+
+
+# ============================================================================
+# A100 V96.0 STARTUP OPTIMIZER — health-first / lazy background / cached learning
+# ============================================================================
+V960_VERSION = "A100 V96.0 STARTUP OPTIMIZER"
+V960_BACKGROUND_DELAY = max(3, min(120, int(os.getenv("STARTUP_BACKGROUND_DELAY", "12"))))
+V960_WARMUP_BATCH_DELAY = max(0.05, min(5.0, float(os.getenv("STARTUP_WARMUP_BATCH_DELAY", "0.35"))))
+try:
+    from v960_startup_optimizer import StartupState as _V960StartupState, IncrementalFileCache as _V960IncrementalFileCache
+    V960_STARTUP = _V960StartupState(process_started_at=time.time())
+    V960_HISTORY_CACHE = _V960IncrementalFileCache()
+except Exception:
+    V960_STARTUP = None
+    V960_HISTORY_CACHE = None
+
+
+def _v960_state_signature():
+    try:
+        st=os.stat(V91_STATE_FILE)
+        return (int(st.st_mtime_ns), int(st.st_size))
+    except OSError:
+        return (0,0)
+
+
+def _v960_history_rows_uncached():
+    try:
+        return list(_v915_learning_rows())
+    except Exception:
+        return []
+
+
+def _v930_history_rows():
+    """Incremental learning read: recompute only when the schema-1 state file changes."""
+    if V960_HISTORY_CACHE is None:
+        return _v960_history_rows_uncached()
+    return list(V960_HISTORY_CACHE.get(_v960_state_signature(), _v960_history_rows_uncached))
+
+
+def _v960_lazy_background_bootstrap():
+    if V960_STARTUP is not None:
+        V960_STARTUP.phase="HEALTH_READY"
+    time.sleep(V960_BACKGROUND_DELAY)
+    try:
+        if V960_STARTUP is not None:
+            V960_STARTUP.phase="BACKGROUND_START"
+            V960_STARTUP.background_started_at=time.time()
+        # Start low-priority services after the health endpoint and Telegram bootstrap window.
+        v91_start_background_once()
+        time.sleep(V960_WARMUP_BATCH_DELAY)
+        v90_3_start_background_once()
+        time.sleep(V960_WARMUP_BATCH_DELAY)
+        # Warm one cached learning snapshot without touching schema or writing data.
+        _v930_history_rows()
+        if V960_STARTUP is not None:
+            V960_STARTUP.phase="READY"
+            V960_STARTUP.warmup_finished_at=time.time()
+    except Exception as exc:
+        if V960_STARTUP is not None:
+            V960_STARTUP.phase="DEGRADED"
+            V960_STARTUP.warmup_error=f"{type(exc).__name__}: {exc}"[:240]
+        v88_record_error("v960-lazy-bootstrap", exc)
+
+
+def v960_start_background_once():
+    if globals().get("_V960_BACKGROUND_BOOTSTRAP_STARTED"):
+        return
+    globals()["_V960_BACKGROUND_BOOTSTRAP_STARTED"]=True
+    threading.Thread(target=_v960_lazy_background_bootstrap, daemon=True, name="a100-v960-lazy-bootstrap").start()
+
+
+async def startup960_cmd(update, context):
+    snap=V960_STARTUP.snapshot() if V960_STARTUP is not None else {"phase":"FALLBACK","uptime_seconds":0}
+    hits=getattr(V960_HISTORY_CACHE,"hits",0); misses=getattr(V960_HISTORY_CACHE,"misses",0)
+    lines=["🚀 <b>A100 V96.0 STARTUP OPTIMIZER</b>",
+      f"Phase <b>{_v54_escape(str(snap.get('phase','UNKNOWN')))}</b> · Uptime <b>{snap.get('uptime_seconds',0):.0f}s</b>",
+      "Health-first ✅ · Telegram-first ✅ · Lazy background ✅",
+      f"Background delay <b>{V960_BACKGROUND_DELAY}s</b> · Learning cache <b>{hits} hit / {misses} miss</b>",
+      "Schema <b>1 유지</b> · 상태 파일 유지 · 실주문 경로 없음"]
+    if snap.get("warmup_error"):
+        lines.append("⚠️ "+_v54_escape(str(snap['warmup_error'])))
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+V925_COMMAND_USAGE["startup"]="V96 Health-first·지연 로딩·학습 캐시 상태"
+V925_HELP_CATEGORIES.setdefault("system",[])
+if "startup" not in V925_HELP_CATEGORIES["system"]: V925_HELP_CATEGORIES["system"].append("startup")
+V90_COMMAND_REGISTRY["startup"]=startup960_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V91_VERSION=V960_VERSION
+
+
+async def help960_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,'\n'.join([f"🚀 <b>A100 V96.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help925_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🚀 <b>A100 V96.0 HELP</b>","","AI: /aidashboard BTC · /aicore BTC · /aichart · /aiweights BTC · /aistatus · /aiperformance · /aimemory","학습 가속: /aisampling · /paperstatus · /papershadowstatus","안정화: /startup · /health · /selfcheck","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V96"]),parse_mode='HTML')
+
+
+async def commands960_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v96','v960','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V96.0 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands925_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help960_cmd,'commands':commands960_cmd}); V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+_V951_PREFLIGHT_FOR_V960=v91_preflight
+def v91_preflight():
+    base=_V951_PREFLIGHT_FOR_V960(); checks=dict(base.get('checks',{}))
+    for key in ('v951_version_sync','v950_version_sync','v940_version_sync','v931_version_sync'):
+        if key in checks: checks[key]=True
+    checks.update({
+      'v960_module_loaded':V960_STARTUP is not None and V960_HISTORY_CACHE is not None,
+      'v960_health_first':callable(globals().get('start_health_server_once')),
+      'v960_lazy_bootstrap':callable(globals().get('v960_start_background_once')),
+      'v960_incremental_cache':callable(globals().get('_v930_history_rows')),
+      'v960_callback':callable(V90_COMMAND_REGISTRY.get('startup')),
+      'v960_help_sync':'startup' in V925_COMMAND_USAGE and 'startup' in V925_HELP_CATEGORIES.get('system',[]),
+      'v960_schema_preserved':_v91_default_state().get('schema')==1,
+      'v960_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v960_version_sync':V91_VERSION==V960_VERSION,
+      'v960_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v960_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v960-startup-optimizer-1'}
+
+
+def main():
+    # Railway health endpoint is bound before preflight, network warmups, Paper, Shadow, or AI learning.
+    start_health_server_once()
+    if V960_STARTUP is not None:
+        V960_STARTUP.health_started_at=time.time(); V960_STARTUP.phase='HEALTH_READY'
+    print(f"{V960_VERSION} health-first worker starting...", flush=True)
+    pre=v91_preflight()
+    if not pre['ok']:
+        print(json.dumps(pre,ensure_ascii=False,default=str),flush=True)
+        raise RuntimeError('A100 V96 startup preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V96 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    # Background Paper/Shadow/symbol refresh is delayed. Telegram polling starts immediately.
+    v960_start_background_once()
+    if V960_STARTUP is not None:
+        V960_STARTUP.telegram_started_at=time.time(); V960_STARTUP.phase='TELEGRAM_START'
+    try:
+        # Bypass the old wrapper that eagerly starts the Binance symbol refresh thread.
+        asyncio.run(_v90_3_run_bot_base())
+    except KeyboardInterrupt:
+        V91_STOP.set(); print('A100 V96 stopped by signal',flush=True)
+    except Exception as error:
+        V91_STOP.set(); v88_record_error('v960-fatal-main',error); print(traceback.format_exc(),flush=True); raise
+
+
 if __name__ == "__main__":
     main()
