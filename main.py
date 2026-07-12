@@ -24034,5 +24034,576 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+
+# ============================================================================
+# A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
+# 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
+# ============================================================================
+V91_VERSION = "A100 V91.0 AUDITED PAPER TRADING ENGINE"
+V91_STARTED_AT = time.time()
+V91_LOCK = threading.RLock()
+V91_STOP = threading.Event()
+V91_MONITOR_THREAD = None
+V91_WATCHDOG_THREAD = None
+V91_LAST_HEARTBEAT = 0.0
+V91_LAST_MONITOR_AT = 0.0
+V91_MONITOR_ERRORS = 0
+V91_STATE_ERRORS = 0
+
+
+def _v91_bool(name, default=False):
+    raw = os.getenv(name, "1" if default else "0").strip().lower()
+    return raw in {"1", "true", "yes", "on", "enabled"}
+
+
+def _v91_float(name, default, minimum=None, maximum=None):
+    try:
+        value = float(os.getenv(name, str(default)))
+    except Exception:
+        value = float(default)
+    if minimum is not None:
+        value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value
+
+
+def _v91_int(name, default, minimum=None, maximum=None):
+    try:
+        value = int(float(os.getenv(name, str(default))))
+    except Exception:
+        value = int(default)
+    if minimum is not None:
+        value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value
+
+
+def _v91_data_dir():
+    candidates = [
+        os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "").strip(),
+        os.getenv("V91_DATA_DIR", "").strip(),
+        globals().get("V75_DATA_DIR", ""),
+        "/data",
+        os.getcwd(),
+    ]
+    for raw in candidates:
+        if not raw:
+            continue
+        try:
+            path = os.path.abspath(str(raw))
+            os.makedirs(path, exist_ok=True)
+            test = os.path.join(path, ".a100_v91_write_test")
+            with open(test, "w", encoding="utf-8") as fh:
+                fh.write("ok")
+            os.remove(test)
+            return path
+        except Exception:
+            continue
+    return os.getcwd()
+
+
+V91_DATA_DIR = _v91_data_dir()
+V91_STATE_FILE = os.path.join(V91_DATA_DIR, "a100_v91_paper_state.json")
+V91_HEARTBEAT_FILE = os.path.join(V91_DATA_DIR, "a100_v91_heartbeat.json")
+V91_PAPER_ENABLED = _v91_bool("PAPER_TRADING_ENABLED", False)
+V91_AUTO_MONITOR = _v91_bool("PAPER_AUTO_MONITOR", False)
+V91_FEE_RATE = _v91_float("PAPER_FEE_RATE", 0.0004, 0.0, 0.02)
+V91_SLIPPAGE_RATE = _v91_float("PAPER_SLIPPAGE_RATE", 0.0005, 0.0, 0.05)
+V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 3, 1, 20)
+V91_DAILY_LOSS_LIMIT = _v91_float("PAPER_DAILY_LOSS_LIMIT", 100.0, 0.0, 100000000.0)
+V91_DEFAULT_NOTIONAL = _v91_float("PAPER_DEFAULT_NOTIONAL", 100.0, 1.0, 100000000.0)
+V91_DEFAULT_SL_PCT = _v91_float("PAPER_DEFAULT_SL_PCT", 2.0, 0.1, 50.0)
+V91_DEFAULT_TP_PCT = _v91_float("PAPER_DEFAULT_TP_PCT", 4.0, 0.1, 500.0)
+V91_MONITOR_SECONDS = _v91_int("PAPER_MONITOR_SECONDS", 15, 5, 3600)
+V91_HEARTBEAT_SECONDS = _v91_int("WATCHDOG_HEARTBEAT_SECONDS", 30, 10, 3600)
+
+
+def _v91_default_state():
+    return {
+        "schema": 1,
+        "version": V91_VERSION,
+        "enabled": bool(V91_PAPER_ENABLED),
+        "kill_switch": False,
+        "positions": {},
+        "closed": [],
+        "events": [],
+        "daily": {},
+        "updated_at": time.time(),
+        "sequence": 0,
+    }
+
+
+def _v91_normalize_symbol(symbol):
+    token = str(symbol or "").strip().upper().replace("/", "")
+    if token.endswith("USDT"):
+        pair = token
+    else:
+        pair = token + "USDT"
+    if not re.fullmatch(r"[A-Z0-9]{2,20}USDT", pair):
+        raise ValueError("잘못된 심볼 형식")
+    valid = globals().get("V78_VALID_SYMBOLS") or set()
+    if valid and pair not in valid:
+        raise ValueError(f"Binance 유효 심볼이 아님: {pair}")
+    return pair
+
+
+def _v91_price(symbol):
+    pair = _v91_normalize_symbol(symbol)
+    price = 0.0
+    try:
+        price = float(v41_price(pair))
+    except Exception:
+        price = 0.0
+    if not math.isfinite(price) or price <= 0:
+        raise RuntimeError(f"가격 조회 실패: {pair}")
+    return price
+
+
+def _v91_load_state():
+    global V91_STATE_ERRORS
+    with V91_LOCK:
+        if not os.path.exists(V91_STATE_FILE):
+            return _v91_default_state()
+        try:
+            with open(V91_STATE_FILE, "r", encoding="utf-8") as fh:
+                state = json.load(fh)
+            if not isinstance(state, dict) or state.get("schema") != 1:
+                raise ValueError("지원하지 않는 상태 파일")
+            base = _v91_default_state()
+            base.update(state)
+            for key in ("positions", "daily"):
+                if not isinstance(base.get(key), dict):
+                    base[key] = {}
+            for key in ("closed", "events"):
+                if not isinstance(base.get(key), list):
+                    base[key] = []
+            return base
+        except Exception as exc:
+            V91_STATE_ERRORS += 1
+            backup = V91_STATE_FILE + f".corrupt.{int(time.time())}"
+            try:
+                os.replace(V91_STATE_FILE, backup)
+            except Exception:
+                pass
+            v88_record_error("v91-state-load", exc)
+            return _v91_default_state()
+
+
+def _v91_save_state(state):
+    global V91_STATE_ERRORS
+    with V91_LOCK:
+        state["updated_at"] = time.time()
+        state["version"] = V91_VERSION
+        tmp = V91_STATE_FILE + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(state, fh, ensure_ascii=False, indent=2, sort_keys=True)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, V91_STATE_FILE)
+        except Exception as exc:
+            V91_STATE_ERRORS += 1
+            v88_record_error("v91-state-save", exc)
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
+            raise
+
+
+def _v91_today():
+    return datetime.utcnow().strftime("%Y-%m-%d")
+
+
+def _v91_daily(state):
+    key = _v91_today()
+    row = state["daily"].setdefault(key, {"realized_pnl": 0.0, "trades": 0, "wins": 0, "losses": 0})
+    return row
+
+
+def _v91_event(state, kind, payload):
+    state["sequence"] = int(state.get("sequence", 0)) + 1
+    state["events"].append({"seq": state["sequence"], "at": time.time(), "kind": kind, **payload})
+    state["events"] = state["events"][-500:]
+
+
+def _v91_entry_fill(raw, side):
+    slip = raw * V91_SLIPPAGE_RATE
+    return raw + slip if side == "LONG" else raw - slip
+
+
+def _v91_exit_fill(raw, side):
+    slip = raw * V91_SLIPPAGE_RATE
+    return raw - slip if side == "LONG" else raw + slip
+
+
+def _v91_unrealized(position, price):
+    entry = float(position["entry_price"])
+    qty = float(position["qty"])
+    gross = (price - entry) * qty if position["side"] == "LONG" else (entry - price) * qty
+    estimated_exit_fee = price * qty * V91_FEE_RATE
+    return gross - estimated_exit_fee
+
+
+def _v91_open(symbol, side="LONG", notional=None, sl_pct=None, tp_pct=None, source="manual"):
+    pair = _v91_normalize_symbol(symbol)
+    direction = str(side or "LONG").upper()
+    if direction not in {"LONG", "SHORT"}:
+        raise ValueError("방향은 LONG 또는 SHORT")
+    notional = float(notional if notional is not None else V91_DEFAULT_NOTIONAL)
+    sl_pct = float(sl_pct if sl_pct is not None else V91_DEFAULT_SL_PCT)
+    tp_pct = float(tp_pct if tp_pct is not None else V91_DEFAULT_TP_PCT)
+    if notional <= 0 or sl_pct <= 0 or tp_pct <= 0:
+        raise ValueError("금액/손절/익절은 0보다 커야 함")
+    state = _v91_load_state()
+    if not state.get("enabled"):
+        raise RuntimeError("Paper Trading이 꺼져 있음: /paperon")
+    if state.get("kill_switch"):
+        raise RuntimeError("Kill Switch 활성 상태")
+    daily = _v91_daily(state)
+    if V91_DAILY_LOSS_LIMIT > 0 and float(daily.get("realized_pnl", 0)) <= -V91_DAILY_LOSS_LIMIT:
+        raise RuntimeError("일일 손실 한도 도달")
+    if pair in state["positions"]:
+        raise RuntimeError(f"중복 진입 차단: {pair}")
+    if len(state["positions"]) >= V91_MAX_POSITIONS:
+        raise RuntimeError("최대 동시 포지션 도달")
+    raw = _v91_price(pair)
+    entry = _v91_entry_fill(raw, direction)
+    qty = notional / entry
+    entry_fee = notional * V91_FEE_RATE
+    if direction == "LONG":
+        stop = entry * (1 - sl_pct / 100.0)
+        target = entry * (1 + tp_pct / 100.0)
+    else:
+        stop = entry * (1 + sl_pct / 100.0)
+        target = entry * (1 - tp_pct / 100.0)
+    pos = {
+        "id": f"P{int(time.time()*1000)}-{state.get('sequence',0)+1}",
+        "symbol": pair,
+        "side": direction,
+        "entry_price": entry,
+        "market_price_at_entry": raw,
+        "qty": qty,
+        "notional": notional,
+        "entry_fee": entry_fee,
+        "stop_price": stop,
+        "target_price": target,
+        "sl_pct": sl_pct,
+        "tp_pct": tp_pct,
+        "opened_at": time.time(),
+        "source": source,
+        "status": "OPEN",
+    }
+    state["positions"][pair] = pos
+    _v91_event(state, "OPEN", {"symbol": pair, "side": direction, "entry": entry, "notional": notional, "source": source})
+    _v91_save_state(state)
+    return pos
+
+
+def _v91_close(symbol, reason="MANUAL", price=None):
+    pair = _v91_normalize_symbol(symbol)
+    state = _v91_load_state()
+    pos = state["positions"].get(pair)
+    if not pos:
+        raise RuntimeError(f"열린 포지션 없음: {pair}")
+    raw = float(price) if price is not None else _v91_price(pair)
+    fill = _v91_exit_fill(raw, pos["side"])
+    qty = float(pos["qty"])
+    gross = (fill - float(pos["entry_price"])) * qty if pos["side"] == "LONG" else (float(pos["entry_price"]) - fill) * qty
+    exit_fee = fill * qty * V91_FEE_RATE
+    pnl = gross - float(pos.get("entry_fee", 0.0)) - exit_fee
+    closed = dict(pos)
+    closed.update({
+        "status": "CLOSED", "exit_price": fill, "market_price_at_exit": raw,
+        "exit_fee": exit_fee, "gross_pnl": gross, "realized_pnl": pnl,
+        "closed_at": time.time(), "close_reason": reason,
+    })
+    state["positions"].pop(pair, None)
+    state["closed"].append(closed)
+    state["closed"] = state["closed"][-1000:]
+    daily = _v91_daily(state)
+    daily["realized_pnl"] = float(daily.get("realized_pnl", 0.0)) + pnl
+    daily["trades"] = int(daily.get("trades", 0)) + 1
+    if pnl >= 0:
+        daily["wins"] = int(daily.get("wins", 0)) + 1
+    else:
+        daily["losses"] = int(daily.get("losses", 0)) + 1
+    if V91_DAILY_LOSS_LIMIT > 0 and daily["realized_pnl"] <= -V91_DAILY_LOSS_LIMIT:
+        state["kill_switch"] = True
+        _v91_event(state, "KILL_SWITCH", {"reason": "DAILY_LOSS_LIMIT", "pnl": daily["realized_pnl"]})
+    _v91_event(state, "CLOSE", {"symbol": pair, "reason": reason, "pnl": pnl, "exit": fill})
+    _v91_save_state(state)
+    return closed
+
+
+def _v91_monitor_once():
+    global V91_LAST_MONITOR_AT, V91_MONITOR_ERRORS
+    V91_LAST_MONITOR_AT = time.time()
+    state = _v91_load_state()
+    if not state.get("enabled") or state.get("kill_switch"):
+        return []
+    closed = []
+    for pair, pos in list(state.get("positions", {}).items()):
+        try:
+            price = _v91_price(pair)
+            side = pos["side"]
+            hit_stop = price <= float(pos["stop_price"]) if side == "LONG" else price >= float(pos["stop_price"])
+            hit_target = price >= float(pos["target_price"]) if side == "LONG" else price <= float(pos["target_price"])
+            if hit_stop:
+                closed.append(_v91_close(pair, "STOP_LOSS", price))
+            elif hit_target:
+                closed.append(_v91_close(pair, "TAKE_PROFIT", price))
+        except Exception as exc:
+            V91_MONITOR_ERRORS += 1
+            v88_record_error(f"v91-monitor:{pair}", exc)
+    return closed
+
+
+def _v91_monitor_loop():
+    while not V91_STOP.wait(V91_MONITOR_SECONDS):
+        try:
+            rows = _v91_monitor_once()
+            for row in rows:
+                try:
+                    send(f"🧪 <b>Paper 청산</b>\n{row['symbol']} {row['side']}\n사유 {row['close_reason']}\n손익 {row['realized_pnl']:+.4f} USDT")
+                except Exception:
+                    pass
+        except Exception as exc:
+            v88_record_error("v91-monitor-loop", exc)
+
+
+def _v91_write_heartbeat():
+    global V91_LAST_HEARTBEAT
+    V91_LAST_HEARTBEAT = time.time()
+    state = _v91_load_state()
+    payload = {
+        "version": V91_VERSION,
+        "at": V91_LAST_HEARTBEAT,
+        "pid": os.getpid(),
+        "paper_enabled": bool(state.get("enabled")),
+        "kill_switch": bool(state.get("kill_switch")),
+        "open_positions": len(state.get("positions", {})),
+        "monitor_alive": bool(V91_MONITOR_THREAD and V91_MONITOR_THREAD.is_alive()),
+        "telegram_dispatch_count": globals().get("V90_1_DISPATCH_COUNT", 0),
+        "recent_errors": len(globals().get("V88_RECENT_ERRORS", [])),
+    }
+    tmp = V91_HEARTBEAT_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        fh.flush(); os.fsync(fh.fileno())
+    os.replace(tmp, V91_HEARTBEAT_FILE)
+
+
+def _v91_watchdog_loop():
+    while not V91_STOP.wait(V91_HEARTBEAT_SECONDS):
+        try:
+            _v91_write_heartbeat()
+        except Exception as exc:
+            v88_record_error("v91-watchdog", exc)
+
+
+def v91_start_background_once():
+    global V91_MONITOR_THREAD, V91_WATCHDOG_THREAD
+    with V91_LOCK:
+        if V91_WATCHDOG_THREAD is None or not V91_WATCHDOG_THREAD.is_alive():
+            V91_WATCHDOG_THREAD = threading.Thread(target=_v91_watchdog_loop, name="a100-v91-watchdog", daemon=True)
+            V91_WATCHDOG_THREAD.start()
+        if V91_AUTO_MONITOR and (V91_MONITOR_THREAD is None or not V91_MONITOR_THREAD.is_alive()):
+            V91_MONITOR_THREAD = threading.Thread(target=_v91_monitor_loop, name="a100-v91-paper-monitor", daemon=True)
+            V91_MONITOR_THREAD.start()
+    try:
+        _v91_write_heartbeat()
+    except Exception as exc:
+        v88_record_error("v91-heartbeat-start", exc)
+
+
+def _v91_fmt_price(value):
+    value = float(value)
+    if value >= 1000: return f"{value:,.2f}"
+    if value >= 1: return f"{value:.4f}"
+    return f"{value:.8f}"
+
+
+async def paperstatus91_cmd(update, context):
+    state = _v91_load_state(); day = _v91_daily(state)
+    lines = [
+        "🧪 <b>A100 V91 Paper Trading</b>",
+        f"상태: <b>{'ON' if state.get('enabled') else 'OFF'}</b>",
+        f"Kill Switch: <b>{'ON' if state.get('kill_switch') else 'OFF'}</b>",
+        f"열린 포지션: <b>{len(state.get('positions', {}))}/{V91_MAX_POSITIONS}</b>",
+        f"오늘 실현손익: <b>{float(day.get('realized_pnl',0)):+.4f} USDT</b>",
+        f"오늘 거래: {day.get('trades',0)}회 / 승 {day.get('wins',0)} / 패 {day.get('losses',0)}",
+        f"수수료 {V91_FEE_RATE*100:.04f}% / 슬리피지 {V91_SLIPPAGE_RATE*100:.04f}%",
+        f"일일 손실한도: {V91_DAILY_LOSS_LIMIT:.2f} USDT",
+        f"자동감시: {'ON' if V91_AUTO_MONITOR else 'OFF'} / {V91_MONITOR_SECONDS}초",
+        f"저장경로: {_v54_escape(V91_STATE_FILE)}",
+        "실계좌 주문: <b>미구현·비활성</b>",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def paperon91_cmd(update, context):
+    state = _v91_load_state(); state["enabled"] = True; _v91_event(state, "ENABLE", {"by": "telegram"}); _v91_save_state(state)
+    await v90_1_safe_reply(update, "✅ Paper Trading 활성화\n실제 주문은 발생하지 않습니다.")
+
+
+async def paperoff91_cmd(update, context):
+    state = _v91_load_state(); state["enabled"] = False; _v91_event(state, "DISABLE", {"by": "telegram"}); _v91_save_state(state)
+    await v90_1_safe_reply(update, "⏸ Paper Trading 신규 진입/자동감시 비활성화\n기존 가상 포지션은 유지됩니다.")
+
+
+async def paperopen91_cmd(update, context):
+    args = list(getattr(context, "args", []) or [])
+    if not args:
+        return await v90_1_safe_reply(update, "사용법: /paperopen BTC LONG 100 2 4")
+    try:
+        pos = _v91_open(args[0], args[1] if len(args)>1 else "LONG", float(args[2]) if len(args)>2 else None, float(args[3]) if len(args)>3 else None, float(args[4]) if len(args)>4 else None)
+        text = (f"🧪 <b>Paper 진입</b>\n{pos['symbol']} {pos['side']}\n"
+                f"진입 {_v91_fmt_price(pos['entry_price'])}\n금액 {pos['notional']:.2f} USDT\n"
+                f"손절 {_v91_fmt_price(pos['stop_price'])}\n익절 {_v91_fmt_price(pos['target_price'])}")
+        await v90_1_safe_reply(update, text, parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Paper 진입 실패: {exc}")
+
+
+async def paperclose91_cmd(update, context):
+    args = list(getattr(context, "args", []) or [])
+    if not args:
+        return await v90_1_safe_reply(update, "사용법: /paperclose BTC")
+    try:
+        row = _v91_close(args[0], "MANUAL")
+        await v90_1_safe_reply(update, f"✅ Paper 청산 {row['symbol']}\n손익 {row['realized_pnl']:+.4f} USDT")
+    except Exception as exc:
+        await v90_1_safe_reply(update, f"❌ Paper 청산 실패: {exc}")
+
+
+async def paperpositions91_cmd(update, context):
+    state = _v91_load_state(); positions = state.get("positions", {})
+    if not positions:
+        return await v90_1_safe_reply(update, "열린 Paper 포지션이 없습니다.")
+    lines = ["📌 <b>Paper Positions</b>"]
+    for pair, pos in positions.items():
+        try:
+            price = _v91_price(pair); pnl = _v91_unrealized(pos, price)
+            lines.append(f"\n<b>{pair} {pos['side']}</b>\n진입 {_v91_fmt_price(pos['entry_price'])} / 현재 {_v91_fmt_price(price)}\n미실현 {pnl:+.4f} USDT\nSL {_v91_fmt_price(pos['stop_price'])} / TP {_v91_fmt_price(pos['target_price'])}")
+        except Exception as exc:
+            lines.append(f"\n<b>{pair}</b> 가격 오류: {_v54_escape(str(exc))}")
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def paperhistory91_cmd(update, context):
+    state = _v91_load_state(); rows = list(state.get("closed", []))[-10:]
+    if not rows:
+        return await v90_1_safe_reply(update, "Paper 청산 기록이 없습니다.")
+    lines = ["📚 <b>Paper 최근 기록</b>"]
+    for row in reversed(rows):
+        lines.append(f"{row['symbol']} {row['side']} | {row.get('close_reason')} | {float(row.get('realized_pnl',0)):+.4f} USDT")
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def paperkill91_cmd(update, context):
+    state = _v91_load_state(); state["kill_switch"] = True; state["enabled"] = False; _v91_event(state, "KILL_SWITCH", {"reason": "MANUAL"}); _v91_save_state(state)
+    await v90_1_safe_reply(update, "🛑 Paper Kill Switch 활성화\n신규 진입 및 자동감시가 중단됩니다.")
+
+
+async def paperresetkill91_cmd(update, context):
+    state = _v91_load_state(); state["kill_switch"] = False; _v91_event(state, "KILL_RESET", {"by": "telegram"}); _v91_save_state(state)
+    await v90_1_safe_reply(update, "✅ Paper Kill Switch 해제\n/paperon 으로 다시 활성화하세요.")
+
+
+async def watchdog91_cmd(update, context):
+    state = _v91_load_state()
+    age = time.time() - V91_LAST_HEARTBEAT if V91_LAST_HEARTBEAT else -1
+    lines = [
+        "💓 <b>A100 V91 Railway Watchdog</b>",
+        f"가동시간: {int(time.time()-V91_STARTED_AT)}초",
+        f"Heartbeat age: {age:.1f}초",
+        f"Watchdog thread: {'✅' if V91_WATCHDOG_THREAD and V91_WATCHDOG_THREAD.is_alive() else '❌'}",
+        f"Paper monitor: {'✅' if V91_MONITOR_THREAD and V91_MONITOR_THREAD.is_alive() else '비활성'}",
+        f"Monitor errors: {V91_MONITOR_ERRORS}",
+        f"State errors: {V91_STATE_ERRORS}",
+        f"열린 포지션: {len(state.get('positions',{}))}",
+        f"저장 경로: {_v54_escape(V91_DATA_DIR)}",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+# 기존 104개 명령은 그대로 보존하고 Paper/Watchdog 명령만 추가한다.
+V90_COMMAND_REGISTRY.update({
+    "paperstatus": paperstatus91_cmd,
+    "paperon": paperon91_cmd,
+    "paperoff": paperoff91_cmd,
+    "paperopen": paperopen91_cmd,
+    "paperclose": paperclose91_cmd,
+    "paperpositions": paperpositions91_cmd,
+    "paperhistory": paperhistory91_cmd,
+    "paperkill": paperkill91_cmd,
+    "paperresetkill": paperresetkill91_cmd,
+    "watchdog": watchdog91_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base = v90_4_preflight()
+    state = _v91_load_state()
+    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog"}
+    checks = {
+        "base_v90_4": bool(base.get("ok")),
+        "v91_callbacks": all(callable(V90_COMMAND_REGISTRY.get(name)) for name in v91_commands),
+        "state_directory": os.path.isdir(V91_DATA_DIR) and os.access(V91_DATA_DIR, os.W_OK),
+        "state_shape": isinstance(state.get("positions"), dict) and isinstance(state.get("closed"), list),
+        "live_trading_absent": "BINANCE_SECRET" not in globals() and not callable(globals().get("place_live_order")),
+        "excluded_legacy_not_added": all(name not in V90_COMMAND_REGISTRY for name in {"arkm","syn","sent","futures"}),
+    }
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base}
+
+
+# V91 명령 추가 후 Application 빌더를 최종 재정의한다.
+def build_v44_application(token):
+    pre = v91_preflight()
+    if not pre["ok"]:
+        failed = [name for name, ok in pre["checks"].items() if not ok]
+        raise RuntimeError("V91 preflight failed: " + ",".join(failed))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V91 dispatcher count: 1", flush=True)
+    print("A100 V91 preflight: OK", flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    pre = v91_preflight()
+    print(f"{V91_VERSION} worker running...", flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}", flush=True)
+    if not pre["ok"]:
+        print(json.dumps(pre, ensure_ascii=False, default=str), flush=True)
+        raise RuntimeError("A100 V91 startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        print("A100 V91 stopped by signal", flush=True)
+    except Exception as error:
+        V91_STOP.set()
+        v88_record_error("v91-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
+
 if __name__ == "__main__":
     main()
