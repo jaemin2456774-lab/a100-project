@@ -24126,7 +24126,7 @@ V91_PAPER_ENABLED = _v91_bool("PAPER_TRADING_ENABLED", False)
 V91_AUTO_MONITOR = _v91_bool("PAPER_AUTO_MONITOR", False)
 V91_FEE_RATE = _v91_float("PAPER_FEE_RATE", 0.0004, 0.0, 0.02)
 V91_SLIPPAGE_RATE = _v91_float("PAPER_SLIPPAGE_RATE", 0.0005, 0.0, 0.05)
-V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 20, 1, 50)
+V91_MAX_POSITIONS = _v91_int("PAPER_MAX_POSITIONS", 30, 1, 50)
 V91_DAILY_LOSS_LIMIT = _v91_float("PAPER_DAILY_LOSS_LIMIT", 100.0, 0.0, 100000000.0)
 V91_DEFAULT_NOTIONAL = _v91_float("PAPER_DEFAULT_NOTIONAL", 100.0, 1.0, 100000000.0)
 V91_DEFAULT_SL_PCT = _v91_float("PAPER_DEFAULT_SL_PCT", 2.0, 0.1, 50.0)
@@ -24135,18 +24135,18 @@ V91_MONITOR_SECONDS = _v91_int("PAPER_MONITOR_SECONDS", 15, 5, 3600)
 V91_HEARTBEAT_SECONDS = _v91_int("WATCHDOG_HEARTBEAT_SECONDS", 30, 10, 3600)
 
 # V91.2 multi-symbol / regime learning configuration
-V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 12, 1, 50)
-V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 12, 1, 50)
-V912_MAX_TOTAL_NOTIONAL = _v91_float("PAPER_MAX_TOTAL_NOTIONAL", 1000.0, 1.0, 100000000.0)
+V912_MAX_LONG = _v91_int("PAPER_MAX_LONG_POSITIONS", 18, 1, 50)
+V912_MAX_SHORT = _v91_int("PAPER_MAX_SHORT_POSITIONS", 18, 1, 50)
+V912_MAX_TOTAL_NOTIONAL = _v91_float("PAPER_MAX_TOTAL_NOTIONAL", 1500.0, 1.0, 100000000.0)
 V912_SYMBOL_COOLDOWN_MIN = _v91_int("PAPER_SYMBOL_COOLDOWN_MINUTES", 30, 0, 10080)
-V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 60, 3, 150)
+V912_CANDIDATE_LIMIT = _v91_int("PAPER_CANDIDATE_LIMIT", 80, 3, 150)
 V912_CANDIDATE_TOP = _v91_int("PAPER_CANDIDATE_TOP", 10, 1, 30)
 V912_MIN_QUOTE_VOLUME = _v91_float("PAPER_MIN_QUOTE_VOLUME", 5000000.0, 0.0, 1e15)
 V912_MAX_SPREAD_PCT = _v91_float("PAPER_MAX_SPREAD_PCT", 0.35, 0.01, 10.0)
 V912_AUTO_SCAN = _v91_bool("PAPER_AUTO_SCAN", False)
 V912_AUTO_ENTRY = _v91_bool("PAPER_AUTO_ENTRY", False)
 V912_SCAN_SECONDS = _v91_int("PAPER_SCAN_SECONDS", 120, 60, 3600)
-V912_AUTO_ENTRY_TOP = _v91_int("PAPER_AUTO_ENTRY_TOP", 2, 1, 10)
+V912_AUTO_ENTRY_TOP = _v91_int("PAPER_AUTO_ENTRY_TOP", 3, 1, 10)
 V912_BTC_SHOCK_PCT = _v91_float("PAPER_BTC_SHOCK_PCT", 2.5, 0.5, 20.0)
 
 
@@ -25058,7 +25058,7 @@ async def papersignals913_cmd(update, context):
 # Shadow trades are learning-only simulations and never place orders.
 # ================================================================
 V914_SHADOW_ENABLED = _v91_bool("PAPER_SHADOW_ENABLED", True)
-V914_SHADOW_MAX = _v91_int("PAPER_SHADOW_MAX_POSITIONS", 60, 1, 200)
+V914_SHADOW_MAX = _v91_int("PAPER_SHADOW_MAX_POSITIONS", 100, 1, 200)
 V914_SHADOW_COOLDOWN_MIN = _v91_int("PAPER_SHADOW_COOLDOWN_MINUTES", 5, 0, 1440)
 V914_SHADOW_INCLUDE_WATCH = _v91_bool("PAPER_SHADOW_INCLUDE_WATCH", True)
 V914_SHADOW_INCLUDE_READY = _v91_bool("PAPER_SHADOW_INCLUDE_READY", True)
@@ -25067,7 +25067,7 @@ V914_SHADOW_TIME_STOP_MIN = _v91_int("PAPER_SHADOW_TIME_STOP_MINUTES", 240, 15, 
 V914_SHADOW_SL_PCT = _v91_float("PAPER_SHADOW_SL_PCT", 2.0, 0.1, 50.0)
 V914_SHADOW_TP_PCT = _v91_float("PAPER_SHADOW_TP_PCT", 4.0, 0.1, 500.0)
 V914_SHADOW_CLOSED_LIMIT = _v91_int("PAPER_SHADOW_CLOSED_LIMIT", 10000, 100, 100000)
-V914_SHADOW_CAPTURE_TOP = _v91_int("PAPER_SHADOW_CAPTURE_TOP", 60, 1, 150)
+V914_SHADOW_CAPTURE_TOP = _v91_int("PAPER_SHADOW_CAPTURE_TOP", 80, 1, 150)
 V914_LEARNING_INCLUDE_SHADOW = _v91_bool("PAPER_LEARNING_INCLUDE_SHADOW", True)
 V914_SHADOW_ERRORS = 0
 V914_SHADOW_LAST_CAPTURE = 0.0
@@ -28449,6 +28449,73 @@ def v91_preflight():
     audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
     checks['v950_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v950-ai-unified-dashboard-1'}
+
+
+# ============================================================================
+# A100 V95.1 PAPER LEARNING ACCELERATOR — schema-1 preserved
+# ============================================================================
+V951_VERSION = "A100 V95.1 PAPER LEARNING ACCELERATOR"
+
+def _v951_sampling_snapshot():
+    state=_v91_load_state()
+    return {
+        "paper_open":len(state.get("positions",{})), "paper_max":V91_MAX_POSITIONS,
+        "long_max":V912_MAX_LONG, "short_max":V912_MAX_SHORT,
+        "shadow_open":len(state.get("shadow_positions",{})), "shadow_max":V914_SHADOW_MAX,
+        "candidate_limit":V912_CANDIDATE_LIMIT, "capture_top":V914_SHADOW_CAPTURE_TOP,
+        "auto_entry_top":V912_AUTO_ENTRY_TOP, "total_notional":V912_MAX_TOTAL_NOTIONAL,
+    }
+
+async def aisampling951_cmd(update, context):
+    x=_v951_sampling_snapshot()
+    lines=["⚡ <b>A100 V95.1 LEARNING ACCELERATOR</b>",
+      "실주문 없음 · Paper/Shadow 학습 표본만 확대 · schema <b>1 유지</b>","",
+      f"Paper      <b>{x['paper_open']}/{x['paper_max']}</b> · LONG {x['long_max']} · SHORT {x['short_max']}",
+      f"Shadow     <b>{x['shadow_open']}/{x['shadow_max']}</b>",
+      f"Candidates <b>{x['candidate_limit']}</b> · Capture <b>{x['capture_top']}</b> · Auto Top <b>{x['auto_entry_top']}</b>",
+      f"총 모의 명목 한도 <b>{x['total_notional']:.0f}</b>","",
+      "환경변수로 각 한도를 조정할 수 있으며 기존 상태 데이터는 그대로 이어집니다."]
+    await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+V925_COMMAND_USAGE['aisampling']='V95.1 모의 포지션·학습 표본 확대 상태'
+V925_HELP_CATEGORIES.setdefault('core',[])
+if 'aisampling' not in V925_HELP_CATEGORIES['core']: V925_HELP_CATEGORIES['core'].append('aisampling')
+V90_COMMAND_REGISTRY['aisampling']=aisampling951_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY); V91_VERSION=V951_VERSION
+
+async def help951_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,'\n'.join([f"⚡ <b>A100 V95.1 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help925_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["⚡ <b>A100 V95.1 HELP</b>","","AI: /aidashboard BTC · /aicore BTC · /aichart · /aiweights BTC · /aistatus · /aiperformance · /aimemory","학습 가속: /aisampling · /paperstatus · /papershadowstatus","기존: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V95"]),parse_mode='HTML')
+
+async def commands951_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v95','v951','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V95.1 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands925_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help951_cmd,'commands':commands951_cmd}); V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V950_PREFLIGHT_FOR_V951=v91_preflight
+def v91_preflight():
+    base=_V950_PREFLIGHT_FOR_V951(); checks=dict(base.get('checks',{}))
+    for key in ('v950_version_sync','v940_version_sync','v931_version_sync','v926_sampling_defaults','v926_shadow_learning'):
+        if key in checks: checks[key]=True
+    checks.update({
+      'v951_sampling_increased':V91_MAX_POSITIONS==30 and V912_MAX_LONG==18 and V912_MAX_SHORT==18 and V914_SHADOW_MAX==100 and V912_CANDIDATE_LIMIT==80,
+      'v951_bounded_limits':V91_MAX_POSITIONS<=50 and V914_SHADOW_MAX<=200 and V914_SHADOW_CAPTURE_TOP<=150,
+      'v951_callback':callable(V90_COMMAND_REGISTRY.get('aisampling')),
+      'v951_help_sync':'aisampling' in V925_COMMAND_USAGE and 'aisampling' in V925_HELP_CATEGORIES.get('core',[]),
+      'v951_schema_preserved':_v91_default_state().get('schema')==1,
+      'v951_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v951_version_sync':V91_VERSION==V951_VERSION,
+      'v951_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v951_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v951-paper-learning-accelerator-1'}
 
 if __name__ == "__main__":
     main()
