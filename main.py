@@ -29909,5 +29909,68 @@ def v91_preflight():
  audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1070_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
  return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1070-autonomous-market-intelligence-1'}
 
+
+# ============================================================================
+# A100 V108.0 PATTERN RECOGNITION INTELLIGENCE
+# ============================================================================
+V1080_VERSION="A100 V108.0 PATTERN RECOGNITION INTELLIGENCE DEVELOPMENT"
+try:
+ from v1080_pattern_recognition_intelligence import build_pattern_library as _v108_lib,detect_pattern as _v108_detect,pattern_stats as _v108_stats,shadow_history as _v108_shadow,dna_quality as _v108_dna,market_memory as _v108_memory,intelligence_cycle as _v108_cycle
+except Exception:
+ _v108_lib=_v108_detect=_v108_stats=_v108_shadow=_v108_dna=_v108_memory=_v108_cycle=None
+
+def _v108_sync():
+ st,info,live=_v107_sync();d=_v108_cycle(st);_v101_save(V1010_STATE_FILE,st);info['v108']=d;return st,info,live
+
+async def patternlibrary1080_cmd(update,context):
+ st,info,_=_v108_sync();x=info['v108']['stats'];lines=["🧬 <b>A100 V108.0 PATTERN LIBRARY</b>",f"패턴 {x['patterns']}개 · 명명 완료 {x['named']}개",f"종료 표본 {x['resolved']}건 · 승률 {x['win_rate']:.1f}%",""]+[f"• {r['pattern_id']} · {r['name']} · {r['samples']}건 · Q {r['quality']:.1f}" for r in x['top']]
+ if not x['top']:lines.append('패턴 생성에 필요한 관찰 표본이 부족합니다.')
+ await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def patterndetect1080_cmd(update,context):
+ st,info,_=_v108_sync();sym=_v103_symbol(context);x=_v108_detect(st,sym);await v90_1_safe_reply(update,'\n'.join(["🔎 <b>A100 V108.0 PATTERN DETECTOR</b>",f"{x['symbol']} · <b>{x['name']}</b>",f"Pattern ID {x['pattern_id']} · Confidence {x['confidence']:.1f}%",f"근거 {', '.join(x.get('evidence') or []) or '없음'}"]),parse_mode='HTML')
+async def patternstats1080_cmd(update,context):
+ st,info,_=_v108_sync();x=info['v108']['stats'];await v90_1_safe_reply(update,'\n'.join(["📊 <b>A100 V108.0 PATTERN STATS</b>",f"전체 {x['patterns']} · 명명 {x['named']} · 미분류 {x['patterns']-x['named']}",f"검증 표본 {x['resolved']} · 통합 승률 {x['win_rate']:.1f}%"]),parse_mode='HTML')
+async def shadowhistory1080_cmd(update,context):
+ st,info,_=_v108_sync();x=info['v108']['shadow'];lines=["🌑 <b>A100 V108.0 SHADOW HISTORY</b>",f"누적 Shadow 학습 {x['total']}건",""]+[f"#{r['no']} {r['symbol']} {r['side']} · {r['result']} · {r['pattern']} ({r['pattern_id']})" for r in x['rows']]
+ if not x['rows']:lines.append('저장된 Shadow 종료 표본이 없습니다.')
+ await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def dnaquality1080_cmd(update,context):
+ st,info,_=_v108_sync();x=info['v108']['dna_quality'];lines=["💎 <b>A100 V108.0 DNA QUALITY</b>",f"평가 DNA {x['total']}개 · A등급 {x['a_grade']}개",""]+[f"• {r['dna_id']} · {r['kind']} · {r['grade']} · Q {r['quality']:.1f} · {r['samples']}건" for r in x['rows']]
+ if not x['rows']:lines.append('평가할 DNA가 아직 없습니다.')
+ await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+async def marketmemory1080_cmd(update,context):
+ st,info,_=_v108_sync();x=info['v108']['memory'];await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V108.0 MARKET MEMORY</b>",f"누적 기억 {x['total']}건 · 이번 신규 {x['added']}건",f"종목 {x['symbols']}개 · 패턴 {x['patterns']}개","","※ 15분 단위 중복을 제거한 시장 관찰 기억입니다."]),parse_mode='HTML')
+async def intelligence1080_cmd(update,context):
+ st,info,_=_v108_sync();d=info['v108'];x=d['intelligence'];await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V108.0 PATTERN INTELLIGENCE</b>",f"Intelligence Score <b>{x['score']:.1f}</b> · Level {x['level']}",f"Patterns {x['patterns']} · Named {x['named_ratio']:.1f}%",f"Shadow {x['shadow']} · DNA {x['dna']} · Memory {x['memory']}",f"Pattern Win Rate {d['stats']['win_rate']:.1f}%","","※ 패턴 인식·학습·추천 전용이며 실주문 설정을 변경하지 않습니다."]),parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'patternlibrary':'AI 패턴 지식 라이브러리','patterndetect':'종목 최신 패턴 자동 식별','patternstats':'패턴 검증 통계','shadowhistory':'Shadow 학습 상세 이력','dnaquality':'DNA 품질 점수와 등급','marketmemory':'시장 패턴 장기 기억','intelligence':'V108 패턴 지능 통합 현황'})
+for _c in ('patternlibrary','patterndetect','patternstats','shadowhistory','dnaquality','marketmemory','intelligence'):
+ if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'patternlibrary':patternlibrary1080_cmd,'patterndetect':patterndetect1080_cmd,'patternstats':patternstats1080_cmd,'shadowhistory':shadowhistory1080_cmd,'dnaquality':dnaquality1080_cmd,'marketmemory':marketmemory1080_cmd,'intelligence':intelligence1080_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V1080_VERSION
+
+async def help1080_cmd(update,context):
+ req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+ if req in V925_HELP_CATEGORIES:return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V108.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+ if req:return await help1070_cmd(update,context)
+ await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V108.0 HELP</b>","","Pattern: /patternlibrary · /patterndetect BTC · /patternstats","Memory: /shadowhistory · /dnaquality · /marketmemory","Dashboard: /intelligence","Autonomous: /automarketscan · /autonomousscheduler","","전체 목록: /commands V108"]),parse_mode='HTML')
+async def commands1080_cmd(update,context):
+ req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+ if req in {'v108','v1080','all','전체'}:
+  names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V108.0 전체 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+  for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+  return
+ return await commands1070_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help1080_cmd,'commands':commands1080_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1070_PREFLIGHT_FOR_V1080=v91_preflight
+def v91_preflight():
+ base=_V1070_PREFLIGHT_FOR_V1080();checks=dict(base.get('checks',{}));checks['v1070_version_sync']=True
+ required={'patternlibrary','patterndetect','patternstats','shadowhistory','dnaquality','marketmemory','intelligence','help','commands'}
+ funcs=(_v108_lib,_v108_detect,_v108_stats,_v108_shadow,_v108_dna,_v108_memory,_v108_cycle)
+ checks.update({'v1080_module_loaded':all(callable(x) for x in funcs),'v1080_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v1080_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),'v1080_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),'v1080_version_sync':V91_VERSION==V1080_VERSION,'v1080_schema_preserved':_v91_default_state().get('schema')==1,'v1080_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v1080_shadow_limit_unchanged':V914_SHADOW_MAX==60,'v1080_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+ audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY))};checks['v1080_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+ return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'paper_state_file':V91_STATE_FILE,'learning_state_file':V1010_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v1080-pattern-recognition-intelligence-1'}
+
 if __name__ == "__main__":
     main()

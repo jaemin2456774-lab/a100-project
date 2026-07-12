@@ -1,7 +1,7 @@
 {
-  "release": "A100 V107.0 AUTONOMOUS MARKET INTELLIGENCE DEVELOPMENT",
+  "release": "A100 V108.0 PATTERN RECOGNITION INTELLIGENCE DEVELOPMENT",
   "created_at": "2026-07-13",
-  "baseline": "V106.0 Real-Time Intelligence Engine Development",
+  "baseline": "V107.0 Autonomous Market Intelligence Development",
   "schema": 1,
   "paper_max_positions": 20,
   "shadow_max_positions": 60,
@@ -20,7 +20,7 @@
     {
       "path": "README.md",
       "size": 315,
-      "sha256": "d1cd5aceaed4c92cd12d8877ae432958064a96d9a085124ee5793d5da4f4fc7f"
+      "sha256": "35675adfa9ea18ef0c1dfb2948ff473f14323572ac8a644d94c2817f79a051e9"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -51,6 +51,11 @@
       "path": "docs/CHANGELOG_V106_0.md",
       "size": 391,
       "sha256": "9767fdb73733676f10b3c6d3e790ef0deeca44993aaa2dc8377b44a1bc671d16"
+    },
+    {
+      "path": "docs/CHANGELOG_V108_0.md",
+      "size": 167,
+      "sha256": "959ec33a0ab67283d9e72e0227eda6b973106a3735d05fcc01022d3e030e77a1"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -118,6 +123,11 @@
       "sha256": "4f6d39d6a15af8cd661fd33f9c70017196baa2d7c1f3ee3ceb1925fa97005807"
     },
     {
+      "path": "docs/DEVELOPMENT_BACKLOG_V108_0.md",
+      "size": 217,
+      "sha256": "042ccfb71323e6529e802f37c5187a7ac6688bd57a06dccc8198dc36e6fc5f8b"
+    },
+    {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
       "size": 736,
       "sha256": "236de097103fe60627f3e4b0d5726e7bcb8377ff9e1b8cef372f7775cbf6d590"
@@ -168,6 +178,11 @@
       "sha256": "d67ee647a51b64757eec03f288f441bd597bff1fc907fae69de92d1979534a16"
     },
     {
+      "path": "docs/RELEASE_NOTES_V108_0.md",
+      "size": 395,
+      "sha256": "ac8ab12cbd69a5d3e90e8f38df15e8137296421455b41d520c2169568932d82d"
+    },
+    {
       "path": "docs/TEST_REPORT_V101_0.md",
       "size": 223,
       "sha256": "28bdb5698640d963354a53b4399571145d379b73034ef4eb9952e6ba8ca0ad0f"
@@ -201,6 +216,11 @@
       "path": "docs/TEST_REPORT_V107_0.md",
       "size": 405,
       "sha256": "11779cb644092c59ec2f8e3b85414e5cf271291775e4c8d80b2a9cfd924b6d76"
+    },
+    {
+      "path": "docs/TEST_REPORT_V108_0.md",
+      "size": 407,
+      "sha256": "e1b4f63256d44ef36aa33cf1b21efa32457f78a47cead26286bdd829f231a2a1"
     },
     {
       "path": "docs/TEST_REPORT_V94_0.md",
@@ -239,8 +259,8 @@
     },
     {
       "path": "main.py",
-      "size": 1343365,
-      "sha256": "3c9d3828809f00c29bc45e5e203501cd07c1f7ff379a337435e2f913592663cd"
+      "size": 1351311,
+      "sha256": "6a6725e36073abeb059bfe937f0b142d3cdcca5f4a4a7d97a0c171380602304e"
     },
     {
       "path": "railway.json",
@@ -286,6 +306,11 @@
       "path": "tests/test_v1070_autonomous_market_intelligence.py",
       "size": 439,
       "sha256": "53d14b6ef043235f4189764ac82f15b774f1270d5f86ae6f129c672388b32129"
+    },
+    {
+      "path": "tests/test_v1080_pattern_recognition_intelligence.py",
+      "size": 859,
+      "sha256": "f447b69a83668dfa4617eef70336b3798c3964dbad8ffaf0f580f91d1d90a5b0"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -443,6 +468,11 @@
       "sha256": "de7682a411f90622ae2e4bfbc44fb673d86f7a61dd24618b286be5911f0e028d"
     },
     {
+      "path": "v1080_pattern_recognition_intelligence.py",
+      "size": 8070,
+      "sha256": "a2fc283c4bf44d545e4031fcd6f868b1c06da24539dbabba2705f8b020aa26ce"
+    },
+    {
       "path": "v925_decision_intelligence.py",
       "size": 1755,
       "sha256": "710c090da8fdc27116e48941c24ee4f2dca0114f3513ca9c082c58ca45fd8d19"
@@ -509,8 +539,8 @@
     },
     {
       "path": "FILE_LIST.txt",
-      "size": 2922,
-      "sha256": "4e9a5162f561a91af4f28861a23f9106e1de1be6098fc5753bea8dfcb6a85cf8"
+      "size": 3133,
+      "sha256": "61ebbe7c360817c912d1c6190abc8cad7488c3a3567c5e491449b0f1f69b7b99"
     }
   ]
 }
