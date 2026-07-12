@@ -1,4 +1,4 @@
-# A100 V96.0 AI Quality & Similarity
+# A100 V96.1 AI Intelligence 2
 
 GitHub clean release. Upload the contents of this folder to the repository root.
 
@@ -15,5 +15,5 @@ GitHub clean release. Upload the contents of this folder to the repository root.
 - no live-order path
 
 
-## V96.0 commands
+## V96.1 commands
 `/aiquality BTC` `/aisimilarity BTC` `/aipattern BTC` `/aituning`

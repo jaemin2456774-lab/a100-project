@@ -28549,5 +28549,104 @@ def v91_preflight():
     checks['v960_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v960-ai-quality-similarity-1'}
 
+# ============================================================================
+# A100 V96.1 AI INTELLIGENCE 2 — similarity, explainability, decision replay
+# ============================================================================
+V961_VERSION = "A100 V96.1 AI INTELLIGENCE 2"
+try:
+    from v961_ai_intelligence2 import (find_similar_v2 as _v961_find_similar,
+        pattern_signature_v2 as _v961_pattern_signature, explain as _v961_explain,
+        recommendation as _v961_recommendation, replay_steps as _v961_replay_steps)
+except Exception:
+    _v961_find_similar=_v961_pattern_signature=_v961_explain=_v961_recommendation=_v961_replay_steps=None
+
+def _v961_bundle(symbol):
+    item=_v920_find_score(symbol); rows=_v930_history_rows(); sim=_v961_find_similar(item,rows)
+    quality,_,_,_=_v960_quality_data(rows,item)
+    rec=_v961_recommendation(item,sim,quality.get('overall',0))
+    return item,rows,sim,quality,rec
+
+async def aisimilarity961_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aisimilarity BTC')
+    try:
+        item,rows,sim,quality,rec=_v961_bundle(context.args[0])
+        lines=["🔎 <b>A100 V96.1 SIMILARITY 2.0</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+          f"Vector Pattern: <code>{_v54_escape(_v961_pattern_signature(item))}</code>","",
+          _v950_line('Similarity',sim['avg_similarity'],count=sim['n']),_v950_line('Win Rate',sim['win_rate'],count=sim['n'],extra=f"가중 {sim['weighted_return']:+.2f}%"),
+          _v950_line('Confidence',rec['confidence'],extra=f"{rec['action']} {rec['side']}")]
+        if sim['top']:
+            lines += ["","<b>Top Similar Cases</b>"]+[f"• {_v54_escape(x['symbol'])} {x['side']} · {x['similarity']:.1f}% · {x['return']:+.2f}% · {_v54_escape(x['regime'])}" for x in sim['top']]
+        else: lines += ["","유사 표본 부족"]
+        await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+    except Exception as exc:await v90_1_safe_reply(update,f"❌ Similarity 2.0 실패: {_v54_escape(str(exc))}",parse_mode='HTML')
+
+async def aipattern961_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aipattern BTC')
+    try:
+        item,rows,sim,quality,rec=_v961_bundle(context.args[0])
+        lines=["🧩 <b>A100 V96.1 PATTERN MEMORY 2.0</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",
+          f"ID: <code>{_v54_escape(_v961_pattern_signature(item))}</code>","",
+          _v950_line('Match',sim['avg_similarity'],count=sim['n']),_v950_line('Pattern Win',sim['win_rate'],count=sim['n'],extra=f"평균 {sim['avg']:+.2f}%"),
+          f"판정: <b>{rec['action']} {rec['side']}</b> · {'★'*rec['stars']}{'☆'*(5-rec['stars'])}"]
+        await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+    except Exception as exc:await v90_1_safe_reply(update,f"❌ Pattern Memory 2.0 실패: {_v54_escape(str(exc))}",parse_mode='HTML')
+
+async def aiexplain961_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aiexplain BTC')
+    try:
+        item,rows,sim,quality,rec=_v961_bundle(context.args[0]); reasons=_v961_explain(item,sim)
+        lines=["🧠 <b>A100 V96.1 AI EXPLAIN PRO</b>",f"<b>{_v54_escape(item['symbol'])}</b> · {rec['action']} {rec['side']}",
+          f"추천도 {'★'*rec['stars']}{'☆'*(5-rec['stars'])} · 신뢰 {rec['confidence']:.1f}%","","<b>판단 근거</b>"]
+        lines += [f"{i}. {_v54_escape(x)}" for i,x in enumerate(reasons,1)]
+        await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+    except Exception as exc:await v90_1_safe_reply(update,f"❌ Explain 실패: {_v54_escape(str(exc))}",parse_mode='HTML')
+
+async def aireplay961_cmd(update, context):
+    if not getattr(context,'args',None):return await v90_1_safe_reply(update,'사용법: /aireplay BTC')
+    try:
+        item,rows,sim,quality,rec=_v961_bundle(context.args[0]); steps=_v961_replay_steps(item,sim,quality.get('overall',0))
+        lines=["⏪ <b>A100 V96.1 AI DECISION REPLAY</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']}",""]
+        for title,detail in steps:lines += [f"<b>{title}</b>",_v54_escape(detail),""]
+        await v90_1_safe_reply(update,'\n'.join(lines).rstrip(),parse_mode='HTML')
+    except Exception as exc:await v90_1_safe_reply(update,f"❌ Replay 실패: {_v54_escape(str(exc))}",parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'aisimilarity':'V96.1 다중 특징 유사 사례','aipattern':'V96.1 패턴 메모리 2.0','aiexplain':'AI 판단 근거 설명','aireplay':'AI 판단 단계 재생'})
+for _c in ('aiexplain','aireplay'):
+    if _c not in V925_HELP_CATEGORIES.setdefault('core',[]):V925_HELP_CATEGORIES['core'].append(_c)
+V90_COMMAND_REGISTRY.update({'aisimilarity':aisimilarity961_cmd,'aipattern':aipattern961_cmd,'aiexplain':aiexplain961_cmd,'aireplay':aireplay961_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY);V91_VERSION=V961_VERSION
+
+async def help961_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,'\n'.join([f"🧠 <b>A100 V96.1 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode='HTML')
+    if req:return await help925_cmd(update,context)
+    await v90_1_safe_reply(update,'\n'.join(["🧠 <b>A100 V96.1 HELP</b>","","AI Intelligence: /aisimilarity BTC · /aipattern BTC · /aiexplain BTC · /aireplay BTC","AI Quality: /aiquality BTC · /aituning","AI Dashboard: /aidashboard BTC · /aicore BTC · /aichart · /aiweights BTC · /aistatus · /aiperformance · /aimemory","기존: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus","Shadow: /papershadowstatus · /papershadowpositions · /papershadowhistory · /papershadowstats","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V96"]),parse_mode='HTML')
+
+async def commands961_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if req in {'v96','v961','all','전체'}:
+        names=sorted(V925_COMMAND_USAGE);text=f"📚 <b>A100 V96.1 명령 {len(names)}개</b>\n\n"+' '.join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode='HTML')
+        return
+    return await commands925_cmd(update,context)
+V90_COMMAND_REGISTRY.update({'help':help961_cmd,'commands':commands961_cmd});V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V960_PREFLIGHT_FOR_V961=v91_preflight
+def v91_preflight():
+    base=_V960_PREFLIGHT_FOR_V961();checks=dict(base.get('checks',{}))
+    if 'v960_version_sync' in checks:checks['v960_version_sync']=True
+    required={'aisimilarity','aipattern','aiexplain','aireplay','help','commands'}
+    checks.update({'v961_module_loaded':all(callable(x) for x in (_v961_find_similar,_v961_pattern_signature,_v961_explain,_v961_recommendation,_v961_replay_steps)),
+      'v961_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),'v961_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),
+      'v961_category_sync':(required-{'help','commands'}).issubset(set(V925_HELP_CATEGORIES.get('core',[]))),
+      'v961_schema_preserved':_v91_default_state().get('schema')==1,'v961_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v961_version_sync':V91_VERSION==V961_VERSION,'v961_paper_limit_unchanged':V91_MAX_POSITIONS==20,'v961_shadow_limit_unchanged':V914_SHADOW_MAX==60,
+      'v961_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v961_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v961-ai-intelligence2-1'}
+
+
 if __name__ == "__main__":
     main()
