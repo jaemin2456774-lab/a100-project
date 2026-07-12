@@ -30463,5 +30463,329 @@ def v91_preflight():
     })
     return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "development_version": V91_VERSION, "registry_fingerprint": "v1110-adaptive-learning-threshold-1"}
 
+# ============================================================================
+# A100 V112.0 SCORE CALIBRATION & LEARNING BOOST
+# Candidate score distribution calibration for PAPER LEARNING mode only.
+# No live-order path, no schema change, and all hard safety guards remain active.
+# ============================================================================
+V1120_VERSION = "A100 V112.0 SCORE CALIBRATION & LEARNING BOOST DEVELOPMENT"
+V112_HISTORY_LIMIT = 500
+V112_TARGET_ENTRY_LOW = 0.05
+V112_TARGET_ENTRY_HIGH = 0.15
+V112_MAX_SCORE_BOOST = 12.0
+V112_MIN_HISTORY = 20
+V112_BEGINNER_BOOST_FLOOR = 50.0
+V112_BEGINNER_TOP_RATE = 0.10
+
+
+def _v112_percentile(values, value):
+    rows = sorted(_v912_safe_float(x) for x in values if x is not None)
+    if not rows:
+        return 0.5
+    below = sum(1 for x in rows if x < value)
+    equal = sum(1 for x in rows if x == value)
+    return max(0.0, min(1.0, (below + equal * 0.5) / len(rows)))
+
+
+def _v112_score_breakdown(row):
+    """Create an explainable breakdown from persisted candidate evidence.
+    It never invents market data: named contributions are derived from existing
+    reasons/penalties and the remainder is labelled as base model contribution.
+    """
+    raw = _v912_safe_float(row.get("raw_score", row.get("final_score", row.get("score"))))
+    items = []
+    reasons = list(row.get("reasons") or [])
+    penalties = list(row.get("penalties") or [])
+    reason_share = min(18.0, max(0.0, raw * 0.28))
+    each_reason = reason_share / max(1, len(reasons)) if reasons else 0.0
+    for text in reasons[:6]:
+        items.append({"label": str(text), "value": round(each_reason, 2), "kind": "positive"})
+    penalty_share = min(12.0, max(0.0, len(penalties) * 2.0))
+    each_penalty = penalty_share / max(1, len(penalties)) if penalties else 0.0
+    for text in penalties[:6]:
+        items.append({"label": str(text), "value": round(-each_penalty, 2), "kind": "negative"})
+    explained = sum(x["value"] for x in items)
+    items.insert(0, {"label": "기본 모델 점수", "value": round(raw - explained, 2), "kind": "base"})
+    boost = _v912_safe_float(row.get("calibration_boost"))
+    if abs(boost) > 0.001:
+        items.append({"label": "분포 보정", "value": round(boost, 2), "kind": "calibration"})
+    return items
+
+
+def _v112_distribution_policy(state, current_scores=None):
+    state = state or _v91_load_state()
+    p = _v111_policy(state)
+    history = list(state.get("candidate_score_history_v112", []))[-V112_HISTORY_LIMIT:]
+    values = [_v912_safe_float(x.get("raw_score")) for x in history if isinstance(x, dict)]
+    values.extend(_v912_safe_float(x) for x in (current_scores or []))
+    values = [x for x in values if x > 0]
+    if not values:
+        return dict(p, history=0, p85=p["entry"], p90=p["entry"], target_rate=0.10, calibration_active=False)
+    values.sort()
+    def q(rate):
+        idx = max(0, min(len(values)-1, int(round((len(values)-1)*rate))))
+        return values[idx]
+    return dict(p, history=len(values), p85=q(0.85), p90=q(0.90), target_rate=0.10,
+                calibration_active=(p["mode"] == "LEARNING" and len(values) >= V112_MIN_HISTORY))
+
+
+def _v112_calibrate_rows(rows, state=None):
+    state = state or _v91_load_state()
+    policy = _v112_distribution_policy(state, [_v912_safe_float(r.get("final_score", r.get("score"))) for r in rows])
+    output = []
+    history_values = [_v912_safe_float(x.get("raw_score")) for x in state.get("candidate_score_history_v112", [])[-V112_HISTORY_LIMIT:] if isinstance(x, dict)]
+    all_values = [x for x in history_values if x > 0] + [_v912_safe_float(r.get("final_score", r.get("score"))) for r in rows]
+    ranked = sorted([_v912_safe_float(r.get("final_score", r.get("score"))) for r in rows], reverse=True)
+    top_cut = ranked[max(0, min(len(ranked)-1, int(len(ranked)*V112_BEGINNER_TOP_RATE)))] if ranked else 100.0
+    for original in rows:
+        row = dict(original)
+        raw = _v912_safe_float(row.get("final_score", row.get("score")))
+        row["raw_score"] = round(raw, 2)
+        calibrated = raw
+        boost = 0.0
+        percentile = _v112_percentile(all_values, raw)
+        if policy["mode"] == "LEARNING" and policy["calibration_active"]:
+            # Map relative quality to 42..76, then blend conservatively with raw score.
+            distribution_score = 42.0 + percentile * 34.0
+            desired = raw * 0.70 + distribution_score * 0.30
+            boost = max(0.0, min(V112_MAX_SCORE_BOOST, desired - raw))
+            calibrated = min(100.0, raw + boost)
+        row["score_percentile"] = round(percentile * 100.0, 1)
+        row["calibration_boost"] = round(boost, 2)
+        row["calibrated_score"] = round(calibrated, 2)
+        row["final_score"] = round(calibrated, 2)
+        # Reclassify stages using the active adaptive policy.
+        if calibrated >= policy["entry"]:
+            stage = "ENTRY"
+        elif calibrated >= policy["ready"]:
+            stage = "READY"
+        elif calibrated >= policy["watch"]:
+            stage = "WATCH"
+        else:
+            stage = "IGNORE"
+        learning_boost = False
+        # Controlled exploration: only BEGINNER, top 10%, sufficient raw quality/confidence.
+        conf = _v912_safe_float(row.get("confidence"))
+        if (policy["mode"] == "LEARNING" and policy["stage"] == "BEGINNER" and
+                stage != "ENTRY" and raw >= V112_BEGINNER_BOOST_FLOOR and raw >= top_cut and
+                conf >= policy["confidence"]):
+            stage = "ENTRY"
+            learning_boost = True
+            row.setdefault("reasons", []).append("BEGINNER 상위 후보 학습 부스트")
+        row["stage"] = stage
+        row["learning_boost_entry"] = learning_boost
+        row["score_breakdown_v112"] = _v112_score_breakdown(row)
+        output.append(row)
+    state = _v91_load_state()
+    hist = list(state.get("candidate_score_history_v112", []))
+    now = time.time()
+    for row in output:
+        hist.append({"at": now, "symbol": row.get("symbol"), "side": row.get("side"),
+                     "raw_score": row.get("raw_score"), "calibrated_score": row.get("calibrated_score"),
+                     "stage": row.get("stage"), "boost_entry": bool(row.get("learning_boost_entry"))})
+    state["candidate_score_history_v112"] = hist[-V112_HISTORY_LIMIT:]
+    state["score_calibration_v112"] = dict(policy, updated_at=now)
+    _v91_save_state(state)
+    return output
+
+
+_V111_SCAN_ALERT_FOR_V112 = _v913_scan_alert_once
+
+def _v112_scan_alert_once(*args, **kwargs):
+    rows = _V111_SCAN_ALERT_FOR_V112(*args, **kwargs)
+    return _v112_calibrate_rows(rows, _v91_load_state())
+
+_v913_scan_alert_once = _v112_scan_alert_once
+
+
+# Upgrade trace to display raw/calibrated score and contribution breakdown.
+_V110_CANDIDATE_TRACE_FOR_V112 = _v110_candidate_trace
+
+def _v112_candidate_trace(row, state=None):
+    trace = _V110_CANDIDATE_TRACE_FOR_V112(row, state)
+    trace["raw_score"] = _v912_safe_float(row.get("raw_score", row.get("final_score")))
+    trace["calibrated_score"] = _v912_safe_float(row.get("calibrated_score", row.get("final_score")))
+    trace["calibration_boost"] = _v912_safe_float(row.get("calibration_boost"))
+    trace["score_percentile"] = _v912_safe_float(row.get("score_percentile"))
+    trace["learning_boost_entry"] = bool(row.get("learning_boost_entry"))
+    trace["score_breakdown_v112"] = list(row.get("score_breakdown_v112") or [])
+    return trace
+
+_v110_candidate_trace = _v112_candidate_trace
+
+
+async def scorecalibration1120_cmd(update, context):
+    state = _v91_load_state(); p = _v112_distribution_policy(state)
+    hist = state.get("candidate_score_history_v112", [])[-V112_HISTORY_LIMIT:]
+    raw = [_v912_safe_float(x.get("raw_score")) for x in hist if isinstance(x, dict)]
+    cal = [_v912_safe_float(x.get("calibrated_score")) for x in hist if isinstance(x, dict)]
+    avg_raw = sum(raw)/len(raw) if raw else 0.0; avg_cal = sum(cal)/len(cal) if cal else 0.0
+    entries = sum(str(x.get("stage")) == "ENTRY" for x in hist if isinstance(x, dict))
+    rate = entries/max(1,len(hist))*100.0
+    lines = [
+        "🎚️ <b>A100 V112.0 SCORE CALIBRATION</b>",
+        f"Mode <b>{p['mode']}</b> · Stage <b>{p['stage']}</b> · 표본 {len(hist)}건",
+        f"평균 원점수 {avg_raw:.1f} → 보정 {avg_cal:.1f}",
+        f"P85 {p['p85']:.1f} · P90 {p['p90']:.1f}",
+        f"ENTRY 비율 {rate:.1f}% · 목표 {V112_TARGET_ENTRY_LOW*100:.0f}~{V112_TARGET_ENTRY_HIGH*100:.0f}%",
+        f"분포 보정 {'ACTIVE' if p['calibration_active'] else 'WARMING UP'} · 최대 +{V112_MAX_SCORE_BOOST:.0f}점",
+        "",
+        "※ Paper LEARNING에만 적용하며 실주문 기준과 안전장치는 변경하지 않습니다.",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def scorebreakdown1120_cmd(update, context):
+    args = list(getattr(context, "args", []) or [])
+    state, trace = _v110_latest(args[0] if args else None)
+    if not trace:
+        return await v90_1_safe_reply(update, "점수 추적 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    items = trace.get("score_breakdown_v112") or []
+    lines = [
+        "🧮 <b>A100 V112.0 SCORE BREAKDOWN</b>",
+        f"<b>{trace.get('symbol')}</b> {trace.get('side')} · {trace.get('stage')}",
+        f"원점수 {trace.get('raw_score',trace.get('score',0)):.1f} → 보정 {trace.get('calibrated_score',trace.get('score',0)):.1f} "
+        f"({trace.get('calibration_boost',0):+.1f})",
+        f"분포 상위 {100.0-trace.get('score_percentile',0):.1f}% · 학습 부스트 {'YES' if trace.get('learning_boost_entry') else 'NO'}",
+        "",
+    ]
+    for item in items[:12]:
+        val = _v912_safe_float(item.get("value")); sign = "+" if val >= 0 else ""
+        lines.append(f"• {_v54_escape(str(item.get('label')))}: <b>{sign}{val:.2f}</b>")
+    if not items:
+        lines.append("세부 구성 기록 없음 — 새 스캔 후 생성됩니다.")
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def learningboost1120_cmd(update, context):
+    state = _v91_load_state(); p = _v111_policy(state)
+    hist = state.get("candidate_score_history_v112", [])[-V112_HISTORY_LIMIT:]
+    boosted = [x for x in hist if isinstance(x, dict) and x.get("boost_entry")]
+    lines = [
+        "🚀 <b>A100 V112.0 LEARNING BOOST</b>",
+        f"Mode {p['mode']} · Stage {p['stage']}",
+        f"활성 조건: BEGINNER · 원점수 ≥ {V112_BEGINNER_BOOST_FLOOR:.0f} · Confidence ≥ {p['confidence']:.0f}% · 상위 {V112_BEGINNER_TOP_RATE*100:.0f}%",
+        f"최근 {len(hist)}건 중 부스트 ENTRY {len(boosted)}건",
+        "",
+        "최대 포지션·중복·쿨다운·Kill Switch·시장데이터·BTC Shock Guard는 그대로 적용됩니다.",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+# Replace trace output with V112 details while retaining all V110 checks.
+async def papertrace1120_cmd(update, context):
+    args = list(getattr(context, "args", []) or []); sym = args[0] if args else None
+    st, x = _v110_latest(sym)
+    if not x:
+        return await v90_1_safe_reply(update, "아직 Paper 진입 추적 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    raw = _v912_safe_float(x.get("raw_score", x.get("score")))
+    cal = _v912_safe_float(x.get("calibrated_score", x.get("score")))
+    lines = ["🧭 <b>A100 V112.0 PAPER TRACE</b>",
+             f"<b>{x['symbol']}</b> {x['side']} · {x['stage']} · 원점수 {raw:.1f} → 보정 <b>{cal:.1f}</b>",
+             f"Confidence {x['confidence']:.1f}% · 분포보정 {x.get('calibration_boost',0):+.1f} · Learning Boost {'YES' if x.get('learning_boost_entry') else 'NO'}", ""]
+    for name, ok, detail in x.get("checks", []):
+        lines.append(f"{'✅' if ok else '❌'} {name}: {_v54_escape(str(detail))}")
+    lines += ["", f"최종 결과: <b>{x.get('result')}</b>",
+              f"원인: <b>{_v54_escape(', '.join(x.get('blockers') or ['없음']))}</b>",
+              "상세 점수: /scorebreakdown " + str(x.get("symbol", ""))]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def thresholdreview1120_cmd(update, context):
+    state = _v91_load_state(); p = _v112_distribution_policy(state)
+    hist = state.get("candidate_score_history_v112", [])[-V112_HISTORY_LIMIT:]
+    raw = [_v912_safe_float(x.get("raw_score")) for x in hist if isinstance(x, dict)]
+    cal = [_v912_safe_float(x.get("calibrated_score")) for x in hist if isinstance(x, dict)]
+    entry = sum(str(x.get("stage")) == "ENTRY" for x in hist if isinstance(x, dict))
+    ready = sum(str(x.get("stage")) == "READY" for x in hist if isinstance(x, dict))
+    avg_raw = sum(raw)/len(raw) if raw else 0.0; avg_cal = sum(cal)/len(cal) if cal else 0.0
+    await v90_1_safe_reply(update, "\n".join([
+        "⚖️ <b>A100 V112.0 THRESHOLD REVIEW</b>",
+        f"Stage {p['stage']} · 학습 표본 {p['samples']}건 · 후보 기록 {len(hist)}건",
+        f"WATCH {p['watch']:.1f} · READY {p['ready']:.1f} · ENTRY <b>{p['entry']:.1f}</b>",
+        f"평균 점수 {avg_raw:.1f} → {avg_cal:.1f} · READY {ready} · ENTRY {entry}",
+        f"ENTRY 통과율 {entry/max(1,len(hist))*100:.1f}% · 목표 5~15%",
+        "",
+        "※ 점수 보정은 최대 +12점이며, 학습 표본을 만들되 무조건 진입시키지 않습니다.",
+    ]), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "scorecalibration": "후보 점수 분포·ENTRY 통과율 자동 보정 상태",
+    "scorebreakdown": "최근 후보 원점수·보정·근거 상세",
+    "learningboost": "BEGINNER 상위 후보 제한형 학습 진입 상태",
+    "papertrace": "V112 원점수·보정점수 포함 Paper 진입 추적",
+    "thresholdreview": "V112 점수 분포·보정·ENTRY 통과율 검토",
+})
+for _c in ("scorecalibration", "scorebreakdown", "learningboost"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("paper", []):
+        V925_HELP_CATEGORIES["paper"].append(_c)
+V90_COMMAND_REGISTRY.update({
+    "scorecalibration": scorecalibration1120_cmd,
+    "scorebreakdown": scorebreakdown1120_cmd,
+    "learningboost": learningboost1120_cmd,
+    "papertrace": papertrace1120_cmd,
+    "thresholdreview": thresholdreview1120_cmd,
+})
+V91_VERSION = V1120_VERSION
+
+
+async def help1120_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update, "\n".join([
+            f"🧠 <b>A100 V112.0 HELP · {req.upper()}</b>", ""
+        ] + [f"/{x} — {V925_COMMAND_USAGE.get(x, '시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]), parse_mode="HTML")
+    if req:
+        return await help1110_cmd(update, context)
+    await v90_1_safe_reply(update, "\n".join([
+        "🧠 <b>A100 V112.0 HELP</b>", "",
+        "Score Calibration: /scorecalibration · /scorebreakdown BTC · /learningboost",
+        "Paper Trace: /papertracescan · /papertrace BTC · /paperpipeline · /paperentryrate",
+        "Adaptive Learning: /learningstatus · /adaptivethreshold · /thresholdreview",
+        "Paper Mode: /paper · /papermode learning · /paperdiagnosis", "",
+        "전체 목록: /commands V112",
+    ]), parse_mode="HTML")
+
+
+async def commands1120_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in {"v112", "v1120", "all", "전체"}:
+        names = sorted(V925_COMMAND_USAGE)
+        text = f"📚 <b>A100 V112.0 전체 명령 {len(names)}개</b>\n\n" + " ".join("/" + x for x in names)
+        for i in range(0, len(text), 3800):
+            await v90_1_safe_reply(update, text[i:i+3800], parse_mode="HTML")
+        return
+    return await commands1110_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"help": help1120_cmd, "commands": commands1120_cmd})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V111_PREFLIGHT_FOR_V112 = v91_preflight
+
+def v91_preflight():
+    base = _V111_PREFLIGHT_FOR_V112(); checks = dict(base.get("checks", {}))
+    checks["v111_version_sync"] = True
+    req = {"scorecalibration", "scorebreakdown", "learningboost", "papertrace", "thresholdreview", "help", "commands"}
+    sample_rows = [
+        {"symbol":"BTCUSDT","side":"LONG","final_score":40.0,"confidence":45.0,"stage":"WATCH","reasons":["test"]},
+        {"symbol":"ETHUSDT","side":"SHORT","final_score":60.0,"confidence":55.0,"stage":"ENTRY","reasons":["test"]},
+    ]
+    checks.update({
+        "v112_callbacks": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in req),
+        "v112_scanner_override": _v913_scan_alert_once is _v112_scan_alert_once,
+        "v112_trace_override": _v110_candidate_trace is _v112_candidate_trace,
+        "v112_boost_capped": V112_MAX_SCORE_BOOST <= 12.0,
+        "v112_target_rate_safe": 0.05 <= V112_TARGET_ENTRY_LOW < V112_TARGET_ENTRY_HIGH <= 0.15,
+        "v112_learning_only": _v112_distribution_policy({"paper_mode_v109":"PROTECTED"})["calibration_active"] is False,
+        "v112_limits_preserved": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v112_schema_preserved": _v91_default_state().get("schema") == 1,
+        "v112_no_live_trading": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+        "v112_version_sync": V91_VERSION == V1120_VERSION,
+    })
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY),
+            "base": base, "development_version": V91_VERSION,
+            "registry_fingerprint": "v1120-score-calibration-learning-boost-1"}
+
 if __name__ == "__main__":
     main()

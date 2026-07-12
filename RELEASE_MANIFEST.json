@@ -1,6 +1,8 @@
 {
-  "release": "A100 V110.0 PAPER TRACE INTELLIGENCE DEVELOPMENT",
-  "created_at": "2026-07-12T19:59:54Z",
+  "release": "A100 V112.0 SCORE CALIBRATION & LEARNING BOOST DEVELOPMENT",
+  "generated_at": "2026-07-13",
+  "schema": 1,
+  "file_count": 125,
   "files": [
     {
       "path": ".gitignore",
@@ -8,9 +10,24 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
-      "path": "FILE_LIST.txt",
-      "size": 3687,
-      "sha256": "99016a8d73b9e0ae186d10ea3953a46b2475457d2d272d27978df4566598dd92"
+      "path": ".pytest_cache/.gitignore",
+      "size": 37,
+      "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd"
+    },
+    {
+      "path": ".pytest_cache/CACHEDIR.TAG",
+      "size": 191,
+      "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4"
+    },
+    {
+      "path": ".pytest_cache/README.md",
+      "size": 302,
+      "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad"
+    },
+    {
+      "path": ".pytest_cache/v/cache/nodeids",
+      "size": 190,
+      "sha256": "919e8b48d68ae48167ae8ff8549ab8b92f60fb189c8a336c5bb5cf0942f1d79e"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -19,18 +36,8 @@
     },
     {
       "path": "README.md",
-      "size": 233,
-      "sha256": "43b482b9663771f0e9bedc1a432d73443519cb7ae11786f05fbcf2bfdccc1b9b"
-    },
-    {
-      "path": "__pycache__/main.cpython-313.pyc",
-      "size": 2011905,
-      "sha256": "4f85de286c61caee6de274ad88729d41860afe67c224bc777428b67ee2e4f827"
-    },
-    {
-      "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
-      "size": 18584,
-      "sha256": "490e285a636e05162610787254115afae04ff2d493192070e1a35fc0e961148c"
+      "size": 694,
+      "sha256": "b732437dcd20bf82eb97341374b10d04c45d900ae3e2756dabc8c5eab1ae55e8"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -76,6 +83,16 @@
       "path": "docs/CHANGELOG_V110_0.md",
       "size": 418,
       "sha256": "2ff2979875af616c83ef55fe1477ce5e04fcf37bad0310d2f278026fe6edd4ff"
+    },
+    {
+      "path": "docs/CHANGELOG_V111_0.md",
+      "size": 528,
+      "sha256": "bb56b4121cbff73fbcd3c26d2e134ffea8c4aad6000891366dbba7338c5d5bcc"
+    },
+    {
+      "path": "docs/CHANGELOG_V112_0.md",
+      "size": 510,
+      "sha256": "025357f2cd99a824cc0dd9d42dfe917b7f696aa9e98961e77044190b40fe7889"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -146,6 +163,11 @@
       "path": "docs/DEVELOPMENT_BACKLOG_V108_0.md",
       "size": 217,
       "sha256": "042ccfb71323e6529e802f37c5187a7ac6688bd57a06dccc8198dc36e6fc5f8b"
+    },
+    {
+      "path": "docs/DEVELOPMENT_BACKLOG_V112_0.md",
+      "size": 335,
+      "sha256": "5b94cef1bf8c6ed8b50167d10f03e860657d1a80b47d4e603f2f0f3857b9097c"
     },
     {
       "path": "docs/DEVELOPMENT_BACKLOG_V94.md",
@@ -253,6 +275,11 @@
       "sha256": "5bc9894afcfe7add304eed9b26738f907ab2562e0cc55de6c491592cc95c5519"
     },
     {
+      "path": "docs/TEST_REPORT_V111_0.md",
+      "size": 347,
+      "sha256": "8f0fc7a5a5bf73e5d6135d5c23362f0ddae61421b3bf78bc10e0c446547bad2f"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -289,8 +316,8 @@
     },
     {
       "path": "main.py",
-      "size": 1371853,
-      "sha256": "e895d21ba046c8a74a5aaa23f9a999935ba4947201d3c3fe3275e7e9912cfa7e"
+      "size": 1398436,
+      "sha256": "8b84706ade1fb0bf047e6ab8ba9404a8f2f05c5858e65c004ff9041804779abc"
     },
     {
       "path": "railway.json",
@@ -321,16 +348,6 @@
       "path": "tests/.pytest_cache/v/cache/nodeids",
       "size": 115,
       "sha256": "b51539756e41a6e6068384f13b75e9ba876fbacc8d91ae59d20b6430f1b8650f"
-    },
-    {
-      "path": "tests/__pycache__/test_v1090_paper_learning_mode.cpython-313-pytest-9.0.2.pyc",
-      "size": 4245,
-      "sha256": "24563f1f2f8a0cfd820eda3ed3d2e5f6435d344a7dc0aec6e267b2d6c913ade9"
-    },
-    {
-      "path": "tests/__pycache__/test_v1100_paper_trace.cpython-313-pytest-9.0.2.pyc",
-      "size": 3177,
-      "sha256": "aa21175f827d0c0bfcf37c7ea76a66e32f7dcb9a9ae77e3331572f4255f3c11b"
     },
     {
       "path": "tests/test_v101_0_closed_loop.py",
@@ -381,6 +398,11 @@
       "path": "tests/test_v1100_paper_trace.py",
       "size": 358,
       "sha256": "7a8d5472dfbc40f7a45f14436946dbbac04773db089fb8f9890b763463d99a36"
+    },
+    {
+      "path": "tests/test_v1110_adaptive_threshold.py",
+      "size": 363,
+      "sha256": "af569e45573771be7830d066540370af6db7e69a20f8b8e7f42439807f276a1b"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -608,10 +630,12 @@
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
   ],
-  "version": "V111.0",
-  "name": "Adaptive Learning Threshold Development",
-  "baseline": "V110.0 Paper Trace Intelligence",
-  "paper_max_positions": 20,
-  "shadow_max_positions": 60,
-  "schema": 1
+  "validation": {
+    "python_compile": true,
+    "runtime_preflight": true,
+    "command_count": 249,
+    "paper_max_positions": 20,
+    "shadow_max_positions": 60,
+    "live_trading_added": false
+  }
 }

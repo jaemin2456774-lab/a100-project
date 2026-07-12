@@ -1,11 +1,18 @@
-# A100 V111.0 Adaptive Learning Threshold Development
+# A100 V112.0 Score Calibration & Learning Boost Development
 
-기준 버전: V110.0 Paper Trace Intelligence
+V111.0을 기준으로 Paper LEARNING 모드의 후보 점수 분포를 보정하고, 초기 학습 단계에서 상위 후보를 제한적으로 ENTRY로 전환하는 개발 릴리스입니다.
 
-핵심: LEARNING 모드에서 학습 표본에 따라 ENTRY 기준을 60→68→74→78로 자동 강화합니다. PROTECTED 모드는 기존 기준을 유지합니다.
+핵심 명령:
+- `/scorecalibration`
+- `/scorebreakdown BTC`
+- `/learningboost`
+- `/papertracescan`
+- `/papertrace BTC`
+- `/thresholdreview`
 
-테스트 명령: `/learningstatus`, `/adaptivethreshold`, `/papertracescan`, `/papertrace`, `/thresholdreview`
-
-A100 V110.0 PAPER TRACE INTELLIGENCE DEVELOPMENT
-
-Paper 후보가 실제 진입으로 이어지지 않는 원인을 Scanner→Stage→Risk Guard→Open 단계별로 기록하고 Telegram에서 확인하는 개발 릴리스입니다.
+안전 원칙:
+- 보정은 Paper LEARNING 모드에만 적용
+- 후보당 점수 보정 최대 +12점
+- 목표 ENTRY 통과율 5~15%
+- 최대 포지션 20, Shadow 60, 중복·쿨다운·Kill Switch·시장 데이터·BTC Shock Guard 유지
+- 실주문 기능 및 실주문 기준 변경 없음
