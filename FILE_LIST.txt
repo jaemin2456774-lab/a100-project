@@ -5,11 +5,14 @@ README.md
 RELEASE_MANIFEST.json
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
+docs/CHANGELOG_V96_0.md
 docs/DEVELOPMENT_BACKLOG_V94.md
 docs/DEVELOPMENT_BACKLOG_V95.md
+docs/DEVELOPMENT_BACKLOG_V96.md
 docs/README_V94_0_KR.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
+docs/TEST_REPORT_V96_0.md
 main.py
 railway.json
 requirements.txt
@@ -30,6 +33,7 @@ tests/test_v93_0_ai_core.py
 tests/test_v93_1_self_learning.py
 tests/test_v94_0_visualization.py
 tests/test_v95_0_dashboard.py
+tests/test_v96_0_ai_quality.py
 v925_decision_intelligence.py
 v926_learning_intelligence.py
 v927_learning_calibration.py
@@ -37,3 +41,4 @@ v930_ai_intelligence_core.py
 v931_self_learning_ai.py
 v940_ai_visualization.py
 v950_ai_dashboard.py
+v960_ai_quality.py

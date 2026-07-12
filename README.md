@@ -1,4 +1,4 @@
-# A100 V95.0 AI Unified Dashboard
+# A100 V96.0 AI Quality & Similarity
 
 GitHub clean release. Upload the contents of this folder to the repository root.
 
@@ -13,3 +13,7 @@ GitHub clean release. Upload the contents of this folder to the repository root.
 - V94/V93 AI learning and visualization
 - existing `/dashboard BTC` behavior
 - no live-order path
+
+
+## V96.0 commands
+`/aiquality BTC` `/aisimilarity BTC` `/aipattern BTC` `/aituning`
