@@ -1,9 +1,0 @@
-{
-  "version": "A100 V91.7 META DECISION & PATTERN SIMILARITY ENGINE",
-  "base": "A100 V91.6",
-  "command_count": 133,
-  "new_commands": ["papermeta", "papersimilarity", "papercontext", "paperrisk"],
-  "help_sync": true,
-  "live_trading": false,
-  "test_result": "PASS"
-}
