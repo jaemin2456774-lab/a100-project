@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.venv/
+venv/
+*.log
+.DS_Store
+# Runtime state is preserved on the server and must not be committed
+a100_v91_paper_state.json

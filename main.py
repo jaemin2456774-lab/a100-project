@@ -28190,5 +28190,131 @@ def v91_preflight():
     checks['v931_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v931-self-learning-1'}
 
+
+# ============================================================================
+# A100 V94.0 AI LEARNING VISUALIZATION — text-only, schema-1 preserved
+# ============================================================================
+V940_VERSION = "A100 V94.0 AI LEARNING VISUALIZATION"
+try:
+    from v940_ai_visualization import (bar as _v940_bar, percent_line as _v940_percent_line,
+        signed_score_bar as _v940_signed_bar, performance_health as _v940_health)
+except Exception as _v940_import_error:
+    _v940_bar=_v940_percent_line=_v940_signed_bar=_v940_health=None
+
+
+def _v940_window_stats(rows,n):
+    sample=rows[-n:]
+    vals=[_v915_row_return_pct(r) for r in sample]
+    wins=sum(x>0 for x in vals)
+    return {"n":len(vals),"win_rate":wins/len(vals)*100 if vals else 0.0,
+            "avg":sum(vals)/len(vals) if vals else 0.0,"vals":vals}
+
+
+def _v940_chart_lines(title, stats, limit=5):
+    lines=[f"<b>{title}</b>"]
+    for x in stats[:limit]:
+        label=_v54_escape(x['key'])
+        lines.append(f"{label}\n{_v940_bar(x['win_rate'])} <b>{x['win_rate']:.1f}%</b> · {x['n']}건 · 평균 {x['avg']:+.2f}%")
+    if not stats: lines.append("표본 없음")
+    return lines
+
+async def aicore940_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /aicore BTC")
+    try:
+        item=_v920_find_score(context.args[0]); d,core=_v931_core(item); c=core['calibration']
+        lines=["🧠 <b>A100 V94.0 AI INTELLIGENCE</b>",f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{core['verdict']}</b>",
+               f"Regime <b>{core['regime']['name']}</b> {core['regime']['confidence']:.1f}% · Strategy <b>{_v54_escape(core['strategy'])}</b>",
+               f"예상승률 {_v940_bar(c['probability'])} <b>{c['probability']:.1f}%</b>",
+               f"95% 범위 <b>{c['ci_low']:.1f}~{c['ci_high']:.1f}%</b> · 표본 {c['n']}건","",f"💬 {_v54_escape(core['explanation'])}","","<b>Learned Engine Impact</b>"]
+        for x in core['contributions'][:6]:
+            lines.append(f"{x['engine']} {_v940_signed_bar(x['contribution'])} · score {x['score']:.0f} · weight {x['weight']:.1f}%")
+        if core['risks']: lines += ["","<b>주의</b>"]+["⚠️ "+_v54_escape(x) for x in core['risks'][:4]]
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Core 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def aistatus940_cmd(update, context):
+    q=_v925_learning_quality(); rows=_v930_history_rows(); engine_rows=sum(1 for r in rows if isinstance(r.get('components') or r.get('engine_scores') or r.get('scores'),dict))
+    vals=[_v915_row_return_pct(r) for r in rows[-300:]]; health=_v940_health(vals)
+    lines=["🧠 <b>A100 V94.0 AI STATUS</b>","Core module ✅ 독립 로딩","Visualization ✅ 문자열 전용 · 추가 저장/네트워크 없음","Schema <b>1 유지</b> · 기존 종료 결과 자동 학습 · 실주문 경로 없음",
+           f"AI Health {_v940_bar(health)} <b>{health:.1f}%</b>",f"종료 학습 표본 <b>{len(rows)}</b>건 · 엔진 점수 표본 <b>{engine_rows}</b>건",f"기존 평가 표본 <b>{q['evaluated']}</b> · 완성도 <b>{q['completion']:.1f}%</b>",f"명령 동기화 <b>{len(V90_COMMAND_REGISTRY)}</b>개"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def aiweights940_cmd(update, context):
+    if not getattr(context,"args",None): return await v90_1_safe_reply(update,"사용법: /aiweights BTC")
+    try:
+        item=_v920_find_score(context.args[0]); _,core=_v931_core(item)
+        lines=["⚖️ <b>A100 V94.0 LEARNED WEIGHTS</b>",f"<b>{_v54_escape(item['symbol'])}</b> · {core['regime']['name']}"]
+        for k,v in sorted(core['weights'].items(),key=lambda x:x[1],reverse=True):
+            lr=core['learned'].get(k,{})
+            lines.append(f"{k}\n{_v940_bar(v,10,25)} <b>{v:.1f}%</b> · 표본 {lr.get('n',0)} · 보정×{lr.get('multiplier',1):.3f}")
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc: await v90_1_safe_reply(update,f"❌ AI Weights 실패: {_v54_escape(str(exc))}",parse_mode="HTML")
+
+async def aiperformance940_cmd(update, context):
+    rows=_v930_history_rows(); grouped=_v931_grouped(rows)
+    lines=["📊 <b>A100 V94.0 AI PERFORMANCE</b>"]
+    all_vals=[]
+    for n in (50,100,300):
+        st=_v940_window_stats(rows,n); all_vals=st['vals'] if n==300 else all_vals
+        lines.append(f"최근 {n}건\n{_v940_bar(st['win_rate'])} <b>{st['win_rate']:.1f}%</b> · 표본 {st['n']}건 · 평균 {st['avg']:+.2f}%")
+    lines += ["",f"AI Health\n{_v940_bar(_v940_health(all_vals))} <b>{_v940_health(all_vals):.1f}%</b>",""]
+    lines += _v940_chart_lines("LONG / SHORT",grouped['side'],4)
+    lines += [""]+_v940_chart_lines("시장 국면",grouped['regime'],5)
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def aimemory940_cmd(update, context):
+    rows=_v930_history_rows(); grouped=_v931_grouped(rows); q=_v925_learning_quality()
+    lines=["🧬 <b>A100 V94.0 AI MEMORY</b>",f"종료 결과 자동 학습 <b>{len(rows)}건</b> · 기존 평가 {q['evaluated']}건 · schema 1 유지","결과 종료 시 기존 Paper/Shadow 데이터에서 자동 재계산합니다.",""]
+    lines += _v940_chart_lines("종목별 상위 표본",grouped['symbol'],5)
+    lines += [""]+_v940_chart_lines("샘플 유형",grouped['sample'],3)
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def aichart940_cmd(update, context):
+    rows=_v930_history_rows(); grouped=_v931_grouped(rows); st=_v940_window_stats(rows,300); health=_v940_health(st['vals'])
+    lines=["📊 <b>A100 V94.0 AI LEARNING CHART</b>",f"AI Health\n{_v940_bar(health)} <b>{health:.1f}%</b>",f"최근 300 승률\n{_v940_bar(st['win_rate'])} <b>{st['win_rate']:.1f}%</b> · {st['n']}건",""]
+    lines += _v940_chart_lines("방향별",grouped['side'],2)
+    lines += [""]+_v940_chart_lines("시장 국면별",grouped['regime'],4)
+    lines += ["","상세: /aiperformance · /aiweights BTC · /aimemory"]
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({"aicore":"V94 학습형 AI 판정·기여도 그래프","aistatus":"V94 AI Health·학습 상태","aiperformance":"성과·방향·국면 막대그래프","aiweights":"적응 가중치 막대그래프","aimemory":"종목·표본 학습 막대그래프","aichart":"AI 학습 통합 막대그래프"})
+V925_HELP_CATEGORIES.setdefault("core",[])
+if "aichart" not in V925_HELP_CATEGORIES["core"]: V925_HELP_CATEGORIES["core"].append("aichart")
+V90_COMMAND_REGISTRY.update({"aicore":aicore940_cmd,"aistatus":aistatus940_cmd,"aiperformance":aiperformance940_cmd,"aiweights":aiweights940_cmd,"aimemory":aimemory940_cmd,"aichart":aichart940_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY); V91_VERSION=V940_VERSION
+
+async def help940_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update,"\n".join([f"📊 <b>A100 V94.0 HELP · {req.upper()}</b>",""]+[f"/{x} — {V925_COMMAND_USAGE.get(x,'시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]),parse_mode="HTML")
+    if req:return await help925_cmd(update,context)
+    await v90_1_safe_reply(update,"\n".join(["📊 <b>A100 V94.0 HELP</b>","","AI: /aicore BTC · /aichart · /aiweights BTC · /aistatus · /aiperformance · /aimemory","기존: /intelligence BTC · /dashboard BTC · /final BTC · /learningstatus","Shadow: /papershadowstatus · /papershadowpositions · /papershadowhistory · /papershadowstats","","분류 도움말: /help core · /help precision · /help paper · /help system","전체 목록: /commands V94"]),parse_mode="HTML")
+
+async def commands940_cmd(update, context):
+    req=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if req in {"v94","v940","all","전체"}:
+        names=sorted(V925_COMMAND_USAGE); text=f"📚 <b>A100 V94.0 명령 {len(names)}개</b>\n\n"+" ".join('/'+x for x in names)
+        for i in range(0,len(text),3800):await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+        return
+    return await commands925_cmd(update,context)
+V90_COMMAND_REGISTRY.update({"help":help940_cmd,"commands":commands940_cmd}); V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V931_PREFLIGHT_FOR_V940=v91_preflight
+def v91_preflight():
+    base=_V931_PREFLIGHT_FOR_V940(); checks=dict(base.get('checks',{}))
+    if 'v931_version_sync' in checks: checks['v931_version_sync']=True
+    required={'aicore','aistatus','aiperformance','aiweights','aimemory','aichart','help','commands'}
+    checks.update({'v940_module_loaded':all(callable(x) for x in (_v940_bar,_v940_percent_line,_v940_signed_bar,_v940_health)),
+      'v940_callbacks':all(callable(V90_COMMAND_REGISTRY.get(x)) for x in required),
+      'v940_help_sync':(required-{'help','commands'}).issubset(V925_COMMAND_USAGE),
+      'v940_category_sync':'aichart' in V925_HELP_CATEGORIES.get('core',[]),
+      'v940_schema_preserved':_v91_default_state().get('schema')==1,
+      'v940_state_filename_preserved':os.path.basename(V91_STATE_FILE)=='a100_v91_paper_state.json',
+      'v940_version_sync':V91_VERSION==V940_VERSION,
+      'v940_no_live_trading':not any(token in globals() for token in ('place_live_order','submit_live_order','execute_live_trade'))})
+    audit={'usage_missing':sorted(set(V925_COMMAND_USAGE)-set(V90_COMMAND_REGISTRY)),'stale_usage':[],'category_missing':sorted({x for rows in V925_HELP_CATEGORIES.values() for x in rows}-set(V90_COMMAND_REGISTRY)),'registered':len(V90_COMMAND_REGISTRY),'usage':len(V925_COMMAND_USAGE)}
+    checks['v940_help_audit_clean']=not audit['usage_missing'] and not audit['category_missing']
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'help_audit':audit,'development_version':V91_VERSION,'data_compatibility':{'state_file':V91_STATE_FILE,'schema':1,'preserved':True},'registry_fingerprint':'v940-ai-visualization-1'}
+
 if __name__ == "__main__":
     main()

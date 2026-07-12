@@ -1,0 +1,9 @@
+{
+  "release": "A100 V94.1 GitHub Clean Release",
+  "base": "V94.0 AI Learning Visualization",
+  "schema": 1,
+  "state_file": "a100_v91_paper_state.json",
+  "state_file_included": false,
+  "purpose": "replace all legacy GitHub repository files with a compact current release",
+  "live_trading_added": false
+}
