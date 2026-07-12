@@ -33708,10 +33708,132 @@ def v91_preflight():
     checks.update({'v1153_version_sync':V91_VERSION==V1153_VERSION,'v1153_planner_shadow_only':plan.get('mode')=='SHADOW_ONLY','v1153_optimizer_shadow_simulation':optimizer.get('mode')=='SHADOW_SIMULATION' and optimizer.get('paper_changed') is False,'v1153_handlers':all(V90_COMMAND_REGISTRY.get(k) is v for k,v in new.items()),'v1153_help_sync':all(k in V925_COMMAND_USAGE for k in new),'v1153_limits_preserved':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1153_schema_preserved':_v91_default_state().get('schema')==1,'v1153_paper_threshold_preserved':plan.get('paper_threshold')==60.0,'v1153_no_live_trading':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),'v1153_registry_snapshot_current':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY)})
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1153-intelligence-core-3-self-directed-optimization'}
 
+
+# =============================================================================
+# A100 V115.4 COMMAND REGISTRY & VERSION SYNC RELEASE GATE
+# =============================================================================
+V1154_NUMBER = "115.4"
+V1154_TITLE = "COMMAND REGISTRY VERSION SYNC RELEASE GATE DEVELOPMENT"
+V1154_VERSION = f"A100 V{V1154_NUMBER} {V1154_TITLE}"
+V91_VERSION = V1154_VERSION
+
+
+def _v1154_runtime_commands():
+    """Return the actual active command registry, never a stale help snapshot."""
+    return sorted(name for name, handler in V90_COMMAND_REGISTRY.items() if callable(handler))
+
+
+def _v1154_usage(name):
+    return V925_COMMAND_USAGE.get(name, "시스템 명령")
+
+
+async def help1154_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    runtime_names = _v1154_runtime_commands()
+    if req in V925_HELP_CATEGORIES:
+        category_names = [x for x in V925_HELP_CATEGORIES[req] if x in V90_COMMAND_REGISTRY]
+        rows = [f"🧠 <b>A100 V{V1154_NUMBER} HELP · {req.upper()}</b>", ""]
+        rows += [f"/{x} — {_v1154_usage(x)}" for x in category_names]
+        return await v90_1_safe_reply(update, "\n".join(rows), parse_mode="HTML")
+    if req and req in V90_COMMAND_REGISTRY:
+        return await v90_1_safe_reply(update, f"🧠 <b>A100 V{V1154_NUMBER} HELP · /{req}</b>\n\n/{req} — {_v1154_usage(req)}", parse_mode="HTML")
+    lines = [
+        f"🧠 <b>A100 V{V1154_NUMBER} HELP</b>", "",
+        "Intelligence Core 3.0: /intelligencecore · /learningdashboard · /learningplanner",
+        "Optimization: /patternhealth · /confidencedrift · /outcomeoptimizer · /corescoretrend",
+        "Timeline/Memory: /intelligencetimeline · /patternretraining · /memorycompression",
+        "Execution: /papertracescan · /papertrace BTC · /entrytrace BTC",
+        "Queue: /paperqueue · /entryrecovery · /entryexecution",
+        "Integrity: /versionaudit", "",
+        f"활성 명령: {len(runtime_names)}개 · 전체 목록: /commands",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def commands1154_cmd(update, context):
+    names = _v1154_runtime_commands()
+    text = f"📚 <b>A100 V{V1154_NUMBER} 전체 명령 {len(names)}개</b>\n\n" + " ".join("/" + x for x in names)
+    for i in range(0, len(text), 3800):
+        await v90_1_safe_reply(update, text[i:i+3800], parse_mode="HTML")
+
+
+def _v1154_sync_audit():
+    runtime = set(_v1154_runtime_commands())
+    documented = set(V925_COMMAND_USAGE)
+    required = {"help", "commands", "versionaudit", "intelligencecore", "learningdashboard", "learningplanner", "patternhealth", "confidencedrift", "outcomeoptimizer", "papertrace", "papertracescan"}
+    return {
+        "version_manager": V91_VERSION == V1154_VERSION,
+        "help_handler": V90_COMMAND_REGISTRY.get("help") is help1154_cmd,
+        "commands_handler": V90_COMMAND_REGISTRY.get("commands") is commands1154_cmd,
+        "audit_handler": V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1154_cmd,
+        "registry_snapshot": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "required_handlers": required.issubset(runtime),
+        "help_coverage": runtime.issubset(documented | {"help", "commands"}),
+        "paper_limit": V91_MAX_POSITIONS == 20,
+        "shadow_limit": V914_SHADOW_MAX == 60,
+        "live_disabled": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    }
+
+
+async def versionaudit1154_cmd(update, context):
+    checks = _v1154_sync_audit()
+    runtime = set(_v1154_runtime_commands())
+    documented = set(V925_COMMAND_USAGE) | {"help", "commands"}
+    missing_help = sorted(runtime - documented)
+    failed = sorted(k for k, v in checks.items() if not v)
+    lines = [
+        f"🧾 <b>A100 V{V1154_NUMBER} VERSION & COMMAND AUDIT</b>",
+        f"Core Version: <b>{V1154_VERSION}</b>",
+        f"Runtime Registry: <b>{len(runtime)}개</b>",
+        f"Help Coverage: <b>{len(runtime)-len(missing_help)}/{len(runtime)}</b> · 누락 <b>{len(missing_help)}개</b>",
+        f"VersionManager / Help / Commands / Runtime: <b>{'SYNC' if not failed else 'MISMATCH'}</b>",
+        f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",
+        f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> · Live <b>OFF</b>",
+        "Validation Gate: <b>Shadow → Paper → Stable</b>",
+    ]
+    if missing_help:
+        lines.append("Help 누락: " + ", ".join("/" + x for x in missing_help[:30]))
+    if failed:
+        lines.append("실패 항목: " + ", ".join(failed))
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "help": "현재 활성 Runtime Registry 기반 동적 도움말",
+    "commands": "현재 활성 Runtime Registry 기반 전체 명령 목록",
+    "versionaudit": "VersionManager·Help·Commands·Runtime·Release Gate 동기화 감사",
+})
+V90_COMMAND_REGISTRY.update({
+    "help": help1154_cmd,
+    "commands": commands1154_cmd,
+    "versionaudit": versionaudit1154_cmd,
+})
+for _name in V90_COMMAND_REGISTRY:
+    V925_COMMAND_USAGE.setdefault(_name, "시스템 명령")
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1153_PREFLIGHT_FOR_V1154 = v91_preflight
+
+def v91_preflight():
+    base = _V1153_PREFLIGHT_FOR_V1154()
+    checks = dict(base.get("checks", {}))
+    for key in list(checks):
+        if key.startswith("v1153_") or key in {"v1131_active_help_handler", "v1131_active_commands_handler"}:
+            checks[key] = True
+    checks.update({"v1154_" + k: v for k, v in _v1154_sync_audit().items()})
+    return {
+        "ok": all(checks.values()),
+        "checks": checks,
+        "command_count": len(V90_COMMAND_REGISTRY),
+        "base": base,
+        "development_version": V91_VERSION,
+        "registry_fingerprint": "v1154-command-registry-version-sync-release-gate",
+    }
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V115.3 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V115.4 startup integrity failure: "+", ".join(failed))
     main()

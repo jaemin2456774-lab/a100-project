@@ -1,4 +1,12 @@
-# A100 V115.3 AI INTELLIGENCE CORE 3.0 SELF-DIRECTED OPTIMIZATION DEVELOPMENT
+# A100 V115.4 COMMAND REGISTRY VERSION SYNC RELEASE GATE DEVELOPMENT
+
+## V115.4 핵심 수정
+- `/help`와 `/commands`를 실제 Runtime Command Registry에서 동적으로 생성
+- V113.1 정적 버전·178개 명령 표시 회귀 제거
+- VersionManager·Help·Commands·Runtime Registry 교차 감사
+- 명령 도움말 Coverage 자동 보완 및 누락 검사
+- Release Gate 실패 시 Runtime 시작 차단
+- V115.3 Intelligence Core 3.0 기능과 학습 데이터 완전 보존
 
 ## 배포 후 검증 순서
 `/versionaudit` → `/intelligencecore` → `/learningdashboard` → `/papertracescan` → `/papertrace` → `/outcomememory` → `/calibration2` → `/memoryaging` → `/regimetransition`
