@@ -30266,5 +30266,202 @@ def v91_preflight():
     checks.update({"v110_callbacks":all(callable(V90_COMMAND_REGISTRY.get(x)) for x in req),"v110_auto_scan_override":_v912_auto_scan_once is _v110_auto_scan_once,"v110_learning_preserved":_v109_paper_mode({})=="LEARNING","v110_limits_preserved":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"v110_schema_preserved":_v91_default_state().get("schema")==1,"v110_no_live_trading":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade")),"v110_version_sync":V91_VERSION==V1100_VERSION})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1100-paper-trace-1"}
 
+
+# ============================================================================
+# A100 V111.0 ADAPTIVE LEARNING THRESHOLD
+# ============================================================================
+V1110_VERSION = "A100 V111.0 ADAPTIVE LEARNING THRESHOLD DEVELOPMENT"
+V111_BASE_THRESHOLDS = {"watch": 55.0, "ready": 68.0, "entry": 78.0, "confidence": 70.0}
+
+
+def _v111_learning_sample_count(state):
+    """Count only persisted learning evidence; never fabricate samples."""
+    state = state or {}
+    keys = (
+        "experience_bank_v104", "shadow_learning_v105", "paper_outcomes",
+        "decision_samples", "outcomes", "resolved_trades", "experience_bank",
+    )
+    best = 0
+    for key in keys:
+        value = state.get(key)
+        if isinstance(value, (list, tuple, dict, set)):
+            best = max(best, len(value))
+    # Existing counters from older versions are accepted when present.
+    for key in ("experience_count", "learning_samples", "resolved_count", "decision_count"):
+        try:
+            best = max(best, int(state.get(key) or 0))
+        except Exception:
+            pass
+    return max(0, best)
+
+
+def _v111_stage(samples):
+    n = max(0, int(samples or 0))
+    if n < 100:
+        return "BEGINNER", 40.0, 50.0, 60.0, 40.0
+    if n < 500:
+        return "INTERMEDIATE", 45.0, 58.0, 68.0, 50.0
+    if n < 3000:
+        return "ADVANCED", 50.0, 64.0, 74.0, 60.0
+    return "EXPERT", 55.0, 68.0, 78.0, 70.0
+
+
+def _v111_policy(state=None):
+    state = state or _v91_load_state()
+    mode = _v109_paper_mode(state)
+    samples = _v111_learning_sample_count(state)
+    stage, watch, ready, entry, confidence = _v111_stage(samples)
+    # Protected mode preserves the original production-grade thresholds.
+    if mode == "PROTECTED":
+        watch, ready, entry, confidence = 55.0, 68.0, 78.0, 70.0
+        stage = "PROTECTED"
+    return {
+        "mode": mode, "samples": samples, "stage": stage,
+        "watch": watch, "ready": ready, "entry": entry,
+        "confidence": confidence,
+    }
+
+
+def _v111_apply_thresholds(state=None):
+    global V913_WATCH_SCORE, V913_READY_SCORE, V913_ENTRY_SCORE
+    policy = _v111_policy(state)
+    V913_WATCH_SCORE = float(policy["watch"])
+    V913_READY_SCORE = float(policy["ready"])
+    V913_ENTRY_SCORE = float(policy["entry"])
+    return policy
+
+
+# Wrap V110 scan so every autonomous/manual scan uses the current learning stage.
+_V110_AUTO_SCAN_FOR_V111 = _v110_auto_scan_once
+
+def _v111_auto_scan_once():
+    state = _v91_load_state()
+    policy = _v111_apply_thresholds(state)
+    opened = _V110_AUTO_SCAN_FOR_V111()
+    state = _v91_load_state()
+    state["adaptive_threshold_v111"] = dict(policy, updated_at=time.time())
+    _v91_save_state(state)
+    return opened
+
+_v110_auto_scan_once = _v111_auto_scan_once
+_v912_auto_scan_once = _v111_auto_scan_once
+_v111_apply_thresholds(_v91_load_state())
+
+
+async def learningstatus1110_cmd(update, context):
+    state = _v91_load_state(); p = _v111_apply_thresholds(state)
+    today = _v91_daily(state)
+    lines = [
+        "🧠 <b>A100 V111.0 LEARNING STATUS</b>",
+        f"Mode <b>{p['mode']}</b> · Stage <b>{p['stage']}</b>",
+        f"학습 표본 <b>{p['samples']}건</b>",
+        "",
+        f"WATCH {p['watch']:.1f} · READY {p['ready']:.1f} · ENTRY <b>{p['entry']:.1f}</b>",
+        f"학습 Confidence 기준 <b>{p['confidence']:.1f}%</b>",
+        f"오늘 거래 {int(today.get('trades') or 0)}회 · 승 {int(today.get('wins') or 0)} · 패 {int(today.get('losses') or 0)}",
+        "",
+        "※ LEARNING은 표본 확보를 위해 완화되며, 표본 증가에 따라 자동으로 강화됩니다.",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def adaptivethreshold1110_cmd(update, context):
+    state = _v91_load_state(); p = _v111_apply_thresholds(state)
+    await v90_1_safe_reply(update, "\n".join([
+        "⚙️ <b>A100 V111.0 ADAPTIVE THRESHOLD</b>",
+        f"현재 단계: <b>{p['stage']}</b> · 표본 {p['samples']}건",
+        f"WATCH {p['watch']:.1f} → READY {p['ready']:.1f} → ENTRY <b>{p['entry']:.1f}</b>",
+        f"Confidence floor {p['confidence']:.1f}%",
+        "",
+        "단계 기준: BEGINNER &lt;100 · INTERMEDIATE &lt;500 · ADVANCED &lt;3000 · EXPERT 3000+",
+        "PROTECTED 모드는 기존 55/68/78 기준을 유지합니다.",
+    ]), parse_mode="HTML")
+
+
+# Upgrade trace scan/review output to reflect the active adaptive policy.
+async def thresholdreview1110_cmd(update, context):
+    state = _v91_load_state(); p = _v111_apply_thresholds(state)
+    rows = state.get("paper_trace_v110", [])[-200:]
+    scores = [_v912_safe_float(x.get("score")) for x in rows]
+    ready = sum(p["ready"] <= v < p["entry"] for v in scores)
+    entry = sum(v >= p["entry"] for v in scores)
+    below = sum(v < p["watch"] for v in scores)
+    await v90_1_safe_reply(update, "\n".join([
+        "⚖️ <b>A100 V111.0 THRESHOLD REVIEW</b>",
+        f"Stage {p['stage']} · 학습 표본 {p['samples']}건",
+        f"WATCH {p['watch']:.1f} · READY {p['ready']:.1f} · ENTRY <b>{p['entry']:.1f}</b>",
+        f"최근 추적 {len(scores)}건 · WATCH 미만 {below} · READY 구간 {ready} · ENTRY 구간 {entry}",
+        "",
+        "※ LEARNING 단계에 따라 자동 조정되며 실주문 기준은 변경하지 않습니다.",
+    ]), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "learningstatus": "현재 AI 학습 단계와 적응형 진입 기준",
+    "adaptivethreshold": "표본 수 기반 WATCH·READY·ENTRY 기준",
+    "thresholdreview": "V111 적응형 임계값 및 후보 분포",
+})
+for _c in ("learningstatus", "adaptivethreshold"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("paper", []):
+        V925_HELP_CATEGORIES["paper"].append(_c)
+V90_COMMAND_REGISTRY.update({
+    "learningstatus": learningstatus1110_cmd,
+    "adaptivethreshold": adaptivethreshold1110_cmd,
+    "thresholdreview": thresholdreview1110_cmd,
+})
+V91_VERSION = V1110_VERSION
+
+
+async def help1110_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in V925_HELP_CATEGORIES:
+        return await v90_1_safe_reply(update, "\n".join([
+            f"🧠 <b>A100 V111.0 HELP · {req.upper()}</b>", ""
+        ] + [f"/{x} — {V925_COMMAND_USAGE.get(x, '시스템 명령')}" for x in V925_HELP_CATEGORIES[req]]), parse_mode="HTML")
+    if req:
+        return await help1100_cmd(update, context)
+    await v90_1_safe_reply(update, "\n".join([
+        "🧠 <b>A100 V111.0 HELP</b>", "",
+        "Adaptive Learning: /learningstatus · /adaptivethreshold · /thresholdreview",
+        "Paper Trace: /papertracescan · /papertrace BTC · /paperpipeline · /paperentryrate",
+        "Paper Mode: /paper · /papermode learning · /paperdiagnosis",
+        "Pattern: /patterndetect BTC · /patternlibrary · /shadowhistory", "",
+        "전체 목록: /commands V111",
+    ]), parse_mode="HTML")
+
+
+async def commands1110_cmd(update, context):
+    req = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    if req in {"v111", "v1110", "all", "전체"}:
+        names = sorted(V925_COMMAND_USAGE)
+        text = f"📚 <b>A100 V111.0 전체 명령 {len(names)}개</b>\n\n" + " ".join("/" + x for x in names)
+        for i in range(0, len(text), 3800):
+            await v90_1_safe_reply(update, text[i:i+3800], parse_mode="HTML")
+        return
+    return await commands1100_cmd(update, context)
+
+V90_COMMAND_REGISTRY.update({"help": help1110_cmd, "commands": commands1110_cmd})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V110_PREFLIGHT_FOR_V111 = v91_preflight
+
+def v91_preflight():
+    base = _V110_PREFLIGHT_FOR_V111(); checks = dict(base.get("checks", {}))
+    checks["v110_version_sync"] = True
+    req = {"learningstatus", "adaptivethreshold", "thresholdreview", "help", "commands"}
+    beginner = _v111_stage(0); expert = _v111_stage(3000)
+    checks.update({
+        "v111_callbacks": all(callable(V90_COMMAND_REGISTRY.get(x)) for x in req),
+        "v111_scan_override": _v912_auto_scan_once is _v111_auto_scan_once,
+        "v111_beginner_entry_60": beginner[3] == 60.0,
+        "v111_expert_entry_78": expert[3] == 78.0,
+        "v111_learning_default": _v111_policy({})["stage"] == "BEGINNER",
+        "v111_limits_preserved": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v111_schema_preserved": _v91_default_state().get("schema") == 1,
+        "v111_no_live_trading": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+        "v111_version_sync": V91_VERSION == V1110_VERSION,
+    })
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY), "base": base, "development_version": V91_VERSION, "registry_fingerprint": "v1110-adaptive-learning-threshold-1"}
+
 if __name__ == "__main__":
     main()

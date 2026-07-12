@@ -607,5 +607,11 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ]
+  ],
+  "version": "V111.0",
+  "name": "Adaptive Learning Threshold Development",
+  "baseline": "V110.0 Paper Trace Intelligence",
+  "paper_max_positions": 20,
+  "shadow_max_positions": 60,
+  "schema": 1
 }
