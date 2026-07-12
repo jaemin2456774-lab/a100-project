@@ -1,4 +1,4 @@
-"""A100 V91.2 offline regression smoke test.
+"""A100 V91.3 offline regression smoke test.
 No live orders, Telegram polling, Binance network, or real account calls are made.
 """
 from __future__ import annotations
@@ -19,17 +19,17 @@ os.environ["PAPER_MAX_SHORT_POSITIONS"] = "6"
 os.environ["PAPER_MAX_TOTAL_NOTIONAL"] = "1000"
 os.environ["PAPER_SYMBOL_COOLDOWN_MINUTES"] = "60"
 
-with tempfile.TemporaryDirectory(prefix="a100_v912_") as tmp:
+with tempfile.TemporaryDirectory(prefix="a100_v913_") as tmp:
     os.environ["A100_DATA_DIR"] = tmp
-    spec = importlib.util.spec_from_file_location("a100_v912", ROOT / "main.py")
+    spec = importlib.util.spec_from_file_location("a100_v913", ROOT / "main.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
     preflight = module.v91_preflight()
     assert preflight["ok"], preflight
-    assert len(module.V90_COMMAND_REGISTRY) == 118
-    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus"):
+    assert len(module.V90_COMMAND_REGISTRY) == 120
+    for command in ("paperregime", "papercandidates", "paperperformance", "paperautostatus", "paperlearning", "papersignals"):
         assert callable(module.V90_COMMAND_REGISTRY.get(command))
 
     module.V78_VALID_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
@@ -85,4 +85,20 @@ with tempfile.TemporaryDirectory(prefix="a100_v912_") as tmp:
     except RuntimeError as exc:
         assert "쿨다운" in str(exc)
 
-print("A100 V91.2 multi-symbol regime stability smoke test: PASS")
+    # Self-learning: create enough synthetic closed samples and verify bounded adjustment/stage/explanations.
+    learned = module._v91_load_state()
+    sample = dict(learned["closed"][-1])
+    sample.update({"symbol":"SOLUSDT", "side":"LONG", "strategy":"MOMENTUM_LIQUIDITY",
+                   "regime_at_entry":{"regime":"MILD_UPTREND"}, "realized_pnl":2.0,
+                   "mfe_pnl":3.0, "mae_pnl":-0.5})
+    learned["closed"].extend([dict(sample, closed_at=1000+i) for i in range(module.V913_MIN_SAMPLES)])
+    module._v91_save_state(learned)
+    explained = module._v913_explain_candidate({"symbol":"SOLUSDT","side":"LONG","strategy":"MOMENTUM_LIQUIDITY",
+        "regime":"MILD_UPTREND","score":75.0,"quote_volume":100000000,"spread_pct":0.02,"change_24h":5.0})
+    assert explained["stats"]["trades"] >= module.V913_MIN_SAMPLES
+    assert 0 <= explained["final_score"] <= 100
+    assert abs(explained["learning_adjust"]) <= module.V913_MAX_ADJUST
+    assert explained["stage"] in {"WATCH","READY","ENTRY"}
+    assert explained["reasons"]
+
+print("A100 V91.3 self-learning explainable signal smoke test: PASS")

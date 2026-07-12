@@ -24041,7 +24041,7 @@ def main():
 # A100 V91.0 AUDITED PAPER TRADING ENGINE — Railway-only / Paper-only
 # 실계좌 주문 코드는 포함하지 않으며, 모든 거래는 가상 체결이다.
 # ============================================================================
-V91_VERSION = "A100 V91.2 MULTI-SYMBOL REGIME LEARNING ENGINE"
+V91_VERSION = "A100 V91.3 SELF-LEARNING EXPLAINABLE SIGNAL ENGINE"
 V91_STARTED_AT = time.time()
 V91_LOCK = threading.RLock()
 V91_STOP = threading.Event()
@@ -24819,14 +24819,14 @@ _v91_monitor_once = _v912_monitor_once
 
 
 def _v912_auto_scan_once():
-    rows = _v912_candidate_scan(force=True)
+    rows = _v913_scan_alert_once()
     if not V912_AUTO_ENTRY:
         return []
     state = _v91_load_state()
     if not state.get("enabled") or state.get("kill_switch"):
         return []
     opened = []
-    for row in rows[:V912_AUTO_ENTRY_TOP]:
+    for row in [r for r in rows if r.get("stage") == "ENTRY"][:V912_AUTO_ENTRY_TOP]:
         if len(_v91_load_state().get("positions", {})) >= V91_MAX_POSITIONS:
             break
         try:
@@ -24895,6 +24895,149 @@ async def paperautostatus912_cmd(update, context):
     await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
 
 
+
+# ============================================================================
+# A100 V91.3 SELF-LEARNING + EXPLAINABLE 4-STAGE SIGNAL EXTENSION
+# ============================================================================
+V913_MIN_SAMPLES = _v91_int("PAPER_LEARNING_MIN_SAMPLES", 10, 3, 1000)
+V913_RECENT_WINDOW = _v91_int("PAPER_LEARNING_RECENT_WINDOW", 100, 20, 5000)
+V913_MAX_ADJUST = _v91_float("PAPER_LEARNING_MAX_ADJUST", 12.0, 0.0, 30.0)
+V913_ALERT_COOLDOWN = _v91_int("PAPER_SIGNAL_COOLDOWN_SECONDS", 1200, 60, 86400)
+V913_WATCH_SCORE = _v91_float("PAPER_SIGNAL_WATCH_SCORE", 55.0, 0.0, 100.0)
+V913_READY_SCORE = _v91_float("PAPER_SIGNAL_READY_SCORE", 68.0, 0.0, 100.0)
+V913_ENTRY_SCORE = _v91_float("PAPER_SIGNAL_ENTRY_SCORE", 78.0, 0.0, 100.0)
+V913_AUTO_ALERT = _v91_bool("PAPER_SIGNAL_ALERTS", True)
+V913_ALERT_MEMORY = {}
+
+
+def _v913_closed_rows(state=None):
+    state = state or _v91_load_state()
+    rows = [r for r in state.get("closed", []) if isinstance(r, dict)]
+    rows.sort(key=lambda r: _v912_safe_float(r.get("closed_at")))
+    return rows[-V913_RECENT_WINDOW:]
+
+
+def _v913_match_stats(symbol, side, strategy, regime, state=None):
+    rows = _v913_closed_rows(state)
+    buckets = {"exact": [], "regime_side": [], "symbol_side": [], "side": []}
+    for r in rows:
+        rside = str(r.get("side", "")).upper()
+        rsym = str(r.get("symbol", "")).upper()
+        rstr = str(r.get("strategy", "UNKNOWN"))
+        rreg = str((r.get("regime_at_entry") or {}).get("regime", "UNKNOWN"))
+        if rside != side: continue
+        buckets["side"].append(r)
+        if rsym == symbol: buckets["symbol_side"].append(r)
+        if rreg == regime: buckets["regime_side"].append(r)
+        if rsym == symbol and rstr == strategy and rreg == regime: buckets["exact"].append(r)
+    chosen_name, chosen = "side", buckets["side"]
+    for name in ("exact", "regime_side", "symbol_side", "side"):
+        if len(buckets[name]) >= V913_MIN_SAMPLES:
+            chosen_name, chosen = name, buckets[name]; break
+    trades = len(chosen)
+    wins = sum(1 for r in chosen if _v912_safe_float(r.get("realized_pnl")) > 0)
+    pnl = sum(_v912_safe_float(r.get("realized_pnl")) for r in chosen)
+    avg = pnl / trades if trades else 0.0
+    wr = wins / trades * 100.0 if trades else 0.0
+    mfe = sum(_v912_safe_float(r.get("mfe_pnl")) for r in chosen) / trades if trades else 0.0
+    mae = sum(_v912_safe_float(r.get("mae_pnl")) for r in chosen) / trades if trades else 0.0
+    return {"bucket": chosen_name, "trades": trades, "wins": wins, "win_rate": wr, "avg_pnl": avg, "pnl": pnl, "avg_mfe": mfe, "avg_mae": mae}
+
+
+def _v913_explain_candidate(row, state=None):
+    state = state or _v91_load_state()
+    symbol = str(row.get("symbol", "")); side = str(row.get("side", "LONG")).upper()
+    regime = str(row.get("regime", "UNKNOWN")); strategy = str(row.get("strategy", "MOMENTUM_LIQUIDITY"))
+    base = _v912_safe_float(row.get("score"))
+    reasons, penalties = [], []
+    qv = _v912_safe_float(row.get("quote_volume")); spread = _v912_safe_float(row.get("spread_pct"), 999)
+    change = _v912_safe_float(row.get("change_24h"))
+    if qv >= 50_000_000: reasons.append("거래대금 우수")
+    elif qv < V912_MIN_QUOTE_VOLUME * 2: penalties.append("거래대금 낮음")
+    if spread <= V912_MAX_SPREAD_PCT * 0.35: reasons.append("스프레드 양호")
+    elif spread >= V912_MAX_SPREAD_PCT * 0.8: penalties.append("스프레드 부담")
+    if 2 <= abs(change) <= 10: reasons.append("적정 모멘텀")
+    elif abs(change) > 12: penalties.append("고점 추격 위험")
+    if regime in {"STRONG_UPTREND","MILD_UPTREND"} and side == "LONG": reasons.append("상승 국면 정합")
+    if regime in {"STRONG_DOWNTREND","MILD_DOWNTREND"} and side == "SHORT": reasons.append("하락 국면 정합")
+    if regime in {"STRONG_UPTREND","MILD_UPTREND"} and side == "SHORT": penalties.append("상승장 역방향")
+    if regime in {"STRONG_DOWNTREND","MILD_DOWNTREND"} and side == "LONG": penalties.append("하락장 역방향")
+    stats = _v913_match_stats(symbol, side, strategy, regime, state)
+    adjust = 0.0
+    if stats["trades"] >= V913_MIN_SAMPLES:
+        adjust = (stats["win_rate"] - 50.0) * 0.22 + stats["avg_pnl"] * 0.35
+        adjust = max(-V913_MAX_ADJUST, min(V913_MAX_ADJUST, adjust))
+        (reasons if adjust >= 0 else penalties).append(f"학습보정 {adjust:+.1f}")
+    final = max(0.0, min(100.0, base + adjust))
+    sample_factor = min(1.0, stats["trades"] / max(V913_MIN_SAMPLES * 4, 1))
+    confidence = max(10.0, min(99.0, 45.0 + (final-50.0)*0.7 + sample_factor*25.0 - len(penalties)*3.0))
+    if final >= V913_ENTRY_SCORE: stage = "ENTRY"
+    elif final >= V913_READY_SCORE: stage = "READY"
+    elif final >= V913_WATCH_SCORE: stage = "WATCH"
+    else: stage = "IGNORE"
+    return {**row, "base_score": round(base,2), "learning_adjust": round(adjust,2), "final_score": round(final,2),
+            "confidence": round(confidence,1), "stage": stage, "reasons": reasons[:6], "penalties": penalties[:6], "stats": stats, "strategy": strategy}
+
+
+def _v913_enriched_candidates(force=False):
+    state = _v91_load_state()
+    rows = _v912_candidate_scan(force=force)
+    enriched = [_v913_explain_candidate({**r, "strategy": "MOMENTUM_LIQUIDITY"}, state) for r in rows]
+    enriched.sort(key=lambda r: (r.get("final_score",0), r.get("confidence",0)), reverse=True)
+    return enriched
+
+
+def _v913_signal_icon(stage):
+    return {"WATCH":"🟡", "READY":"🟠", "ENTRY":"🔴", "EXIT":"🔵"}.get(stage, "⚪")
+
+
+def _v913_alert_candidate(row):
+    if not V913_AUTO_ALERT or not CHAT_ID or row.get("stage") not in {"WATCH","READY","ENTRY"}: return False
+    key = f"{row.get('symbol')}:{row.get('side')}"; now=time.time()
+    old = V913_ALERT_MEMORY.get(key, {})
+    rank = {"WATCH":1,"READY":2,"ENTRY":3}
+    if old and now-old.get("at",0) < V913_ALERT_COOLDOWN and rank.get(row.get("stage"),0) <= rank.get(old.get("stage"),0): return False
+    stats=row.get("stats",{}); reasons=" / ".join(row.get("reasons") or ["조건 점수 충족"]); penalties=" / ".join(row.get("penalties") or ["없음"])
+    text=(f"{_v913_signal_icon(row['stage'])} <b>{row['stage']} PAPER SIGNAL</b>\n"
+          f"종목 <b>{_v54_escape(row['symbol'])}</b> · {row['side']}\n"
+          f"점수 {row['base_score']:.1f} → <b>{row['final_score']:.1f}</b> · Confidence {row['confidence']:.1f}%\n"
+          f"시장국면 {_v54_escape(row.get('regime','UNKNOWN'))}\n"
+          f"학습표본 {stats.get('trades',0)}건 · 승률 {stats.get('win_rate',0):.1f}% · 평균PnL {stats.get('avg_pnl',0):+.3f}\n"
+          f"추천: {_v54_escape(reasons)}\n감점: {_v54_escape(penalties)}\n\n<i>실주문이 아닌 Paper 조건 알림입니다.</i>")
+    ok = v72_send_telegram(text)
+    if ok: V913_ALERT_MEMORY[key] = {"at":now, "stage":row["stage"], "score":row["final_score"]}
+    return ok
+
+
+def _v913_scan_alert_once():
+    rows = _v913_enriched_candidates(force=True)
+    for row in rows[:V912_CANDIDATE_TOP]:
+        try: _v913_alert_candidate(row)
+        except Exception as exc: v88_record_error(f"v913-alert:{row.get('symbol')}", exc)
+    return rows
+
+async def paperlearning913_cmd(update, context):
+    state=_v91_load_state(); rows=_v913_closed_rows(state)
+    regimes={}
+    for r in rows:
+        reg=str((r.get('regime_at_entry') or {}).get('regime','UNKNOWN')); side=str(r.get('side','?')); key=f"{reg}|{side}"
+        x=regimes.setdefault(key,{'n':0,'w':0,'p':0.0}); x['n']+=1; x['p']+=_v912_safe_float(r.get('realized_pnl')); x['w']+=1 if _v912_safe_float(r.get('realized_pnl'))>0 else 0
+    lines=["🧠 <b>V91.3 Self-Learning Status</b>",f"최근 학습표본 {len(rows)}/{V913_RECENT_WINDOW}",f"최소 보정 표본 {V913_MIN_SAMPLES} · 최대보정 ±{V913_MAX_ADJUST:.1f}"]
+    for key,x in sorted(regimes.items(), key=lambda kv: kv[1]['n'], reverse=True)[:12]:
+        lines.append(f"{key}: {x['n']}건 · 승률 {(x['w']/x['n']*100 if x['n'] else 0):.1f}% · PnL {x['p']:+.3f}")
+    await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def papersignals913_cmd(update, context):
+    try:
+        rows=_v913_enriched_candidates(force=True)[:V912_CANDIDATE_TOP]
+        lines=["📡 <b>V91.3 Explainable Signals</b>"]
+        for i,r in enumerate(rows,1):
+            why=", ".join(r.get('reasons')[:3]) or "점수조건"
+            lines.append(f"{i}. {_v913_signal_icon(r['stage'])} <b>{r['symbol']}</b> {r['side']} | {r['stage']} | {r['final_score']:.1f}점 | 신뢰 {r['confidence']:.0f}%\n   {_v54_escape(why)} · 표본 {r['stats']['trades']}")
+        await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    except Exception as exc:
+        await v90_1_safe_reply(update,f"❌ 신호 분석 실패: {exc}")
+
 # 기존 104개 명령은 그대로 보존하고 Paper/Watchdog 명령만 추가한다.
 V90_COMMAND_REGISTRY.update({
     "paperstatus": paperstatus91_cmd,
@@ -24911,6 +25054,8 @@ V90_COMMAND_REGISTRY.update({
     "papercandidates": papercandidates912_cmd,
     "paperperformance": paperperformance912_cmd,
     "paperautostatus": paperautostatus912_cmd,
+    "paperlearning": paperlearning913_cmd,
+    "papersignals": papersignals913_cmd,
 })
 V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 
@@ -24918,7 +25063,7 @@ V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 def v91_preflight():
     base = v90_4_preflight()
     state = _v91_load_state()
-    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus"}
+    v91_commands = {"paperstatus","paperon","paperoff","paperopen","paperclose","paperpositions","paperhistory","paperkill","paperresetkill","watchdog","paperregime","papercandidates","paperperformance","paperautostatus","paperlearning","papersignals"}
     checks = {
         "base_v90_4": bool(base.get("ok")),
         "v91_callbacks": all(callable(V90_COMMAND_REGISTRY.get(name)) for name in v91_commands),
