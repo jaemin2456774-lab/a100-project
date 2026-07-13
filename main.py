@@ -35897,10 +35897,212 @@ def v91_preflight():
     checks.update({"v1160_rc3_"+k:v for k,v in _v1160_rc3_regression_shield().items()})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc3-long-term-validation-regression-shield"}
 
+
+# =============================================================================
+# A100 V116.0 LTS RC4 — INTELLIGENCE QUALITY & TRUST FRAMEWORK (LIVE OFF)
+# =============================================================================
+V1160_RC4_NUMBER = "116.0-RC4"
+V1160_RC4_TITLE = "INTELLIGENCE QUALITY AND TRUST FRAMEWORK"
+V1160_RC4_VERSION = f"A100 V{V1160_RC4_NUMBER} {V1160_RC4_TITLE}"
+V91_VERSION = V1160_RC4_VERSION
+
+
+def _v1160_clamp(value, low=0.0, high=100.0):
+    try: return max(low,min(high,float(value)))
+    except Exception: return low
+
+
+def _v1160_rc4_outcome_quality(state):
+    rows=_v1160_raw_rows(state); total=len(rows)
+    resolved=[r for r in rows if str(r.get("outcome","")).upper() in ("WIN","LOSS")]
+    attributed=[r for r in resolved if str(r.get("reason","")).strip() not in ("","ZERO_OUTCOME","OUTCOME_ATTRIBUTION_REQUIRED","UNKNOWN","NONE")]
+    wins=[r for r in resolved if str(r.get("outcome","")).upper()=="WIN"]
+    losses=[r for r in resolved if str(r.get("outcome","")).upper()=="LOSS"]
+    win_attr=sum(1 for r in wins if r in attributed); loss_attr=sum(1 for r in losses if r in attributed)
+    resolved_cov=len(resolved)/max(1,total)*100; attr_cov=len(attributed)/max(1,len(resolved))*100
+    win_cov=win_attr/max(1,len(wins))*100; loss_cov=loss_attr/max(1,len(losses))*100
+    unknown=max(0,total-len(attributed)); unknown_rate=unknown/max(1,total)*100
+    score=_v1160_clamp(resolved_cov*.35+attr_cov*.40+win_cov*.10+loss_cov*.15)
+    status="TRUSTED" if score>=90 and unknown_rate<=5 else "VALIDATING" if score>=50 else "INSUFFICIENT"
+    return {"score":round(score,1),"status":status,"total":total,"resolved":len(resolved),"attributed":len(attributed),
+            "resolved_coverage":round(resolved_cov,1),"attribution_coverage":round(attr_cov,1),"win_attribution":round(win_cov,1),
+            "loss_attribution":round(loss_cov,1),"unknown":unknown,"unknown_rate":round(unknown_rate,1)}
+
+
+def _v1160_rc4_strategy_trust(state):
+    base=_v1158_performance_snapshot(state,False)
+    items=[]
+    for x in base.get("strategies",base.get("items",[])):
+        n=int(x.get("samples",x.get("n",0)) or 0); wr=float(x.get("win_rate",0) or 0); ev=float(x.get("expectancy",0) or 0)
+        rr=float(x.get("risk_reward",x.get("rr",0)) or 0); mdd=float(x.get("max_drawdown",x.get("mdd",0)) or 0); stability=float((x.get("stability") or {}).get("score",0) if isinstance(x.get("stability"),dict) else (x.get("stability",0) or 0))
+        sample_score=min(100,n/300*100); ev_score=_v1160_clamp(50+ev*25); rr_score=_v1160_clamp(rr/2*100)
+        dd_score=_v1160_clamp(100-mdd*8); wr_score=_v1160_clamp(wr); stability_score=_v1160_clamp(stability)
+        trust=_v1160_clamp(sample_score*.25+wr_score*.15+ev_score*.20+rr_score*.10+dd_score*.10+stability_score*.20)
+        items.append({**x,"name":x.get("name",x.get("strategy",x.get("id","UNKNOWN"))),"samples":n,"trust":round(trust,1),
+                      "trust_status":"TRUSTED" if trust>=85 and n>=100 and ev>0 else "VALIDATING"})
+    items.sort(key=lambda x:x["trust"],reverse=True)
+    avg=sum(x["trust"] for x in items)/max(1,len(items))
+    return {"score":round(avg,1),"items":items,"trusted":sum(1 for x in items if x["trust_status"]=="TRUSTED")}
+
+
+def _v1160_rc4_memory_health(state):
+    mem=_v1160_load_state(); rows=_v1160_raw_rows(state); patterns=_v1160_rc3_pattern_maturity(state).get("items",[])
+    active=len(patterns); compress=sum(1 for x in patterns if x.get("stage") in ("ROOKIE","LEARNING") and int(x.get("samples",0))>=50)
+    archive=sum(1 for x in patterns if int(x.get("samples",0))>=100 and float(x.get("expectancy",0) or 0)<0)
+    keys=[]
+    for x in patterns: keys.append((x.get("pattern"),x.get("regime")))
+    duplicate=max(0,len(keys)-len(set(keys)))
+    stale=min(active,sum(1 for x in patterns if int(x.get("samples",0))<25))
+    penalty=(compress*1.2+archive*2.0+duplicate*2.5+stale*.5)/max(1,active)*100
+    persistence=100.0 if isinstance(mem,dict) and isinstance(mem.get("experience",{}),dict) else 50.0
+    score=_v1160_clamp(persistence*.35+(100-penalty)*.65)
+    return {"score":round(score,1),"status":"HEALTHY" if score>=95 else "MAINTENANCE" if score>=75 else "REVIEW",
+            "active":active,"compress":compress,"archive":archive,"duplicate":duplicate,"stale":stale,"rows":len(rows)}
+
+
+def _v1160_rc4_champion_stability(state):
+    trust=_v1160_rc4_strategy_trust(state); history=_v1158_load_state().get("champion_history",[])
+    champion=trust["items"][0] if trust["items"] else {"name":"NONE","trust":0,"samples":0,"expectancy":0,"mdd":0,"stability":0}
+    generations=max(1,len(history)); repeated=sum(1 for x in history if str(x.get("champion",x.get("name","")))==str(champion.get("name")))
+    generation_score=min(100,generations/3*100); repeat_score=min(100,repeated/3*100)
+    score=_v1160_clamp(float(champion.get("trust",0))*.60+generation_score*.20+repeat_score*.20)
+    stable=bool(score>=95 and int(champion.get("samples",0))>=100 and generations>=3 and float(champion.get("expectancy",0) or 0)>0)
+    return {"score":round(score,1),"stable":stable,"champion":champion.get("name","NONE"),"generations":generations,
+            "repeated":repeated,"samples":int(champion.get("samples",0) or 0),"trust":float(champion.get("trust",0) or 0),
+            "ev":float(champion.get("expectancy",0) or 0),"mdd":float(champion.get("max_drawdown",champion.get("mdd",0)) or 0)}
+
+
+def _v1160_rc4_intelligence_score(state):
+    cert=_v1160_rc3_certification(state,False); oq=_v1160_rc4_outcome_quality(state); st=_v1160_rc4_strategy_trust(state)
+    mh=_v1160_rc4_memory_health(state); cs=_v1160_rc4_champion_stability(state)
+    metrics=cert.get("metrics",{})
+    components={
+      "Learning":float(metrics.get("Learning",0)),"OutcomeQuality":oq["score"],"Pattern":float(metrics.get("Pattern",0)),
+      "Market":float(metrics.get("Market",0)),"Confidence":float(metrics.get("Confidence",0)),"StrategyTrust":st["score"],
+      "MemoryHealth":mh["score"],"ChampionStability":cs["score"],"Runtime":float(metrics.get("Runtime",0)),
+      "Regression":float(metrics.get("Regression",0)),"DataIntegrity":float(metrics.get("DataIntegrity",0))}
+    weights={"Learning":.12,"OutcomeQuality":.14,"Pattern":.10,"Market":.10,"Confidence":.10,"StrategyTrust":.12,
+             "MemoryHealth":.08,"ChampionStability":.08,"Runtime":.06,"Regression":.05,"DataIntegrity":.05}
+    score=sum(components[k]*weights[k] for k in components)
+    return {"score":round(score,1),"components":components,"status":"HIGH_TRUST" if score>=90 else "VALIDATING"}
+
+
+def _v1160_rc4_lts_predictor(state):
+    cert=_v1160_rc3_certification(state,False); intelligence=_v1160_rc4_intelligence_score(state); oq=_v1160_rc4_outcome_quality(state)
+    current=round((cert.get("score",0)*.55+intelligence["score"]*.45),1)
+    unresolved=max(0,500-oq["attributed"]); pattern=_v1160_rc3_pattern_maturity(state)
+    pattern_gap=sum(max(0,200-int(x.get("samples",0))) for x in pattern.get("items",[]))
+    history=_v1160_load_state().get("certification_history",[])
+    daily_gain=0.0
+    if len(history)>=2:
+        first,last=history[0],history[-1]; days=max(1,(int(last.get("ts",0))-int(first.get("ts",0)))/86400)
+        daily_gain=max(0.0,(float(last.get("score",0))-float(first.get("score",0)))/days)
+    projected_gain=daily_gain if daily_gain>0 else min(1.5,max(.1,(oq["attribution_coverage"]+1)/100))
+    days_to_95=0 if current>=95 else int(max(1,min(365,(95-current)/max(.1,projected_gain))))
+    return {"current":current,"day7":round(min(100,current+projected_gain*7),1),"day30":round(min(100,current+projected_gain*30),1),
+            "days_to_95":days_to_95,"additional_outcomes":unresolved,"pattern_sample_gap":pattern_gap,"daily_gain":round(projected_gain,2)}
+
+
+def _v1160_rc4_trust_gate(state):
+    intelligence=_v1160_rc4_intelligence_score(state); strategy=_v1160_rc4_strategy_trust(state); outcome=_v1160_rc4_outcome_quality(state)
+    memory=_v1160_rc4_memory_health(state); predictor=_v1160_rc4_lts_predictor(state)
+    checks={"IntelligenceScore":intelligence["score"]>=90,"StrategyTrust":strategy["score"]>=85,
+            "OutcomeQuality":outcome["score"]>=90,"MemoryHealth":memory["score"]>=95,"LTSReadiness":predictor["current"]>=95,
+            "LiveSafety":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+    return {"checks":checks,"pass":all(checks.values()),"values":{"IntelligenceScore":intelligence["score"],"StrategyTrust":strategy["score"],
+            "OutcomeQuality":outcome["score"],"MemoryHealth":memory["score"],"LTSReadiness":predictor["current"]},
+            "status":"EXECUTION_LAYER_ELIGIBLE" if all(checks.values()) else "BLOCKED_VALIDATION"}
+
+
+async def intelligencescore1160rc4_cmd(update,context):
+    _v1155_track("intelligencescore"); x=_v1160_rc4_intelligence_score(_v91_load_state())
+    lines=[f"🧠 <b>A100 V{V1160_RC4_NUMBER} INTELLIGENCE SCORE ENGINE</b>",f"Total {_v1160_bar(x['score'])} <b>{x['score']:.1f}%</b> · {x['status']}"]
+    for k,v in x["components"].items(): lines.append(f"{k}: {_v1160_bar(v)} {v:.1f}%")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def outcomequality1160rc4_cmd(update,context):
+    _v1155_track("outcomequality"); x=_v1160_rc4_outcome_quality(_v91_load_state())
+    lines=[f"🧩 <b>A100 V{V1160_RC4_NUMBER} OUTCOME QUALITY ENGINE</b>",f"Score {_v1160_bar(x['score'])} <b>{x['score']:.1f}%</b> · {x['status']}",
+           f"Rows {x['total']} · Resolved {x['resolved']} · Attributed {x['attributed']}",f"Resolved Coverage {x['resolved_coverage']:.1f}% · Attribution {x['attribution_coverage']:.1f}%",
+           f"Win Attribution {x['win_attribution']:.1f}% · Loss Attribution {x['loss_attribution']:.1f}%",f"Unknown {x['unknown']} · {x['unknown_rate']:.1f}%"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def strategytrust1160rc4_cmd(update,context):
+    _v1155_track("strategytrust"); x=_v1160_rc4_strategy_trust(_v91_load_state())
+    lines=[f"🛡 <b>A100 V{V1160_RC4_NUMBER} STRATEGY TRUST ENGINE</b>",f"Average Trust {_v1160_bar(x['score'])} <b>{x['score']:.1f}%</b> · Trusted {x['trusted']}"]
+    for i,s in enumerate(x["items"][:8],1): lines.append(f"{i}. <b>{s['name']}</b> · Trust {s['trust']:.1f}% · N {s['samples']} · WR {float(s.get('win_rate',0)):.1f}% · EV {float(s.get('expectancy',0)):+.3f}% · {s['trust_status']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def memoryhealth1160rc4_cmd(update,context):
+    _v1155_track("memoryhealth"); x=_v1160_rc4_memory_health(_v91_load_state())
+    lines=[f"🧠 <b>A100 V{V1160_RC4_NUMBER} MEMORY HEALTH ENGINE</b>",f"Health {_v1160_bar(x['score'])} <b>{x['score']:.1f}%</b> · {x['status']}",
+           f"Active {x['active']} · Compress {x['compress']} · Archive {x['archive']}",f"Duplicate {x['duplicate']} · Stale {x['stale']} · Rows {x['rows']}","자동 삭제/압축: <b>없음 · Recommendation Only</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def championstability1160rc4_cmd(update,context):
+    _v1155_track("championstability"); x=_v1160_rc4_champion_stability(_v91_load_state())
+    lines=[f"🏆 <b>A100 V{V1160_RC4_NUMBER} CHAMPION STABILITY ENGINE</b>",f"Champion <b>{x['champion']}</b> · Score {_v1160_bar(x['score'])} {x['score']:.1f}%",
+           f"Generations {x['generations']} · Repeated {x['repeated']} · Samples {x['samples']}",f"Trust {x['trust']:.1f}% · EV {x['ev']:+.3f}% · MDD {x['mdd']:.3f}",f"Stable: <b>{'YES' if x['stable'] else 'NO'}</b> · 자동 승격 없음"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltspredictor1160rc4_cmd(update,context):
+    _v1155_track("ltspredictor"); x=_v1160_rc4_lts_predictor(_v91_load_state())
+    lines=[f"🔮 <b>A100 V{V1160_RC4_NUMBER} LTS READINESS PREDICTOR</b>",f"Current {_v1160_bar(x['current'])} <b>{x['current']:.1f}%</b>",
+           f"7일 예상 <b>{x['day7']:.1f}%</b> · 30일 예상 <b>{x['day30']:.1f}%</b>",f"95% 예상: <b>{x['days_to_95']}일</b> · Daily Gain {x['daily_gain']:.2f}%p",
+           f"추가 Attribution Outcome {x['additional_outcomes']} · Pattern Sample Gap {x['pattern_sample_gap']}","예측은 현재 축적 속도 기반이며 자동 LTS 승격 없음"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def trustgate1160rc4_cmd(update,context):
+    _v1155_track("trustgate"); x=_v1160_rc4_trust_gate(_v91_load_state())
+    lines=[f"🚦 <b>A100 V{V1160_RC4_NUMBER} AI TRUST GATE</b>",f"Status: <b>{x['status']}</b>"]
+    thresholds={"IntelligenceScore":90,"StrategyTrust":85,"OutcomeQuality":90,"MemoryHealth":95,"LTSReadiness":95}
+    for k,v in x["values"].items(): lines.append(f"{'✅' if x['checks'][k] else '⏳'} {k}: {v:.1f}% / {thresholds[k]}%")
+    lines += [f"✅ LiveSafety: OFF" if x['checks']['LiveSafety'] else "❌ LiveSafety", "Execution Layer 진입: <b>모든 Gate 통과 후에만 가능</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def intelligenceos1160rc4_cmd(update,context):
+    _v1155_track("intelligenceos"); cert=_v1160_rc3_certification(_v91_load_state(),False); q=_v1160_rc4_intelligence_score(_v91_load_state()); gate=_v1160_rc4_trust_gate(_v91_load_state()); pred=_v1160_rc4_lts_predictor(_v91_load_state())
+    lines=[f"🧠 <b>A100 V{V1160_RC4_NUMBER} INTELLIGENCE DASHBOARD 5.3</b>",f"LTS {_v1160_bar(pred['current'])} <b>{pred['current']:.1f}%</b> · {cert['status']}",f"Intelligence Quality {_v1160_bar(q['score'])} <b>{q['score']:.1f}%</b>"]
+    for k in ("OutcomeQuality","StrategyTrust","MemoryHealth","ChampionStability","Confidence","Runtime","Regression","DataIntegrity"):
+        v=q["components"].get(k,cert.get("metrics",{}).get(k,0)); lines.append(f"{k}: {_v1160_bar(v)} <b>{v:.1f}%</b>")
+    lines += [f"Trust Gate: <b>{gate['status']}</b>",f"7D/30D LTS Forecast: <b>{pred['day7']:.1f}% / {pred['day30']:.1f}%</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({"intelligencescore":"RC4 Intelligence Quality 종합 점수","outcomequality":"Outcome 해결·원인 Attribution 품질","strategytrust":"전략별 장기 신뢰도","memoryhealth":"Memory 압축·보관·중복 건강도","championstability":"Champion 세대·신뢰도·안정성","ltspredictor":"7/30일 LTS 준비도 예측","trustgate":"Execution Layer 진입 AI 품질 Gate","intelligenceos":"V116.0 RC4 Intelligence Dashboard 5.3"})
+for _cmd in ("intelligencescore","outcomequality","strategytrust","memoryhealth","championstability","ltspredictor","trustgate"):
+    if _cmd not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append(_cmd)
+V90_COMMAND_REGISTRY.update({"intelligencescore":intelligencescore1160rc4_cmd,"outcomequality":outcomequality1160rc4_cmd,"strategytrust":strategytrust1160rc4_cmd,"memoryhealth":memoryhealth1160rc4_cmd,"championstability":championstability1160rc4_cmd,"ltspredictor":ltspredictor1160rc4_cmd,"trustgate":trustgate1160rc4_cmd,"intelligenceos":intelligenceos1160rc4_cmd,"intel":intelligenceos1160rc4_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_RC3_PREFLIGHT_FOR_RC4=v91_preflight
+
+
+def _v1160_rc4_regression_shield():
+    runtime=set(_v1154_runtime_commands()); required={"intelligencescore","outcomequality","strategytrust","memoryhealth","championstability","ltspredictor","trustgate","intelligenceos","versionaudit"}
+    functions={"score":_v1160_rc4_intelligence_score(_v91_default_state()),"outcome":_v1160_rc4_outcome_quality(_v91_default_state()),"strategy":_v1160_rc4_strategy_trust(_v91_default_state()),"memory":_v1160_rc4_memory_health(_v91_default_state()),"champion":_v1160_rc4_champion_stability(_v91_default_state()),"predictor":_v1160_rc4_lts_predictor(_v91_default_state()),"gate":_v1160_rc4_trust_gate(_v91_default_state())}
+    return {"version_manager":V91_VERSION==V1160_RC4_VERSION,"registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),"handlers":required.issubset(runtime),"help":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),"quality_engines":all(isinstance(v,dict) for v in functions.values()),"trust_gate":functions["gate"].get("status") in ("BLOCKED_VALIDATION","EXECUTION_LAYER_ELIGIBLE"),"paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1160rc4_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc4_regression_shield(); failed=[k for k,v in checks.items() if not v]; gate=_v1160_rc4_trust_gate(_v91_load_state()); runtime=len(_v1154_runtime_commands())
+    lines=[f"🛡 <b>A100 V{V1160_RC4_NUMBER} VERSION & QUALITY RELEASE GATE</b>",f"Core Version: <b>{V1160_RC4_VERSION}</b>",f"Runtime Registry: <b>{runtime}</b> · Help Coverage <b>{runtime}/{runtime}</b>",f"Quality Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"AI Trust Gate: <b>{gate['status']}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Validation: <b>Shadow → Paper → LTS → Stress Test</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC4 Quality Engines·Trust Gate·Version·Registry Release Gate"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160rc4_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base=_V1160_RC3_PREFLIGHT_FOR_RC4(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1160_rc3_"): checks[key]=True
+    checks.update({"v1160_rc4_"+k:v for k,v in _v1160_rc4_regression_shield().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc4-intelligence-quality-trust-framework"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC3 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4 startup integrity failure: "+", ".join(failed))
     main()

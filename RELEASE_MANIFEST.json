@@ -1,16 +1,24 @@
 {
-  "release": "A100 V116.0-RC3 LONG-TERM INTELLIGENCE VALIDATION AND REGRESSION SHIELD",
-  "baseline": "A100 V116.0-RC2 UNIFIED INTELLIGENCE INTEGRATION AND CERTIFICATION PROGRESS",
-  "active_commands": 314,
+  "release": "A100 V116.0-RC4 INTELLIGENCE QUALITY AND TRUST FRAMEWORK",
+  "baseline": "A100 V116.0-RC3 LONG-TERM INTELLIGENCE VALIDATION AND REGRESSION SHIELD",
+  "active_commands": 320,
   "paper_positions": 20,
   "shadow_positions": 60,
   "live_trading": false,
-  "validation_flow": "Shadow -> Paper -> Stable",
+  "validation_flow": "Shadow -> Paper -> LTS -> Stress Test",
+  "trust_gate_thresholds": {
+    "intelligence_score": 90,
+    "strategy_trust": 85,
+    "outcome_quality": 90,
+    "memory_health": 95,
+    "lts_readiness": 95
+  },
   "tests": {
     "compile": "PASS",
-    "rc3_tests": "4/4 PASS",
+    "rc4_tests": "4/4 PASS",
+    "runtime_import": "PASS",
     "preflight": "PASS",
-    "regression_shield": "10/10 PASS"
+    "quality_release_gate": "PASS"
   },
   "files": [
     {
@@ -19,14 +27,19 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
+      "path": "FILE_LIST.txt",
+      "size": 5656,
+      "sha256": "3e8e55aca986a61b37368313d3a566e84ee063365d290d25272ca843417227d8"
+    },
+    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
       "size": 1265,
       "sha256": "a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3"
     },
     {
       "path": "README.md",
-      "size": 521,
-      "sha256": "0548d16ad9c25c02a984aaef9882a69f2708bb5279bcfbe8d76c8a855f6601b6"
+      "size": 806,
+      "sha256": "dc35a1f5dbd42eedbcbc7cb8f74783bcd471c3004ce9828ad3127f89e33732a9"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -182,6 +195,11 @@
       "path": "docs/CHANGELOG_V116_0_RC3.md",
       "size": 664,
       "sha256": "6d99c69d95da54058da7e42acae2b283faf2b0a13d9f466c45d5170d439cc7a4"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4.md",
+      "size": 586,
+      "sha256": "2dfb0ca86f18c49ab9e58ded54545adecaedac1651f189a84eaf7592236ba5ac"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -489,6 +507,11 @@
       "sha256": "a7959faab83da5401e46429430034c00762e67fbb25835f65f1c657fc28d9e18"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC4.md",
+      "size": 582,
+      "sha256": "55bcc029b0ad90393c0b906c9661aa3948d753e2ab8abd8295fe91302d21d420"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -525,8 +548,8 @@
     },
     {
       "path": "main.py",
-      "size": 1727730,
-      "sha256": "0a47927039939739809c69d27eb38c0aa34bb1d12d12e990b556cd00331b0598"
+      "size": 1746007,
+      "sha256": "bd9b8e05ca4d951aa2113e75917d75e66098af565d74248ed5aae1baf92adc1d"
     },
     {
       "path": "pytest.ini",
@@ -702,6 +725,11 @@
       "path": "tests/test_v1160_rc3_long_term_validation.py",
       "size": 1215,
       "sha256": "35a7a3b375820561fe58ac1737c657ba73a3f564e850579376439dfe5e19a105"
+    },
+    {
+      "path": "tests/test_v116_0_rc4_quality_trust.py",
+      "size": 1545,
+      "sha256": "b39e0b06adade601b8c77b315c376fa454307a529691f2e04d99c54fd0dfdc37"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
