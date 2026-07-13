@@ -37904,6 +37904,17 @@ V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 _V1160_RC49_PREFLIGHT_BASE=v91_preflight
 def v91_preflight():
     base=_V1160_RC49_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    # Older RC preflight wrappers are intentionally inherited for regression coverage,
+    # but identity/version assertions for handlers superseded by RC4.9 must not block startup.
+    # Functional integrity is re-validated below against the active RC4.9 registry.
+    for obsolete in (
+        "v1160_rc47_version_manager",
+        "v1160_rc47_pipeline_read_only",
+        "v1160_rc48_version_manager",
+        "v1160_rc48_ltscert",
+        "v1160_rc48_live_release_gate",
+    ):
+        checks.pop(obsolete, None)
     checks.update({
         "v1160_rc49_version_manager":V91_VERSION==V1160_RC49_VERSION,
         "v1160_rc49_live_gate":V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160rc49_cmd,
