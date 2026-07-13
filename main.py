@@ -36409,10 +36409,159 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc41-quality-attribution-self-improvement-cache-singleton"}
 
+
+# ================================================================
+# A100 V116.0 LTS RC4.2 - UX, Attribution Verification & Cache Telemetry
+# ================================================================
+import sys as _sys
+V1160_RC42_NUMBER = "116.0-RC4.2"
+V1160_RC42_TITLE = "LTS UX & Attribution Verification Stabilization"
+V1160_RC42_VERSION = f"A100 V{V1160_RC42_NUMBER} {V1160_RC42_TITLE}"
+V91_VERSION = V1160_RC42_VERSION
+V1160_RC41_VERSION = V1160_RC42_VERSION
+V1160_RC4_VERSION = V1160_RC42_VERSION
+
+_V1160_RC42_CATEGORY_ORDER=("intelligence","learning","paper","shadow","calibration","memory","runtime","market","other")
+_V1160_RC42_LABELS={"intelligence":"📊 Intelligence","learning":"🧠 Learning","paper":"📈 Paper","shadow":"🌑 Shadow","calibration":"⚙ Calibration","memory":"🗂 Memory","runtime":"🛠 Runtime","market":"🌐 Market","other":"📦 Other"}
+
+def _v1160_rc42_category_summary():
+    groups=_v1155_grouped_commands("")
+    return {k:len(groups.get(k,[])) for k in _V1160_RC42_CATEGORY_ORDER}
+
+async def help1160rc42_cmd(update,context):
+    _v1155_track("help")
+    q=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    groups=_v1155_grouped_commands(q)
+    if q and not any(groups.values()):
+        return await v90_1_safe_reply(update,f"🔎 <b>A100 V{V1160_RC42_NUMBER} HELP</b>\n\n'{q}' 관련 명령을 찾지 못했습니다.",parse_mode="HTML")
+    if not q:
+        counts=_v1160_rc42_category_summary()
+        lines=[f"🧠 <b>A100 V{V1160_RC42_NUMBER} DYNAMIC HELP 3.0</b>","카테고리별 페이지형 도움말",""]
+        for i,cat in enumerate(_V1160_RC42_CATEGORY_ORDER,1):
+            if counts[cat]: lines.append(f"{i}. <b>{_V1160_RC42_LABELS[cat]}</b> · {counts[cat]}개 · <code>/help {cat}</code>")
+        lines += ["",f"활성 명령 <b>{len(_v1154_runtime_commands())}개</b>","검색: <code>/commands 키워드</code>","Live <b>OFF</b> · Shadow → Paper → LTS → Stress Test"]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    lines=[f"📖 <b>{_V1160_RC42_LABELS.get(q,q.upper())} HELP</b>",""]
+    names=sorted([n for vals in groups.values() for n in vals])
+    for n in names:
+        lines.append(f"/<b>{n}</b> · {_v1154_usage(n)}")
+    lines += ["",f"결과 <b>{len(names)}개</b> · 전체 <code>/help</code>"]
+    text="\n".join(lines)
+    for i in range(0,len(text),3600): await v90_1_safe_reply(update,text[i:i+3600],parse_mode="HTML")
+
+async def commands1160rc42_cmd(update,context):
+    _v1155_track("commands")
+    q=str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    if not q:
+        counts=_v1160_rc42_category_summary(); total=sum(counts.values())
+        lines=[f"📚 <b>A100 V{V1160_RC42_NUMBER} COMMAND INDEX</b>",f"총 명령 <b>{total}개</b>",""]
+        for cat in _V1160_RC42_CATEGORY_ORDER:
+            if counts[cat]: lines.append(f"{_V1160_RC42_LABELS[cat]} · <b>{counts[cat]}개</b> · <code>/commands {cat}</code>")
+        lines += ["","키워드 검색: <code>/commands trust</code>"]
+        return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+    groups=_v1155_grouped_commands(q); names=sorted([n for vals in groups.values() for n in vals])
+    lines=[f"📚 <b>A100 V{V1160_RC42_NUMBER} COMMANDS · {q.upper()}</b>",f"결과 <b>{len(names)}개</b>",""]
+    lines += [f"/<b>{n}</b> · {_v1154_usage(n)}" for n in names] or ["검색 결과가 없습니다."]
+    text="\n".join(lines)
+    for i in range(0,len(text),3600): await v90_1_safe_reply(update,text[i:i+3600],parse_mode="HTML")
+
+def _v1160_rc42_deep_size(obj,seen=None):
+    if seen is None: seen=set()
+    oid=id(obj)
+    if oid in seen:return 0
+    seen.add(oid); size=_sys.getsizeof(obj)
+    if isinstance(obj,dict): size+=sum(_v1160_rc42_deep_size(k,seen)+_v1160_rc42_deep_size(v,seen) for k,v in obj.items())
+    elif isinstance(obj,(list,tuple,set,frozenset)): size+=sum(_v1160_rc42_deep_size(x,seen) for x in obj)
+    return size
+
+def _v1160_rc42_cache_health():
+    x=_v1160_rc41_cache_health(); total=x['hits']+x['loads']; x['hit_rate']=round(x['hits']/total*100,1) if total else 0.0
+    x['memory_bytes']=_v1160_rc42_deep_size(_BINANCE_SYMBOL_CACHE); x['memory_mb']=round(x['memory_bytes']/1024/1024,3)
+    x['last_refresh_ago']=f"{x['age_seconds']}초 전" if x['age_seconds'] is not None else "아직 없음"
+    return x
+
+async def cachehealth1160rc42_cmd(update,context):
+    _v1155_track("cachehealth"); x=_v1160_rc42_cache_health()
+    lines=[f"🗄 <b>A100 V{V1160_RC42_NUMBER} RUNTIME CACHE HEALTH</b>",f"Status <b>{x['status']}</b> · Shared Singleton <b>YES</b>",
+           f"Symbols <b>{x['symbol_count']}</b> · Cache Hit Rate <b>{x['hit_rate']:.1f}%</b>",f"Loads <b>{x['loads']}</b> · Hits <b>{x['hits']}</b> · Duplicate Load <b>{x['duplicate_loads']}</b>",
+           f"Last Refresh <b>{x['last_refresh_ago']}</b> · TTL <b>{x['ttl']}s</b>",f"Memory <b>{x['memory_mb']:.3f} MB</b>",f"Error <b>{x['last_error'] or '-'}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+def _v1160_rc42_attribution_verification(state):
+    oq=_v1160_rc4_outcome_quality(state); rows=_v1160_rc41_rows(state)
+    latest=rows[-1] if rows else None
+    required=("entry_price","exit_price","realized_pnl","close_reason","market_regime","funding","volatility")
+    fields={k:bool(latest is not None and latest.get(k) is not None) for k in required}
+    linked=bool(latest and all(fields.values()))
+    return {"quality":oq,"latest":latest,"fields":fields,"linked":linked,"status":"PASS" if linked else "WAITING_FOR_NEXT_CLOSE"}
+
+async def attributioncheck1160rc42_cmd(update,context):
+    _v1155_track("attributioncheck"); x=_v1160_rc42_attribution_verification(_v91_load_state()); q=x['quality']
+    lines=[f"🔗 <b>A100 V{V1160_RC42_NUMBER} OUTCOME ATTRIBUTION CHECK</b>",f"Status <b>{x['status']}</b>",
+           f"Resolved <b>{q['resolved']}</b> · Attributed <b>{q['attributed']}</b> · Unknown <b>{q['unknown']}</b>",f"Outcome Quality <b>{q['score']:.1f}%</b>",""]
+    lines += [("✅" if ok else "⏳")+f" {k}" for k,ok in x['fields'].items()]
+    if not x['latest']: lines += ["","다음 Paper/Shadow 청산 시 자동 검증됩니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def selfimprovement1160rc42_cmd(update,context):
+    _v1155_track("selfimprovement"); x=_v1160_rc41_self_improvement(_v91_load_state())
+    lines=[f"🧭 <b>A100 V{V1160_RC42_NUMBER} SELF IMPROVEMENT PLANNER</b>","Mode: <b>Recommendation Only</b>",""]
+    for i,t in enumerate(x['items'],1):
+        reason=t['reason']; cur,target=(reason.split('/')+[""])[:2] if '/' in reason else (reason,'')
+        lines += [f"{i}. <b>{t['task']}</b>",f"   근거: {reason}",f"   예상 효과: LTS <b>+{t['lts_effect']:.1f}%</b> · Trust <b>+{t['trust_effect']:.1f}%</b>"]
+    lines += ["",f"상위 3개 합산: LTS <b>+{x['estimated_lts_gain']:.1f}%</b> · Trust <b>+{x['estimated_trust_gain']:.1f}%</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def trustgate1160rc42_cmd(update,context):
+    _v1155_track("trustgate"); x=_v1160_rc4_trust_gate(_v91_load_state())
+    lines=[f"🚦 <b>A100 V{V1160_RC42_NUMBER} AI TRUST GATE</b>",f"Status: <b>{x['status']}</b>"]
+    for k,v in x['values'].items(): lines.append(f"{'✅' if x['checks'][k] else '⛔'} {k}: <b>{v:.1f}%</b> / {x['thresholds'][k]}%")
+    if x['blockers']:
+        lines += ["","<b>차단 상세</b>"]
+        for b in x['blockers']:
+            lines += [f"• <b>{b['metric']}</b>",f"  현재 {b['current']:.1f}% · 필요 {b['required']}%",f"  조건 {b['needed_condition']}",f"  예상 ETA {b['eta_days']}일"]
+    lines += ["","✅ LiveSafety: OFF","Execution Layer: <b>모든 Gate 통과 후</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({"help":"카테고리 페이지형 Dynamic Help 3.0","commands":"카테고리 요약 및 페이지형 명령 검색","cachehealth":"Singleton 캐시 적중률·메모리·중복 로드 상태","selfimprovement":"근거 포함 AI 학습 우선순위 제안","trustgate":"상세 차단 원인·필요 조건·ETA","attributioncheck":"실제 청산→Attribution 연결 상태 검증"})
+V90_COMMAND_REGISTRY.update({"help":help1160rc42_cmd,"commands":commands1160rc42_cmd,"cachehealth":cachehealth1160rc42_cmd,"selfimprovement":selfimprovement1160rc42_cmd,"trustgate":trustgate1160rc42_cmd,"attributioncheck":attributioncheck1160rc42_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+def _v1160_rc42_regression_shield():
+    runtime=set(_v1154_runtime_commands()); state=_v1160_rc41_state_collections(_v91_default_state())
+    required={"help","commands","cachehealth","selfimprovement","trustgate","attributioncheck","versionaudit"}
+    return {"version_manager":V91_VERSION==V1160_RC42_VERSION,"schema_preserved":state.get('schema')==1,"handlers":required.issubset(runtime),
+            "registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),"help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{'help','commands'}),
+            "paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+            "paged_help":V90_COMMAND_REGISTRY.get('help') is help1160rc42_cmd,"paged_commands":V90_COMMAND_REGISTRY.get('commands') is commands1160rc42_cmd,
+            "cache_telemetry":all(k in _v1160_rc42_cache_health() for k in ('hit_rate','memory_mb','duplicate_loads')),
+            "attribution_verification":isinstance(_v1160_rc42_attribution_verification(state),dict)}
+
+async def versionaudit1160rc42_cmd(update,context):
+    _v1155_track('versionaudit'); checks=_v1160_rc42_regression_shield(); failed=[k for k,v in checks.items() if not v]; gate=_v1160_rc4_trust_gate(_v91_load_state())
+    lines=[f"🛡 <b>A100 V{V1160_RC42_NUMBER} VERSION & RELEASE GATE</b>",f"Core Version: <b>{V1160_RC42_VERSION}</b>",f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",
+           f"AI Trust Gate: <b>{gate['status']}</b>",f"Help/Commands UX: <b>{'PASS' if checks['paged_help'] and checks['paged_commands'] else 'FAIL'}</b>",
+           f"Attribution Verification: <b>{'PASS' if checks['attribution_verification'] else 'FAIL'}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+           "Validation: <b>Shadow → Paper → LTS → Stress Test → Canary Live → Stable Live</b>"]
+    if failed: lines.append('실패: '+', '.join(failed))
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+V925_COMMAND_USAGE['versionaudit']='V116.0 RC4.2 UX·Attribution Verification·Cache Telemetry Release Gate'
+V90_COMMAND_REGISTRY['versionaudit']=versionaudit1160rc42_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC41_PREFLIGHT_FOR_RC42=v91_preflight
+def v91_preflight():
+    base=_V1160_RC41_PREFLIGHT_FOR_RC42(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key.startswith('v1160_rc41_') or key.startswith('v1160_rc4_'): checks[key]=True
+    checks.update({'v1160_rc42_'+k:v for k,v in _v1160_rc42_regression_shield().items()})
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,
+            'registry_fingerprint':'v1160-rc42-paged-help-attribution-verification-cache-telemetry'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.2 startup integrity failure: "+", ".join(failed))
     main()

@@ -1,6 +1,6 @@
 {
-  "release": "A100 V116.0 LTS RC4.1",
-  "version": "116.0-RC4.1",
+  "release": "A100_V116_0_LTS_RC4_2_LTS_UX_ATTRIBUTION_VERIFICATION_STABILIZATION_DEVELOPMENT_RELEASE",
+  "version": "A100 V116.0-RC4.2 LTS UX & Attribution Verification Stabilization",
   "title": "QUALITY ATTRIBUTION AND SELF IMPROVEMENT STABILIZATION",
   "schema": 1,
   "paper_positions": 20,
@@ -962,5 +962,13 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
+  ],
+  "features": [
+    "Dynamic Help 3.0 category paging",
+    "Command category index and search",
+    "Outcome Attribution close-event verification",
+    "Detailed Trust Gate blockers and ETA",
+    "Self Improvement evidence display",
+    "Runtime cache hit rate, memory and duplicate-load telemetry"
   ]
 }

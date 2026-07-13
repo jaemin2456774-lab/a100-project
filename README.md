@@ -1,3 +1,7 @@
+# A100 V116.0 LTS RC4.2
+
+LTS UX & Attribution Verification Stabilization development release.
+
 # A100 V116.0 LTS RC4.1 — Quality Attribution & Self Improvement Stabilization
 
 # A100 V116.0 LTS RC4
