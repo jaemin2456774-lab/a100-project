@@ -37747,11 +37747,182 @@ def v91_preflight():
       "v1160_rc48_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc48-lts-certification-integrity-validation"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9 - FINAL GATE SOURCE UNIFICATION & HEALTH CERTIFICATION
+# ---------------------------------------------------------------------------
+V1160_RC49_NUMBER = "116.0-RC4.9"
+V1160_RC49_VERSION = "A100 V116.0-RC4.9 LTS FINAL GATE SOURCE UNIFICATION & HEALTH CERTIFICATION"
+V91_VERSION = V1160_RC49_VERSION
+
+def _v1160_rc49_numeric(obj, preferred=()):
+    """Extract a real numeric engine metric without silently replacing valid values."""
+    if isinstance(obj, bool):
+        return float(obj)
+    if isinstance(obj, (int, float)):
+        return float(obj)
+    if not isinstance(obj, dict):
+        return 0.0
+    keys=tuple(preferred)+("score","current","trust","quality","health","readiness_score","lts_readiness","value","pct","percentage","readiness")
+    for key in keys:
+        value=obj.get(key)
+        if isinstance(value, bool):
+            return float(value)
+        if isinstance(value, (int,float)):
+            return float(value)
+    # Only inspect known metric containers; never scan arbitrary counters such as samples.
+    for key in ("metric","metrics","summary","result"):
+        value=obj.get(key)
+        if isinstance(value,dict):
+            found=_v1160_rc49_numeric(value, preferred)
+            if found or any(isinstance(value.get(k),(int,float)) for k in keys):
+                return found
+    return 0.0
+
+def _v1160_rc49_source_snapshot(state):
+    engines={
+        "intelligence_score":_v1160_rc4_intelligence_score(state),
+        "strategy_trust":_v1160_rc4_strategy_trust(state),
+        "outcome_quality":_v1160_rc4_outcome_quality(state),
+        "memory_health":_v1160_rc4_memory_health(state),
+        "lts_readiness":_v1160_rc4_lts_predictor(state),
+    }
+    values={
+        "intelligence_score":_v1160_rc49_numeric(engines["intelligence_score"],("intelligence_score",)),
+        "strategy_trust":_v1160_rc49_numeric(engines["strategy_trust"],("strategy_trust","average_trust")),
+        "outcome_quality":_v1160_rc49_numeric(engines["outcome_quality"],("outcome_quality",)),
+        "memory_health":_v1160_rc49_numeric(engines["memory_health"],("memory_health",)),
+        "lts_readiness":_v1160_rc49_numeric(engines["lts_readiness"],("lts_readiness","readiness_score","current")),
+    }
+    return {"values":values,"engines":engines,"source":"RC4 production engines","captured_at":time.time()}
+
+def _v1160_rc49_repository_audit(state):
+    snap=_v1160_rc49_source_snapshot(state)
+    revisions=_v1160_rc48_revision_integrity(state)
+    queue=_v1160_rc44_queue_health(state)
+    dashboard_completed=int(queue.get("completed",queue.get("processed",0)) or 0)
+    checks={
+        "learning_repository":isinstance(state.get("learning_history",[]),list),
+        "strategy_repository":isinstance(_v1158_performance_snapshot(state,False),dict),
+        "trust_repository":isinstance(snap["engines"]["strategy_trust"],dict),
+        "champion_repository":isinstance(_v1160_rc4_champion_stability(state),dict),
+        "dashboard_repository":dashboard_completed>=0,
+        "release_gate_repository":all(isinstance(v,(int,float)) for v in snap["values"].values()),
+        "revision_order":revisions.get("consistent",False),
+    }
+    return {"status":"PASS" if all(checks.values()) else "FAILED","checks":checks,
+            "metrics":snap["values"],"revisions":revisions,"queue_completed":dashboard_completed,
+            "source":snap["source"],"captured_at":snap["captured_at"]}
+
+def _v1160_rc49_certification(state):
+    source=_v1160_rc49_source_snapshot(state)
+    repo=_v1160_rc49_repository_audit(state)
+    pipe=_v1160_rc47_pipeline_audit(state)
+    cmd=_v1160_rc48_command_certification()
+    runtime=_v1134_runtime_health(state)
+    targets={"intelligence_score":90.0,"strategy_trust":85.0,"outcome_quality":90.0,"memory_health":95.0,"lts_readiness":95.0}
+    gate={k:{"value":round(source["values"][k],1),"target":target,
+             "pass":source["values"][k]>=target,"need":round(max(0.0,target-source["values"][k]),1)}
+          for k,target in targets.items()}
+    active_exception=bool(runtime.get("last_fail"))
+    checks={
+        "command_integrity":cmd["status"]!="FAILED",
+        "pipeline_integrity":pipe.get("status")=="PASS",
+        "repository_consistency":repo["status"]=="PASS",
+        "revision_integrity":repo["revisions"].get("consistent",False),
+        "release_gate_consistency":all(abs(gate[k]["value"]-round(_v1160_rc49_numeric(source["engines"][k]),1))<0.01 for k in gate),
+        "runtime_stability":not active_exception,
+        "schema_compatibility":state.get("schema",1)==1,
+        "limits_preserved":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    }
+    ready=all(checks.values()) and all(g["pass"] for g in gate.values())
+    blocked=[{"metric":k,"value":g["value"],"target":g["target"],"need":g["need"]} for k,g in gate.items() if not g["pass"]]
+    return {"ready":ready,"checks":checks,"gate":gate,"blocked":blocked,"source":source,
+            "repository":repo,"pipeline":pipe,"commands":cmd,"runtime":runtime}
+
+def _v1160_rc49_health_score(state):
+    cert=_v1160_rc49_certification(state)
+    components={
+        "Command":100.0 if cert["checks"]["command_integrity"] else 50.0,
+        "Pipeline":100.0 if cert["checks"]["pipeline_integrity"] else 0.0,
+        "Repository":100.0 if cert["checks"]["repository_consistency"] else 0.0,
+        "Revision":100.0 if cert["checks"]["revision_integrity"] else 0.0,
+        "Runtime":100.0 if cert["checks"]["runtime_stability"] else 0.0,
+        "Queue":100.0 if not cert["pipeline"].get("failed",0) else 50.0,
+        "Regression":100.0 if v91_preflight().get("ok",False) else 0.0,
+    }
+    overall=round(sum(components.values())/max(1,len(components)),1)
+    return {"overall":overall,"components":components,"certification":cert}
+
+async def releasegate1160rc49_cmd(update,context):
+    _v1155_track("releasegate"); c=_v1160_rc49_certification(_v91_load_state())
+    labels={"intelligence_score":"Intelligence Score","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    lines=[f"🚦 <b>A100 V{V1160_RC49_NUMBER} LIVE RELEASE GATE</b>",f"Status <b>{'READY' if c['ready'] else 'BLOCKED'}</b> · Source <b>{c['source']['source']}</b>",""]
+    for k,g in c["gate"].items():
+        lines.append(f"{'✅' if g['pass'] else '⛔'} {labels[k]} <b>{g['value']:.1f}</b> / {g['target']:.0f} · Need {g['need']:.1f}")
+    if c["blocked"]:
+        lines += ["","<b>Block Reasons</b>"]+[f"• {labels[x['metric']]}: {x['value']:.1f} → {x['target']:.0f}" for x in c["blocked"]]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltscert1160rc49_cmd(update,context):
+    _v1155_track("ltscert"); c=_v1160_rc49_certification(_v91_load_state())
+    lines=[f"🏅 <b>A100 V{V1160_RC49_NUMBER} LTS CERTIFICATION</b>",f"Result <b>{'READY FOR LTS' if c['ready'] else 'BLOCKED'}</b>",""]
+    for k,v in c["checks"].items(): lines.append(f"{'✅' if v else '⛔'} {k.replace('_',' ').title()}")
+    if c["blocked"]:
+        lines += ["","<b>Blocking Metrics</b>"]
+        labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+        lines += [f"⛔ {labels[x['metric']]} {x['value']:.1f}/{x['target']:.0f} · 부족 {x['need']:.1f}" for x in c["blocked"]]
+    r=c["repository"]["revisions"]
+    lines += ["",f"Current Trace <code>{r.get('attribution_id') or 'N/A'}</code>",f"L{r['current']['learning']} → S{r['current']['strategy']} → T{r['current']['trust']} → C{r['current']['champion']}",f"Latest Engine L{r['latest']['learning']} → S{r['latest']['strategy']} → T{r['latest']['trust']} → C{r['latest']['champion']}"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def repositoryaudit1160rc49_cmd(update,context):
+    _v1155_track("repositoryaudit"); r=_v1160_rc49_repository_audit(_v91_load_state())
+    lines=[f"🗄️ <b>A100 V{V1160_RC49_NUMBER} REPOSITORY AUDIT</b>",f"Status <b>{r['status']}</b> · Source <b>{r['source']}</b>",""]
+    lines += [("✅" if ok else "⛔")+" "+name.replace("_"," ").title() for name,ok in r["checks"].items()]
+    lines += ["",f"Gate Metrics I {r['metrics']['intelligence_score']:.1f} · T {r['metrics']['strategy_trust']:.1f} · O {r['metrics']['outcome_quality']:.1f} · M {r['metrics']['memory_health']:.1f} · LTS {r['metrics']['lts_readiness']:.1f}",f"Queue Completed {r['queue_completed']}"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def healthscore1160rc49_cmd(update,context):
+    _v1155_track("healthscore"); h=_v1160_rc49_health_score(_v91_load_state())
+    lines=[f"❤️ <b>A100 V{V1160_RC49_NUMBER} SYSTEM HEALTH SCORE</b>",f"Overall <b>{h['overall']:.1f}%</b>",""]
+    lines += [f"{'✅' if value>=100 else '⚠️'} {name} <b>{value:.0f}</b>" for name,value in h["components"].items()]
+    lines += ["",f"LTS Status <b>{'READY' if h['certification']['ready'] else 'BLOCKED'}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+    "releasegate":"실제 RC4 운영 엔진의 동일 스냅샷을 사용하는 LTS Release Gate",
+    "ltscert":"차단 지표와 실제 부족 점수를 포함하는 LTS 공식 인증 보고서",
+    "repositoryaudit":"Learning→Strategy→Trust→Champion→Dashboard→Gate 저장소 일관성 감사",
+    "healthscore":"Command/Pipeline/Repository/Revision/Runtime/Queue/Regression 통합 건강 점수",
+})
+V90_COMMAND_REGISTRY.update({"releasegate":releasegate1160rc49_cmd,"ltscert":ltscert1160rc49_cmd,
+                             "repositoryaudit":repositoryaudit1160rc49_cmd,"healthscore":healthscore1160rc49_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC49_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC49_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    checks.update({
+        "v1160_rc49_version_manager":V91_VERSION==V1160_RC49_VERSION,
+        "v1160_rc49_live_gate":V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160rc49_cmd,
+        "v1160_rc49_ltscert_detail":V90_COMMAND_REGISTRY.get("ltscert") is ltscert1160rc49_cmd,
+        "v1160_rc49_repository_audit":V90_COMMAND_REGISTRY.get("repositoryaudit") is repositoryaudit1160rc49_cmd,
+        "v1160_rc49_health_score":V90_COMMAND_REGISTRY.get("healthscore") is healthscore1160rc49_cmd,
+        "v1160_rc49_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc49_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc49_schema":_v91_default_state().get("schema")==1,
+        "v1160_rc49_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc49-final-gate-source-unification-health-certification"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit = v91_preflight()
+    audit=v91_preflight()
     if not audit.get("ok"):
-        failed = [k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.8 startup integrity failure: " + ", ".join(failed))
+        failed=[k for k,v in audit.get("checks",{}).items() if not v]
+        raise RuntimeError("V116.0 RC4.9 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()

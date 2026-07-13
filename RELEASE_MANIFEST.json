@@ -1,11 +1,18 @@
 {
-  "version": "A100 V116.0-RC4.8",
-  "release": "LTS Certification & Integrity Validation Development Release",
-  "created_at": "2026-07-13T16:41:15",
-  "schema": 1,
-  "paper_max": 20,
-  "shadow_max": 60,
-  "live_trading": false,
+  "release": "A100 V116.0 LTS RC4.9",
+  "title": "Final Gate Source Unification & Health Certification Development Release",
+  "created_utc": "2026-07-13T21:43:44.701336+00:00",
+  "preserved": {
+    "schema": 1,
+    "paper_positions": 20,
+    "shadow_positions": 60,
+    "live_trading": false
+  },
+  "validation": {
+    "python_compile": "PASS",
+    "ast_parse": "PASS",
+    "rc48_rc49_tests": "9 PASS"
+  },
   "files": [
     {
       "path": ".gitignore",
@@ -29,18 +36,13 @@
     },
     {
       "path": ".pytest_cache/v/cache/lastfailed",
-      "size": 2681,
-      "sha256": "630cb1a88325ae0c17bda60f728820d214415fbb17ba4fb80ee702e8eea4c9d5"
+      "size": 2739,
+      "sha256": "c7141851997f2f28c5e3981ab0eadeda3b6095660d1ba111e764d1860e9ca004"
     },
     {
       "path": ".pytest_cache/v/cache/nodeids",
-      "size": 13473,
-      "sha256": "c0141a5a9bcc5348b1b18013b68863d5cf9c1fa8d2cc5e59ca79d647b065d093"
-    },
-    {
-      "path": "FILE_LIST.txt",
-      "size": 13252,
-      "sha256": "4071e610e415c15d9b22dd9bb6af79b7038bed0dc9d50e7aa35ed4504ca7384c"
+      "size": 13829,
+      "sha256": "0079359f0e769b4624bf010b0d4e13097ab2da5591f1e92be64eb516875a3cfe"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -59,8 +61,8 @@
     },
     {
       "path": "README.md",
-      "size": 641,
-      "sha256": "01d0109d4d195395880d3809b123f15900f13a383e136751223072a24ac91acf"
+      "size": 298,
+      "sha256": "08757eb503e8e0caaf43f728a54808baf6368e3a0ccb8c974232ed18b42887aa"
     },
     {
       "path": "RELEASE_MANIFEST_RC4_6.json",
@@ -74,8 +76,8 @@
     },
     {
       "path": "__pycache__/main.cpython-313.pyc",
-      "size": 2759565,
-      "sha256": "340ea7efe07dfed656b4e43347d020ecd6a72e28ff1c309acb7761347f296ea1"
+      "size": 2775496,
+      "sha256": "b4c2fd19141ded858a19ef19184c0cfaf218a9cd0e2201a05e76346c71b21bc9"
     },
     {
       "path": "__pycache__/v1000_learning_intelligence.cpython-313.pyc",
@@ -533,6 +535,11 @@
       "sha256": "ac8ab12cbd69a5d3e90e8f38df15e8137296421455b41d520c2169568932d82d"
     },
     {
+      "path": "docs/RELEASE_NOTES_V116_0_RC4_9.md",
+      "size": 757,
+      "sha256": "f1a0d396afca5155ea2885c17e9824c2b3bcd0e22c8863ce17ed0fe080556664"
+    },
+    {
       "path": "docs/TEST_REPORT_V101_0.md",
       "size": 223,
       "sha256": "28bdb5698640d963354a53b4399571145d379b73034ef4eb9952e6ba8ca0ad0f"
@@ -754,13 +761,13 @@
     },
     {
       "path": "main.py",
-      "size": 1860205,
-      "sha256": "73f732ef11ab0c6fafcbb394421c7c63aea4e5d28e00fc462819b166233b01b2"
+      "size": 1871553,
+      "sha256": "144e64b799ad2c2e443f7b6a66a14d1b905a035919de88b444dd6de4ba420498"
     },
     {
       "path": "pytest.ini",
-      "size": 76,
-      "sha256": "7929c906d7bf8b04baee7de8817f78435a01d49f405baa3f071fc26150cb7ede"
+      "size": 94,
+      "sha256": "00b0ab2eb14f0a188033fd188de7082deea7b89b311bb3ab9e74ea527a184704"
     },
     {
       "path": "railway.json",
@@ -966,6 +973,11 @@
       "path": "tests/__pycache__/test_v1160_rc48_lts_certification.cpython-313-pytest-9.0.2.pyc",
       "size": 5669,
       "sha256": "e1ce2e043e263ce18cdb76c1a029063ab6c3baf2ae1cbccf2fe9bb2f58619a1d"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc49_final_gate.cpython-313-pytest-9.0.2.pyc",
+      "size": 7864,
+      "sha256": "f87f16d93fcdfe844932328f5b114488665a0744b229fde6d768f25e29f28610"
     },
     {
       "path": "tests/__pycache__/test_v116_0_rc4_quality_trust.cpython-313-pytest-9.0.2.pyc",
@@ -1281,6 +1293,11 @@
       "path": "tests/test_v1160_rc48_lts_certification.py",
       "size": 676,
       "sha256": "b25d4cce3749d03a5c66fcf15cf01ed26365fdefbdffac1b2d543486027d3fed"
+    },
+    {
+      "path": "tests/test_v1160_rc49_final_gate.py",
+      "size": 879,
+      "sha256": "74f96d4a809edc51ecb87bd8f61e42c9c8321c18e62a22b9e2cbf6fa193c4b04"
     },
     {
       "path": "tests/test_v116_0_rc4_quality_trust.py",
