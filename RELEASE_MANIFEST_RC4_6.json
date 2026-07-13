@@ -1,0 +1,17 @@
+{
+  "version": "A100 V116.0-RC4.6 LTS INTEGRITY COMPLETION",
+  "release_type": "DEVELOPMENT_RELEASE",
+  "schema": 1,
+  "paper_max": 20,
+  "shadow_max": 60,
+  "live_trading": false,
+  "features": [
+    "central_version_unification",
+    "version_command",
+    "champion_alias",
+    "trust_revision_visibility",
+    "champion_revision_visibility",
+    "threshold_schema_guard",
+    "expanded_e2e_trace"
+  ]
+}

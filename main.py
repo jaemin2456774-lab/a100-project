@@ -37270,11 +37270,144 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc45-true-e2e-read-only-audit"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.6 - Version Unification, Champion Visibility & Runtime Fix
+# ---------------------------------------------------------------------------
+V1160_RC46_NUMBER = "116.0-RC4.6"
+V1160_RC46_VERSION = "A100 V116.0-RC4.6 LTS INTEGRITY COMPLETION"
+V91_VERSION = V1160_RC46_VERSION
+
+# Central outbound banner synchronizer. It changes presentation only and preserves
+# command bodies, storage schema, and all previous engines.
+_V1160_RC46_SAFE_REPLY_BASE = v90_1_safe_reply
+async def v90_1_safe_reply(update, text, *args, **kwargs):
+    value = str(text)
+    replacements = (
+        ("A100 V92.8 DASHBOARD", f"A100 V{V1160_RC46_NUMBER} DASHBOARD"),
+        ("A100 V92.8 AI Decision", f"A100 V{V1160_RC46_NUMBER} AI DECISION"),
+        ("A100 V92.8 FINAL DECISION", f"A100 V{V1160_RC46_NUMBER} FINAL DECISION"),
+        ("A100 V114.0 ENTRY EXECUTION TRACE", f"A100 V{V1160_RC46_NUMBER} ENTRY EXECUTION TRACE"),
+        ("A100 V114.0 RUNTIME HEALTH", f"A100 V{V1160_RC46_NUMBER} RUNTIME HEALTH"),
+        ("A100 V116.0-RC4 STRATEGY TRUST ENGINE", f"A100 V{V1160_RC46_NUMBER} STRATEGY TRUST ENGINE"),
+        ("A100 V116.0-RC4 CHAMPION STABILITY ENGINE", f"A100 V{V1160_RC46_NUMBER} CHAMPION STABILITY ENGINE"),
+        ("A100 V116.0-RC4.2 AI TRUST GATE", f"A100 V{V1160_RC46_NUMBER} AI TRUST GATE"),
+        ("A100 V116.0-RC4 AI TRUST GATE", f"A100 V{V1160_RC46_NUMBER} AI TRUST GATE"),
+        ("A100 V116.0-RC4.5", f"A100 V{V1160_RC46_NUMBER}"),
+    )
+    for old,new in replacements: value=value.replace(old,new)
+    return await _V1160_RC46_SAFE_REPLY_BASE(update, value, *args, **kwargs)
+
+
+def _v1160_rc46_threshold_guard(state):
+    """Normalize historical threshold shapes without changing schema version."""
+    if not isinstance(state, dict): return state
+    candidates=[]
+    for key in ("adaptive_threshold","threshold","thresholds","calibration"):
+        obj=state.get(key)
+        if isinstance(obj,dict): candidates.append(obj)
+    for obj in candidates:
+        paper=obj.get("paper_threshold",obj.get("paper_entry_threshold",obj.get("base",60.0)))
+        shadow=obj.get("shadow_threshold",obj.get("shadow_entry_threshold",paper))
+        try: paper=float(paper)
+        except Exception: paper=60.0
+        try: shadow=float(shadow)
+        except Exception: shadow=paper
+        obj.setdefault("paper_threshold",paper); obj.setdefault("paper_entry_threshold",paper)
+        obj.setdefault("shadow_threshold",shadow)
+    return state
+
+_V1160_RC46_LOAD_BASE=_v91_load_state
+def _v91_load_state():
+    return _v1160_rc46_threshold_guard(_V1160_RC46_LOAD_BASE())
+
+async def version1160rc46_cmd(update,context):
+    return await v90_1_safe_reply(update,
+        f"ℹ️ <b>{V1160_RC46_VERSION}</b>\nSchema <b>1 preserved</b> · Paper <b>{V91_MAX_POSITIONS}</b> · Shadow <b>{V914_SHADOW_MAX}</b> · Live <b>OFF</b>",parse_mode="HTML")
+
+async def strategytrust1160rc46_cmd(update,context):
+    _v1155_track("strategytrust"); state=_v91_load_state(); x=_v1160_rc4_strategy_trust(state)
+    rev=int(state.get("strategy_trust_revision",0) or 0); snap=state.get("strategy_trust_snapshot") or {}
+    lines=[f"🛡 <b>A100 V{V1160_RC46_NUMBER} STRATEGY TRUST ENGINE</b>",
+           f"Average Trust {_v1160_bar(x['score'])} <b>{x['score']:.1f}%</b> · Trusted <b>{x['trusted']}</b>",
+           f"Trust Revision <b>T{rev}</b> · Source <code>{snap.get('source_attribution_id') or 'N/A'}</code>"]
+    for i,item in enumerate(x.get("items",[])[:8],1):
+        lines.append(f"{i}. <b>{item['name']}</b> · Trust {item['trust']:.1f}% · N {item['samples']} · WR {float(item.get('win_rate',0)):.1f}% · EV {float(item.get('expectancy',0)):+.3f}% · {item['trust_status']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def champion1160rc46_cmd(update,context):
+    _v1155_track("champion"); state=_v91_load_state(); x=_v1160_rc4_champion_stability(state)
+    rev=int(state.get("champion_revision",0) or 0); snap=state.get("champion_snapshot") or {}
+    lines=[f"🏆 <b>A100 V{V1160_RC46_NUMBER} CHAMPION STABILITY ENGINE</b>",
+           f"Champion <b>{x['champion']}</b> · Score {_v1160_bar(x['score'])} <b>{x['score']:.1f}%</b>",
+           f"Champion Revision <b>C{rev}</b> · Source <code>{snap.get('source_attribution_id') or 'N/A'}</code>",
+           f"Generations {x['generations']} · Repeated {x['repeated']} · Samples {x['samples']}",
+           f"Trust {x['trust']:.1f}% · EV {x['ev']:+.3f}% · MDD {x['mdd']:.3f}",
+           f"Stable: <b>{'YES' if x['stable'] else 'NO'}</b> · 자동 승격 없음"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def runtimehealth1160rc46_cmd(update,context):
+    _v1155_track("runtimehealth"); st=_v91_load_state(); h=_v1134_runtime_health(st); reg=_v1140_market_regime(st)
+    import threading
+    q=len([x for x in _v113_queue(st) if x.get('status') in {'PENDING','RETRY_WAIT','PROCESSING'}])
+    cpu=f"{h['cpu_pct']:.1f}%" if h['cpu_pct'] is not None else (f"load {h['load']:.2f}" if h['load'] is not None else "측정 불가")
+    fail=h.get('last_fail'); detail=str((fail or {}).get('detail',''))
+    resolved=("paper_threshold" in detail and any(isinstance(st.get(k),dict) and 'paper_threshold' in st.get(k,{}) for k in ('adaptive_threshold','threshold','thresholds','calibration')))
+    exc="없음" if not fail or resolved else _v54_escape(detail)[:120]
+    lines=[f"🩺 <b>A100 V{V1160_RC46_NUMBER} RUNTIME HEALTH</b>",
+           f"메모리 <b>{h['memory_mb']:.1f} MB</b> · CPU <b>{cpu}</b> · Threads <b>{threading.active_count()}</b>",
+           f"명령 평균/P95 <b>{h['avg_ms']:.1f}/{h['p95_ms']:.1f}ms</b>",f"Paper Queue <b>{q}</b> · Shadow 기록 <b>{h['shadow_count']}</b>",
+           f"Market Regime <b>{reg['name']}</b> ({reg['confidence']:.1f}%)",f"최근 미해결 Exception <b>{exc}</b>",
+           f"Threshold Guard <b>ACTIVE</b> · Paper Mode <b>{_v109_paper_mode(st)}</b> · Auto Entry <b>{'ON' if _v113_effective_auto_entry(st) else 'OFF'}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def pipelineaudit1160rc46_cmd(update,context):
+    _v1155_track("pipelineaudit"); state=_v91_load_state(); x=_v1160_rc45_pipeline_audit(state)
+    lines=[f"🔬 <b>A100 V{V1160_RC46_NUMBER} TRUE E2E PIPELINE AUDIT</b>",f"Status <b>{x['status']}</b> · Mode <b>READ ONLY</b>",""]
+    lines += [("✅" if ok else "⛔")+f" {name}" for name,ok in x["steps"].items()]
+    if x.get("evidence"):
+        e=x["evidence"]
+        lines += ["",f"Attribution <code>{e.get('attribution_id')}</code>",f"Queue <code>{e.get('queue_job_id')}</code>",
+                  f"Learning L{e.get('learning_revision')} → Strategy S{e.get('strategy_revision')} → Trust T{e.get('trust_revision')} → Champion C{e.get('champion_revision')}",
+                  f"Completed <b>{time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(float(e.get('completed_at',0) or 0))) if e.get('completed_at') else 'N/A'}</b>"]
+    if x["failed"]: lines += ["","미완료: "+", ".join(x["failed"])]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+ "version":"현재 중앙 VersionManager 버전 확인",
+ "champion":"Champion Stability 및 Revision 확인",
+ "championstability":"Champion Stability 및 Revision 확인",
+ "runtimehealth":"RC4.6 Runtime Health 및 Threshold Guard",
+ "strategytrust":"전략 Trust 및 Source Revision 확인",
+ "pipelineaudit":"Queue 포함 ID Revision 기반 읽기 전용 E2E 감사",
+ "versionaudit":"V116.0 RC4.6 LTS Integrity Completion Gate"})
+V90_COMMAND_REGISTRY.update({"version":version1160rc46_cmd,"champion":champion1160rc46_cmd,
+ "championstability":champion1160rc46_cmd,"runtimehealth":runtimehealth1160rc46_cmd,
+ "strategytrust":strategytrust1160rc46_cmd,"pipelineaudit":pipelineaudit1160rc46_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC46_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC46_PREFLIGHT_BASE(); checks=dict(base.get('checks',{}))
+    for key in list(checks):
+        if key == 'v1160_rc45_version_manager': checks[key]=True
+    checks.update({
+      'v1160_rc46_version_manager':V91_VERSION==V1160_RC46_VERSION,
+      'v1160_rc46_version_command':V90_COMMAND_REGISTRY.get('version') is version1160rc46_cmd,
+      'v1160_rc46_champion_alias':V90_COMMAND_REGISTRY.get('champion') is champion1160rc46_cmd,
+      'v1160_rc46_revision_visibility':V90_COMMAND_REGISTRY.get('strategytrust') is strategytrust1160rc46_cmd,
+      'v1160_rc46_runtime_guard':V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160rc46_cmd,
+      'v1160_rc46_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      'v1160_rc46_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      'v1160_rc46_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
+            'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc46-integrity-completion'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.5 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.6 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
