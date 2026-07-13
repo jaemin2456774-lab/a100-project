@@ -1,0 +1,45 @@
+{
+  "version": "A100 V116.0-RC4.9.4 LTS COMMAND RESPONSE PERFORMANCE STABILIZATION",
+  "release": "development",
+  "base": "A100 V116.0-RC4.9.3",
+  "schema": 1,
+  "paper_limit": 20,
+  "shadow_limit": 60,
+  "live_trading": false,
+  "features": [
+    "command latency profiler",
+    "shared state context",
+    "snapshot TTL cache",
+    "progress response",
+    "summary/detail output",
+    "response-time regression targets"
+  ],
+  "validation": {
+    "python_compile": "PASS",
+    "rc494_tests": "5/5 PASS",
+    "startup_preflight": "PASS",
+    "full_pytest": "40 PASS / 9 historical version-lock failures"
+  },
+  "files": [
+    {
+      "path": "main.py",
+      "sha256": "d440202a895bd03d1b73d9e50868ffd1d52214777453d8b297fcc2dab22ac387",
+      "bytes": 1908360
+    },
+    {
+      "path": "tests/test_v1160_rc494_command_performance.py",
+      "sha256": "c0df71ef8c204f12aed6853e148d57e248658914ec14ed32bd96b5a3c5277617",
+      "bytes": 1693
+    },
+    {
+      "path": "RC4_9_4_RELEASE_REPORT_KR.md",
+      "sha256": "b364ef9d6ca1b7784c0b2125151f60f33911e08ebf46159a6790b4bd9f7da07e",
+      "bytes": 2019
+    },
+    {
+      "path": "README_RC4_9_4.md",
+      "sha256": "2c96c7c935edfa6ae821d528b8b6d17a0bbb28335ce0d888bf0a750946797284",
+      "bytes": 494
+    }
+  ]
+}

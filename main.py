@@ -38321,11 +38321,198 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc493-final-certification-snapshot-integrity"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.4 - COMMAND RESPONSE PERFORMANCE STABILIZATION
+# ---------------------------------------------------------------------------
+V1160_RC494_NUMBER = "116.0-RC4.9.4"
+V1160_RC494_VERSION = "A100 V116.0-RC4.9.4 LTS COMMAND RESPONSE PERFORMANCE STABILIZATION"
+V91_VERSION = V1160_RC494_VERSION
+
+from collections import defaultdict, deque
+
+V1160_RC494_CACHE = {}
+V1160_RC494_CACHE_HITS = 0
+V1160_RC494_CACHE_MISSES = 0
+V1160_RC494_LATENCY = defaultdict(lambda: deque(maxlen=100))
+V1160_RC494_LAST_LATENCY = {}
+V1160_RC494_SLOW_COMMANDS = {"commandcert","ltscert","regression","releasegate","pipelineaudit","repositoryaudit","versionaudit"}
+V1160_RC494_TARGETS_MS = {"help":1000,"commands":1000,"status":1000,"version":1000,"dashboard":2000,
+                          "strategytrust":2000,"memoryhealth":3000,"pipelineaudit":5000,"releasegate":5000,
+                          "versionaudit":5000,"commandcert":10000,"ltscert":10000,"regression":10000}
+
+def _v1160_rc494_state_signature(state):
+    """Small deterministic signature used to invalidate cached engine reports."""
+    try:
+        return _v1160_rc493_snapshot(state).get("snapshot_id", "-")
+    except Exception:
+        return str((state or {}).get("updated_at") or (state or {}).get("learning_revision") or "-")
+
+def _v1160_rc494_cache_get(key, ttl, producer):
+    global V1160_RC494_CACHE_HITS, V1160_RC494_CACHE_MISSES
+    now=time.monotonic(); row=V1160_RC494_CACHE.get(key)
+    if row and now-row[0] <= ttl:
+        V1160_RC494_CACHE_HITS += 1
+        return row[1], True
+    V1160_RC494_CACHE_MISSES += 1
+    value=producer(); V1160_RC494_CACHE[key]=(now,value)
+    return value, False
+
+def _v1160_rc494_shared_state(ttl=2.0):
+    return _v1160_rc494_cache_get(("shared_state",),ttl,_v91_load_state)[0]
+
+def _v1160_rc494_command_certification_cached(state):
+    sig=_v1160_rc494_state_signature(state)
+    return _v1160_rc494_cache_get(("commandcert",sig),60.0,lambda:_v1160_rc493_command_certification(state))
+
+def _v1160_rc494_certification_cached(state):
+    sig=_v1160_rc494_state_signature(state)
+    return _v1160_rc494_cache_get(("ltscert",sig),30.0,lambda:_v1160_rc493_certification(state))
+
+def _v1160_rc494_regression_cached(state):
+    sig=_v1160_rc494_state_signature(state)
+    def make():
+        cmd=_v1160_rc494_command_certification_cached(state)[0]
+        return _v1160_rc493_regression_report_without_preflight(state,cmd)
+    return _v1160_rc494_cache_get(("regression",sig),60.0,make)
+
+def _v1160_rc494_latency_class(ms):
+    return "FAST" if ms < 1000 else "NORMAL" if ms < 3000 else "SLOW" if ms < 5000 else "CRITICAL"
+
+def _v1160_rc494_record_latency(command, elapsed_ms, ok=True):
+    V1160_RC494_LATENCY[command].append(float(elapsed_ms))
+    V1160_RC494_LAST_LATENCY[command]={"ms":round(float(elapsed_ms),2),"ok":bool(ok),"at":time.time(),
+                                      "class":_v1160_rc494_latency_class(elapsed_ms)}
+
+async def _v1160_rc494_progress(update, command):
+    await v90_1_safe_reply(update, f"⏳ /{command} 정밀 검증 중입니다…\n완료되면 요약 결과를 전송합니다.")
+
+async def commandcert1160rc494_cmd(update,context):
+    _v1155_track("commandcert"); state=_v1160_rc494_shared_state(); c,hit=_v1160_rc494_command_certification_cached(state)
+    detail=bool(getattr(context,"args",[]) and str(context.args[0]).lower() in {"detail","full","all"})
+    lines=[f"🧾 <b>A100 V{V1160_RC494_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Status <b>{c['status']}</b> · Snapshot <code>{c['snapshot_id']}</code> · Cache {'HIT' if hit else 'MISS'}",
+           " · ".join(f"{k} {v}" for k,v in c["counts"].items()),""]
+    rows=[r for r in c["rows"] if r["status"]!="PASS"]
+    limit=30 if detail else 8
+    for r in rows[:limit]:
+        e=r["evidence"]; icon="⛔" if r["status"]=="FAILED" else "⚠️"
+        lines.append(f"{icon} /{r['command']} · <b>{r['status']}</b> · {', '.join(r['reasons']) or '-'}")
+        if detail: lines.append(f"   Engine <code>{e['engine']}</code> · Repo <code>{e['repository']}</code> · {e['runtime_ms']:.2f} ms")
+    if not rows: lines.append("✅ Handler → Engine → Repository → Output → Runtime → Snapshot 인증 완료")
+    elif not detail and len(rows)>limit: lines += ["",f"나머지 {len(rows)-limit}건: <code>/commandcert detail</code>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltscert1160rc494_cmd(update,context):
+    _v1155_track("ltscert"); state=_v1160_rc494_shared_state(); c,hit=_v1160_rc494_certification_cached(state); sid=c["snapshot"]["snapshot_id"]
+    detail=bool(getattr(context,"args",[]) and str(context.args[0]).lower() in {"detail","full","all"})
+    lines=[f"🏅 <b>A100 V{V1160_RC494_NUMBER} LTS FINAL CERTIFICATION</b>",
+           f"Result <b>{'READY FOR LTS' if c['ready'] else 'BLOCKED'}</b> · Snapshot <code>{sid}</code> · Cache {'HIT' if hit else 'MISS'}",""]
+    failed=[(k,v) for k,v in c["checks"].items() if not v]
+    if detail:
+        lines += [f"{'✅' if v else '⛔'} {k.replace('_',' ').title()}" for k,v in c["checks"].items()]
+    else:
+        lines += [f"✅ Checks {sum(bool(v) for v in c['checks'].values())}/{len(c['checks'])}",f"{'✅' if not failed else '⛔'} Failed checks {len(failed)}"]
+    if c.get("blocked"):
+        lines += ["","<b>Blocking Metrics</b>"]
+        labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+        for x in c["blocked"][:8]: lines.append(f"⛔ {labels[x['metric']]} {x['value']:.1f}/{x['target']:.0f} · Need +{x['need']:.1f}")
+    lines += ["",f"Command {c['commands']['status']} · Regression {c['regression']['status']}"]
+    if not detail: lines.append("세부 검증: <code>/ltscert detail</code>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def regression1160rc494_cmd(update,context):
+    _v1155_track("regression"); state=_v1160_rc494_shared_state(); r,hit=_v1160_rc494_regression_cached(state)
+    lines=[f"🧪 <b>A100 V{V1160_RC494_NUMBER} REGRESSION REPORT</b>",f"Status <b>{r['status']}</b> · Snapshot <code>{r['snapshot_id']}</code> · Cache {'HIT' if hit else 'MISS'}",
+           f"PASS {r['pass']} · FIXED {r['fixed']} · NEW ISSUE {r['new_issue']} · KNOWN ISSUE {r['known_issue']}",f"Coverage <b>{r['coverage']:.1f}%</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commandperformance1160rc494_cmd(update,context):
+    rows=[]
+    for name,vals in V1160_RC494_LATENCY.items():
+        if not vals: continue
+        avg=sum(vals)/len(vals); mx=max(vals); last=V1160_RC494_LAST_LATENCY.get(name,{})
+        rows.append((avg,name,mx,last.get("ms",0),last.get("class","-"),len(vals)))
+    rows.sort(reverse=True)
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES
+    hit_rate=100.0*V1160_RC494_CACHE_HITS/max(1,total)
+    lines=[f"⚡ <b>A100 V{V1160_RC494_NUMBER} COMMAND PERFORMANCE</b>",
+           f"Cache hit <b>{hit_rate:.1f}%</b> · HIT {V1160_RC494_CACHE_HITS} / MISS {V1160_RC494_CACHE_MISSES}",""]
+    if not rows: lines.append("아직 측정된 명령이 없습니다.")
+    for avg,name,mx,last,cls,count in rows[:15]:
+        target=V1160_RC494_TARGETS_MS.get(name,3000); icon="✅" if avg<=target else "⚠️"
+        lines.append(f"{icon} /{name} · avg {avg:.0f} ms · last {last:.0f} · max {mx:.0f} · {cls} · n={count}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+# Replace only expensive report handlers. Existing engines and data remain untouched.
+V925_COMMAND_USAGE.update({"commandperformance":"명령별 평균/최근/최대 지연시간과 캐시 적중률",
+                           "latency":"commandperformance 별칭","commandcert":"빠른 요약 및 detail 기능 인증",
+                           "ltscert":"캐시·요약 출력 기반 LTS 최종 인증","regression":"캐시 기반 회귀 보고서"})
+V90_COMMAND_REGISTRY.update({"commandcert":commandcert1160rc494_cmd,"ltscert":ltscert1160rc494_cmd,
+                             "regression":regression1160rc494_cmd,"commandperformance":commandperformance1160rc494_cmd,
+                             "latency":commandperformance1160rc494_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+# Late dispatcher override: the application resolves this name at build time.
+async def v90_1_dispatch(update, context):
+    global V90_1_DISPATCH_COUNT, V90_1_DISPATCH_ERRORS, V90_1_LAST_COMMAND, V90_1_LAST_COMMAND_AT
+    message=getattr(update,"effective_message",None) or getattr(update,"message",None)
+    text=getattr(message,"text","") if message else ""; parsed=v90_1_parse_command_lines(text)
+    if not parsed: return
+    if len(parsed)>15:
+        await v90_1_safe_reply(update,f"⚠️ 한 메시지에서 {len(parsed)}개 명령이 감지됐습니다.\n안정성을 위해 앞의 15개만 실행합니다."); parsed=parsed[:15]
+    if len(parsed)>1: await v90_1_safe_reply(update,f"📋 {len(parsed)}개 명령을 확인했습니다. 순서대로 실행합니다.")
+    original_args=list(getattr(context,"args",[]) or [])
+    for command,args in parsed:
+        V90_1_DISPATCH_COUNT+=1; V90_1_LAST_COMMAND=command; V90_1_LAST_COMMAND_AT=time.time()
+        callback=V90_COMMAND_REGISTRY.get(command)
+        if callback is None:
+            await v90_1_safe_reply(update,f"지원하지 않는 명령입니다: /{command}\n/commands에서 전체 명령을 확인하세요."); continue
+        started=time.perf_counter(); ok=False
+        try:
+            context.args=list(args)
+            if command in V1160_RC494_SLOW_COMMANDS: await _v1160_rc494_progress(update,command)
+            result=callback(update,context)
+            if inspect.isawaitable(result): await asyncio.wait_for(result,timeout=120)
+            ok=True
+        except asyncio.TimeoutError:
+            V90_1_DISPATCH_ERRORS+=1; v88_record_error(f"v1160-rc494-timeout:/{command}",RuntimeError("command timeout after 120 seconds"))
+            await v90_1_safe_reply(update,f"⚠️ /{command} 처리 시간이 120초를 초과했습니다.\n봇은 계속 작동합니다.")
+        except Exception as error:
+            V90_1_DISPATCH_ERRORS+=1; v88_record_error(f"v1160-rc494-command:/{command}",error)
+            await v90_1_safe_reply(update,f"⚠️ /{command} 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요.")
+        finally:
+            elapsed=(time.perf_counter()-started)*1000.0; _v1160_rc494_record_latency(command,elapsed,ok)
+            context.args=list(original_args)
+
+_V1160_RC494_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC494_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    for obsolete in ("v1160_rc493_version_manager","v1160_rc493_commandcert_handler","v1160_rc493_ltscert_handler","v1160_rc493_regression_handler"):
+        checks.pop(obsolete,None)
+    checks.update({
+        "v1160_rc494_version_manager":V91_VERSION==V1160_RC494_VERSION,
+        "v1160_rc494_commandcert_handler":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc494_cmd,
+        "v1160_rc494_ltscert_handler":V90_COMMAND_REGISTRY.get("ltscert") is ltscert1160rc494_cmd,
+        "v1160_rc494_regression_handler":V90_COMMAND_REGISTRY.get("regression") is regression1160rc494_cmd,
+        "v1160_rc494_performance_handler":V90_COMMAND_REGISTRY.get("commandperformance") is commandperformance1160rc494_cmd,
+        "v1160_rc494_latency_alias":V90_COMMAND_REGISTRY.get("latency") is commandperformance1160rc494_cmd,
+        "v1160_rc494_cache":callable(_v1160_rc494_cache_get),
+        "v1160_rc494_shared_context":callable(_v1160_rc494_shared_state),
+        "v1160_rc494_dispatch_profiler":callable(v90_1_dispatch),
+        "v1160_rc494_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc494_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc494_schema":_v91_default_state().get("schema")==1,
+        "v1160_rc494_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc494-command-response-performance-stabilization"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.3 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.4 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
