@@ -1,7 +1,8 @@
-# A100 V115.9 MARKET INTELLIGENCE & OUTCOME ATTRIBUTION DEVELOPMENT
+# A100 V116.0 LTS RC1
 
-V115.8 안정 베이스에 시장 국면별 전략 성과, Outcome 원인 귀속, Confidence Calibration 2.0, Data Sufficiency, Evolution Memory를 추가한 V116.0 LTS 직전 개발 버전입니다.
+Unified Intelligence Platform release candidate.
 
-신규 명령: `/marketintelligence`, `/marketregime`, `/marketmemory`, `/outcomeattribution`, `/outcomereasons`, `/datasufficiency`, `/confidenceaccuracy`, `/evolutionmemory`.
+## New commands
+`/intelligencegraph`, `/learningattribution`, `/patternsuccessmap`, `/aiexperience`, `/ltscertification`
 
-안전 원칙: Paper 20, Shadow 60, Live OFF, Recommendation Only, 기존 학습 데이터 보존.
+Live Trading remains disabled. Paper 20 and Shadow 60 are preserved.

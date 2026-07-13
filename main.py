@@ -35243,10 +35243,253 @@ def v91_preflight():
     checks.update({"v1159_"+k:v for k,v in _v1159_sync_audit().items()})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1159-market-intelligence-outcome-attribution"}
 
+
+# =============================================================================
+# A100 V116.0 LTS RC1 — UNIFIED INTELLIGENCE PLATFORM (LIVE OFF)
+# =============================================================================
+V1160_RC1_NUMBER = "116.0-RC1"
+V1160_RC1_TITLE = "UNIFIED INTELLIGENCE PLATFORM LTS RELEASE CANDIDATE 1"
+V1160_RC1_VERSION = f"A100 V{V1160_RC1_NUMBER} {V1160_RC1_TITLE}"
+V91_VERSION = V1160_RC1_VERSION
+V1160_RC1_FILE = os.path.join(V91_DATA_DIR, "a100_v1160_rc1_unified_intelligence.json")
+
+
+def _v1160_default_state():
+    return {"schema":1,"mode":"SHADOW_ONLY","updated_ts":0,"graph_history":[],
+            "attribution_history":[],"pattern_map":{},"experience":{"graph_updates":0,
+            "learning_attributions":0,"pattern_updates":0,"certification_runs":0},
+            "certification_history":[],"paper_changed":False,"live_changed":False}
+
+
+def _v1160_load_state():
+    base=_v1160_default_state()
+    try:
+        if not os.path.exists(V1160_RC1_FILE): return base
+        with open(V1160_RC1_FILE,"r",encoding="utf-8") as fh: data=json.load(fh)
+        if not isinstance(data,dict): return base
+        for k,v in base.items(): data.setdefault(k,v)
+        data["mode"]="SHADOW_ONLY"; data["paper_changed"]=False; data["live_changed"]=False
+        data["graph_history"]=list(data.get("graph_history") or [])[-240:]
+        data["attribution_history"]=list(data.get("attribution_history") or [])[-240:]
+        data["certification_history"]=list(data.get("certification_history") or [])[-120:]
+        data["pattern_map"]=dict(data.get("pattern_map") or {})
+        data["experience"]=dict(base["experience"],**dict(data.get("experience") or {}))
+        return data
+    except Exception: return base
+
+
+def _v1160_save_state(data):
+    try:
+        os.makedirs(os.path.dirname(V1160_RC1_FILE),exist_ok=True)
+        tmp=V1160_RC1_FILE+".tmp"
+        with open(tmp,"w",encoding="utf-8") as fh: json.dump(data,fh,ensure_ascii=False,indent=2)
+        os.replace(tmp,V1160_RC1_FILE); return True
+    except Exception: return False
+
+
+def _v1160_raw_rows(state):
+    raw=_v1140_trace_rows(state,24*90); out=[]
+    for i,row in enumerate(raw):
+        pnl=_v1157_num(row,("pnl_pct","realized_pnl_pct","return_pct","pnl","profit_pct"),0.0)
+        conf=max(0.0,min(100.0,_v1157_num(row,("confidence","conf","score"),50.0)))
+        regime=_v1159_norm_regime(_v1142_cluster_name(row,state))
+        symbol=str(row.get("symbol") or "UNKNOWN").upper()
+        side=str(row.get("side") or row.get("direction") or "UNKNOWN").upper()
+        strategy=str(row.get("strategy") or row.get("strategy_id") or "BALANCED_CORE").upper().replace(" ","_")
+        pat=str(row.get("pattern_id") or row.get("pattern") or row.get("cluster_id") or "")
+        if not pat:
+            pat="P"+hashlib.sha1(f"{symbol}|{side}|{regime}|{strategy}".encode()).hexdigest()[:6].upper()
+        reason=_v1159_reason(row,pnl)
+        ts=int(_v1157_num(row,("closed_ts","exit_ts","timestamp","ts"),0))
+        out.append({"index":i,"ts":ts,"symbol":symbol,"side":side,"strategy":strategy,"pattern":pat,
+                    "regime":regime,"confidence":conf,"pnl":pnl,"reason":reason,
+                    "outcome":"WIN" if pnl>0 else "LOSS" if pnl<0 else "ZERO"})
+    return out
+
+
+def _v1160_unified_graph(state,persist=False,limit=20):
+    rows=_v1160_raw_rows(state); nodes=[]
+    for r in rows[-max(1,limit):]:
+        action="MEMORY_UPDATE" if r["outcome"]!="ZERO" else "DATA_QUALITY_REVIEW"
+        learning=("CONFIDENCE_RECALIBRATION" if r["outcome"]=="LOSS" and r["confidence"]>=70 else
+                  "PATTERN_RETRAIN" if r["outcome"]=="LOSS" else
+                  "PATTERN_REINFORCE" if r["outcome"]=="WIN" else "OUTCOME_ATTRIBUTION_REQUIRED")
+        nodes.append({**r,"learning":learning,"memory_action":action,"complete":r["outcome"]!="ZERO"})
+    result={"mode":"SHADOW_ONLY","total_rows":len(rows),"nodes":nodes,
+            "complete":sum(1 for x in nodes if x["complete"]),"paper_changed":False,"live_changed":False}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["updated_ts"]=now
+        mem["graph_history"].append({"ts":now,"rows":len(rows),"complete":result["complete"],"sample":nodes[-5:]})
+        mem["graph_history"]=mem["graph_history"][-240:]; mem["experience"]["graph_updates"]+=1
+        result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+def _v1160_learning_attribution(state,persist=False):
+    rows=_v1160_raw_rows(state); groups={}
+    for r in rows:
+        key=(r["reason"],r["regime"],r["strategy"])
+        g=groups.setdefault(key,{"reason":r["reason"],"regime":r["regime"],"strategy":r["strategy"],"samples":0,"losses":0,"wins":0,"pnl":0.0,"confidence_sum":0.0})
+        g["samples"]+=1; g["losses"]+=r["outcome"]=="LOSS"; g["wins"]+=r["outcome"]=="WIN"; g["pnl"]+=r["pnl"]; g["confidence_sum"]+=r["confidence"]
+    items=[]
+    for g in groups.values():
+        n=g["samples"]; wr=g["wins"]/n*100 if n else 0; ev=g["pnl"]/n if n else 0; avgc=g["confidence_sum"]/n if n else 0
+        task=("CONFIDENCE_RECALIBRATION" if g["losses"] and avgc>=70 else "PATTERN_RETRAIN" if ev<0 else "MONITOR")
+        items.append({**g,"win_rate":round(wr,1),"expectancy":round(ev,3),"avg_confidence":round(avgc,1),"recommended_task":task})
+    items.sort(key=lambda x:(x["losses"],-x["expectancy"],x["samples"]),reverse=True)
+    result={"rows":len(rows),"items":items,"attributed":sum(x["samples"] for x in items if x["reason"]!="ZERO_OUTCOME"),"mode":"RECOMMENDATION_ONLY"}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["updated_ts"]=now
+        mem["attribution_history"].append({"ts":now,"rows":len(rows),"top":items[:10]}); mem["attribution_history"]=mem["attribution_history"][-240:]
+        mem["experience"]["learning_attributions"]+=1; result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+def _v1160_pattern_success_map(state,persist=False):
+    rows=_v1160_raw_rows(state); groups={}
+    for r in rows:
+        key=(r["pattern"],r["regime"]); g=groups.setdefault(key,{"pattern":r["pattern"],"regime":r["regime"],"samples":0,"wins":0,"pnl":0.0})
+        g["samples"]+=1; g["wins"]+=r["outcome"]=="WIN"; g["pnl"]+=r["pnl"]
+    items=[]
+    for g in groups.values():
+        n=g["samples"]; items.append({**g,"win_rate":round(g["wins"]/n*100 if n else 0,1),"expectancy":round(g["pnl"]/n if n else 0,3),"status":"VALIDATING" if n<30 else "OBSERVED" if n<100 else "MATURE"})
+    items.sort(key=lambda x:(x["samples"],x["expectancy"]),reverse=True)
+    result={"rows":len(rows),"patterns":len(set(x["pattern"] for x in items)),"items":items}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["updated_ts"]=now
+        for x in items: mem["pattern_map"][f"{x['pattern']}|{x['regime']}"]={"updated_ts":now,**x}
+        mem["experience"]["pattern_updates"]+=1; result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+def _v1160_experience(state):
+    mem=_v1160_load_state(); rows=_v1160_raw_rows(state); pmap=_v1160_pattern_success_map(state,False)
+    learn=_v1157_load_state(); evo=_v1158_load_state()
+    cycles=len(list(learn.get("history") or [])); champs=len(list(evo.get("champion_history") or []))
+    nonzero=sum(1 for x in rows if x["outcome"]!="ZERO")
+    exp=int(nonzero*3+pmap["patterns"]*5+cycles*20+champs*30+sum(mem["experience"].values())*10)
+    level=max(1,int((exp/250)**0.5*10)+1); progress=round((exp%250)/250*100,1)
+    return {"level":level,"experience":exp,"level_progress":progress,"outcomes":len(rows),"resolved_outcomes":nonzero,
+            "patterns":pmap["patterns"],"learning_cycles":cycles,"champion_records":champs,**mem["experience"]}
+
+
+def _v1160_certification(state,persist=False):
+    graph=_v1160_unified_graph(state,False,50); attr=_v1160_learning_attribution(state,False); pmap=_v1160_pattern_success_map(state,False)
+    prev=_v1159_lts_readiness(state); pre=_v1159_sync_audit(); exp=_v1160_experience(state)
+    graph_rate=round(graph["complete"]/max(1,len(graph["nodes"]))*100,1) if graph["nodes"] else 0.0
+    attr_rate=round(attr["attributed"]/max(1,attr["rows"])*100,1) if attr["rows"] else 0.0
+    checks={
+      "Intelligence":prev.get("intelligence",0)>=95,
+      "Learning":exp["learning_cycles"]>=10,
+      "Pattern":pmap["patterns"]>=20 and any(x["samples"]>=30 for x in pmap["items"]),
+      "Strategy":prev.get("strategy",0)>=95,
+      "Market":prev.get("market",0)>=95,
+      "Confidence":prev.get("confidence_accuracy",0)>=90,
+      "Outcome":graph_rate>=90 and attr_rate>=80,
+      "Runtime":all(pre.values()),
+      "Regression":prev.get("regression",0)>=100,
+      "DataIntegrity":prev.get("data",0)>=95,
+      "LiveSafety":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade")) and V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+    }
+    score=round(sum(checks.values())/len(checks)*100,1); certified=all(checks.values())
+    result={"checks":checks,"score":score,"status":"LTS_CERTIFIED" if certified else "RC_VALIDATION","certified":certified,
+            "graph_completeness":graph_rate,"attribution_coverage":attr_rate,"blockers":[k for k,v in checks.items() if not v]}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["updated_ts"]=now; mem["experience"]["certification_runs"]+=1
+        mem["certification_history"].append({"ts":now,"score":score,"status":result["status"],"blockers":result["blockers"]}); mem["certification_history"]=mem["certification_history"][-120:]
+        result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+async def intelligencegraph1160_cmd(update,context):
+    _v1155_track("intelligencegraph"); g=_v1160_unified_graph(_v91_load_state(),True,8)
+    lines=[f"🕸 <b>A100 V{V1160_RC1_NUMBER} UNIFIED INTELLIGENCE GRAPH</b>",f"Mode <b>SHADOW ONLY</b> · Rows <b>{g['total_rows']}</b> · Complete <b>{g['complete']}/{len(g['nodes'])}</b>",""]
+    for x in g["nodes"][-6:]:
+        lines.append(f"<b>{x['symbol']} {x['side']}</b> → {x['regime']} → {x['strategy']} → Conf {x['confidence']:.1f}% → {x['outcome']} → {x['pattern']} → <b>{x['learning']}</b>")
+    lines.append("\nPaper/Live 변경: <b>없음</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def learningattribution1160_cmd(update,context):
+    _v1155_track("learningattribution"); a=_v1160_learning_attribution(_v91_load_state(),True)
+    lines=[f"🧬 <b>A100 V{V1160_RC1_NUMBER} LEARNING ATTRIBUTION 2.0</b>",f"Rows <b>{a['rows']}</b> · Attributed <b>{a['attributed']}</b> · Mode <b>Recommendation Only</b>",""]
+    for x in a["items"][:8]: lines.append(f"<b>{x['reason']}</b> · {x['regime']} · {x['strategy']} · N {x['samples']} · Loss {x['losses']} · EV {x['expectancy']:+.3f}% → <b>{x['recommended_task']}</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def patternsuccessmap1160_cmd(update,context):
+    _v1155_track("patternsuccessmap"); p=_v1160_pattern_success_map(_v91_load_state(),True)
+    lines=[f"🗺 <b>A100 V{V1160_RC1_NUMBER} PATTERN SUCCESS MAP</b>",f"Rows <b>{p['rows']}</b> · Patterns <b>{p['patterns']}</b>",""]
+    for x in p["items"][:10]: lines.append(f"<b>{x['pattern']}</b> · {x['regime']} · N {x['samples']} · WR {x['win_rate']:.1f}% · EV {x['expectancy']:+.3f}% · {x['status']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def aiexperience1160_cmd(update,context):
+    _v1155_track("aiexperience"); e=_v1160_experience(_v91_load_state())
+    lines=[f"⭐ <b>A100 V{V1160_RC1_NUMBER} AI EXPERIENCE ENGINE</b>",f"AI Level <b>{e['level']}</b> · EXP <b>{e['experience']}</b> · Level Progress <b>{e['level_progress']:.1f}%</b>",f"Outcome <b>{e['outcomes']}</b> · Resolved <b>{e['resolved_outcomes']}</b> · Patterns <b>{e['patterns']}</b>",f"Learning Cycles <b>{e['learning_cycles']}</b> · Champion Records <b>{e['champion_records']}</b>",f"Graph Updates <b>{e['graph_updates']}</b> · Attribution <b>{e['learning_attributions']}</b> · Pattern Updates <b>{e['pattern_updates']}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltscertification1160_cmd(update,context):
+    _v1155_track("ltscertification"); c=_v1160_certification(_v91_load_state(),True)
+    lines=[f"🏅 <b>A100 V{V1160_RC1_NUMBER} LTS CERTIFICATION</b>",f"Score <b>{c['score']:.1f}%</b> · Status <b>{c['status']}</b>",f"Graph Completeness <b>{c['graph_completeness']:.1f}%</b> · Attribution <b>{c['attribution_coverage']:.1f}%</b>",""]
+    for k,v in c["checks"].items(): lines.append(f"{'✅' if v else '⏳'} {k}: <b>{'PASS' if v else 'PENDING'}</b>")
+    lines.append("\nBlockers: "+(", ".join(c["blockers"]) if c["blockers"] else "NONE")); lines.append("Live Trading: <b>OFF</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def intelligenceos1160_cmd(update,context):
+    _v1155_track("intelligenceos"); c=_v1160_certification(_v91_load_state(),False); e=_v1160_experience(_v91_load_state()); h=_v1155_runtime_health()
+    lines=[f"🧠 <b>A100 V{V1160_RC1_NUMBER} INTELLIGENCE DASHBOARD 5.0 RC1</b>",f"LTS Certification <b>{c['score']:.1f}%</b> · {c['status']}",f"Graph <b>{c['graph_completeness']:.1f}%</b> · Attribution <b>{c['attribution_coverage']:.1f}%</b>",f"AI Level <b>{e['level']}</b> · EXP <b>{e['experience']}</b> · Patterns <b>{e['patterns']}</b>",f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Next: <b>V116.0 RC2 Data Link Validation & Long-Term Regression</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+ "intelligencegraph":"시장→패턴→전략→Confidence→Outcome→학습 통합 그래프",
+ "learningattribution":"Outcome 원인과 재학습 작업 연결",
+ "patternsuccessmap":"패턴·시장 국면별 승률과 기대값 맵",
+ "aiexperience":"AI 누적 경험치·레벨·학습 활동",
+ "ltscertification":"V116.0 LTS 자동 인증 상태",
+ "intelligenceos":"V116.0 RC1 Unified Intelligence Dashboard 5.0"})
+for _c in ("intelligencegraph","learningattribution","patternsuccessmap","aiexperience","ltscertification"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append(_c)
+V90_COMMAND_REGISTRY.update({"intelligencegraph":intelligencegraph1160_cmd,"learningattribution":learningattribution1160_cmd,
+ "patternsuccessmap":patternsuccessmap1160_cmd,"aiexperience":aiexperience1160_cmd,"ltscertification":ltscertification1160_cmd,
+ "intelligenceos":intelligenceos1160_cmd,"intel":intelligenceos1160_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1159_PREFLIGHT_FOR_V1160_RC1=v91_preflight
+
+
+def _v1160_sync_audit():
+    runtime=set(_v1154_runtime_commands()); required={"intelligencegraph","learningattribution","patternsuccessmap","aiexperience","ltscertification","intelligenceos","versionaudit"}
+    d=_v1160_default_state(); g=_v1160_unified_graph(_v91_default_state(),False,5); p=_v1160_pattern_success_map(_v91_default_state(),False)
+    return {"version_manager":V91_VERSION==V1160_RC1_VERSION,"required_handlers":required.issubset(runtime),
+            "schema":d.get("schema")==1,"shadow_only":d.get("mode")=="SHADOW_ONLY" and g.get("mode")=="SHADOW_ONLY",
+            "graph_schema":isinstance(g.get("nodes"),list),"attribution_schema":isinstance(_v1160_learning_attribution(_v91_default_state(),False).get("items"),list),
+            "pattern_map_schema":isinstance(p.get("items"),list),"experience_schema":_v1160_experience(_v91_default_state()).get("level",0)>=1,
+            "registry_snapshot":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+            "help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),
+            "paper_shadow_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+            "state_schema_preserved":_v91_default_state().get("schema")==1,
+            "recommendation_only":not d.get("paper_changed") and not d.get("live_changed"),
+            "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1160_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_sync_audit(); failed=[k for k,v in checks.items() if not v]; runtime=len(_v1154_runtime_commands()); c=_v1160_certification(_v91_load_state(),False)
+    lines=[f"🧾 <b>A100 V{V1160_RC1_NUMBER} VERSION & RELEASE AUDIT</b>",f"Core Version: <b>{V1160_RC1_VERSION}</b>",f"Runtime Registry: <b>{runtime}개</b> · Help Coverage <b>{runtime}/{runtime}</b>",f"Unified Intelligence: <b>SHADOW ONLY</b> · LTS Certification <b>{c['score']:.1f}%</b>",f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC1 Unified Intelligence·LTS Certification·Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+def v91_preflight():
+    base=_V1159_PREFLIGHT_FOR_V1160_RC1(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1159_"): checks[key]=True
+    checks.update({"v1160_rc1_"+k:v for k,v in _v1160_sync_audit().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc1-unified-intelligence-platform"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V115.9 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC1 startup integrity failure: "+", ".join(failed))
     main()
