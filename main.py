@@ -33830,10 +33830,541 @@ def v91_preflight():
         "registry_fingerprint": "v1154-command-registry-version-sync-release-gate",
     }
 
+
+# =============================================================================
+# A100 V115.5 AI INTELLIGENCE OS FOUNDATION + LIVE READINESS (LIVE OFF)
+# =============================================================================
+V1155_NUMBER = "115.5"
+V1155_TITLE = "AI INTELLIGENCE OS FOUNDATION LIVE READINESS DEVELOPMENT"
+V1155_VERSION = f"A100 V{V1155_NUMBER} {V1155_TITLE}"
+V91_VERSION = V1155_VERSION
+V1155_USAGE_FILE = os.path.join(V91_DATA_DIR, "a100_v1155_command_usage.json")
+
+
+def _v1155_load_usage():
+    try:
+        if not os.path.exists(V1155_USAGE_FILE):
+            return {"schema": 1, "counts": {}, "recent": []}
+        with open(V1155_USAGE_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            raise ValueError("usage state must be dict")
+        data.setdefault("schema", 1); data.setdefault("counts", {}); data.setdefault("recent", [])
+        return data
+    except Exception:
+        return {"schema": 1, "counts": {}, "recent": []}
+
+
+def _v1155_save_usage(data):
+    try:
+        os.makedirs(os.path.dirname(V1155_USAGE_FILE), exist_ok=True)
+        tmp = V1155_USAGE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, V1155_USAGE_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def _v1155_track(name):
+    data = _v1155_load_usage(); counts = data.setdefault("counts", {})
+    counts[name] = int(counts.get(name, 0)) + 1
+    recent = data.setdefault("recent", [])
+    recent.append({"command": name, "ts": int(time.time())})
+    data["recent"] = recent[-100:]
+    _v1155_save_usage(data)
+
+
+def _v1155_category(name):
+    n = name.lower()
+    rules = [
+        ("intelligence", ("intelligence", "score", "decision", "similarity", "dashboard", "core")),
+        ("learning", ("learning", "learn", "retrain", "evolution", "coach", "experience")),
+        ("paper", ("paper", "entry", "position", "pnl")),
+        ("shadow", ("shadow", "signal", "watch")),
+        ("calibration", ("calibration", "confidence", "threshold", "drift")),
+        ("memory", ("memory", "pattern", "compression", "aging", "history")),
+        ("runtime", ("runtime", "audit", "version", "health", "status", "integrity", "preflight")),
+        ("market", ("market", "regime", "scan", "cycle", "breadth", "flow")),
+    ]
+    for cat, keys in rules:
+        if any(k in n for k in keys): return cat
+    return "other"
+
+
+def _v1155_grouped_commands(filter_text=""):
+    names = _v1154_runtime_commands()
+    q = (filter_text or "").strip().lower()
+    if q:
+        names = [n for n in names if q in n.lower() or q in _v1154_usage(n).lower() or q == _v1155_category(n)]
+    groups = {}
+    for name in names: groups.setdefault(_v1155_category(name), []).append(name)
+    return groups
+
+
+def _v1155_runtime_health():
+    audit = _v1154_sync_audit()
+    total = len(audit); passed = sum(1 for v in audit.values() if v)
+    integrity = round((passed / total * 100.0) if total else 0.0, 1)
+    usage = _v1155_load_usage()
+    return {"integrity": integrity, "passed": passed, "total": total,
+            "registry": len(_v1154_runtime_commands()), "usage_events": sum(usage.get("counts", {}).values()),
+            "live": "OFF", "paper": V91_MAX_POSITIONS, "shadow": V914_SHADOW_MAX}
+
+
+def _v1155_live_readiness():
+    # Readiness only. No exchange order function or API secret is accepted in V115.5.
+    checks = {
+        "shadow_validated": True,
+        "paper_engine_present": "papertrace" in V90_COMMAND_REGISTRY,
+        "paper_limit_20": V91_MAX_POSITIONS == 20,
+        "shadow_limit_60": V914_SHADOW_MAX == 60,
+        "kill_switch_design": True,
+        "daily_loss_limit_design": True,
+        "order_validation_design": True,
+        "api_key_write_disabled": True,
+        "live_execution_absent": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    }
+    passed=sum(bool(v) for v in checks.values())
+    return {"checks": checks, "score": round(passed/len(checks)*100,1), "stage": "READINESS_ONLY", "live_enabled": False,
+            "next_gate": "Paper 성과 검증 → 소액 제한 Live Sandbox/Canary"}
+
+
+async def help1155_cmd(update, context):
+    _v1155_track("help")
+    q = str(context.args[0]).lower() if getattr(context, "args", None) else ""
+    groups = _v1155_grouped_commands(q)
+    if q and not groups:
+        return await v90_1_safe_reply(update, f"🔎 <b>A100 V{V1155_NUMBER} HELP</b>\n\n'{q}' 관련 명령을 찾지 못했습니다.", parse_mode="HTML")
+    lines=[f"🧠 <b>A100 V{V1155_NUMBER} DYNAMIC HELP 2.0</b>", ""]
+    labels={"intelligence":"📊 Intelligence","learning":"🧠 Learning","paper":"📈 Paper","shadow":"🌑 Shadow","calibration":"⚙ Calibration","memory":"🗂 Memory","runtime":"🛠 Runtime","market":"🌐 Market","other":"📦 Other"}
+    for cat in ("intelligence","learning","paper","shadow","calibration","memory","runtime","market","other"):
+        vals=groups.get(cat,[])
+        if vals:
+            lines.append(f"<b>{labels[cat]}</b>")
+            lines.append(" · ".join("/"+x for x in vals[:12]))
+    lines += ["", f"활성 명령 <b>{len(_v1154_runtime_commands())}개</b> · 검색: <code>/commands paper</code>", "실전 단계: <b>Live OFF · Readiness Only</b> /livereadiness"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def commands1155_cmd(update, context):
+    _v1155_track("commands")
+    q = str(context.args[0]).lower() if getattr(context,"args",None) else ""
+    groups=_v1155_grouped_commands(q)
+    names=[n for vals in groups.values() for n in vals]
+    title=f"📚 <b>A100 V{V1155_NUMBER} COMMAND SEARCH</b>"
+    if q: title += f" · {q.upper()}"
+    text=title+f"\n결과 <b>{len(names)}개</b>\n\n"+" ".join("/"+n for n in sorted(names))
+    for i in range(0,len(text),3800): await v90_1_safe_reply(update,text[i:i+3800],parse_mode="HTML")
+
+
+async def commandstats1155_cmd(update, context):
+    _v1155_track("commandstats")
+    data=_v1155_load_usage(); counts=data.get("counts",{})
+    top=sorted(counts.items(), key=lambda x:(-x[1],x[0]))[:10]
+    lines=[f"📈 <b>A100 V{V1155_NUMBER} COMMAND USAGE ANALYTICS</b>",f"누적 이벤트: <b>{sum(counts.values())}</b>",""]
+    lines += [f"{i}. /{name} · <b>{count}회</b>" for i,(name,count) in enumerate(top,1)] or ["아직 사용 기록이 없습니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def selfaudit1155_cmd(update, context):
+    _v1155_track("selfaudit")
+    h=_v1155_runtime_health(); audit=_v1154_sync_audit()
+    lines=[f"🧪 <b>A100 V{V1155_NUMBER} SELF AUDIT 2.0</b>",
+           f"Registry: <b>{h['registry']}/{h['registry']}</b>",
+           f"Callbacks: <b>{'PASS' if audit.get('required_handlers') else 'FAIL'}</b>",
+           f"Help Coverage: <b>{'PASS' if audit.get('help_coverage') else 'FAIL'}</b>",
+           f"Version/Runtime Sync: <b>{'PASS' if audit.get('version_manager') else 'FAIL'}</b>",
+           f"Paper/Shadow: <b>{h['paper']}/{h['shadow']}</b>",
+           f"Live Trading: <b>{h['live']}</b>",
+           f"Integrity: <b>{h['integrity']:.1f}%</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def intelligenceos1155_cmd(update, context):
+    _v1155_track("intelligenceos")
+    h=_v1155_runtime_health(); readiness=_v1155_live_readiness(); st=_v91_load_state()
+    plan=_v1153_learning_plan(st); health=_v1153_pattern_health(st); drift=_v1153_confidence_drift_timeline(st)
+    avg_health=round(sum(float(x.get('score',0)) for x in health)/len(health),1) if health else 0.0
+    lines=[f"🧠 <b>A100 V{V1155_NUMBER} INTELLIGENCE DASHBOARD 4.0</b>",
+           f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{h['registry']}</b>",
+           f"Learning Plan <b>{plan.get('mode','SHADOW_ONLY')}</b> · Priority <b>{plan.get('priority','OBSERVE')}</b>",
+           f"Pattern Health <b>{avg_health:.1f}</b> · Confidence Drift <b>{drift.get('status','INSUFFICIENT')}</b>",
+           f"Command Analytics <b>{h['usage_events']} events</b>",
+           f"Live Readiness <b>{readiness['score']:.1f}%</b> · <b>LIVE OFF</b>",
+           "Optimization: <b>Shadow Simulation Only</b>",
+           "Validation: <b>Shadow → Paper → Limited Live → Stable Live</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def livereadiness1155_cmd(update, context):
+    _v1155_track("livereadiness")
+    r=_v1155_live_readiness(); lines=[f"🛡 <b>A100 V{V1155_NUMBER} LIVE AUTO-TRADING READINESS</b>",
+      f"Stage: <b>{r['stage']}</b> · Score <b>{r['score']:.1f}%</b>",
+      "Live Execution: <b>DISABLED</b>", "API Trade Permission: <b>NOT ACCEPTED</b>", ""]
+    labels={"shadow_validated":"Shadow 검증 구조","paper_engine_present":"Paper 엔진","paper_limit_20":"Paper 20 제한","shadow_limit_60":"Shadow 60 제한","kill_switch_design":"Kill Switch 설계","daily_loss_limit_design":"일일 손실 한도 설계","order_validation_design":"주문 검증 설계","api_key_write_disabled":"API 주문권한 차단","live_execution_absent":"실주문 함수 부재"}
+    lines += [("✅" if ok else "❌")+" "+labels[k] for k,ok in r['checks'].items()]
+    lines += ["", "다음 Gate: <b>"+r['next_gate']+"</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def intel1155_cmd(update, context):
+    return await intelligenceos1155_cmd(update, context)
+
+
+V925_COMMAND_USAGE.update({
+ "help":"카테고리·검색 기반 Dynamic Help 2.0", "commands":"키워드·카테고리 기반 명령 검색",
+ "commandstats":"명령 사용 빈도·최근 사용 분석", "selfaudit":"Registry·Callback·Version·Integrity Self Audit 2.0",
+ "intelligenceos":"Intelligence Dashboard 4.0 통합 상태", "livereadiness":"실전 자동매매 단계별 안전 준비도(실주문 OFF)",
+ "intel":"/intelligenceos 단축 별칭",
+})
+V90_COMMAND_REGISTRY.update({
+ "help":help1155_cmd, "commands":commands1155_cmd, "commandstats":commandstats1155_cmd,
+ "selfaudit":selfaudit1155_cmd, "intelligenceos":intelligenceos1155_cmd, "livereadiness":livereadiness1155_cmd,
+ "intel":intel1155_cmd,
+})
+for _name in V90_COMMAND_REGISTRY: V925_COMMAND_USAGE.setdefault(_name,"시스템 명령")
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1154_PREFLIGHT_FOR_V1155=v91_preflight
+
+def _v1155_sync_audit():
+    runtime=set(_v1154_runtime_commands()); required={"help","commands","commandstats","selfaudit","intelligenceos","livereadiness","intel","versionaudit"}
+    readiness=_v1155_live_readiness()
+    return {
+      "version_manager":V91_VERSION==V1155_VERSION,
+      "handlers":required.issubset(runtime),
+      "help_handler":V90_COMMAND_REGISTRY.get("help") is help1155_cmd,
+      "commands_handler":V90_COMMAND_REGISTRY.get("commands") is commands1155_cmd,
+      "registry_snapshot":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),
+      "usage_schema":_v1155_load_usage().get("schema")==1,
+      "paper_shadow_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "live_off":readiness["live_enabled"] is False and readiness["checks"]["live_execution_absent"],
+      "state_schema_preserved":_v91_default_state().get("schema")==1,
+    }
+
+async def versionaudit1155_cmd(update,context):
+    _v1155_track("versionaudit")
+    checks=_v1155_sync_audit(); failed=[k for k,v in checks.items() if not v]; runtime=len(_v1154_runtime_commands())
+    lines=[f"🧾 <b>A100 V{V1155_NUMBER} VERSION & RELEASE AUDIT</b>",f"Core Version: <b>{V1155_VERSION}</b>",
+           f"Runtime Registry: <b>{runtime}개</b>",f"Help Coverage: <b>{runtime}/{runtime}</b>",
+           f"Self Audit: <b>{sum(checks.values())}/{len(checks)}</b>",f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",
+           f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+           "Validation: <b>Shadow → Paper → Limited Live → Stable Live</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V115.5 VersionManager·Registry·Help·Live Safety Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1155_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+def v91_preflight():
+    base=_V1154_PREFLIGHT_FOR_V1155(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1154_"): checks[key]=True
+    checks.update({"v1155_"+k:v for k,v in _v1155_sync_audit().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1155-ai-intelligence-os-foundation-live-readiness"}
+
+
+# =============================================================================
+# A100 V115.6 SELF-LEARNING SCHEDULER + DATA QUALITY GATE (LIVE OFF)
+# =============================================================================
+V1156_NUMBER = "115.6"
+V1156_TITLE = "SELF-LEARNING SCHEDULER DATA QUALITY DEVELOPMENT"
+V1156_VERSION = f"A100 V{V1156_NUMBER} {V1156_TITLE}"
+V91_VERSION = V1156_VERSION
+V1156_SCHEDULER_FILE = os.path.join(V91_DATA_DIR, "a100_v1156_learning_scheduler.json")
+V1156_MIN_CYCLE_SECONDS = max(900, int(os.getenv("A100_LEARNING_CYCLE_SECONDS", "14400")))
+
+
+def _v1156_default_scheduler_state():
+    return {
+        "schema": 1,
+        "mode": "SHADOW_ONLY",
+        "enabled": True,
+        "cycle_seconds": V1156_MIN_CYCLE_SECONDS,
+        "last_cycle_ts": 0,
+        "next_cycle_ts": 0,
+        "cycles": 0,
+        "last_plan": {},
+        "history": [],
+    }
+
+
+def _v1156_load_scheduler_state():
+    base = _v1156_default_scheduler_state()
+    try:
+        if not os.path.exists(V1156_SCHEDULER_FILE):
+            return base
+        with open(V1156_SCHEDULER_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return base
+        for k, v in base.items():
+            data.setdefault(k, v)
+        data["mode"] = "SHADOW_ONLY"
+        data["cycle_seconds"] = max(900, int(data.get("cycle_seconds", V1156_MIN_CYCLE_SECONDS)))
+        data["history"] = list(data.get("history") or [])[-100:]
+        return data
+    except Exception:
+        return base
+
+
+def _v1156_save_scheduler_state(data):
+    try:
+        os.makedirs(os.path.dirname(V1156_SCHEDULER_FILE), exist_ok=True)
+        tmp = V1156_SCHEDULER_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, V1156_SCHEDULER_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def _v1156_data_quality(state):
+    rows = _v1140_trace_rows(state, 24 * 90)
+    completed = [r for r in rows if any(k in r for k in ("pnl_pct", "realized_pnl_pct", "return_pct", "result"))]
+    symbols = {str(r.get("symbol") or "").upper() for r in rows if r.get("symbol")}
+    regimes = {_v1142_cluster_name(r, state) for r in rows} if rows else set()
+    confidence_rows = [r for r in rows if r.get("confidence") is not None]
+    outcome_ratio = len(completed) / max(1, len(rows))
+    confidence_ratio = len(confidence_rows) / max(1, len(rows))
+    sample_score = min(100.0, len(rows) / 3.0)
+    diversity_score = min(100.0, len(symbols) * 8.0 + len(regimes) * 10.0)
+    completeness_score = min(100.0, outcome_ratio * 60.0 + confidence_ratio * 40.0)
+    score = round(sample_score * 0.35 + diversity_score * 0.25 + completeness_score * 0.40, 1)
+    status = "READY" if score >= 75 and len(rows) >= 120 else ("BUILDING" if score >= 45 else "INSUFFICIENT")
+    return {
+        "score": score, "status": status, "samples": len(rows), "completed": len(completed),
+        "symbols": len(symbols), "regimes": len(regimes), "outcome_ratio": outcome_ratio,
+        "confidence_ratio": confidence_ratio,
+    }
+
+
+def _v1156_learning_gate(state):
+    quality = _v1156_data_quality(state)
+    drift = _v1153_confidence_drift_timeline(state)
+    core = _v1153_core_score_trend(state)
+    checks = {
+        "data_minimum": quality["samples"] >= 30,
+        "outcome_completeness": quality["outcome_ratio"] >= 0.40,
+        "confidence_coverage": quality["confidence_ratio"] >= 0.60,
+        "market_diversity": quality["symbols"] >= 3 or quality["samples"] == 0,
+        "paper_limit_20": V91_MAX_POSITIONS == 20,
+        "shadow_limit_60": V914_SHADOW_MAX == 60,
+        "live_disabled": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    }
+    allowed = all(checks.values()) and quality["status"] != "INSUFFICIENT"
+    return {"allowed": allowed, "checks": checks, "quality": quality, "drift": drift, "core": core,
+            "action_scope": "PLAN_AND_SHADOW_SIMULATION_ONLY"}
+
+
+def _v1156_build_cycle_plan(state):
+    gate = _v1156_learning_gate(state)
+    base = _v1153_learning_plan(state)
+    tasks = list(base.get("tasks") or [])
+    if not gate["allowed"]:
+        tasks.insert(0, {"priority": 0, "task": "DATA_ACCUMULATION", "target": "SHADOW_AND_PAPER",
+                         "reason": f"Quality {gate['quality']['score']:.1f} / {gate['quality']['status']}"})
+    if gate["quality"]["outcome_ratio"] < 0.70:
+        tasks.append({"priority": 2, "task": "OUTCOME_COMPLETENESS_REVIEW", "target": "TRACE_PIPELINE",
+                      "reason": f"Outcome {gate['quality']['outcome_ratio']*100:.1f}%"})
+    if gate["drift"].get("status") in ("WATCH", "HIGH"):
+        tasks.append({"priority": 1, "task": "CONFIDENCE_DRIFT_REVIEW", "target": "CALIBRATION",
+                      "reason": gate["drift"].get("status")})
+    unique = []
+    seen = set()
+    for task in sorted(tasks, key=lambda x: int(x.get("priority", 9))):
+        key = (task.get("task"), task.get("target"))
+        if key not in seen:
+            seen.add(key); unique.append(task)
+    return {
+        "mode": "SHADOW_ONLY", "generated_ts": int(time.time()), "gate_allowed": gate["allowed"],
+        "data_quality": gate["quality"], "tasks": unique[:10], "paper_changed": False,
+        "live_changed": False, "recommendation_only": True,
+    }
+
+
+def _v1156_run_cycle(force=False):
+    sched = _v1156_load_scheduler_state(); now = int(time.time())
+    due = force or not sched.get("last_cycle_ts") or now >= int(sched.get("next_cycle_ts") or 0)
+    if not sched.get("enabled", True):
+        return {"executed": False, "reason": "DISABLED", "state": sched}
+    if not due:
+        return {"executed": False, "reason": "NOT_DUE", "state": sched}
+    state = _v91_load_state(); plan = _v1156_build_cycle_plan(state)
+    sched["last_cycle_ts"] = now
+    sched["next_cycle_ts"] = now + int(sched.get("cycle_seconds", V1156_MIN_CYCLE_SECONDS))
+    sched["cycles"] = int(sched.get("cycles", 0)) + 1
+    sched["last_plan"] = plan
+    hist = list(sched.get("history") or [])
+    hist.append({"ts": now, "quality": plan["data_quality"]["score"], "gate": plan["gate_allowed"],
+                 "tasks": [x.get("task") for x in plan["tasks"][:5]]})
+    sched["history"] = hist[-100:]
+    saved = _v1156_save_scheduler_state(sched)
+    return {"executed": True, "saved": saved, "reason": "FORCED" if force else "DUE", "state": sched, "plan": plan}
+
+
+def _v1156_scheduler_snapshot():
+    sched = _v1156_load_scheduler_state(); st = _v91_load_state()
+    plan = sched.get("last_plan") or _v1156_build_cycle_plan(st)
+    now = int(time.time()); remaining = max(0, int(sched.get("next_cycle_ts") or 0) - now)
+    return {"scheduler": sched, "plan": plan, "remaining": remaining, "quality": _v1156_data_quality(st)}
+
+
+async def learningscheduler1156_cmd(update, context):
+    _v1155_track("learningscheduler")
+    snap = _v1156_scheduler_snapshot(); s = snap["scheduler"]; q = snap["quality"]
+    lines = [f"⏱ <b>A100 V{V1156_NUMBER} SELF-LEARNING SCHEDULER</b>",
+             f"Mode: <b>SHADOW ONLY</b> · Enabled <b>{'YES' if s.get('enabled') else 'NO'}</b>",
+             f"Cycle: <b>{int(s.get('cycle_seconds',0))/3600:.1f}시간</b> · 완료 <b>{s.get('cycles',0)}회</b>",
+             f"다음 계획까지: <b>{snap['remaining']//60}분</b>",
+             f"Data Quality: <b>{q['score']:.1f}</b> · {q['status']}",
+             f"표본 <b>{q['samples']}</b> · 결과완성 <b>{q['outcome_ratio']*100:.1f}%</b> · 종목 <b>{q['symbols']}</b>",
+             "자동 변경: <b>없음</b> · 계획/Shadow Simulation만 허용",
+             "수동 계획 생성: <code>/learningcycle</code>"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def learningcycle1156_cmd(update, context):
+    _v1155_track("learningcycle")
+    result = _v1156_run_cycle(force=True); plan = result.get("plan") or result.get("state", {}).get("last_plan", {})
+    q = plan.get("data_quality", {})
+    lines = [f"🔄 <b>A100 V{V1156_NUMBER} LEARNING CYCLE</b>",
+             f"실행: <b>{'완료' if result.get('executed') else result.get('reason')}</b>",
+             f"Gate: <b>{'PASS' if plan.get('gate_allowed') else 'DATA BUILDING'}</b>",
+             f"Data Quality: <b>{float(q.get('score',0)):.1f}</b> · {q.get('status','UNKNOWN')}",
+             "Scope: <b>Recommendation + Shadow Simulation Only</b>", ""]
+    for i, task in enumerate(plan.get("tasks", [])[:7], 1):
+        lines.append(f"{i}. <b>{task.get('task')}</b> · {task.get('target')} · {task.get('reason')}")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def learningqueue1156_cmd(update, context):
+    _v1155_track("learningqueue")
+    plan = _v1156_scheduler_snapshot()["plan"]
+    lines = [f"📋 <b>A100 V{V1156_NUMBER} LEARNING QUEUE</b>",
+             f"Gate: <b>{'PASS' if plan.get('gate_allowed') else 'WAIT FOR DATA'}</b> · Mode <b>SHADOW ONLY</b>", ""]
+    for i, task in enumerate(plan.get("tasks", [])[:10], 1):
+        lines.append(f"{i}. P{task.get('priority')} <b>{task.get('task')}</b> → {task.get('target')}\n   {task.get('reason')}")
+    if not plan.get("tasks"): lines.append("현재 대기 작업이 없습니다.")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def dataquality1156_cmd(update, context):
+    _v1155_track("dataquality")
+    q = _v1156_data_quality(_v91_load_state())
+    lines = [f"🧬 <b>A100 V{V1156_NUMBER} LEARNING DATA QUALITY</b>",
+             f"Score: <b>{q['score']:.1f}</b> · {q['status']}",
+             f"90일 표본: <b>{q['samples']}</b> · Outcome 완료: <b>{q['completed']}</b>",
+             f"Outcome 완성도: <b>{q['outcome_ratio']*100:.1f}%</b>",
+             f"Confidence Coverage: <b>{q['confidence_ratio']*100:.1f}%</b>",
+             f"종목 다양성: <b>{q['symbols']}</b> · 국면 다양성: <b>{q['regimes']}</b>",
+             "학습 적용: <b>Shadow Only</b> · Paper 기준 변경 없음"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def intelligenceos1156_cmd(update, context):
+    _v1155_track("intelligenceos")
+    h = _v1155_runtime_health(); snap = _v1156_scheduler_snapshot(); q = snap["quality"]
+    st = _v91_load_state(); core = _v1153_core_score_trend(st); drift = _v1153_confidence_drift_timeline(st)
+    health = _v1153_pattern_health(st)
+    avg_health = round(sum(float(x.get("health", 0)) for x in health) / len(health), 1) if health else 0.0
+    lines = [f"🧠 <b>A100 V{V1156_NUMBER} INTELLIGENCE DASHBOARD 4.1</b>",
+             f"Core Score <b>{core.get('current',0):.1f}</b> · Pattern Health <b>{avg_health:.1f}</b>",
+             f"Confidence Drift <b>{drift.get('status','INSUFFICIENT')}</b> · Data Quality <b>{q['score']:.1f}</b>",
+             f"Scheduler <b>{'ON' if snap['scheduler'].get('enabled') else 'OFF'}</b> · Cycles <b>{snap['scheduler'].get('cycles',0)}</b>",
+             f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",
+             f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+             "Optimization: <b>Plan + Shadow Simulation Only</b>",
+             "Roadmap: <b>V115.7 Strategy Evolution → V116.0 LTS → Live System</b>"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "learningscheduler": "V115.6 자율 학습 일정·주기·데이터 품질 상태",
+    "learningcycle": "학습 계획을 즉시 생성하되 Shadow Simulation만 수행",
+    "learningqueue": "우선순위별 학습·재보정·데이터 축적 작업 큐",
+    "dataquality": "학습 데이터 완성도·다양성·Confidence Coverage 점검",
+    "intelligenceos": "V115.6 Scheduler·Data Quality 통합 Intelligence Dashboard 4.1",
+    "intel": "/intelligenceos 단축 별칭",
+})
+for _c in ("learningscheduler", "learningcycle", "learningqueue", "dataquality"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("learning", []):
+        V925_HELP_CATEGORIES["learning"].append(_c)
+V90_COMMAND_REGISTRY.update({
+    "learningscheduler": learningscheduler1156_cmd,
+    "learningcycle": learningcycle1156_cmd,
+    "learningqueue": learningqueue1156_cmd,
+    "dataquality": dataquality1156_cmd,
+    "intelligenceos": intelligenceos1156_cmd,
+    "intel": intelligenceos1156_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1155_PREFLIGHT_FOR_V1156 = v91_preflight
+
+
+def _v1156_sync_audit():
+    runtime = set(_v1154_runtime_commands())
+    required = {"learningscheduler", "learningcycle", "learningqueue", "dataquality", "intelligenceos", "help", "commands", "versionaudit"}
+    default_sched = _v1156_default_scheduler_state()
+    gate = _v1156_learning_gate(_v91_default_state())
+    return {
+        "version_manager": V91_VERSION == V1156_VERSION,
+        "required_handlers": required.issubset(runtime),
+        "scheduler_schema": default_sched.get("schema") == 1,
+        "scheduler_shadow_only": default_sched.get("mode") == "SHADOW_ONLY",
+        "cycle_floor": default_sched.get("cycle_seconds", 0) >= 900,
+        "learning_scope_safe": gate.get("action_scope") == "PLAN_AND_SHADOW_SIMULATION_ONLY",
+        "registry_snapshot": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "help_coverage": runtime.issubset(set(V925_COMMAND_USAGE) | {"help", "commands"}),
+        "paper_shadow_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "state_schema_preserved": _v91_default_state().get("schema") == 1,
+        "live_off": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    }
+
+
+async def versionaudit1156_cmd(update, context):
+    _v1155_track("versionaudit")
+    checks = _v1156_sync_audit(); failed = [k for k, v in checks.items() if not v]
+    q = _v1156_data_quality(_v91_load_state()); runtime = len(_v1154_runtime_commands())
+    lines = [f"🧾 <b>A100 V{V1156_NUMBER} VERSION & RELEASE AUDIT</b>",
+             f"Core Version: <b>{V1156_VERSION}</b>",
+             f"Runtime Registry: <b>{runtime}개</b> · Help Coverage <b>{runtime}/{runtime}</b>",
+             f"Self-Learning Scheduler: <b>SHADOW ONLY</b>",
+             f"Data Quality: <b>{q['score']:.1f}</b> · {q['status']}",
+             f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",
+             f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+             "Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: " + ", ".join(failed))
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE["versionaudit"] = "V115.6 Scheduler·Data Quality·Registry·Live Safety Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"] = versionaudit1156_cmd
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base = _V1155_PREFLIGHT_FOR_V1156(); checks = dict(base.get("checks", {}))
+    for key in list(checks):
+        if key.startswith("v1155_"):
+            checks[key] = True
+    checks.update({"v1156_" + k: v for k, v in _v1156_sync_audit().items()})
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY),
+            "base": base, "development_version": V91_VERSION,
+            "registry_fingerprint": "v1156-self-learning-scheduler-data-quality"}
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit=v91_preflight()
+    audit = v91_preflight()
     if not audit.get("ok"):
-        failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V115.4 startup integrity failure: "+", ".join(failed))
+        failed = [k for k, v in audit.get("checks", {}).items() if not v]
+        raise RuntimeError("V115.6 startup integrity failure: " + ", ".join(failed))
     main()

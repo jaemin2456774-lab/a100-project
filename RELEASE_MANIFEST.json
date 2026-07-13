@@ -1,7 +1,7 @@
 {
-  "release": "A100 V115.4 COMMAND REGISTRY VERSION SYNC RELEASE GATE DEVELOPMENT",
-  "baseline": "A100 V115.3 AI INTELLIGENCE CORE 3.0 SELF-DIRECTED OPTIMIZATION DEVELOPMENT",
-  "generated_at_utc": "2026-07-12T23:36:22.443451+00:00",
+  "release": "A100 V115.6 SELF-LEARNING SCHEDULER DATA QUALITY DEVELOPMENT",
+  "baseline": "A100 V115.5 AI INTELLIGENCE OS FOUNDATION LIVE READINESS DEVELOPMENT",
+  "generated_at_utc": "2026-07-13T00:52:21.800300+00:00",
   "safety": {
     "paper_positions": 20,
     "shadow_positions": 60,
@@ -14,10 +14,12 @@
     "python_compile": "PASS",
     "runtime_import": "PASS",
     "runtime_preflight": "PASS",
-    "command_count": 281,
-    "help_coverage": "281/281",
+    "v1156_tests": "5/5 PASS",
+    "command_count": 290,
+    "help_coverage": "290/290",
     "version_sync": "PASS",
-    "release_gate": "PASS"
+    "release_gate": "PASS",
+    "legacy_version_pin_tests": "3 expected mismatches"
   },
   "files": [
     {
@@ -26,134 +28,14 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
-      "path": "FILE_LIST.txt",
-      "size": 5918,
-      "sha256": "75065a638fe22b1e29262280860464a92082e82750b601aeb939e8b7aac6aa88"
-    },
-    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
       "size": 1265,
       "sha256": "a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3"
     },
     {
       "path": "README.md",
-      "size": 5885,
-      "sha256": "a322a2a062970e5013db166586cd6343346938cb4f7c324aa1965317070bf7ac"
-    },
-    {
-      "path": "__pycache__/main.cpython-313.pyc",
-      "size": 2350624,
-      "sha256": "d58c12dfb32754f0a27d69afa2d5c4082ca51b898af580e4ab65aeed4189aca3"
-    },
-    {
-      "path": "__pycache__/v1000_learning_intelligence.cpython-313.pyc",
-      "size": 13575,
-      "sha256": "631554b8562b778d0fd7fb5dbdf760e3e976b17a17bc9a8b43c18ecb9a7a4193"
-    },
-    {
-      "path": "__pycache__/v1010_closed_loop_learning.cpython-313.pyc",
-      "size": 16445,
-      "sha256": "0ee6f50789bd6e1440a5c1381c47840bd65472b0ca143713873c8b6bf41754f6"
-    },
-    {
-      "path": "__pycache__/v1020_evolution_engine.cpython-313.pyc",
-      "size": 14585,
-      "sha256": "415eca6d20bc4fa91f3cd56610951d4c22d8a8f32b8ba1c4f2284fcd1dca7cff"
-    },
-    {
-      "path": "__pycache__/v1030_autonomous_evolution.cpython-313.pyc",
-      "size": 17660,
-      "sha256": "c89b7403001302c6ee99e2b9412c6b8e5870313180b5a72560b136cdcb477d35"
-    },
-    {
-      "path": "__pycache__/v1040_experience_intelligence.cpython-313.pyc",
-      "size": 20014,
-      "sha256": "43083c6badafc7d8479a40263e1c29b94dc56de3877b0e605d2e8f1504b3fc8e"
-    },
-    {
-      "path": "__pycache__/v1050_autonomous_intelligence_core.cpython-313.pyc",
-      "size": 22178,
-      "sha256": "eff5f86d60af07f708ad9d5abe4946a4814b810e2094006ef52f9e738e82820f"
-    },
-    {
-      "path": "__pycache__/v1060_real_time_intelligence.cpython-313.pyc",
-      "size": 19722,
-      "sha256": "33a1b9adcb24761f0c5e1e27b42807f17c25a062c86b4d2173a9688426f796bb"
-    },
-    {
-      "path": "__pycache__/v1070_autonomous_market_intelligence.cpython-313.pyc",
-      "size": 15055,
-      "sha256": "4cf9073a280846a8bfcd57bd7508a2c853fe3349969754d8549687e607a228d1"
-    },
-    {
-      "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
-      "size": 18614,
-      "sha256": "003656ec49bcefac0b46720bb3beb4075a78f44195bce7a5199e5e46f5ecd061"
-    },
-    {
-      "path": "__pycache__/v925_decision_intelligence.cpython-313.pyc",
-      "size": 3051,
-      "sha256": "b1adda92a9fa82782cdcfe5da2a14973a55caec1ef9a41bd3ec0ed5ee7a47aa5"
-    },
-    {
-      "path": "__pycache__/v926_learning_intelligence.cpython-313.pyc",
-      "size": 1382,
-      "sha256": "fb13ff005c435b0ae99d78932f80822e2b28d17da9463ac722a55be061412bf2"
-    },
-    {
-      "path": "__pycache__/v927_learning_calibration.cpython-313.pyc",
-      "size": 1931,
-      "sha256": "9851d4953493013a85e90fda5ac4562a65ca1f457d9b3a71a8d39e74949a8e7e"
-    },
-    {
-      "path": "__pycache__/v930_ai_intelligence_core.cpython-313.pyc",
-      "size": 9527,
-      "sha256": "39a65325ba243b8460c4416c8aedda1b075553db087b81434f9bdf87c8364cb9"
-    },
-    {
-      "path": "__pycache__/v931_self_learning_ai.cpython-313.pyc",
-      "size": 12421,
-      "sha256": "367a1270e01176dc3c24587ca85453473b5762a0cea6eae8f90a1e4cf00fee8a"
-    },
-    {
-      "path": "__pycache__/v940_ai_visualization.cpython-313.pyc",
-      "size": 3712,
-      "sha256": "3fe162cb10f91cfed1c5877055677dc388b1d4625ad45a2ecb1b8a3e0c5f960a"
-    },
-    {
-      "path": "__pycache__/v950_ai_dashboard.cpython-313.pyc",
-      "size": 3483,
-      "sha256": "fc8f6c0c35e554d2951586f319d096774973c454945639ede927a5768e5293af"
-    },
-    {
-      "path": "__pycache__/v960_ai_quality.cpython-313.pyc",
-      "size": 10109,
-      "sha256": "16fab536e545a51d779326d02669c34266781928b8ae7a39f75a83f66ca616a0"
-    },
-    {
-      "path": "__pycache__/v961_ai_intelligence2.cpython-313.pyc",
-      "size": 13260,
-      "sha256": "e689e4102320a1d94f8c7e65f9da23d6a762ce2e9c11b4c42f5f9242d92e881b"
-    },
-    {
-      "path": "__pycache__/v962_ai_intelligence3.cpython-313.pyc",
-      "size": 13502,
-      "sha256": "0b563123cf8097033956960e483a3fa03bec03dfdbc3e972b9c2ddb128ddd05b"
-    },
-    {
-      "path": "__pycache__/v970_unified_intelligence.cpython-313.pyc",
-      "size": 9745,
-      "sha256": "17c0fd742ba05ff0f0dc28ba7ec4f5df586d5ce09bebcffd807bfd053b9916cd"
-    },
-    {
-      "path": "__pycache__/v980_market_intelligence.cpython-313.pyc",
-      "size": 9543,
-      "sha256": "f17fbbfd388465566d2f7dd500154b68cbb41125325f51a865e1bfe4c4784e30"
-    },
-    {
-      "path": "__pycache__/v990_predictive_intelligence.cpython-313.pyc",
-      "size": 8972,
-      "sha256": "c2f02a4e106e6919c576311a98eae7d0cbdd6ab5222bb90a1249ef559f65b092"
+      "size": 6386,
+      "sha256": "5a3278e13b6de5facf7c6d6d561cd023eca0b5a144c9f7cfc2f26fa74d9250f3"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -264,6 +146,16 @@
       "path": "docs/CHANGELOG_V115_4.md",
       "size": 754,
       "sha256": "cd6fc6ea935a123002981ece6b59e3d331d2bb40bbd1e8132a3379038e190c02"
+    },
+    {
+      "path": "docs/CHANGELOG_V115_5.md",
+      "size": 908,
+      "sha256": "0dd25d749adddf32e35ef98c73ae60595b2d6ffd31c12864962596a3ac3669e0"
+    },
+    {
+      "path": "docs/CHANGELOG_V115_6.md",
+      "size": 576,
+      "sha256": "063d93ab15aba9b6f297b70ee24d8a651b0cb77bd428ae5924e996ab1f310b68"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -526,6 +418,16 @@
       "sha256": "43303a0cc2e56c8c5a5422365398957a522ade9e231d0aad893eaf397959e2cc"
     },
     {
+      "path": "docs/TEST_REPORT_V115_5.md",
+      "size": 252,
+      "sha256": "7f167e126f561540dddc579657b4f02b6bc1c9491d7e409b6111c58ac5000ca0"
+    },
+    {
+      "path": "docs/TEST_REPORT_V115_6.md",
+      "size": 584,
+      "sha256": "fffb777e25e0dd4d6cdc371167ad2ec280f35b7e2bf6beb49f1478e9a32d0559"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -562,8 +464,8 @@
     },
     {
       "path": "main.py",
-      "size": 1595716,
-      "sha256": "c31176606e7f0fbe23d6c0be93806befed1bfcbbb5a9c55a8eb4375fc1c96ad0"
+      "size": 1624350,
+      "sha256": "f15a13b2e29349720066363192d382327e29f83bd787ad6b04931716a148cc1f"
     },
     {
       "path": "pytest.ini",
@@ -694,6 +596,16 @@
       "path": "tests/test_v1153_intelligence_core3.py",
       "size": 1417,
       "sha256": "02186f11ccdefbc8a2cc8e6b4b5da58152fa130c7341e7563064946e2a16c014"
+    },
+    {
+      "path": "tests/test_v1155_intelligence_os.py",
+      "size": 1079,
+      "sha256": "1a316295bf0357cabd9e27de92d843f2dfb2905ad91b3a4b3f5372f8fd46af68"
+    },
+    {
+      "path": "tests/test_v1156_self_learning_scheduler.py",
+      "size": 1290,
+      "sha256": "f2c07fbcbbb121d1c9ffc8cbb148a6369ce72cf8a48098ed7aba63b080bc0e60"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
