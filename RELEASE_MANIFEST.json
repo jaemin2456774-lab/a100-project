@@ -1,26 +1,36 @@
 {
-  "release": "A100 V115.6 SELF-LEARNING SCHEDULER DATA QUALITY DEVELOPMENT",
-  "baseline": "A100 V115.5 AI INTELLIGENCE OS FOUNDATION LIVE READINESS DEVELOPMENT",
-  "generated_at_utc": "2026-07-13T00:52:21.800300+00:00",
+  "release": "A100 V115.7 STRATEGY EVOLUTION AI GROWTH DEVELOPMENT",
+  "baseline": "A100 V115.6 SELF-LEARNING SCHEDULER DATA QUALITY DEVELOPMENT",
+  "generated_at_utc": "2026-07-13T03:03:10.868593+00:00",
   "safety": {
     "paper_positions": 20,
     "shadow_positions": 60,
     "paper_threshold": 60.0,
     "live_trading": false,
     "optimization_mode": "SHADOW_ONLY",
-    "data_schema_preserved": true
+    "data_schema_preserved": true,
+    "automatic_paper_promotion": false
   },
   "tests": {
     "python_compile": "PASS",
     "runtime_import": "PASS",
     "runtime_preflight": "PASS",
-    "v1156_tests": "5/5 PASS",
-    "command_count": 290,
-    "help_coverage": "290/290",
+    "v1157_tests": "4/4 PASS",
+    "command_count": 295,
+    "help_coverage": "295/295",
     "version_sync": "PASS",
     "release_gate": "PASS",
-    "legacy_version_pin_tests": "3 expected mismatches"
+    "legacy_version_pin_tests": "1 expected V115.6 version mismatch"
   },
+  "features": [
+    "Strategy Lab",
+    "Strategy Evolution",
+    "Multi-objective Candidate Scoring",
+    "Explainable Learning Queue",
+    "Learning History",
+    "AI Growth Level",
+    "Intelligence Dashboard 4.2"
+  ],
   "files": [
     {
       "path": ".gitignore",
@@ -34,8 +44,8 @@
     },
     {
       "path": "README.md",
-      "size": 6386,
-      "sha256": "5a3278e13b6de5facf7c6d6d561cd023eca0b5a144c9f7cfc2f26fa74d9250f3"
+      "size": 7586,
+      "sha256": "a3630999b839c6a8681653bbf84038f5a2b65b3b62c06de387223e63ef76fb78"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -156,6 +166,11 @@
       "path": "docs/CHANGELOG_V115_6.md",
       "size": 576,
       "sha256": "063d93ab15aba9b6f297b70ee24d8a651b0cb77bd428ae5924e996ab1f310b68"
+    },
+    {
+      "path": "docs/CHANGELOG_V115_7.md",
+      "size": 622,
+      "sha256": "07c66a87e6d89b4205fae15ccde5f669c395e829d5a5940c395733ff684b81a8"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -428,6 +443,11 @@
       "sha256": "fffb777e25e0dd4d6cdc371167ad2ec280f35b7e2bf6beb49f1478e9a32d0559"
     },
     {
+      "path": "docs/TEST_REPORT_V115_7.md",
+      "size": 507,
+      "sha256": "87ac2f5f843d01fbbc35c6ae31a1555cf8bc69e53f76c4b91b3628afd72aa416"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -464,8 +484,8 @@
     },
     {
       "path": "main.py",
-      "size": 1624350,
-      "sha256": "f15a13b2e29349720066363192d382327e29f83bd787ad6b04931716a148cc1f"
+      "size": 1641785,
+      "sha256": "d4730a890c244ce0b55aa3dd45f618b3a3793fc0ee45a54f33c6947c4c161a8b"
     },
     {
       "path": "pytest.ini",
@@ -606,6 +626,11 @@
       "path": "tests/test_v1156_self_learning_scheduler.py",
       "size": 1290,
       "sha256": "f2c07fbcbbb121d1c9ffc8cbb148a6369ce72cf8a48098ed7aba63b080bc0e60"
+    },
+    {
+      "path": "tests/test_v1157_strategy_evolution.py",
+      "size": 1166,
+      "sha256": "0ec58e348b0909408a0378008ff4e82734126d734dc8e23633e40b1a47396457"
     },
     {
       "path": "tests/test_v91_8_baseline.py",

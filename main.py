@@ -34361,10 +34361,297 @@ def v91_preflight():
             "registry_fingerprint": "v1156-self-learning-scheduler-data-quality"}
 
 
+# =============================================================================
+# A100 V115.7 STRATEGY EVOLUTION + AI GROWTH INTELLIGENCE (LIVE OFF)
+# =============================================================================
+V1157_NUMBER = "115.7"
+V1157_TITLE = "STRATEGY EVOLUTION AI GROWTH DEVELOPMENT"
+V1157_VERSION = f"A100 V{V1157_NUMBER} {V1157_TITLE}"
+V91_VERSION = V1157_VERSION
+V1157_EVOLUTION_FILE = os.path.join(V91_DATA_DIR, "a100_v1157_strategy_evolution.json")
+
+
+def _v1157_default_state():
+    return {"schema": 1, "mode": "SHADOW_ONLY", "generation": 0, "last_run_ts": 0,
+            "champion": None, "candidates": [], "history": []}
+
+
+def _v1157_load_state():
+    base = _v1157_default_state()
+    try:
+        if not os.path.exists(V1157_EVOLUTION_FILE):
+            return base
+        with open(V1157_EVOLUTION_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return base
+        for k, v in base.items(): data.setdefault(k, v)
+        data["mode"] = "SHADOW_ONLY"
+        data["history"] = list(data.get("history") or [])[-120:]
+        data["candidates"] = list(data.get("candidates") or [])[:12]
+        return data
+    except Exception:
+        return base
+
+
+def _v1157_save_state(data):
+    try:
+        os.makedirs(os.path.dirname(V1157_EVOLUTION_FILE), exist_ok=True)
+        tmp = V1157_EVOLUTION_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, V1157_EVOLUTION_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def _v1157_num(row, keys, default=0.0):
+    for key in keys:
+        try:
+            if row.get(key) is not None: return float(row.get(key))
+        except Exception:
+            pass
+    return float(default)
+
+
+def _v1157_outcomes(state):
+    rows = _v1140_trace_rows(state, 24 * 90)
+    out = []
+    for row in rows:
+        pnl = _v1157_num(row, ("pnl_pct", "realized_pnl_pct", "return_pct", "pnl", "profit_pct"), 0.0)
+        conf = _v1157_num(row, ("confidence", "conf", "score"), 50.0)
+        side = str(row.get("side") or row.get("direction") or "UNKNOWN").upper()
+        regime = _v1142_cluster_name(row, state)
+        out.append({"pnl": pnl, "confidence": conf, "side": side, "regime": regime,
+                    "symbol": str(row.get("symbol") or "UNKNOWN").upper()})
+    return out
+
+
+def _v1157_candidate_templates():
+    return [
+        {"id":"BALANCED_CORE", "name":"Balanced Core", "conf_min":45.0, "regimes":None, "sides":None, "risk":1.00},
+        {"id":"HIGH_CONFIDENCE", "name":"High Confidence", "conf_min":58.0, "regimes":None, "sides":None, "risk":0.85},
+        {"id":"TREND_FOLLOW", "name":"Trend Follow", "conf_min":50.0, "regimes":{"BULL","BEAR","TREND"}, "sides":None, "risk":0.95},
+        {"id":"REGIME_SELECTIVE", "name":"Regime Selective", "conf_min":52.0, "regimes":{"BULL","SIDEWAYS","BEAR"}, "sides":None, "risk":0.80},
+        {"id":"DRAWDOWN_GUARD", "name":"Drawdown Guard", "conf_min":55.0, "regimes":None, "sides":None, "risk":0.65},
+    ]
+
+
+def _v1157_eval_candidate(template, outcomes):
+    selected=[]
+    for r in outcomes:
+        if r["confidence"] < template["conf_min"]: continue
+        if template["regimes"] and r["regime"] not in template["regimes"]: continue
+        if template["sides"] and r["side"] not in template["sides"]: continue
+        selected.append(r)
+    pnls=[r["pnl"] * template["risk"] for r in selected]
+    wins=[x for x in pnls if x > 0]; losses=[x for x in pnls if x < 0]
+    n=len(pnls); win_rate=(len(wins)/n*100.0) if n else 0.0
+    avg_win=(sum(wins)/len(wins)) if wins else 0.0
+    avg_loss=abs(sum(losses)/len(losses)) if losses else 0.0
+    rr=(avg_win/avg_loss) if avg_loss > 0 else (avg_win if avg_win > 0 else 0.0)
+    expectancy=(sum(pnls)/n) if n else 0.0
+    equity=0.0; peak=0.0; max_dd=0.0; loss_streak=0; max_loss_streak=0
+    for x in pnls:
+        equity += x; peak=max(peak,equity); max_dd=max(max_dd, peak-equity)
+        if x < 0: loss_streak += 1; max_loss_streak=max(max_loss_streak,loss_streak)
+        else: loss_streak=0
+    sample_factor=min(1.0,n/120.0)
+    score=(win_rate*0.35 + min(100.0,rr*35.0)*0.20 + max(0.0,min(100.0,50+expectancy*20))*0.25
+           + max(0.0,100-max_dd*8)*0.15 + sample_factor*100*0.05)
+    return {"id":template["id"],"name":template["name"],"samples":n,"win_rate":round(win_rate,1),
+            "risk_reward":round(rr,2),"expectancy":round(expectancy,3),"max_drawdown":round(max_dd,2),
+            "max_loss_streak":max_loss_streak,"score":round(score,1),"confidence_min":template["conf_min"],
+            "risk_multiplier":template["risk"],"eligible":n>=30 and expectancy>0}
+
+
+def _v1157_strategy_lab(state):
+    outcomes=_v1157_outcomes(state)
+    candidates=[_v1157_eval_candidate(t,outcomes) for t in _v1157_candidate_templates()]
+    candidates.sort(key=lambda x:(x["eligible"],x["score"],x["samples"]), reverse=True)
+    champion=candidates[0] if candidates else None
+    return {"mode":"SHADOW_ONLY","outcomes":len(outcomes),"candidates":candidates,"champion":champion,
+            "promotion":"RECOMMENDATION_ONLY","paper_changed":False,"live_changed":False}
+
+
+def _v1157_run_evolution(force=True):
+    ai_state=_v91_load_state(); lab=_v1157_strategy_lab(ai_state); evo=_v1157_load_state(); now=int(time.time())
+    evo["generation"]=int(evo.get("generation",0))+1
+    evo["last_run_ts"]=now; evo["champion"]=lab.get("champion"); evo["candidates"]=lab.get("candidates",[])
+    evo["history"]=(list(evo.get("history") or []) + [{"ts":now,"generation":evo["generation"],
+        "champion":(lab.get("champion") or {}).get("id"),"score":(lab.get("champion") or {}).get("score",0),
+        "samples":lab.get("outcomes",0)}])[-120:]
+    saved=_v1157_save_state(evo)
+    return {"executed":True,"saved":saved,"state":evo,"lab":lab,"scope":"SHADOW_SIMULATION_ONLY"}
+
+
+def _v1157_learning_history():
+    sched=_v1156_load_scheduler_state(); hist=list(sched.get("history") or [])
+    evo=_v1157_load_state(); eh=list(evo.get("history") or [])
+    successful=sum(1 for x in hist if x.get("gate")); failed=max(0,len(hist)-successful)
+    return {"learning_cycles":len(hist),"successful":successful,"failed":failed,
+            "evolution_generations":int(evo.get("generation",0)),"evolution_history":len(eh),
+            "last_quality":float(hist[-1].get("quality",0)) if hist else 0.0}
+
+
+def _v1157_growth_metrics(state):
+    q=_v1156_data_quality(state); core=_v1153_core_score_trend(state); drift=_v1153_confidence_drift_timeline(state)
+    health=_v1153_pattern_health(state)
+    pattern=round(sum(float(x.get("health",x.get("score",0))) for x in health)/len(health),1) if health else 0.0
+    hist=_v1157_learning_history(); lab=_v1157_strategy_lab(state); champ=lab.get("champion") or {}
+    confidence_stability=max(0.0, min(100.0, 100.0-abs(float(drift.get("drift",0) or 0))*1.5))
+    experience=min(100.0, q["samples"]/5.0 + hist["learning_cycles"]*2.0 + hist["evolution_generations"]*3.0)
+    overall=round(float(core.get("current",0))*0.25 + pattern*0.20 + q["score"]*0.20 + confidence_stability*0.15
+                  + float(champ.get("score",0))*0.15 + experience*0.05,1)
+    level=max(1,min(100,int(overall//2)+1))
+    return {"level":level,"experience":round(experience,1),"pattern_mastery":pattern,
+            "confidence_stability":round(confidence_stability,1),"strategy_score":float(champ.get("score",0)),
+            "overall_growth":overall,"data_quality":q["score"],"core":float(core.get("current",0))}
+
+
+def _v1157_task_effect(task):
+    name=str(task.get("task") or "")
+    effects={
+      "PATTERN_RETRAIN":"Pattern Health +4~8 / 기대승률 +0.5~1.5%p",
+      "CONFIDENCE_RECALIBRATION":"Calibration 오차 -2~5%p / 과신 감소",
+      "CONFIDENCE_DRIFT_REVIEW":"Confidence 안정성 +3~7",
+      "CORE_RECOVERY_SIMULATION":"Core Score +2~5 예상",
+      "MEMORY_COMPRESSION":"Memory 품질 +2~4 / 노이즈 감소",
+      "DATA_ACCUMULATION":"표본 신뢰도 향상 / 과최적화 위험 감소",
+      "OUTCOME_COMPLETENESS_REVIEW":"Outcome Coverage +5~15%p",
+    }
+    return effects.get(name,"Shadow 검증 후 효과 재평가")
+
+
+async def strategylab1157_cmd(update, context):
+    _v1155_track("strategylab"); lab=_v1157_strategy_lab(_v91_load_state()); champ=lab.get("champion") or {}
+    lines=[f"🧪 <b>A100 V{V1157_NUMBER} STRATEGY LAB</b>","Mode: <b>SHADOW ONLY</b> · 자동 승격 없음",
+           f"검증 Outcome: <b>{lab['outcomes']}</b> · 후보 <b>{len(lab['candidates'])}</b>",""]
+    for i,c in enumerate(lab["candidates"][:5],1):
+        mark="👑" if c.get("id")==champ.get("id") else ("✅" if c.get("eligible") else "⏳")
+        lines.append(f"{mark} {i}. <b>{c['name']}</b> · Score {c['score']:.1f}\n   승률 {c['win_rate']:.1f}% · 기대값 {c['expectancy']:+.3f}% · RR {c['risk_reward']:.2f} · DD {c['max_drawdown']:.2f}")
+    lines += ["","Promotion: <b>Recommendation Only</b> · Paper/Live 변경 없음"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def strategyevolution1157_cmd(update, context):
+    _v1155_track("strategyevolution"); r=_v1157_run_evolution(); evo=r["state"]; c=evo.get("champion") or {}
+    lines=[f"🧬 <b>A100 V{V1157_NUMBER} STRATEGY EVOLUTION</b>",f"Generation: <b>{evo.get('generation',0)}</b> · 저장 <b>{'YES' if r.get('saved') else 'NO'}</b>",
+           "Scope: <b>Shadow Simulation Only</b>",f"Champion Candidate: <b>{c.get('name','NONE')}</b>",
+           f"Score {float(c.get('score',0)):.1f} · 승률 {float(c.get('win_rate',0)):.1f}% · 기대값 {float(c.get('expectancy',0)):+.3f}%",
+           "자동 Paper 승격: <b>금지</b> · Live Trading: <b>OFF</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def strategycompare1157_cmd(update, context):
+    _v1155_track("strategycompare"); lab=_v1157_strategy_lab(_v91_load_state()); cs=lab["candidates"]
+    lines=[f"📊 <b>A100 V{V1157_NUMBER} STRATEGY COMPARISON</b>","Score = 승률·손익비·기대값·낙폭·표본 균형",""]
+    for c in cs[:7]: lines.append(f"<b>{c['name']}</b> {c['score']:.1f} | WR {c['win_rate']:.1f}% | EV {c['expectancy']:+.3f}% | DD {c['max_drawdown']:.2f}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def learninghistory1157_cmd(update, context):
+    _v1155_track("learninghistory"); h=_v1157_learning_history()
+    lines=[f"📚 <b>A100 V{V1157_NUMBER} LEARNING HISTORY</b>",f"Learning Cycles: <b>{h['learning_cycles']}</b>",
+           f"Gate 성공 <b>{h['successful']}</b> · 대기/실패 <b>{h['failed']}</b>",f"Strategy Generations: <b>{h['evolution_generations']}</b>",
+           f"최근 Data Quality: <b>{h['last_quality']:.1f}</b>","기록 범위: <b>최근 120회</b> · 기존 학습 데이터 보존"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def ailevel1157_cmd(update, context):
+    _v1155_track("ailevel"); g=_v1157_growth_metrics(_v91_load_state())
+    lines=[f"🚀 <b>A100 V{V1157_NUMBER} AI GROWTH LEVEL</b>",f"AI Level: <b>{g['level']}</b> · Overall Growth <b>{g['overall_growth']:.1f}</b>",
+           f"Experience <b>{g['experience']:.1f}%</b> · Pattern Mastery <b>{g['pattern_mastery']:.1f}%</b>",
+           f"Confidence Stability <b>{g['confidence_stability']:.1f}%</b> · Strategy Score <b>{g['strategy_score']:.1f}</b>",
+           "평가 기준: 승률 단독이 아닌 기대값·손익비·낙폭·신뢰도·데이터 품질"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def learningqueue1157_cmd(update, context):
+    _v1155_track("learningqueue"); plan=_v1156_scheduler_snapshot()["plan"]
+    lines=[f"📋 <b>A100 V{V1157_NUMBER} EXPLAINABLE LEARNING QUEUE</b>",f"Gate: <b>{'PASS' if plan.get('gate_allowed') else 'WAIT FOR DATA'}</b> · Mode <b>SHADOW ONLY</b>",""]
+    for i,t in enumerate(plan.get("tasks",[])[:8],1):
+        lines.append(f"{i}. P{t.get('priority')} <b>{t.get('task')}</b> → {t.get('target')}\n   근거: {t.get('reason')}\n   예상 효과: {_v1157_task_effect(t)}")
+    if not plan.get("tasks"): lines.append("현재 대기 작업이 없습니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def intelligenceos1157_cmd(update, context):
+    _v1155_track("intelligenceos"); g=_v1157_growth_metrics(_v91_load_state()); lab=_v1157_strategy_lab(_v91_load_state())
+    champ=lab.get("champion") or {}; q=_v1156_data_quality(_v91_load_state()); h=_v1155_runtime_health()
+    lines=[f"🧠 <b>A100 V{V1157_NUMBER} INTELLIGENCE DASHBOARD 4.2</b>",
+           f"AI Level <b>{g['level']}</b> · Growth <b>{g['overall_growth']:.1f}</b> · Core <b>{g['core']:.1f}</b>",
+           f"Pattern <b>{g['pattern_mastery']:.1f}</b> · Confidence Stability <b>{g['confidence_stability']:.1f}</b> · Data <b>{q['score']:.1f}</b>",
+           f"Strategy Champion <b>{champ.get('name','NONE')}</b> · Score <b>{float(champ.get('score',0)):.1f}</b>",
+           f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",
+           f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+           "Evolution: <b>Shadow Competition → Recommendation Only</b>","Next: <b>V116.0 LTS Long-Term Stability</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+ "strategylab":"Shadow 후보 전략 경쟁·성과 평가", "strategyevolution":"전략 세대 진화 시뮬레이션(자동 승격 없음)",
+ "strategycompare":"후보 전략 승률·기대값·손익비·낙폭 비교", "learninghistory":"학습 주기와 전략 진화 이력",
+ "ailevel":"AI 성장 레벨·경험·패턴·신뢰도 안정성", "learningqueue":"우선순위 근거와 예상 효과를 포함한 학습 큐",
+ "intelligenceos":"V115.7 Strategy Evolution·AI Growth 통합 Dashboard 4.2",
+})
+for _c in ("strategylab","strategyevolution","strategycompare"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append(_c)
+for _c in ("learninghistory","ailevel"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("learning",[]): V925_HELP_CATEGORIES["learning"].append(_c)
+V90_COMMAND_REGISTRY.update({
+ "strategylab":strategylab1157_cmd,"strategyevolution":strategyevolution1157_cmd,"strategycompare":strategycompare1157_cmd,
+ "learninghistory":learninghistory1157_cmd,"ailevel":ailevel1157_cmd,"learningqueue":learningqueue1157_cmd,
+ "intelligenceos":intelligenceos1157_cmd,"intel":intelligenceos1157_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1156_PREFLIGHT_FOR_V1157=v91_preflight
+
+
+def _v1157_sync_audit():
+    runtime=set(_v1154_runtime_commands()); required={"strategylab","strategyevolution","strategycompare","learninghistory","ailevel","learningqueue","intelligenceos","versionaudit"}
+    lab=_v1157_strategy_lab(_v91_default_state()); d=_v1157_default_state()
+    return {"version_manager":V91_VERSION==V1157_VERSION,"required_handlers":required.issubset(runtime),
+      "evolution_schema":d.get("schema")==1,"shadow_only":d.get("mode")=="SHADOW_ONLY",
+      "candidate_engine":len(lab.get("candidates",[]))>=5,"recommendation_only":lab.get("promotion")=="RECOMMENDATION_ONLY",
+      "registry_snapshot":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),
+      "paper_shadow_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "state_schema_preserved":_v91_default_state().get("schema")==1,
+      "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+
+async def versionaudit1157_cmd(update, context):
+    _v1155_track("versionaudit"); checks=_v1157_sync_audit(); failed=[k for k,v in checks.items() if not v]
+    runtime=len(_v1154_runtime_commands()); evo=_v1157_load_state()
+    lines=[f"🧾 <b>A100 V{V1157_NUMBER} VERSION & RELEASE AUDIT</b>",f"Core Version: <b>{V1157_VERSION}</b>",
+      f"Runtime Registry: <b>{runtime}개</b> · Help Coverage <b>{runtime}/{runtime}</b>",
+      f"Strategy Evolution: <b>SHADOW ONLY</b> · Generation <b>{evo.get('generation',0)}</b>",
+      f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+      "Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+V925_COMMAND_USAGE["versionaudit"]="V115.7 Strategy Evolution·AI Growth·Registry·Live Safety Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1157_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base=_V1156_PREFLIGHT_FOR_V1157(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1156_"): checks[key]=True
+    checks.update({"v1157_"+k:v for k,v in _v1157_sync_audit().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1157-strategy-evolution-ai-growth"}
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit = v91_preflight()
+    audit=v91_preflight()
     if not audit.get("ok"):
-        failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V115.6 startup integrity failure: " + ", ".join(failed))
+        failed=[k for k,v in audit.get("checks",{}).items() if not v]
+        raise RuntimeError("V115.7 startup integrity failure: "+", ".join(failed))
     main()

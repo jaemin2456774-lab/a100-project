@@ -1,3 +1,28 @@
+# A100 V115.7 STRATEGY EVOLUTION AI GROWTH DEVELOPMENT
+
+V115.6 Self-Learning Scheduler를 안정 베이스로 유지하면서 후보 전략을 Shadow에서 경쟁시키고, 승률뿐 아니라 기대값·손익비·최대낙폭·연속손실·표본 신뢰도를 함께 평가하는 Strategy Evolution 계층을 추가한 개발 릴리스입니다.
+
+## 신규 명령
+- `/strategylab` 후보 전략 Shadow 경쟁
+- `/strategyevolution` 전략 세대 진화 시뮬레이션
+- `/strategycompare` 후보별 승률·기대값·손익비·낙폭 비교
+- `/learninghistory` 학습 및 진화 이력
+- `/ailevel` AI 성장 레벨과 품질 지표
+- `/learningqueue` 우선순위 근거와 예상 효과 강화
+- `/intelligenceos` Dashboard 4.2
+
+## 안전 정책
+- 기존 학습 데이터와 상태 스키마 보존
+- Paper 20 / Shadow 60 유지
+- 전략 진화는 Shadow Simulation과 추천만 수행
+- 자동 Paper 승격 및 Live Trading 없음
+- V116.0 LTS 장기 안정화 전 Live 기능 추가 금지
+
+## 배포 후 검증 순서
+`/versionaudit` → `/intelligenceos` → `/strategylab` → `/strategycompare` → `/strategyevolution` → `/learninghistory` → `/ailevel` → `/learningqueue`
+
+---
+
 # A100 V115.4 COMMAND REGISTRY VERSION SYNC RELEASE GATE DEVELOPMENT
 
 ## V115.4 핵심 수정
