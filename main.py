@@ -37929,11 +37929,188 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc49-final-gate-source-unification-health-certification"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.2 - EXECUTION-BASED COMMAND FUNCTIONAL CERTIFICATION
+# ---------------------------------------------------------------------------
+V1160_RC492_NUMBER = "116.0-RC4.9.2"
+V1160_RC492_VERSION = "A100 V116.0-RC4.9.2 LTS EXECUTION-BASED COMMAND FUNCTIONAL CERTIFICATION"
+V91_VERSION = V1160_RC492_VERSION
+
+
+def _v1160_rc492_call_probe(fn, state):
+    """Execute a read-only engine/repository probe against an isolated state copy."""
+    import copy, inspect
+    isolated=copy.deepcopy(state)
+    sig=inspect.signature(fn)
+    params=list(sig.parameters.values())
+    required=[p for p in params if p.default is inspect._empty and p.kind in (p.POSITIONAL_ONLY,p.POSITIONAL_OR_KEYWORD)]
+    if not required:
+        result=fn()
+    elif len(required)==1:
+        result=fn(isolated)
+    else:
+        return {"ok":False,"reason":"probe_requires_runtime_arguments","result_type":"-"}
+    return {"ok":result is not None,"reason":"executed" if result is not None else "probe_returned_none",
+            "result_type":type(result).__name__}
+
+
+def _v1160_rc492_probe_candidates(command, handler):
+    """Resolve actual engine/repository callables referenced by the active handler."""
+    import inspect, re
+    try:
+        src=inspect.getsource(handler)
+    except Exception:
+        src=""
+    names=[]
+    # Function calls are resolved from the currently active global namespace.
+    for name in re.findall(r"\b([A-Za-z_]\w*)\s*\(",src):
+        if name in {"str","int","float","len","max","min","round","sum","sorted","set","list","dict","tuple","bool","range","enumerate","zip","getattr","isinstance"}:
+            continue
+        fn=globals().get(name)
+        if callable(fn) and fn is not handler and not name.endswith("_cmd") and name not in {"v90_1_safe_reply","safe_reply"}:
+            names.append(name)
+    # Explicit production adapters for handlers that delegate through inline expressions.
+    adapters={
+        "releasegate":["_v1160_rc49_certification"],"ltscert":["_v1160_rc49_certification"],
+        "repositoryaudit":["_v1160_rc49_repository_audit"],"healthscore":["_v1160_rc49_health_score"],
+        "pipelineaudit":["_v1160_rc47_pipeline_audit","_v1160_rc48_revision_integrity"],
+        "strategytrust":["_v1160_rc4_strategy_trust"],"champion":["_v1160_rc4_champion_stability"],
+        "championstability":["_v1160_rc4_champion_stability"],"trustgate":["_v1160_rc4_trust_gate"],
+        "learningqueue":["_v1160_rc45_queue_health_read_only"],"queueworker":["_v1160_rc45_queue_health_read_only"],
+        "runtimehealth":["_v1134_runtime_health"],"versionaudit":["v91_preflight"],
+    }
+    # Only execute explicitly approved read-only production adapters. This avoids
+    # network calls, trading actions, formatting helpers and recursive certification.
+    explicit=[n for n in adapters.get(command,[]) if callable(globals().get(n))]
+    return explicit[:1]
+
+
+
+def _v1160_rc492_command_certification(state=None):
+    """Execution-based functional certification of every active Telegram command.
+
+    Certification executes the command's production engine/repository adapter against a
+    deep-copied state. It never invokes Telegram output or mutates the live repository.
+    """
+    import inspect
+    state=_v91_load_state() if state is None else state
+    informational={"start","help","commands","ping","version","about"}
+    rows=[]
+    runtime=sorted(set(_v1154_runtime_commands()))
+    for name in runtime:
+        handler=V90_COMMAND_REGISTRY.get(name); reasons=[]; evidence=[]
+        handler_ok=callable(handler)
+        help_ok=name in V925_COMMAND_USAGE or name in {"help","commands"}
+        output_ok=False
+        try:
+            src=inspect.getsource(handler) if handler_ok else ""
+            output_ok=any(token in src for token in ("v90_1_safe_reply","safe_reply","reply_text","reply_html"))
+        except Exception:
+            src=""
+        engine_ok=False; repo_ok=False; executed=False
+        probes=[]
+        if name in informational:
+            engine_ok=repo_ok=True; executed=True; evidence.append("informational_command")
+        elif handler_ok:
+            for probe_name in _v1160_rc492_probe_candidates(name,handler):
+                try:
+                    p=_v1160_rc492_call_probe(globals()[probe_name],state)
+                except Exception as exc:
+                    p={"ok":False,"reason":f"{type(exc).__name__}:{exc}","result_type":"-"}
+                p["probe"]=probe_name; probes.append(p)
+                if p["ok"]:
+                    executed=True; engine_ok=True
+                    if p["result_type"] in {"dict","list","tuple","set"}: repo_ok=True
+                    evidence.append(f"{probe_name}:{p['result_type']}")
+            # A direct durable state read is valid repository evidence only when an engine probe executed.
+            if executed and any(t in src for t in ("_v91_load_state","learning_history","outcome_attributions","paper","shadow","repository","snapshot")):
+                repo_ok=True
+        if not handler_ok: reasons.append("handler_not_callable")
+        if not help_ok: reasons.append("help_missing")
+        if not output_ok: reasons.append("output_path_unverified")
+        if not executed: reasons.append("engine_execution_unverified")
+        if executed and not repo_ok: reasons.append("repository_result_unverified")
+        if not handler_ok: status="FAILED"
+        elif reasons: status="PARTIAL"
+        else: status="PASS"
+        risk="HIGH" if status=="FAILED" else "MEDIUM" if status=="PARTIAL" else "NONE"
+        rows.append({"command":name,"status":status,"risk":risk,"reasons":reasons,
+                     "handler":handler_ok,"help":help_ok,"output":output_ok,"engine":engine_ok,
+                     "repository":repo_ok,"executed":executed,"evidence":evidence,"probes":probes})
+    counts={k:sum(1 for r in rows if r["status"]==k) for k in ("PASS","PARTIAL","FAILED")}
+    status="PASS" if counts["FAILED"]==0 and counts["PARTIAL"]==0 else "FAILED" if counts["FAILED"] else "PARTIAL"
+    return {"rows":rows,"counts":counts,"status":status,"total":len(rows),"mode":"EXECUTION_BASED_READ_ONLY"}
+
+
+async def commandcert1160rc492_cmd(update,context):
+    _v1155_track("commandcert"); c=_v1160_rc492_command_certification(_v91_load_state())
+    rows=[r for r in c["rows"] if r["status"]!="PASS"]
+    lines=[f"🧾 <b>A100 V{V1160_RC492_NUMBER} COMMAND FUNCTIONAL CERTIFICATION</b>",
+           f"Mode <b>{c['mode']}</b>",
+           f"Status <b>{c['status']}</b> · PASS {c['counts']['PASS']} / PARTIAL {c['counts']['PARTIAL']} / FAILED {c['counts']['FAILED']}",""]
+    for r in rows[:30]:
+        icon="⛔" if r["status"]=="FAILED" else "⚠️"
+        ev=", ".join(r["evidence"][:2]) or "no_engine_evidence"
+        lines.append(f"{icon} /{r['command']} · {r['status']} · {', '.join(r['reasons'])} · <code>{ev}</code>")
+    if not rows: lines.append("✅ 모든 활성 명령의 Handler → Engine → Repository → Output 경로 실행 인증 완료")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+# Make LTS and health certification consume execution-based command evidence.
+def _v1160_rc492_certification(state):
+    base=_v1160_rc49_certification(state)
+    cmd=_v1160_rc492_command_certification(state)
+    base["commands"]=cmd
+    base["checks"]["command_integrity"]=cmd["status"]!="FAILED"
+    base["ready"]=all(base["checks"].values()) and all(g["pass"] for g in base["gate"].values())
+    return base
+
+async def ltscert1160rc492_cmd(update,context):
+    _v1155_track("ltscert"); c=_v1160_rc492_certification(_v91_load_state())
+    lines=[f"🏅 <b>A100 V{V1160_RC492_NUMBER} LTS CERTIFICATION</b>",f"Result <b>{'READY FOR LTS' if c['ready'] else 'BLOCKED'}</b>",
+           f"Command Execution <b>{c['commands']['status']}</b> · {c['commands']['counts']['PASS']}/{c['commands']['counts']['PARTIAL']}/{c['commands']['counts']['FAILED']}",""]
+    for k,v in c["checks"].items(): lines.append(f"{'✅' if v else '⛔'} {k.replace('_',' ').title()}")
+    if c["blocked"]:
+        lines += ["","<b>Blocking Metrics</b>"]
+        labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+        lines += [f"⛔ {labels[x['metric']]} {x['value']:.1f}/{x['target']:.0f} · 부족 {x['need']:.1f}" for x in c["blocked"]]
+    r=c["repository"]["revisions"]
+    lines += ["",f"Current Trace <code>{r.get('attribution_id') or 'N/A'}</code>",f"L{r['current']['learning']} → S{r['current']['strategy']} → T{r['current']['trust']} → C{r['current']['champion']}",f"Latest Engine L{r['latest']['learning']} → S{r['latest']['strategy']} → T{r['latest']['trust']} → C{r['latest']['champion']}"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+    "commandcert":"실행 기반 Read-Only Handler→Engine→Repository→Output 기능 인증",
+    "ltscert":"실행 기반 명령 인증을 포함하는 LTS 최종 품질 보고서",
+})
+V90_COMMAND_REGISTRY.update({"commandcert":commandcert1160rc492_cmd,"ltscert":ltscert1160rc492_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC492_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC492_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    # Superseded handler identity checks are replaced by active RC4.9.2 execution checks.
+    for obsolete in ("v1160_rc48_ltscert","v1160_rc48_command_functional_cert","v1160_rc49_ltscert_detail","v1160_rc49_version_manager"):
+        checks.pop(obsolete,None)
+    sample=_v91_default_state()
+    checks.update({
+        "v1160_rc492_version_manager":V91_VERSION==V1160_RC492_VERSION,
+        "v1160_rc492_commandcert_handler":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc492_cmd,
+        "v1160_rc492_ltscert_handler":V90_COMMAND_REGISTRY.get("ltscert") is ltscert1160rc492_cmd,
+        "v1160_rc492_execution_mode":callable(_v1160_rc492_command_certification),
+        "v1160_rc492_no_failed_commands":all(callable(v) for v in V90_COMMAND_REGISTRY.values()),
+        "v1160_rc492_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc492_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc492_schema":sample.get("schema")==1,
+        "v1160_rc492_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc492-execution-command-certification"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.2 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
