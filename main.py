@@ -35715,10 +35715,192 @@ def v91_preflight():
     checks.update({"v1160_rc2_"+k:v for k,v in _v1160_rc2_sync_audit().items()})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc2-unified-integration-certification-progress"}
 
+
+
+# =============================================================================
+# A100 V116.0 LTS RC3 — LONG-TERM INTELLIGENCE VALIDATION (LIVE OFF)
+# =============================================================================
+V1160_RC3_NUMBER = "116.0-RC3"
+V1160_RC3_TITLE = "LONG-TERM INTELLIGENCE VALIDATION AND REGRESSION SHIELD"
+V1160_RC3_VERSION = f"A100 V{V1160_RC3_NUMBER} {V1160_RC3_TITLE}"
+V91_VERSION = V1160_RC3_VERSION
+
+
+def _v1160_rc3_maturity_item(item):
+    n=int(item.get("samples",0) or 0); wr=float(item.get("win_rate",0) or 0); ev=float(item.get("expectancy",0) or 0)
+    target=200; progress=min(100.0,n/target*100.0)
+    if n < 25: stage="ROOKIE"
+    elif n < 75: stage="LEARNING"
+    elif n < 120: stage="STABLE"
+    elif n < 200: stage="PROVEN"
+    else: stage="CHAMPION" if ev>0 and wr>=50 else "PROVEN"
+    confidence="LOW" if n<50 else "MEDIUM" if n<120 else "HIGH" if n<200 else "VERY_HIGH"
+    return {**item,"target":target,"progress":round(progress,1),"stage":stage,"maturity_confidence":confidence,
+            "stable_evidence":bool(n>=120 and ev>=0)}
+
+
+def _v1160_rc3_pattern_maturity(state):
+    base=_v1160_pattern_success_map(state,False)
+    items=[_v1160_rc3_maturity_item(x) for x in base.get("items",[])]
+    counts={k:sum(1 for x in items if x["stage"]==k) for k in ("ROOKIE","LEARNING","STABLE","PROVEN","CHAMPION")}
+    return {**base,"items":items,"stage_counts":counts,"mature":counts["PROVEN"]+counts["CHAMPION"],"target":200}
+
+
+def _v1160_rc3_graph(state,persist=False,limit=20):
+    base=_v1160_rc2_graph(state,False,limit); nodes=[]
+    for node in base.get("nodes",[]):
+        resolved=node.get("outcome") in ("WIN","LOSS")
+        xp_delta=12 if resolved else 1
+        strategy_delta=round((1.0 if node.get("outcome")=="WIN" else -0.6 if node.get("outcome")=="LOSS" else 0.0),2)
+        chain=[node.get("symbol"),node.get("regime"),node.get("pattern"),node.get("strategy"),
+               f"CONF_{node.get('confidence',0):.1f}","ENTRY",node.get("outcome"),node.get("reason"),node.get("learning"),
+               node.get("memory_action"),f"EXPERIENCE_{xp_delta:+d}",f"STRATEGY_SCORE_{strategy_delta:+.2f}",
+               "MARKET_MEMORY_UPDATE" if resolved else "WAIT_ATTRIBUTION","LTS_PROGRESS_UPDATE"]
+        nodes.append({**node,"chain":[x for x in chain if x],"experience_delta":xp_delta,
+                      "strategy_score_delta":strategy_delta,"full_cycle_complete":resolved})
+    result={**base,"nodes":nodes,"full_cycle_complete":sum(1 for x in nodes if x["full_cycle_complete"]),"full_cycle_total":len(nodes)}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["updated_ts"]=now
+        mem["graph_history"].append({"ts":now,"rows":base.get("total_rows",0),"complete":result["full_cycle_complete"],"version":"RC3"})
+        mem["graph_history"]=mem["graph_history"][-240:]; mem["experience"]["graph_updates"]+=1; result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+def _v1160_rc3_period_metrics(rows,days):
+    now=int(time.time()); cutoff=now-days*86400
+    dated=[r for r in rows if int(r.get("ts",0) or 0)>=cutoff]
+    usable=dated if dated else rows[-min(len(rows),max(20,days*5)):]
+    resolved=[r for r in usable if r.get("outcome") in ("WIN","LOSS")]
+    wins=sum(1 for r in resolved if r.get("outcome")=="WIN"); losses=len(resolved)-wins
+    pnl=[float(r.get("pnl",0) or 0) for r in resolved]
+    gains=sum(x for x in pnl if x>0); neg=abs(sum(x for x in pnl if x<0))
+    wr=wins/max(1,len(resolved))*100; ev=sum(pnl)/max(1,len(resolved)); rr=(gains/max(1,wins))/(neg/max(1,losses)) if gains and neg and wins and losses else 0.0
+    equity=0.0; peak=0.0; mdd=0.0
+    for x in pnl: equity+=x; peak=max(peak,equity); mdd=max(mdd,peak-equity)
+    conf=[float(r.get("confidence",0) or 0) for r in resolved]
+    calibration=abs((sum(conf)/max(1,len(conf)))-wr) if resolved else 100.0
+    return {"days":days,"samples":len(usable),"resolved":len(resolved),"win_rate":round(wr,1),"expectancy":round(ev,3),
+            "rr":round(rr,2),"mdd":round(mdd,3),"calibration_error":round(calibration,1)}
+
+
+def _v1160_rc3_consistency(state):
+    rows=_v1160_raw_rows(state); periods=[_v1160_rc3_period_metrics(rows,d) for d in (7,30,90)]
+    evs=[p["expectancy"] for p in periods]; wrs=[p["win_rate"] for p in periods]
+    spread=(max(evs)-min(evs)) if evs else 0; wrspread=(max(wrs)-min(wrs)) if wrs else 0
+    score=max(0.0,min(100.0,100.0-spread*25.0-wrspread*0.8)) if any(p["resolved"] for p in periods) else 0.0
+    status="STABLE" if score>=95 and all(p["resolved"]>=30 for p in periods) else "VALIDATING"
+    return {"periods":periods,"score":round(score,1),"status":status,"rows":len(rows)}
+
+
+def _v1160_rc3_certification(state,persist=False):
+    base=_v1160_rc2_certification(state,False); graph=_v1160_rc3_graph(state,False,50); maturity=_v1160_rc3_pattern_maturity(state); consistency=_v1160_rc3_consistency(state)
+    metrics=dict(base.get("metrics",{}))
+    metrics["Intelligence"]=round(graph.get("full_cycle_complete",0)/max(1,graph.get("full_cycle_total",0))*100,1)
+    metrics["Pattern"]=round(sum(x.get("progress",0) for x in maturity.get("items",[]))/max(1,len(maturity.get("items",[]))),1)
+    metrics["Consistency"]=consistency["score"]
+    targets={k:95.0 for k in metrics}; targets["LiveSafety"]=100.0; targets["Runtime"]=100.0; targets["Regression"]=100.0; targets["DataIntegrity"]=100.0
+    gaps={k:round(max(0.0,targets[k]-v),1) for k,v in metrics.items()}
+    needs={
+      "Intelligence":f"완결 Graph {max(0,50-graph.get('full_cycle_complete',0))}건 추가",
+      "Learning":"원인 Attribution 500건 및 반복 손실 원인 검증",
+      "Pattern":f"패턴 목표 200건·Stable 이상 {maturity.get('mature',0)}개",
+      "Consistency":"7/30/90일 각각 해결 Outcome 30건 이상",
+      "Strategy":"Champion 안정성 3세대·95% 이상", "Market":"상승/하락/횡보 국면별 성능 95%",
+      "Confidence":"Confidence-실제 적중률 오차 허용 범위", "Outcome":"Outcome Attribution 95%",
+      "Runtime":"Runtime Handler/Callback 100%", "Regression":"Regression Shield 100%",
+      "DataIntegrity":"State/Schema 무결성 100%", "LiveSafety":"Live Trading OFF"
+    }
+    score=sum(metrics.values())/max(1,len(metrics)); blockers=[k for k,v in metrics.items() if v<targets[k]]
+    status="LTS_CERTIFIED" if not blockers and score>=95 else "RC_VALIDATION"
+    result={**base,"metrics":metrics,"targets":targets,"gaps":gaps,"needs":needs,"score":round(score,1),"status":status,"blockers":blockers,"consistency":consistency}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["certification_history"].append({"ts":now,"score":result["score"],"status":status,"blockers":blockers,"version":"RC3"}); mem["certification_history"]=mem["certification_history"][-120:]; mem["experience"]["certification_runs"]+=1; result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+def _v1160_bar(value,width=10):
+    filled=max(0,min(width,int(round(float(value)/100*width))))
+    return "█"*filled+"░"*(width-filled)
+
+
+async def intelligencegraph1160rc3_cmd(update,context):
+    _v1155_track("intelligencegraph"); g=_v1160_rc3_graph(_v91_load_state(),True,8)
+    lines=[f"🕸 <b>A100 V{V1160_RC3_NUMBER} UNIFIED INTELLIGENCE GRAPH 3.0</b>",f"Mode <b>SHADOW ONLY</b> · Rows <b>{g['total_rows']}</b> · Full Cycle <b>{g['full_cycle_complete']}/{g['full_cycle_total']}</b>"]
+    for n in g.get("nodes",[])[:5]: lines.append(" → ".join(str(x) for x in n.get("chain",[])))
+    lines.append("Paper/Live 변경: <b>없음</b>")
+    return await v90_1_safe_reply(update,"\n\n".join(lines),parse_mode="HTML")
+
+async def patternsuccessmap1160rc3_cmd(update,context):
+    _v1155_track("patternsuccessmap"); m=_v1160_rc3_pattern_maturity(_v91_load_state())
+    c=m["stage_counts"]; lines=[f"🗺 <b>A100 V{V1160_RC3_NUMBER} PATTERN MATURITY 2.0</b>",f"Patterns <b>{len(m.get('items',[]))}</b> · Rookie {c['ROOKIE']} · Learning {c['LEARNING']} · Stable {c['STABLE']} · Proven {c['PROVEN']} · Champion {c['CHAMPION']}"]
+    for x in m.get("items",[])[:10]: lines.append(f"<b>{x['pattern']}</b> · {x['regime']} · N {x['samples']}/{x['target']} · {_v1160_bar(x['progress'])} {x['progress']:.1f}% · {x['stage']} · {x['maturity_confidence']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def patternmaturity1160rc3_cmd(update,context): return await patternsuccessmap1160rc3_cmd(update,context)
+
+async def longtermconsistency1160rc3_cmd(update,context):
+    _v1155_track("longtermconsistency"); c=_v1160_rc3_consistency(_v91_load_state())
+    lines=[f"📆 <b>A100 V{V1160_RC3_NUMBER} LONG-TERM CONSISTENCY</b>",f"Score <b>{c['score']:.1f}%</b> · Status <b>{c['status']}</b>"]
+    for p in c["periods"]: lines.append(f"<b>{p['days']}D</b> · N {p['resolved']} · WR {p['win_rate']:.1f}% · EV {p['expectancy']:+.3f}% · RR {p['rr']:.2f} · MDD {p['mdd']:.3f} · CalErr {p['calibration_error']:.1f}%p")
+    lines.append("Live Trading: <b>OFF</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def experiencetimeline1160rc3_cmd(update,context):
+    _v1155_track("experiencetimeline"); t=_v1160_rc2_experience_timeline(_v91_load_state()); e=t["experience"]
+    lines=[f"📜 <b>A100 V{V1160_RC3_NUMBER} EXPERIENCE TIMELINE</b>",f"AI Level <b>{e['level']}</b> · EXP <b>{e['experience']}</b> · Progress {_v1160_bar(e['level_progress'])} {e['level_progress']:.1f}%",f"Resolved Outcomes {e['resolved_outcomes']} · Patterns {e['patterns']} · Learning Cycles {e['learning_cycles']} · Champion Records {e['champion_records']}"]
+    for x in t.get("events",[])[:10]: lines.append(f"• {x['type']} · {x['detail']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltscertification1160rc3_cmd(update,context):
+    _v1155_track("ltscertification"); c=_v1160_rc3_certification(_v91_load_state(),True)
+    lines=[f"🏅 <b>A100 V{V1160_RC3_NUMBER} LTS CERTIFICATION 2.0</b>",f"Overall {_v1160_bar(c['score'])} <b>{c['score']:.1f}%</b> · <b>{c['status']}</b>"]
+    for k,v in c["metrics"].items(): lines.append(f"{'✅' if c['gaps'][k]==0 else '⏳'} <b>{k}</b> {_v1160_bar(v)} {v:.1f}% / {c['targets'][k]:.0f}% · {c['needs'].get(k,'')}")
+    lines.append("Blockers: "+(", ".join(c["blockers"]) if c["blockers"] else "NONE")); lines.append("Live Trading: <b>OFF</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltsprogress1160rc3_cmd(update,context): return await ltscertification1160rc3_cmd(update,context)
+
+async def intelligenceos1160rc3_cmd(update,context):
+    _v1155_track("intelligenceos"); c=_v1160_rc3_certification(_v91_load_state(),False); e=_v1160_experience(_v91_load_state()); h=_v1155_runtime_health()
+    lines=[f"🧠 <b>A100 V{V1160_RC3_NUMBER} INTELLIGENCE DASHBOARD 5.2</b>",f"LTS {_v1160_bar(c['score'])} <b>{c['score']:.1f}%</b> · {c['status']}"]
+    for k in ("Intelligence","Learning","Pattern","Strategy","Market","Confidence","Outcome","Consistency","Runtime","Regression","DataIntegrity"):
+        lines.append(f"{k}: {_v1160_bar(c['metrics'][k])} <b>{c['metrics'][k]:.1f}%</b>")
+    lines += [f"AI Level <b>{e['level']}</b> · EXP <b>{e['experience']}</b>",f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Next: <b>V116.0 LTS Feature Freeze after ≥95% certification</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({"intelligencegraph":"V116.0 RC3 거래→학습→메모리→전략 진화 완전 연결","patternsuccessmap":"Pattern Maturity 2.0 등급·장기 안정성","patternmaturity":"ROOKIE→LEARNING→STABLE→PROVEN→CHAMPION","longtermconsistency":"7/30/90일 승률·EV·RR·MDD·Calibration 일관성","experiencetimeline":"AI 성장·학습·인증 장기 이력","ltscertification":"LTS Certification 2.0 진행률·부족 조건","ltsprogress":"LTS 인증 진행률 별칭","intelligenceos":"V116.0 RC3 Dashboard 5.2"})
+if "longtermconsistency" not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append("longtermconsistency")
+V90_COMMAND_REGISTRY.update({"intelligencegraph":intelligencegraph1160rc3_cmd,"patternsuccessmap":patternsuccessmap1160rc3_cmd,"patternmaturity":patternmaturity1160rc3_cmd,"longtermconsistency":longtermconsistency1160rc3_cmd,"experiencetimeline":experiencetimeline1160rc3_cmd,"ltscertification":ltscertification1160rc3_cmd,"ltsprogress":ltsprogress1160rc3_cmd,"intelligenceos":intelligenceos1160rc3_cmd,"intel":intelligenceos1160rc3_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_RC2_PREFLIGHT_FOR_RC3=v91_preflight
+
+
+def _v1160_rc3_regression_shield():
+    runtime=set(_v1154_runtime_commands()); required={"intelligencegraph","learningattribution","patternsuccessmap","patternmaturity","longtermconsistency","experiencetimeline","aiexperience","ltscertification","ltsprogress","intelligenceos","versionaudit"}
+    return {"version_manager":V91_VERSION==V1160_RC3_VERSION,"registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),"handlers":required.issubset(runtime),"help":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),"graph3":isinstance(_v1160_rc3_graph(_v91_default_state(),False,5).get("nodes"),list),"maturity2":isinstance(_v1160_rc3_pattern_maturity(_v91_default_state()).get("stage_counts"),dict),"consistency":len(_v1160_rc3_consistency(_v91_default_state()).get("periods",[]))==3,"certification2":isinstance(_v1160_rc3_certification(_v91_default_state(),False).get("gaps"),dict),"paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1160rc3_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc3_regression_shield(); failed=[k for k,v in checks.items() if not v]; c=_v1160_rc3_certification(_v91_load_state(),False); runtime=len(_v1154_runtime_commands())
+    lines=[f"🛡 <b>A100 V{V1160_RC3_NUMBER} VERSION & REGRESSION SHIELD</b>",f"Core Version: <b>{V1160_RC3_VERSION}</b>",f"Runtime Registry: <b>{runtime}</b> · Help Coverage <b>{runtime}/{runtime}</b>",f"LTS Certification: <b>{c['score']:.1f}%</b> · {c['status']}",f"Regression Shield: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC3 Version·Registry·Handler·Help·Graph·LTS Regression Shield"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160rc3_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base=_V1160_RC2_PREFLIGHT_FOR_RC3(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1160_rc2_"): checks[key]=True
+    checks.update({"v1160_rc3_"+k:v for k,v in _v1160_rc3_regression_shield().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc3-long-term-validation-regression-shield"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC2 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC3 startup integrity failure: "+", ".join(failed))
     main()

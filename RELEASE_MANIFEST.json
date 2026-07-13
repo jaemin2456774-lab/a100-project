@@ -1,12 +1,17 @@
 {
-  "version": "A100 V116.0-RC2",
-  "title": "UNIFIED INTELLIGENCE INTEGRATION AND CERTIFICATION PROGRESS",
-  "schema": 1,
+  "release": "A100 V116.0-RC3 LONG-TERM INTELLIGENCE VALIDATION AND REGRESSION SHIELD",
+  "baseline": "A100 V116.0-RC2 UNIFIED INTELLIGENCE INTEGRATION AND CERTIFICATION PROGRESS",
+  "active_commands": 314,
   "paper_positions": 20,
   "shadow_positions": 60,
   "live_trading": false,
-  "runtime_commands": 313,
-  "help_coverage": "313/313",
+  "validation_flow": "Shadow -> Paper -> Stable",
+  "tests": {
+    "compile": "PASS",
+    "rc3_tests": "4/4 PASS",
+    "preflight": "PASS",
+    "regression_shield": "10/10 PASS"
+  },
   "files": [
     {
       "path": ".gitignore",
@@ -20,8 +25,8 @@
     },
     {
       "path": "README.md",
-      "size": 404,
-      "sha256": "8654a867a1cb334ebe7dd97b82698d26d46db91920a4022de6fc0651b4be9831"
+      "size": 521,
+      "sha256": "0548d16ad9c25c02a984aaef9882a69f2708bb5279bcfbe8d76c8a855f6601b6"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -172,6 +177,11 @@
       "path": "docs/CHANGELOG_V116_0_RC2.md",
       "size": 551,
       "sha256": "42f70f73ca53e58451428dae024b72bb802d5a7ccecd481ff860e638c9febb78"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC3.md",
+      "size": 664,
+      "sha256": "6d99c69d95da54058da7e42acae2b283faf2b0a13d9f466c45d5170d439cc7a4"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -474,6 +484,11 @@
       "sha256": "ef26288302d4d6921815d8fe2fee3ccb68e1a8f4eb5990183730b0a859fe1e07"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC3.md",
+      "size": 446,
+      "sha256": "a7959faab83da5401e46429430034c00762e67fbb25835f65f1c657fc28d9e18"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -510,8 +525,8 @@
     },
     {
       "path": "main.py",
-      "size": 1712195,
-      "sha256": "5ff756a4251d7a35a2654e34391b9874fa9f47b589816e30c5687be2e8e11720"
+      "size": 1727730,
+      "sha256": "0a47927039939739809c69d27eb38c0aa34bb1d12d12e990b556cd00331b0598"
     },
     {
       "path": "pytest.ini",
@@ -682,6 +697,11 @@
       "path": "tests/test_v1160_rc2_integration.py",
       "size": 1227,
       "sha256": "553e9104fad245cf00afaaf30ef4e71dbb3b4d87ffc47c6e2968f18eefe23bba"
+    },
+    {
+      "path": "tests/test_v1160_rc3_long_term_validation.py",
+      "size": 1215,
+      "sha256": "35a7a3b375820561fe58ac1737c657ba73a3f564e850579376439dfe5e19a105"
     },
     {
       "path": "tests/test_v91_8_baseline.py",

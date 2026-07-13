@@ -1,180 +1,183 @@
-.gitignore
-GITHUB_REPLACE_GUIDE_KR.md
-README.md
-docs/CHANGELOG_V101_0.md
-docs/CHANGELOG_V102_0.md
-docs/CHANGELOG_V103_0.md
-docs/CHANGELOG_V104_0.md
-docs/CHANGELOG_V105_0.md
-docs/CHANGELOG_V106_0.md
-docs/CHANGELOG_V108_0.md
-docs/CHANGELOG_V109_0.md
-docs/CHANGELOG_V110_0.md
-docs/CHANGELOG_V111_0.md
-docs/CHANGELOG_V112_0.md
-docs/CHANGELOG_V113_2.md
-docs/CHANGELOG_V113_3.md
-docs/CHANGELOG_V113_4.md
-docs/CHANGELOG_V114_0.md
-docs/CHANGELOG_V114_1.md
-docs/CHANGELOG_V114_2.md
-docs/CHANGELOG_V115_0.md
-docs/CHANGELOG_V115_1.md
-docs/CHANGELOG_V115_2.md
-docs/CHANGELOG_V115_3.md
-docs/CHANGELOG_V115_4.md
-docs/CHANGELOG_V115_5.md
-docs/CHANGELOG_V115_6.md
-docs/CHANGELOG_V115_7.md
-docs/CHANGELOG_V115_8.md
-docs/CHANGELOG_V115_9.md
-docs/CHANGELOG_V116_0_RC1.md
-docs/CHANGELOG_V116_0_RC1_1.md
-docs/CHANGELOG_V116_0_RC2.md
-docs/CHANGELOG_V94_0.md
-docs/CHANGELOG_V95_0.md
-docs/CHANGELOG_V96_0.md
-docs/CHANGELOG_V96_1.md
-docs/CHANGELOG_V96_2.md
-docs/CHANGELOG_V97_0.md
-docs/CHANGELOG_V98_0.md
-docs/CHANGELOG_V99_0.md
-docs/DEVELOPMENT_BACKLOG_V101_0.md
-docs/DEVELOPMENT_BACKLOG_V103_0.md
-docs/DEVELOPMENT_BACKLOG_V104_0.md
-docs/DEVELOPMENT_BACKLOG_V105_0.md
-docs/DEVELOPMENT_BACKLOG_V106_0.md
-docs/DEVELOPMENT_BACKLOG_V108_0.md
-docs/DEVELOPMENT_BACKLOG_V112_0.md
-docs/DEVELOPMENT_BACKLOG_V114_0.md
-docs/DEVELOPMENT_BACKLOG_V114_2.md
-docs/DEVELOPMENT_BACKLOG_V115_0.md
-docs/DEVELOPMENT_BACKLOG_V115_2.md
-docs/DEVELOPMENT_BACKLOG_V115_3.md
-docs/DEVELOPMENT_BACKLOG_V94.md
-docs/DEVELOPMENT_BACKLOG_V95.md
-docs/DEVELOPMENT_BACKLOG_V96.md
-docs/DEVELOPMENT_BACKLOG_V96_1.md
-docs/DEVELOPMENT_BACKLOG_V96_2.md
-docs/DEVELOPMENT_BACKLOG_V97_0.md
-docs/DEVELOPMENT_BACKLOG_V98_0.md
-docs/DEVELOPMENT_BACKLOG_V99_0.md
-docs/README_V94_0_KR.md
-docs/RELEASE_NOTES_V107_0.md
-docs/RELEASE_NOTES_V108_0.md
-docs/TEST_REPORT_V101_0.md
-docs/TEST_REPORT_V102_0.md
-docs/TEST_REPORT_V103_0.md
-docs/TEST_REPORT_V104_0.md
-docs/TEST_REPORT_V105_0.md
-docs/TEST_REPORT_V106_0.md
-docs/TEST_REPORT_V107_0.md
-docs/TEST_REPORT_V108_0.md
-docs/TEST_REPORT_V109_0.md
-docs/TEST_REPORT_V110_0.md
-docs/TEST_REPORT_V111_0.md
-docs/TEST_REPORT_V113_3.md
-docs/TEST_REPORT_V113_4.md
-docs/TEST_REPORT_V114_0.md
-docs/TEST_REPORT_V114_1.md
-docs/TEST_REPORT_V114_2.md
-docs/TEST_REPORT_V115_0.md
-docs/TEST_REPORT_V115_1.md
-docs/TEST_REPORT_V115_2.md
-docs/TEST_REPORT_V115_3.md
-docs/TEST_REPORT_V115_4.md
-docs/TEST_REPORT_V115_5.md
-docs/TEST_REPORT_V115_6.md
-docs/TEST_REPORT_V115_7.md
-docs/TEST_REPORT_V115_8.md
-docs/TEST_REPORT_V115_9.md
-docs/TEST_REPORT_V116_0_RC1.md
-docs/TEST_REPORT_V116_0_RC1_1.md
-docs/TEST_REPORT_V116_0_RC2.md
-docs/TEST_REPORT_V94_0.md
-docs/TEST_REPORT_V95_0.md
-docs/TEST_REPORT_V96_0.md
-docs/TEST_REPORT_V96_1.md
-docs/TEST_REPORT_V96_2.md
-docs/TEST_REPORT_V97_0.md
-docs/TEST_REPORT_V99_0.md
-main.py
-pytest.ini
-railway.json
-requirements.txt
-tests/conftest.py
-tests/test_v101_0_closed_loop.py
-tests/test_v102_0_evolution_engine.py
-tests/test_v103_0_autonomous_evolution.py
-tests/test_v104_0_experience_intelligence.py
-tests/test_v105_0_autonomous_core.py
-tests/test_v106_0_real_time_intelligence.py
-tests/test_v1070_autonomous_market_intelligence.py
-tests/test_v1080_pattern_recognition_intelligence.py
-tests/test_v1090_paper_learning_mode.py
-tests/test_v1100_paper_trace.py
-tests/test_v1110_adaptive_threshold.py
-tests/test_v1130_entry_execution_queue.py
-tests/test_v1132_post_deploy_verification.py
-tests/test_v1133_version_runtime_trace.py
-tests/test_v1134_operations_observability.py
-tests/test_v114_0_pattern_memory_regime_adaptive.py
-tests/test_v114_1_explainable_similarity.py
-tests/test_v114_2_cross_market_self_optimization.py
-tests/test_v1150_intelligence_core.py
-tests/test_v1151_core_stabilization.py
-tests/test_v1152_intelligence_core2.py
-tests/test_v1153_intelligence_core3.py
-tests/test_v1155_intelligence_os.py
-tests/test_v1156_self_learning_scheduler.py
-tests/test_v1157_strategy_evolution.py
-tests/test_v1158_strategy_performance.py
-tests/test_v1159_market_intelligence.py
-tests/test_v1160_rc11_name_resolution.py
-tests/test_v1160_rc1_unified_intelligence.py
-tests/test_v1160_rc2_integration.py
-tests/test_v91_8_baseline.py
-tests/test_v91_8_scenario.py
-tests/test_v91_stability.py
-tests/test_v92_0_score.py
-tests/test_v92_1_review.py
-tests/test_v92_2_final_coach.py
-tests/test_v92_3_dashboard.py
-tests/test_v92_4_consensus.py
-tests/test_v92_5_intelligence.py
-tests/test_v92_6_learning.py
-tests/test_v92_7_calibration.py
-tests/test_v92_7_integration.py
-tests/test_v92_8_command_integrity.py
-tests/test_v93_0_ai_core.py
-tests/test_v93_1_self_learning.py
-tests/test_v94_0_visualization.py
-tests/test_v95_0_dashboard.py
-tests/test_v96_0_ai_quality.py
-tests/test_v96_1_intelligence2.py
-tests/test_v96_2_intelligence3.py
-tests/test_v97_0_unified.py
-tests/test_v98_0_market_intelligence.py
-tests/test_v99_0_predictive_intelligence.py
-v1000_learning_intelligence.py
-v1010_closed_loop_learning.py
-v1020_evolution_engine.py
-v1030_autonomous_evolution.py
-v1040_experience_intelligence.py
-v1050_autonomous_intelligence_core.py
-v1060_real_time_intelligence.py
-v1070_autonomous_market_intelligence.py
-v1080_pattern_recognition_intelligence.py
-v925_decision_intelligence.py
-v926_learning_intelligence.py
-v927_learning_calibration.py
-v930_ai_intelligence_core.py
-v931_self_learning_ai.py
-v940_ai_visualization.py
-v950_ai_dashboard.py
-v960_ai_quality.py
-v961_ai_intelligence2.py
-v962_ai_intelligence3.py
-v970_unified_intelligence.py
-v980_market_intelligence.py
-v990_predictive_intelligence.py
+ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2         167  .gitignore
+a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3        1265  GITHUB_REPLACE_GUIDE_KR.md
+0548d16ad9c25c02a984aaef9882a69f2708bb5279bcfbe8d76c8a855f6601b6         521  README.md
+0aaebb282892a41b3c26de1540cc9886270927708578dd93c23b7f7af56cf6cc         611  docs/CHANGELOG_V101_0.md
+e0cbc80fe6c1987c42767f030c8d4d20672841af3fb51e150078a1115ffb39bf         672  docs/CHANGELOG_V102_0.md
+2092d1ad869e1c57d209134ac6576be94d575f2f343d729d788ee2ab891d1029         755  docs/CHANGELOG_V103_0.md
+bb59c592544d5b7ff954a5c4c7fe715ffecc23a1b8dc7c4accfa470f4261f608         469  docs/CHANGELOG_V104_0.md
+ac69fee4cdb0458529c328ff48e7675f0ce7413768877b5ec7e221f4b7b1c27e         498  docs/CHANGELOG_V105_0.md
+9767fdb73733676f10b3c6d3e790ef0deeca44993aaa2dc8377b44a1bc671d16         391  docs/CHANGELOG_V106_0.md
+959ec33a0ab67283d9e72e0227eda6b973106a3735d05fcc01022d3e030e77a1         167  docs/CHANGELOG_V108_0.md
+5d6882a4dfb78a65857989dccbdf0c9b16a844360f4e950f5cadb271cc779e9a         426  docs/CHANGELOG_V109_0.md
+2ff2979875af616c83ef55fe1477ce5e04fcf37bad0310d2f278026fe6edd4ff         418  docs/CHANGELOG_V110_0.md
+bb56b4121cbff73fbcd3c26d2e134ffea8c4aad6000891366dbba7338c5d5bcc         528  docs/CHANGELOG_V111_0.md
+025357f2cd99a824cc0dd9d42dfe917b7f696aa9e98961e77044190b40fe7889         510  docs/CHANGELOG_V112_0.md
+7cd569846554c2fdda76f91dcb2a883e64dc76aed0c8478a434fbd78df7d6b93         508  docs/CHANGELOG_V113_2.md
+c79c3fec4b2ab1d3fe70908bbb02bba9c26a535933be0ba5fa6ad8cf8d703bf0         444  docs/CHANGELOG_V113_3.md
+222687023f3f2e23b392c5ab365e7abb3d58ad757d9478b6ea97c7fb0a066343        1086  docs/CHANGELOG_V113_4.md
+3aa116d674767550fc9ba77fa10df002887e629a802113ffebe93bcdbd5526c8        1541  docs/CHANGELOG_V114_0.md
+14f34f16dbd10b83f0c5448b21a6191c52de3afcd805d312eefa3ac07fcaf4a4         994  docs/CHANGELOG_V114_1.md
+2cb251b9cdfde95118d9299429f6a90ed993a83e4cddcd294afca11a618be0c4         431  docs/CHANGELOG_V114_2.md
+cde14274c0c43d92042b503db163b708bcc52468dc46e731378b39b8132d66af         824  docs/CHANGELOG_V115_0.md
+22d219e9a337995e364970491bf656620ef805d01c000efce4137547700fed42         532  docs/CHANGELOG_V115_1.md
+77d2c5bd13c8b8f8ff6b25023f4f84e3cf5c394b1b9dcb8ee0f9b86df0c3bf18         435  docs/CHANGELOG_V115_2.md
+289ae5fcbd9c5e0f0695d2f7abf441992b77d5881a83e32a02bfea1ada6d8570         778  docs/CHANGELOG_V115_3.md
+cd6fc6ea935a123002981ece6b59e3d331d2bb40bbd1e8132a3379038e190c02         754  docs/CHANGELOG_V115_4.md
+0dd25d749adddf32e35ef98c73ae60595b2d6ffd31c12864962596a3ac3669e0         908  docs/CHANGELOG_V115_5.md
+063d93ab15aba9b6f297b70ee24d8a651b0cb77bd428ae5924e996ab1f310b68         576  docs/CHANGELOG_V115_6.md
+07c66a87e6d89b4205fae15ccde5f669c395e829d5a5940c395733ff684b81a8         622  docs/CHANGELOG_V115_7.md
+6a6bd1da2e23ddda926317cb4003a8c3c417ac95c73b04f950e16fe8d91a32a7         831  docs/CHANGELOG_V115_8.md
+d1a5ca8e69da40611a2c56219bc03b59c0fcaddb638241729319d86f4179e5f6         453  docs/CHANGELOG_V115_9.md
+2149bc943d46165db7f8341142d33086145a5ae2aa2041243e32daa9bb4b3a4f         244  docs/CHANGELOG_V116_0_RC1.md
+6c560998d1c08b1ccdda3e061f776b7bc171ce3f55932ce66c592b859c3c3587         546  docs/CHANGELOG_V116_0_RC1_1.md
+42f70f73ca53e58451428dae024b72bb802d5a7ccecd481ff860e638c9febb78         551  docs/CHANGELOG_V116_0_RC2.md
+6d99c69d95da54058da7e42acae2b283faf2b0a13d9f466c45d5170d439cc7a4         664  docs/CHANGELOG_V116_0_RC3.md
+932d82d1b7ef1d5f1885f6f7e35161ae75b2050898e07c05a57843210b49a8f1         301  docs/CHANGELOG_V94_0.md
+bc991242074922e56e746a6e2e187aa46509238ddf199f82d8b36c4b71f5aacf         349  docs/CHANGELOG_V95_0.md
+8708bee2a8851ae9bfc02ab0e8b3f562d5f6802c869ae6829ed625c6f365ebe8         658  docs/CHANGELOG_V96_0.md
+cab6976a12da914a0ec6030fe5bb0a0a648b78507826eb62d7ed74b2cea9a4a4         357  docs/CHANGELOG_V96_1.md
+fa03ab94b79c80e87bcc4573c4f445277ae5ac1df28d01ed153e69148c1df267         745  docs/CHANGELOG_V96_2.md
+65ec05fc09d76fbd997f63a6a51dff99c5ef3939792bc779726693aa4e49110b         732  docs/CHANGELOG_V97_0.md
+81172a7ca41ee7821ae2faf2f359781ee0c3eb22c43f305acb311518bd8d12ee         487  docs/CHANGELOG_V98_0.md
+71ac985d5f46050ae2f75c0d78eefceae8227efafe6e3cd2c337fdad6ecb7f13         534  docs/CHANGELOG_V99_0.md
+79739a4b3ff859a7cc3f63aca9042af2689ca67b31c2e0474f2412448f542368         285  docs/DEVELOPMENT_BACKLOG_V101_0.md
+a9b57dd1be612490f19e3bda9bbe5a1746435fb013c78e606010f8144a0301da         334  docs/DEVELOPMENT_BACKLOG_V103_0.md
+9a5a858d7dfd96ad0b3bf8f42351ca9de36de44ea0e875b51a2bf29771e18426         176  docs/DEVELOPMENT_BACKLOG_V104_0.md
+ef24af50141277811f86b767660a8bfc3a3e09dac9d403ac90d015d119270853         230  docs/DEVELOPMENT_BACKLOG_V105_0.md
+4f6d39d6a15af8cd661fd33f9c70017196baa2d7c1f3ee3ceb1925fa97005807         243  docs/DEVELOPMENT_BACKLOG_V106_0.md
+042ccfb71323e6529e802f37c5187a7ac6688bd57a06dccc8198dc36e6fc5f8b         217  docs/DEVELOPMENT_BACKLOG_V108_0.md
+5b94cef1bf8c6ed8b50167d10f03e860657d1a80b47d4e603f2f0f3857b9097c         335  docs/DEVELOPMENT_BACKLOG_V112_0.md
+8ba076b5c4e23d5b8a93a57ab0e9ae3a6c379f8c2e201dbcbcda6090f1c77e2e         353  docs/DEVELOPMENT_BACKLOG_V114_0.md
+c4ce4751b5687d1da28fe3c765d6c416628bf4e8f6180b5934fe91b92c6f97a5         268  docs/DEVELOPMENT_BACKLOG_V114_2.md
+ac6960e3f722cdffe1f22e69823b7f9de784f164f727b2b72e6f2e3dd5484093         294  docs/DEVELOPMENT_BACKLOG_V115_0.md
+7a78c25c6c1cc6e7696a80b52f905ee53c2097a7e93951880d13ae488e98adaa         259  docs/DEVELOPMENT_BACKLOG_V115_2.md
+7a18a6c7feee84032c43347896062188e9893b27cfcdc94b14edda29e74a3e11         316  docs/DEVELOPMENT_BACKLOG_V115_3.md
+236de097103fe60627f3e4b0d5726e7bcb8377ff9e1b8cef372f7775cbf6d590         736  docs/DEVELOPMENT_BACKLOG_V94.md
+21589b3ccecd68310ffd8cdd33c1f9c13bd3babf93f4466e245566dc7f378d44         426  docs/DEVELOPMENT_BACKLOG_V95.md
+14ff952f8ec4f7a318f8251574257c9934dba5ae0fbe91ebcea6f87556236372         573  docs/DEVELOPMENT_BACKLOG_V96.md
+b8c9aef632576b697f5291f1392bec98fd926f048cc430ff35090f354a76f5b8         367  docs/DEVELOPMENT_BACKLOG_V96_1.md
+7d526dd17761b7b54614ea6461a65c89cd52d4c78412edae5f934434409ab537         453  docs/DEVELOPMENT_BACKLOG_V96_2.md
+27ac0190fe612d32eed98b57c6e2fdfb4528e5884ba55dbb55dbe985b3fa18d0         440  docs/DEVELOPMENT_BACKLOG_V97_0.md
+7958a29b40a430e1daaa733e133f1751af37745776dd935aa48b4122f53f239e         215  docs/DEVELOPMENT_BACKLOG_V98_0.md
+0aa8092304a6751c8de87bd698c37897cc4866e0479d9712ebbd606bb905c10a         223  docs/DEVELOPMENT_BACKLOG_V99_0.md
+c66d149ba420f7917e5e78a56de7e73d1f05b6b9aef4d9556821b24071c389ab         816  docs/README_V94_0_KR.md
+d67ee647a51b64757eec03f288f441bd597bff1fc907fae69de92d1979534a16         281  docs/RELEASE_NOTES_V107_0.md
+ac8ab12cbd69a5d3e90e8f38df15e8137296421455b41d520c2169568932d82d         395  docs/RELEASE_NOTES_V108_0.md
+28bdb5698640d963354a53b4399571145d379b73034ef4eb9952e6ba8ca0ad0f         223  docs/TEST_REPORT_V101_0.md
+c9c75ee9da71efe2b1101c0446309cb342abfb5e781557c0e107e33219c6ebe0         304  docs/TEST_REPORT_V102_0.md
+e8b81b23780f4df098f62ec9ae989e246184b08eab4fcf721c843102e21ce966         293  docs/TEST_REPORT_V103_0.md
+1634361b18aef4c730485e945101a7c0735ce99274d32fd90b87fc386013938c         689  docs/TEST_REPORT_V104_0.md
+6cdefc4e6ce5a4a2bb2da32cb0b99b23b03485b8da1ce0c582a9a3c224a88608         402  docs/TEST_REPORT_V105_0.md
+a4d0cf4cfdcff20028cdfe94c90aadbdfd4e93c9801638dd60f1d7ec014c7d28         404  docs/TEST_REPORT_V106_0.md
+11779cb644092c59ec2f8e3b85414e5cf271291775e4c8d80b2a9cfd924b6d76         405  docs/TEST_REPORT_V107_0.md
+e1b4f63256d44ef36aa33cf1b21efa32457f78a47cead26286bdd829f231a2a1         407  docs/TEST_REPORT_V108_0.md
+804cd067ecacd83ced0201dca15e1ef42ded19f0dc8024d0f1fef66288566cc6         299  docs/TEST_REPORT_V109_0.md
+5bc9894afcfe7add304eed9b26738f907ab2562e0cc55de6c491592cc95c5519         191  docs/TEST_REPORT_V110_0.md
+8f0fc7a5a5bf73e5d6135d5c23362f0ddae61421b3bf78bc10e0c446547bad2f         347  docs/TEST_REPORT_V111_0.md
+9f755988b1b47a67e515cfdaf5dc2c62e16749520483fed35741341d7d77866c         207  docs/TEST_REPORT_V113_3.md
+f8578e9a9273e8fc89a13360e78633a72b09b3c9200075872fd7262b28aedc64         341  docs/TEST_REPORT_V113_4.md
+27d96577f39b92f035f75767c3877a3b3178340a40c21abb96d280c783feca25         401  docs/TEST_REPORT_V114_0.md
+956b192fa9cf47e0ed509765052883fe01b3104dafb4dea83618f16e3f92ff07         356  docs/TEST_REPORT_V114_1.md
+97003809f43cb279f7d573f0e779cc583c823036b079aa69cc783bc89574df49         370  docs/TEST_REPORT_V114_2.md
+2b41c9f9ad1d9f940a437d2e52087cf8db8f49692433172ec63f29059ca04e1b         443  docs/TEST_REPORT_V115_0.md
+cc698df07efa7c595ee74c5ed7b0eb36b2ed8691104247c35f78e870fa8dedc1         310  docs/TEST_REPORT_V115_1.md
+ed46039612becc9b20ed139cdd2956d8e8ba2fd2d81a6a46fc0621b665fcfb55         375  docs/TEST_REPORT_V115_2.md
+625de572b171380f20b435577f22a9c25fbade30db2b5ff1d995cae1add08f63         759  docs/TEST_REPORT_V115_3.md
+43303a0cc2e56c8c5a5422365398957a522ade9e231d0aad893eaf397959e2cc         447  docs/TEST_REPORT_V115_4.md
+7f167e126f561540dddc579657b4f02b6bc1c9491d7e409b6111c58ac5000ca0         252  docs/TEST_REPORT_V115_5.md
+fffb777e25e0dd4d6cdc371167ad2ec280f35b7e2bf6beb49f1478e9a32d0559         584  docs/TEST_REPORT_V115_6.md
+87ac2f5f843d01fbbc35c6ae31a1555cf8bc69e53f76c4b91b3628afd72aa416         507  docs/TEST_REPORT_V115_7.md
+b5bfc414045edbf43e34e6b799028fa6e1c720ad6dd09c1abf4df121e154547c         851  docs/TEST_REPORT_V115_8.md
+19e7d10aebc44745eaa58b9e2d827c91ec59ab189a1e94b32ed3198848292fee         276  docs/TEST_REPORT_V115_9.md
+49059009c8b98dc09ee4a2d6107ce120dd907bb4182f989a896f918b8012bdc6         533  docs/TEST_REPORT_V116_0_RC1.md
+019b8ea47586efe9b41b7044f2535d8c1ae7578feefb7185376724ea26d88316         234  docs/TEST_REPORT_V116_0_RC1_1.md
+ef26288302d4d6921815d8fe2fee3ccb68e1a8f4eb5990183730b0a859fe1e07         466  docs/TEST_REPORT_V116_0_RC2.md
+a7959faab83da5401e46429430034c00762e67fbb25835f65f1c657fc28d9e18         446  docs/TEST_REPORT_V116_0_RC3.md
+6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e         768  docs/TEST_REPORT_V94_0.md
+667b348e39a5671c8a9861d70ac5e0bb60ad4080517b5df2e792e67681c41f2c         186  docs/TEST_REPORT_V95_0.md
+827f28b9b2de2ba8ee14f19a7018a09c87956060d09a6308cb05a805aaf81583         400  docs/TEST_REPORT_V96_0.md
+4c6f2d1c116f327fb089a37dcc36afa7912b92b9205c98cfa6d471cef9ad6b63         183  docs/TEST_REPORT_V96_1.md
+ab7aec541f6edd5d397b1b4f6bf24b7c78cadfd91b393e7fc6d8ae3cb553bff0         470  docs/TEST_REPORT_V96_2.md
+2c6f93510f911f14058500895bdaf611af2d0a3453d1a2377751ebfbdb007b6c         583  docs/TEST_REPORT_V97_0.md
+46b87b9eb1dc8a23e01b051e069fbd056318d09b9022a25f9725b95bc0157d74         192  docs/TEST_REPORT_V99_0.md
+0a47927039939739809c69d27eb38c0aa34bb1d12d12e990b556cd00331b0598     1727730  main.py
+1a8c102d3d37920a997dca76b2a63b44eb90921bca026a0e5886684566ce2035          71  pytest.ini
+0e4255265122f37b0713bc2e4f4ec604be574ca6f8e9881205e14192db899628         349  railway.json
+1ee7cd2517fe1e995714813c4e63b9f1255dfcd8d45af1bcbe46b4224472bbdf          99  requirements.txt
+6d34c88cfc06ba1a91f2333fa65f64d270aaa45f686f86b551dbb9dfbef88085         144  tests/conftest.py
+6477c926c3e762d6f2c4b20ab631656b655de87296d5e7b086535bd17f88a6a0        1315  tests/test_v101_0_closed_loop.py
+181823b07300565962832bacfbd5d3e9fc3e02829d1baf28b838fc2a9f87162a        1635  tests/test_v102_0_evolution_engine.py
+fa34d38eecdf6aedbfd55be6877a27e07cc488fc6cfd4de70ff6c14bc4cd0b40        1733  tests/test_v103_0_autonomous_evolution.py
+17bcfd2419ddb79bd81e74b68748b68bb24dfb6aeb7643d4359bdde2889a190b        1554  tests/test_v104_0_experience_intelligence.py
+e6231411b5f682e00fca8f11ea9d0354ea5f53c35a2da8de580d762b922b7d9b        1287  tests/test_v105_0_autonomous_core.py
+fed6698d43e04b28e271a683e68c134bba8bd55436eb10e401485528f84668dd        1037  tests/test_v106_0_real_time_intelligence.py
+53d14b6ef043235f4189764ac82f15b774f1270d5f86ae6f129c672388b32129         439  tests/test_v1070_autonomous_market_intelligence.py
+f447b69a83668dfa4617eef70336b3798c3964dbad8ffaf0f580f91d1d90a5b0         859  tests/test_v1080_pattern_recognition_intelligence.py
+1bee6ff4930df0268dd646a8f539a4509f3abd9882cf80d081efb95780e01d51         478  tests/test_v1090_paper_learning_mode.py
+7a8d5472dfbc40f7a45f14436946dbbac04773db089fb8f9890b763463d99a36         358  tests/test_v1100_paper_trace.py
+af569e45573771be7830d066540370af6db7e69a20f8b8e7f42439807f276a1b         363  tests/test_v1110_adaptive_threshold.py
+387e81985c127a02c57dafa843c57f09a3df46c674ece21bcb3c3f34e3e59f55         975  tests/test_v1130_entry_execution_queue.py
+c17bf3ac7e47882768d31252ea09cfd504f0f3006b8d83c7ab43523b275f852a        1493  tests/test_v1132_post_deploy_verification.py
+8ff7c958f065c99e91810489b400400e9d17a3436f2207f9e6b05cd32f3cadd5         454  tests/test_v1133_version_runtime_trace.py
+39c7b8c18b2d4ba1c3f86eb81c3e208a094a624f84ac4608364f2a91ff5a70c9         741  tests/test_v1134_operations_observability.py
+fb6ddbf1eaedc1d67d294beb07b25cf67cf2fe847ce2d14c127a88e9b99e4a05        1569  tests/test_v114_0_pattern_memory_regime_adaptive.py
+3ec6dc0d850f8259601eef52909bc4e4542d065187dbb2a35ebad2cce1d3aadc        1222  tests/test_v114_1_explainable_similarity.py
+f912ed8de5220131126bd4fc95b3a361dbcf380191823f462028e779aee588f2        2154  tests/test_v114_2_cross_market_self_optimization.py
+823e66ac0043c41ef3202ab23257153e4e3e3a70dacfe38262308e16f38a8141         831  tests/test_v1150_intelligence_core.py
+8065a3c345f20bedb13cbf4ad85ae14eca8955fca26eee04eb6ac3c45ca598c1         938  tests/test_v1151_core_stabilization.py
+abcfb6faa701b08439c28da44131453db763dfe4d139228837208618fad167d9         838  tests/test_v1152_intelligence_core2.py
+02186f11ccdefbc8a2cc8e6b4b5da58152fa130c7341e7563064946e2a16c014        1417  tests/test_v1153_intelligence_core3.py
+1a316295bf0357cabd9e27de92d843f2dfb2905ad91b3a4b3f5372f8fd46af68        1079  tests/test_v1155_intelligence_os.py
+f2c07fbcbbb121d1c9ffc8cbb148a6369ce72cf8a48098ed7aba63b080bc0e60        1290  tests/test_v1156_self_learning_scheduler.py
+0ec58e348b0909408a0378008ff4e82734126d734dc8e23633e40b1a47396457        1166  tests/test_v1157_strategy_evolution.py
+bf1b0e9d674c998849d858d7a707de93de1acfa16c58258acae31178d080d45f        1724  tests/test_v1158_strategy_performance.py
+05b2faf5cb0281cc01c325b2a7b69e6f208ace436adf20fb8b3488c4f5912e79         961  tests/test_v1159_market_intelligence.py
+36acbcb3057272cffe49814aec604b2e9b3fe49ba0565e208c8f8326c5b61755         976  tests/test_v1160_rc11_name_resolution.py
+3da784e012af3fb6f135c5f9ba27bbbfd4f1788c0e37beea2d14d43cbf3539c1         834  tests/test_v1160_rc1_unified_intelligence.py
+553e9104fad245cf00afaaf30ef4e71dbb3b4d87ffc47c6e2968f18eefe23bba        1227  tests/test_v1160_rc2_integration.py
+35a7a3b375820561fe58ac1737c657ba73a3f564e850579376439dfe5e19a105        1215  tests/test_v1160_rc3_long_term_validation.py
+056fa4d6f8f45b358652a20a7063c2d75d154670e0b6067be696c48c012072f5        1727  tests/test_v91_8_baseline.py
+b65889a320e4a09f9dbf7cf74d915f6a5b694b3d6cb493c1692eb6dd3321f7cb        1930  tests/test_v91_8_scenario.py
+b33787a090a37da4970ddefdb875f047114bd1f8b679a24f2b7baca251890d8c        7744  tests/test_v91_stability.py
+fff96bb5b5df4c19ad6bbbff7b9da8d65aae2b0286ec7ef4b01384e8a27fce66        3054  tests/test_v92_0_score.py
+7b9dedd3610ea3eb9527e85bd19691d37c54bd099b1b0a6a475d4666182a55c9        1722  tests/test_v92_1_review.py
+e1b037a5b6ecd01767cd99671eb28ac52102621fc62766257910ab809e8a27b4        1916  tests/test_v92_2_final_coach.py
+143c68c79f2fb2ce0817bb4c1ac30178f1abdc29580a4d4bf3d80352950fa0d9        1424  tests/test_v92_3_dashboard.py
+eae68b1085fbfee7367ad5a41cec45da66cee12154bdf351b848d07c387e708f        1724  tests/test_v92_4_consensus.py
+6a28b6181189065fead87f0548d4345fcec8a729da584f8fe1cbcd08f461e666        2178  tests/test_v92_5_intelligence.py
+0f647af5756ef94676029fe65bf18ac776a6f47a7ef1365132ecff3f318437c9        2013  tests/test_v92_6_learning.py
+ba66da85f74b8a8737f95857e5b415ca9f828a153285d510f425d0e5b28d7d84         876  tests/test_v92_7_calibration.py
+bb827d1dcc7451a7f3ef7eb73ff795a2d13843b309c916f315f230c38ec2d9df        1269  tests/test_v92_7_integration.py
+db7bd27b60b23301e7434e53d8d28182966cbf4742b4295431ea9bf23a8c06d5        1397  tests/test_v92_8_command_integrity.py
+35803e8169eb594ec4329128b1e4ac5e5f1d215eceb38f746d5dde49db6c7c5f        1064  tests/test_v93_0_ai_core.py
+62f5aad9f6042b660a9081e648b20e711612120be8b4d638dc0ec8a5d348602d        1120  tests/test_v93_1_self_learning.py
+20f9f378c1d95e6cffd4db842f585ba17b0fec4b65b631343031d6f6a12890f3         622  tests/test_v94_0_visualization.py
+ba85ccf24a0cfc22934af5a3807d7d501fb0bb5ff0848f97a9bf4d180d071600         743  tests/test_v95_0_dashboard.py
+d0abd19ff066474879715765aff7e1eacba464980a5c795762001e65485fd3a7         969  tests/test_v96_0_ai_quality.py
+119d6bc4f5af0e6eea97f286e5597a0bc8d84ec1ae850eb48799acb148feba9d        1383  tests/test_v96_1_intelligence2.py
+87558a51f6e81cbe3b5be12110a9c8830c6c202ea3cb9dadf9ec5922638fdaea         997  tests/test_v96_2_intelligence3.py
+60141c1262eda23ac0d5b70ca3968d4b831579d47cd4196cbfa36e09ac24e29f        1329  tests/test_v97_0_unified.py
+4eaf5b599450ec7a4bf60d35bb236ea98750e281a02650745573e1f8fe027116        1142  tests/test_v98_0_market_intelligence.py
+8fd916a80c92f20ab7e5f0152a364f5e13e4635151dde0ea4cde4ce9953c8308         958  tests/test_v99_0_predictive_intelligence.py
+e355c53f535957485e546fac1e2e0a30d653062a2e305a3723982ff24fb549a1        5852  v1000_learning_intelligence.py
+066b123c3d8bf1f7234e4f467a7dc0f307bb47159f816561508964f7f4e3ac3c        7479  v1010_closed_loop_learning.py
+ee7fbd5a94319bb1ae98afba9b87de2afb602ecf8ba730ba648913380a6a9e6b        6747  v1020_evolution_engine.py
+a2eae88c18ae57b355e699b02d578fb1555bbec2d60a96ebe65b30c892650ebb        8567  v1030_autonomous_evolution.py
+346864f14f5231aa350fbfdd9c0c32366ef59fbaf99d109d0e328629eb3c816d        8308  v1040_experience_intelligence.py
+3a2fe7107d06276727471289e0624d070e8b7da111805dd2e4696a1b9dedc2b1        9554  v1050_autonomous_intelligence_core.py
+0be4d38b10923c68bae1938a27122e6362c50a836657e95e8a63732479302417        7949  v1060_real_time_intelligence.py
+de7682a411f90622ae2e4bfbc44fb673d86f7a61dd24618b286be5911f0e028d        6833  v1070_autonomous_market_intelligence.py
+a2fc283c4bf44d545e4031fcd6f868b1c06da24539dbabba2705f8b020aa26ce        8070  v1080_pattern_recognition_intelligence.py
+710c090da8fdc27116e48941c24ee4f2dca0114f3513ca9c082c58ca45fd8d19        1755  v925_decision_intelligence.py
+86cea9e7e062d2c0dfd576f059fdd5037642fef407e62066ac8d9055da72ad38         764  v926_learning_intelligence.py
+4eb72ed150407377417f2f6ff8931a0df2a1a4ef87971448a1f491312aeef306        1253  v927_learning_calibration.py
+900a2d4c40848e288e5efecf0cf9f1e53445ccf050c6134828543fdeff67ed6d        4748  v930_ai_intelligence_core.py
+f8a66cccaca96cf38a16b0c6568d2e2c071e61653957f1e6d4c165bc99f133dd        5159  v931_self_learning_ai.py
+7a2969cce4045fe5dfa5526f1a77f77b9dff99d6dc1ef01b8b4f1868f7cef82e        1944  v940_ai_visualization.py
+0115b23cb120a049c35d367f1c4fe3aa7032121cfec68b1369addb5fa511669a        1696  v950_ai_dashboard.py
+41b117e61bf51cf6ac1c54f97bbef770f5abfa2f8f602c80464e78b4da782191        4143  v960_ai_quality.py
+fe2a7eee8bb54bddc35bed09c91dbf008df3216bc8b38ea0388f76aab01cd7dd        5797  v961_ai_intelligence2.py
+682449306fd6c27894fb345d47e12a1ccf8982569fe854e92a55f86ae747e2b4        6037  v962_ai_intelligence3.py
+381c907f302c28df1e18dcc4b9157afa9f0a45671384dde37f194412f30d8af1        5041  v970_unified_intelligence.py
+298ffbd149b06bbc68371661930a8191b8b15c4ee39e3288261742beb4e81bca        4464  v980_market_intelligence.py
+0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49        4016  v990_predictive_intelligence.py
