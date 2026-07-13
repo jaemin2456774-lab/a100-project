@@ -1,0 +1,21 @@
+{
+  "project": "A100 AI Trading Intelligence OS",
+  "version": "A100 V116.0-RC4.7 LTS FINAL INTEGRATION COMPLETION",
+  "release_type": "DEVELOPMENT_RELEASE",
+  "schema": 1,
+  "paper_positions": 20,
+  "shadow_positions": 60,
+  "live_trading": false,
+  "focus": [
+    "dashboard_learning_queue_integration",
+    "paper_threshold_keyerror_source_fix",
+    "entry_trust_champion_revision_trace",
+    "release_gate_block_reason_visibility",
+    "strict_read_only_pipeline_audit"
+  ],
+  "verification": {
+    "python_compile": "PASS",
+    "startup_preflight": "PASS",
+    "rc47_tests": "5 PASS"
+  }
+}

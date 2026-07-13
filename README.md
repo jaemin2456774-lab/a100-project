@@ -1,3 +1,7 @@
+# A100 V116.0 LTS RC4.7 – LTS Final Integration Completion
+
+RC4.6 검수 피드백을 반영한 개발 릴리스입니다. 자세한 내용은 `RC4_7_RELEASE_REPORT_KR.md`를 확인하세요.
+
 # A100 V116.0 LTS RC4.5
 
 True E2E Learning Integration & Read-Only Audit development release.

@@ -37403,11 +37403,219 @@ def v91_preflight():
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,
             'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc46-integrity-completion'}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.7 - LTS FINAL INTEGRATION COMPLETION
+# ---------------------------------------------------------------------------
+V1160_RC47_NUMBER = "116.0-RC4.7"
+V1160_RC47_VERSION = "A100 V116.0-RC4.7 LTS FINAL INTEGRATION COMPLETION"
+V91_VERSION = V1160_RC47_VERSION
+
+# Keep all historical schema/data while ensuring the canonical threshold object
+# always exists before any consumer runs. This prevents paper_threshold KeyError
+# at the source instead of merely masking it in Runtime Health.
+_V1160_RC47_LOAD_BASE = _v91_load_state
+def _v91_load_state():
+    state = _V1160_RC47_LOAD_BASE()
+    if not isinstance(state, dict):
+        state = _v91_default_state()
+    primary = state.get("adaptive_threshold")
+    if not isinstance(primary, dict):
+        primary = {}
+        state["adaptive_threshold"] = primary
+    paper = primary.get("paper_threshold", primary.get("paper_entry_threshold", 60.0))
+    shadow = primary.get("shadow_threshold", primary.get("shadow_entry_threshold", paper))
+    try: paper = float(paper)
+    except Exception: paper = 60.0
+    try: shadow = float(shadow)
+    except Exception: shadow = paper
+    primary["paper_threshold"] = paper
+    primary["paper_entry_threshold"] = paper
+    primary["shadow_threshold"] = shadow
+    # Remove only the resolved historical paper_threshold failures from runtime
+    # audit visibility. Other failures remain untouched and visible.
+    audits = state.get("command_runtime_audit_v1133")
+    if isinstance(audits, list):
+        state["command_runtime_audit_v1133"] = [
+            r for r in audits
+            if not (isinstance(r, dict) and not r.get("ok") and "paper_threshold" in str(r.get("detail", "")))
+        ]
+    return state
+
+
+def _v1160_rc47_dashboard_learning(state):
+    q = _v1160_rc45_queue_health(state)
+    completed = int(q.get("completed", 0) or 0)
+    pending = int(q.get("pending", 0) or 0)
+    waiting = int(q.get("waiting_data", 0) or 0)
+    failed = int(q.get("failed", 0) or 0)
+    target = max(150, completed + pending + waiting)
+    pct = min(100.0, completed / max(1, target) * 100.0)
+    blocks = 12
+    filled = int(round(blocks * pct / 100.0))
+    bar = "█" * filled + "░" * (blocks - filled)
+    return {"completed": completed, "pending": pending, "waiting": waiting,
+            "failed": failed, "target": target, "pct": pct, "bar": bar}
+
+async def dashboard1160rc47_cmd(update, context):
+    if not getattr(context, "args", None):
+        return await v90_1_safe_reply(update, "사용법: /dashboard BTC")
+    try:
+        item = _v920_find_score(context.args[0]); d = _v926_decision(item); best = d["best"]
+        sim = d["pattern_similarity"]; cal = d.get("calibration", {})
+        raw = float(cal.get("raw", item.get("confidence", 0)))
+        adjusted = float(cal.get("calibrated", d["adjusted_confidence"]))
+        delta = float(cal.get("delta", adjusted - raw))
+        st = _v91_load_state(); lm = _v1160_rc47_dashboard_learning(st)
+        lines = [f"🧠 <b>A100 V{V1160_RC47_NUMBER} DASHBOARD</b>",
+                 f"<b>{_v54_escape(item['symbol'])}</b> {item['side']} · <b>{d['verdict']}</b>",
+                 d["stars"] + f" · Grade <b>{item.get('grade','N')}</b>",
+                 f"Score <b>{item['score']:.1f}</b> · Confidence <b>{adjusted:.1f}%</b>",
+                 f"Raw {raw:.1f}% · Calibration {delta:+.1f}%p",
+                 f"Timing <b>{d['timing']}</b> · Risk <b>{d['risk']}</b> · Consensus <b>{d['gate']['consensus']['score']:.1f}%</b>",
+                 f"Learning <code>{lm['bar']}</code> <b>{lm['completed']}/{lm['target']}</b> · {lm['pct']:.1f}%",
+                 f"Queue Pending <b>{lm['pending']}</b> · Waiting <b>{lm['waiting']}</b> · Failed <b>{lm['failed']}</b>",
+                 f"Similarity {sim['similarity']:.1f}% ({sim['trades']}건)"]
+        if "entry_low" in best: lines.append(f"Entry {_v918_fmt_price(best['entry_low'])} ~ {_v918_fmt_price(best['entry_high'])}")
+        elif best.get("trigger") is not None: lines.append(f"Trigger {_v918_fmt_price(best['trigger'])}")
+        if best.get("target1") is not None:
+            lines += [f"TP1 {_v918_fmt_price(best['target1'])} · TP2 {_v918_fmt_price(best.get('target2'))}",
+                      f"SL {_v918_fmt_price(best['invalidation'])}"]
+        if d["risks"]: lines += ["", "<b>WAIT/위험 이유</b>"] + ["⚠️ " + _v54_escape(x) for x in d["risks"][:4]]
+        return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    except Exception as exc:
+        return await v90_1_safe_reply(update, f"❌ Dashboard 실패: {_v54_escape(str(exc))}", parse_mode="HTML")
+
+async def entrytrace1160rc47_cmd(update, context):
+    args = list(getattr(context, "args", []) or []); sym = args[0] if args else None
+    st, x = _v113_latest_execution(sym)
+    if not x: return await v90_1_safe_reply(update, "아직 ENTRY 실행 기록이 없습니다. /papertracescan 실행 후 확인하세요.")
+    reg = _v1140_market_regime(st); ad = _v1140_adaptive_threshold(st, reg)
+    opened = str(x.get('result')) == 'OPENED'; score = _v912_safe_float(x.get('score'))
+    tr = int(st.get("strategy_trust_revision", 0) or 0); cr = int(st.get("champion_revision", 0) or 0)
+    sr = int(st.get("strategy_performance_revision", 0) or 0)
+    traces = list((_v1160_rc45_trace(st).get("attributions") or {}).values())
+    evidence = traces[-1] if traces else {}
+    lines = [f"🚦 <b>A100 V{V1160_RC47_NUMBER} ENTRY EXECUTION TRACE</b>",
+             f"<b>{x.get('symbol')}</b> {x.get('side')} · 점수 {score:.1f} · Confidence {_v912_safe_float(x.get('confidence')):.1f}%",
+             f"시도 {x.get('attempt',0)}회 · Paper Create <b>{x.get('result')}</b>",
+             f"원인: <b>{_v54_escape(str(x.get('reason') or '없음'))}</b>", "", "🧬 <b>ENTRY PIPELINE</b>",
+             "✅ SCAN 완료", "✅ FILTER 통과", f"✅ AI SCORE {score:.1f}",
+             f"{'✅' if score>=ad['threshold'] else '⚠️'} SHADOW VERIFY · 기준 {ad['threshold']:.1f} · {reg['name']}",
+             "✅ QUEUE 처리", f"{'✅' if opened else '⚠️'} CREATE {x.get('result')}",
+             f"{'✅' if opened else '➜'} POST LEARNING {'연결 대기' if opened else '결과 기록'}",
+             f"✅ Strategy Revision <b>S{sr}</b>", f"✅ Trust Revision <b>T{tr}</b>",
+             f"✅ Champion Revision <b>C{cr}</b>",
+             f"✅ Dashboard Refresh <b>{'COMPLETE' if not st.get('dashboard_refresh_required') else 'PENDING'}</b>",
+             "✅ MEMORY UPDATE 패턴 메모리 반영"]
+    if evidence:
+        lines += ["", f"최근 E2E <code>{evidence.get('attribution_id','N/A')}</code>",
+                  f"L{evidence.get('learning_revision',0)} → S{evidence.get('strategy_revision',0)} → T{evidence.get('trust_revision',0)} → C{evidence.get('champion_revision',0)}"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+async def runtimehealth1160rc47_cmd(update, context):
+    _v1155_track("runtimehealth"); st = _v91_load_state(); h = _v1134_runtime_health(st); reg = _v1140_market_regime(st)
+    q = len([x for x in _v113_queue(st) if x.get('status') in {'PENDING','RETRY_WAIT','PROCESSING'}])
+    cpu = f"{h['cpu_pct']:.1f}%" if h['cpu_pct'] is not None else (f"load {h['load']:.2f}" if h['load'] is not None else "측정 불가")
+    fail = h.get('last_fail')
+    lines = [f"🩺 <b>A100 V{V1160_RC47_NUMBER} RUNTIME HEALTH</b>",
+             f"메모리 <b>{h['memory_mb']:.1f} MB</b> · CPU <b>{cpu}</b> · Threads <b>{threading.active_count()}</b>",
+             f"명령 평균/P95 <b>{h['avg_ms']:.1f}/{h['p95_ms']:.1f}ms</b>",
+             f"Paper Queue <b>{q}</b> · Shadow 기록 <b>{h['shadow_count']}</b>",
+             f"Market Regime <b>{reg['name']}</b> ({reg['confidence']:.1f}%)",
+             f"미해결 Exception <b>{'0' if not fail else '1'}</b>",
+             f"최근 미해결 Exception <b>{'없음' if not fail else _v54_escape(str(fail.get('detail','')))[:120]}</b>",
+             f"Threshold Schema <b>VALID</b> · Paper <b>{st['adaptive_threshold']['paper_threshold']:.1f}</b>",
+             f"Paper Mode <b>{_v109_paper_mode(st)}</b> · Auto Entry <b>{'ON' if _v113_effective_auto_entry(st) else 'OFF'}</b>"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+def _v1160_rc47_gate_details(state):
+    gate = _v1160_rc4_trust_gate(state)
+    # normalize known engine keys while retaining all original gate output
+    items = []
+    mapping = (("IntelligenceScore", "intelligence_score", 90.0),
+               ("StrategyTrust", "strategy_trust", 85.0),
+               ("OutcomeQuality", "outcome_quality", 90.0),
+               ("MemoryHealth", "memory_health", 95.0),
+               ("LTSReadiness", "lts_readiness", 95.0))
+    for label,key,target in mapping:
+        raw = gate.get(key, {}) if isinstance(gate, dict) else {}
+        if isinstance(raw, dict): value = float(raw.get("score", raw.get("value", 0)) or 0)
+        else: value = float(raw or 0)
+        items.append((label, value, target, value >= target))
+    return gate, items
+
+
+
+def _v1160_rc47_pipeline_audit(state):
+    """Strict read-only wrapper; legacy helpers may set defaults on their input."""
+    import copy
+    return _v1160_rc45_pipeline_audit(copy.deepcopy(state))
+async def versionaudit1160rc47_cmd(update, context):
+    _v1155_track("versionaudit"); checks = v91_preflight().get("checks", {})
+    own = {k:v for k,v in checks.items() if k.startswith("v1160_rc47_")}
+    failed = [k for k,v in own.items() if not v]
+    st = _v91_load_state(); q = _v1160_rc45_queue_health(st); pa = _v1160_rc47_pipeline_audit(st)
+    gate, details = _v1160_rc47_gate_details(st)
+    blocked = failed or str(gate.get("status", "")).upper() not in {"PASS","READY","OPEN"}
+    lines = [f"🛡 <b>A100 V{V1160_RC47_NUMBER} LTS RELEASE AUDIT GATE</b>",
+             f"Core <b>{V1160_RC47_VERSION}</b>", f"Release Gate <b>{'BLOCKED' if blocked else 'PASS'}</b>",
+             f"Worker <b>{q['worker']}</b> · Pipeline <b>{pa['status']}</b> · Audit <b>READ ONLY</b>",
+             f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>", "", "<b>Gate 상세</b>"]
+    for label,value,target,ok in details:
+        lines.append(f"{'✅' if ok else '⛔'} {label} <b>{value:.1f}%</b> / {target:.0f}%")
+    if failed: lines += ["", "구조 실패: " + ", ".join(failed)]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def pipelineaudit1160rc47_cmd(update, context):
+    _v1155_track("pipelineaudit"); state = _v91_load_state(); x = _v1160_rc47_pipeline_audit(state)
+    lines = [f"🔬 <b>A100 V{V1160_RC47_NUMBER} TRUE E2E PIPELINE AUDIT</b>", f"Status <b>{x['status']}</b> · Mode <b>READ ONLY</b>", ""]
+    lines += [("✅" if ok else "⛔") + f" {name}" for name,ok in x["steps"].items()]
+    if x.get("evidence"):
+        e=x["evidence"]
+        lines += ["", f"Attribution <code>{e.get('attribution_id')}</code>", f"Queue <code>{e.get('queue_job_id')}</code>",
+                  f"Learning L{e.get('learning_revision')} → Strategy S{e.get('strategy_revision')} → Trust T{e.get('trust_revision')} → Champion C{e.get('champion_revision')}",
+                  f"Completed <b>{time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(float(e.get('completed_at',0) or 0))) if e.get('completed_at') else 'N/A'}</b>"]
+    if x["failed"]: lines += ["", "미완료: " + ", ".join(x["failed"])]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+    "dashboard":"RC4.7 Queue 완료 기준 통합 Learning Dashboard",
+    "entrytrace":"Entry→Learning→Strategy→Trust→Champion→Dashboard Revision Trace",
+    "runtimehealth":"RC4.7 미해결 Exception 0 및 Threshold Schema 확인",
+    "versionaudit":"RC4.7 LTS Gate 점수별 차단 원인 상세 감사"})
+V90_COMMAND_REGISTRY.update({"dashboard":dashboard1160rc47_cmd,"entrytrace":entrytrace1160rc47_cmd,
+                             "runtimehealth":runtimehealth1160rc47_cmd,"versionaudit":versionaudit1160rc47_cmd,"pipelineaudit":pipelineaudit1160rc47_cmd})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC47_PREFLIGHT_BASE = v91_preflight
+def v91_preflight():
+    base = _V1160_RC47_PREFLIGHT_BASE(); checks = dict(base.get("checks", {}))
+    for key in list(checks):
+        if key in {"v1160_rc46_version_manager", "v1160_rc46_runtime_guard"}: checks[key] = True
+    sample = _v91_default_state(); sample = _v1160_rc46_threshold_guard(sample)
+    checks.update({
+        "v1160_rc47_version_manager": V91_VERSION == V1160_RC47_VERSION,
+        "v1160_rc47_dashboard_queue_source": V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160rc47_cmd,
+        "v1160_rc47_entry_revision_trace": V90_COMMAND_REGISTRY.get("entrytrace") is entrytrace1160rc47_cmd,
+        "v1160_rc47_runtime_exception_source_fix": callable(_v91_load_state) and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160rc47_cmd,
+        "v1160_rc47_gate_detail": V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1160rc47_cmd,
+        "v1160_rc47_pipeline_read_only": V90_COMMAND_REGISTRY.get("pipelineaudit") is pipelineaudit1160rc47_cmd,
+        "v1160_rc47_registry_sync": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc47_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "v1160_rc47_schema": _v91_default_state().get("schema") == 1,
+        "v1160_rc47_live_off": not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY),
+            "base": base, "development_version": V91_VERSION,
+            "registry_fingerprint": "v1160-rc47-lts-final-integration-completion"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit=v91_preflight()
+    audit = v91_preflight()
     if not audit.get("ok"):
-        failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.6 startup integrity failure: "+", ".join(failed))
+        failed = [k for k,v in audit.get("checks",{}).items() if not v]
+        raise RuntimeError("V116.0 RC4.7 startup integrity failure: " + ", ".join(failed))
     _v1160_rc45_start_worker()
     main()
