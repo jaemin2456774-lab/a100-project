@@ -34975,10 +34975,278 @@ def v91_preflight():
             "registry_fingerprint": "v1158-strategy-performance-intelligence"}
 
 
+
+# =============================================================================
+# A100 V115.9 MARKET INTELLIGENCE & OUTCOME ATTRIBUTION (LIVE OFF)
+# =============================================================================
+V1159_NUMBER = "115.9"
+V1159_TITLE = "MARKET INTELLIGENCE OUTCOME ATTRIBUTION DEVELOPMENT"
+V1159_VERSION = f"A100 V{V1159_NUMBER} {V1159_TITLE}"
+V91_VERSION = V1159_VERSION
+V1159_MARKET_FILE = os.path.join(V91_DATA_DIR, "a100_v1159_market_intelligence.json")
+V1159_SUFFICIENCY_TARGET = 1000
+
+
+def _v1159_default_state():
+    return {"schema": 1, "mode": "SHADOW_ONLY", "updated_ts": 0,
+            "regime_memory": {}, "reason_memory": {}, "calibration_history": [],
+            "evolution_memory": [], "snapshots": [], "paper_changed": False,
+            "live_changed": False}
+
+
+def _v1159_load_state():
+    base = _v1159_default_state()
+    try:
+        if not os.path.exists(V1159_MARKET_FILE): return base
+        with open(V1159_MARKET_FILE, "r", encoding="utf-8") as fh: data=json.load(fh)
+        if not isinstance(data, dict): return base
+        for k,v in base.items(): data.setdefault(k,v)
+        data["mode"]="SHADOW_ONLY"; data["paper_changed"]=False; data["live_changed"]=False
+        data["snapshots"]=list(data.get("snapshots") or [])[-240:]
+        data["calibration_history"]=list(data.get("calibration_history") or [])[-240:]
+        data["evolution_memory"]=list(data.get("evolution_memory") or [])[-240:]
+        data["regime_memory"]=dict(data.get("regime_memory") or {})
+        data["reason_memory"]=dict(data.get("reason_memory") or {})
+        return data
+    except Exception: return base
+
+
+def _v1159_save_state(data):
+    try:
+        os.makedirs(os.path.dirname(V1159_MARKET_FILE), exist_ok=True)
+        tmp=V1159_MARKET_FILE+".tmp"
+        with open(tmp,"w",encoding="utf-8") as fh: json.dump(data,fh,ensure_ascii=False,indent=2)
+        os.replace(tmp,V1159_MARKET_FILE); return True
+    except Exception: return False
+
+
+def _v1159_norm_regime(value):
+    s=str(value or "UNKNOWN").upper().replace(" ","_")
+    aliases={"BULLISH":"BULL","UPTREND":"BULL","BEARISH":"BEAR","DOWNTREND":"BEAR",
+             "RANGE":"SIDEWAYS","RANGING":"SIDEWAYS","HIGH_VOL":"HIGH_VOLATILITY",
+             "LOW_VOL":"LOW_VOLATILITY","SHORT_SQUEEZE":"SHORT_SQUEEZE",
+             "LONG_SQUEEZE":"LONG_LIQUIDATION","BREAKOUT_UP":"BREAKOUT"}
+    s=aliases.get(s,s)
+    allowed={"BULL","BEAR","SIDEWAYS","HIGH_VOLATILITY","LOW_VOLATILITY","BREAKOUT",
+             "FAKE_BREAKOUT","SHORT_SQUEEZE","LONG_LIQUIDATION","TREND","UNKNOWN"}
+    return s if s in allowed else ("BULL" if "BULL" in s else "BEAR" if "BEAR" in s else "SIDEWAYS" if "SIDE" in s or "RANGE" in s else "UNKNOWN")
+
+
+def _v1159_reason(row, pnl):
+    raw=" ".join(str(row.get(k) or "") for k in ("exit_reason","close_reason","reason","outcome_reason","status","note")).upper()
+    mapping=(("STOP","STOP_LOSS"),("TAKE_PROFIT","TAKE_PROFIT"),("TP","TAKE_PROFIT"),
+             ("LATE","LATE_ENTRY"),("EARLY","EARLY_EXIT"),("FAKE","FAKE_BREAKOUT"),
+             ("FUNDING","FUNDING_REVERSAL"),("NEWS","NEWS_IMPACT"),("VOLUME","LOW_VOLUME"),
+             ("LIQUID","LIQUIDITY_SWEEP"),("VOLAT","HIGH_VOLATILITY"),("TIMEOUT","TIME_EXIT"))
+    for token,label in mapping:
+        if token in raw: return label
+    if pnl>0: return "PROFIT_UNATTRIBUTED"
+    if pnl<0: return "LOSS_UNATTRIBUTED"
+    return "ZERO_OUTCOME"
+
+
+def _v1159_rows(state):
+    raw=_v1140_trace_rows(state,24*90); out=[]
+    for row in raw:
+        pnl=_v1157_num(row,("pnl_pct","realized_pnl_pct","return_pct","pnl","profit_pct"),0.0)
+        conf=_v1157_num(row,("confidence","conf","score"),50.0)
+        regime=_v1159_norm_regime(_v1142_cluster_name(row,state))
+        out.append({"pnl":pnl,"confidence":max(0.0,min(100.0,conf)),"regime":regime,
+                    "reason":_v1159_reason(row,pnl),"symbol":str(row.get("symbol") or "UNKNOWN").upper(),
+                    "side":str(row.get("side") or row.get("direction") or "UNKNOWN").upper()})
+    return out
+
+
+def _v1159_metrics(rows):
+    pnls=[float(x.get("pnl",0)) for x in rows]; n=len(pnls)
+    wins=[x for x in pnls if x>0]; losses=[x for x in pnls if x<0]
+    wr=len(wins)/n*100 if n else 0.0; ev=sum(pnls)/n if n else 0.0
+    aw=sum(wins)/len(wins) if wins else 0.0; al=abs(sum(losses)/len(losses)) if losses else 0.0
+    rr=aw/al if al else (aw if aw else 0.0)
+    eq=peak=mdd=0.0
+    for x in pnls: eq+=x; peak=max(peak,eq); mdd=max(mdd,peak-eq)
+    return {"samples":n,"win_rate":round(wr,1),"expectancy":round(ev,3),"risk_reward":round(rr,2),"max_drawdown":round(mdd,2)}
+
+
+def _v1159_market_intelligence(state,persist=False):
+    rows=_v1159_rows(state); regimes={}
+    templates=_v1157_candidate_templates()
+    for regime in sorted(set([x["regime"] for x in rows]) | {"BULL","BEAR","SIDEWAYS","HIGH_VOLATILITY","LOW_VOLATILITY"}):
+        rr=[x for x in rows if x["regime"]==regime]; base=_v1159_metrics(rr); strategies=[]
+        for t in templates:
+            selected=[x for x in rr if x["confidence"]>=t["conf_min"] and (not t["regimes"] or regime in t["regimes"])]
+            m=_v1159_metrics([{**x,"pnl":x["pnl"]*t["risk"]} for x in selected])
+            score=round(m["win_rate"]*.35+max(0,min(100,50+m["expectancy"]*20))*.30+min(100,m["risk_reward"]*35)*.20+min(100,m["samples"])*.15,1)
+            strategies.append({"id":t["id"],"name":t["name"],**m,"score":score})
+        strategies.sort(key=lambda x:(x["samples"]>=30,x["expectancy"]>0,x["score"]),reverse=True)
+        regimes[regime]={**base,"best_strategy":strategies[0] if strategies else None,"strategies":strategies}
+    current=max(regimes.items(),key=lambda kv:kv[1]["samples"])[0] if regimes else "UNKNOWN"
+    result={"mode":"SHADOW_ONLY","rows":len(rows),"current_regime":current,"regimes":regimes,"paper_changed":False,"live_changed":False}
+    if persist:
+        mem=_v1159_load_state(); now=int(time.time()); mem["updated_ts"]=now
+        for k,v in regimes.items(): mem["regime_memory"][k]={"updated_ts":now,**{q:v[q] for q in ("samples","win_rate","expectancy","risk_reward","max_drawdown")},"best_strategy":(v.get("best_strategy") or {}).get("id")}
+        mem["snapshots"].append({"ts":now,"current_regime":current,"rows":len(rows)})
+        mem["snapshots"]=mem["snapshots"][-240:]; result["saved"]=_v1159_save_state(mem)
+    return result
+
+
+def _v1159_outcome_attribution(state,persist=False):
+    rows=_v1159_rows(state); groups={}
+    for r in rows: groups.setdefault(r["reason"],[]).append(r)
+    reasons=[]
+    for reason,items in groups.items(): reasons.append({"reason":reason,**_v1159_metrics(items),"losses":sum(1 for x in items if x["pnl"]<0)})
+    reasons.sort(key=lambda x:(x["losses"],x["samples"]),reverse=True)
+    result={"rows":len(rows),"reasons":reasons,"unattributed":sum(1 for x in rows if "UNATTRIBUTED" in x["reason"] or x["reason"]=="ZERO_OUTCOME")}
+    if persist:
+        mem=_v1159_load_state(); now=int(time.time()); mem["updated_ts"]=now
+        for x in reasons: mem["reason_memory"][x["reason"]]={"updated_ts":now,**x}
+        result["saved"]=_v1159_save_state(mem)
+    return result
+
+
+def _v1159_calibration(state,persist=False):
+    rows=[x for x in _v1159_rows(state) if abs(x["pnl"])>1e-12]; bins=[]
+    for lo in range(0,100,10):
+        b=[x for x in rows if lo<=x["confidence"]<(lo+10 if lo<90 else 101)]
+        if not b: continue
+        predicted=sum(x["confidence"] for x in b)/len(b); actual=sum(1 for x in b if x["pnl"]>0)/len(b)*100
+        bins.append({"range":f"{lo}-{lo+9 if lo<90 else 100}","samples":len(b),"predicted":round(predicted,1),"actual":round(actual,1),"error":round(predicted-actual,1)})
+    total=sum(x["samples"] for x in bins)
+    mae=round(sum(abs(x["error"])*x["samples"] for x in bins)/total,1) if total else 0.0
+    bias=round(sum(x["error"]*x["samples"] for x in bins)/total,1) if total else 0.0
+    status="INSUFFICIENT_DATA" if total<30 else "OVERCONFIDENT" if bias>5 else "UNDERCONFIDENT" if bias<-5 else "CALIBRATED"
+    rec="데이터 축적" if total<30 else "Confidence 하향 보정" if bias>5 else "Confidence 상향 검토" if bias<-5 else "현재 보정 유지"
+    result={"samples":total,"mae":mae,"bias":bias,"status":status,"recommendation":rec,"bins":bins}
+    if persist:
+        mem=_v1159_load_state(); mem["calibration_history"].append({"ts":int(time.time()),"samples":total,"mae":mae,"bias":bias,"status":status}); mem["calibration_history"]=mem["calibration_history"][-240:]; result["saved"]=_v1159_save_state(mem)
+    return result
+
+
+def _v1159_sufficiency(state):
+    p=_v1158_performance_snapshot(state,persist=False); rows=[]
+    for c in p.get("strategies",[]):
+        n=int(c.get("samples",0)); rows.append({"id":c["id"],"name":c["name"],"samples":n,"target":V1159_SUFFICIENCY_TARGET,"pct":round(min(100,n/V1159_SUFFICIENCY_TARGET*100),1),"status":"READY" if n>=V1159_SUFFICIENCY_TARGET else "ACCUMULATING"})
+    return rows
+
+
+def _v1159_evolution_memory(persist=False):
+    evo=_v1157_load_state(); perf=_v1158_load_state(); hist=list(evo.get("history") or []); champs=list(perf.get("champion_history") or [])
+    events=[]
+    prev=None
+    for h in hist[-120:]:
+        cid=h.get("champion")
+        if cid!=prev: events.append({"ts":h.get("ts",0),"generation":h.get("generation",0),"strategy":cid or "NONE","event":"CHAMPION_CHANGED" if prev else "INITIAL_CANDIDATE","reason":"최고 점수 후보 변경; Paper 자동 승격 없음"}); prev=cid
+    result={"generation":int(evo.get("generation",0)),"events":events[-30:],"champion_records":len(champs),"mode":"RECOMMENDATION_ONLY"}
+    if persist:
+        mem=_v1159_load_state(); mem["evolution_memory"]=(mem["evolution_memory"]+events)[-240:]; result["saved"]=_v1159_save_state(mem)
+    return result
+
+
+def _v1159_lts_readiness(state):
+    base=_v1158_lts_readiness(state); market=_v1159_market_intelligence(state,False); attr=_v1159_outcome_attribution(state,False); cal=_v1159_calibration(state,False)
+    populated=[v for v in market["regimes"].values() if v["samples"]>=30]
+    market_score=round(min(100,len(populated)/3*100),1)
+    attribution=round((1-attr["unattributed"]/max(1,attr["rows"]))*100,1) if attr["rows"] else 0.0
+    cal_score=max(0.0,100-cal["mae"]*2) if cal["samples"]>=30 else 0.0
+    overall=round(base["overall"]*.55+market_score*.18+attribution*.12+cal_score*.15,1)
+    blockers=list(base["blockers"])
+    if market_score<95: blockers.append("MARKET_MEMORY_BELOW_95")
+    if attribution<80: blockers.append("OUTCOME_ATTRIBUTION_BELOW_80")
+    if cal["samples"]<30: blockers.append("CALIBRATION_SAMPLES")
+    if overall<95 and "READINESS_BELOW_95" not in blockers: blockers.append("READINESS_BELOW_95")
+    return {**base,"market":market_score,"attribution":attribution,"confidence_accuracy":round(cal_score,1),"overall":overall,"status":"LTS_CANDIDATE" if not blockers else "DEVELOPMENT","blockers":list(dict.fromkeys(blockers))}
+
+
+async def marketintelligence1159_cmd(update,context):
+    _v1155_track("marketintelligence"); m=_v1159_market_intelligence(_v91_load_state(),True)
+    lines=[f"🌐 <b>A100 V{V1159_NUMBER} MARKET INTELLIGENCE</b>",f"Mode: <b>SHADOW ONLY</b> · Outcome <b>{m['rows']}</b>",f"Dominant Regime: <b>{m['current_regime']}</b>",""]
+    for name,v in sorted(m["regimes"].items(),key=lambda kv:kv[1]["samples"],reverse=True)[:7]:
+        best=v.get("best_strategy") or {}; lines.append(f"<b>{name}</b> · N {v['samples']} · WR {v['win_rate']:.1f}% · EV {v['expectancy']:+.3f}%\n   Best: {best.get('name','NONE')} · Score {float(best.get('score',0)):.1f}")
+    lines.append("\n전략 선택: <b>Recommendation Only</b> · Paper/Live 변경 없음")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def marketregime1159_cmd(update,context): return await marketintelligence1159_cmd(update,context)
+
+async def marketmemory1159_cmd(update,context):
+    _v1155_track("marketmemory"); m=_v1159_market_intelligence(_v91_load_state(),False)
+    lines=[f"🧠 <b>A100 V{V1159_NUMBER} MARKET MEMORY</b>"]
+    for name,v in sorted(m["regimes"].items(),key=lambda kv:kv[1]["samples"],reverse=True)[:8]: lines.append(f"{name}: N {v['samples']} · EV {v['expectancy']:+.3f}% · MDD {v['max_drawdown']:.2f}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def outcomeattribution1159_cmd(update,context):
+    _v1155_track("outcomeattribution"); a=_v1159_outcome_attribution(_v91_load_state(),True)
+    lines=[f"🧩 <b>A100 V{V1159_NUMBER} OUTCOME ATTRIBUTION</b>",f"Outcomes <b>{a['rows']}</b> · Unattributed <b>{a['unattributed']}</b>",""]
+    for x in a["reasons"][:10]: lines.append(f"<b>{x['reason']}</b> · N {x['samples']} · Loss {x['losses']} · WR {x['win_rate']:.1f}% · EV {x['expectancy']:+.3f}%")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def outcomereasons1159_cmd(update,context): return await outcomeattribution1159_cmd(update,context)
+
+async def datasufficiency1159_cmd(update,context):
+    _v1155_track("datasufficiency"); rows=_v1159_sufficiency(_v91_load_state()); lines=[f"📚 <b>A100 V{V1159_NUMBER} DATA SUFFICIENCY INDEX</b>",f"Target: <b>{V1159_SUFFICIENCY_TARGET} samples / strategy</b>",""]
+    for x in rows: lines.append(f"<b>{x['name']}</b> {x['samples']} / {x['target']} · <b>{x['pct']:.1f}%</b> · {x['status']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def confidenceaccuracy1159_cmd(update,context):
+    _v1155_track("confidenceaccuracy"); c=_v1159_calibration(_v91_load_state(),True)
+    lines=[f"🎯 <b>A100 V{V1159_NUMBER} CONFIDENCE CALIBRATION 2.0</b>",f"Samples <b>{c['samples']}</b> · MAE <b>{c['mae']:.1f}%p</b> · Bias <b>{c['bias']:+.1f}%p</b>",f"Status <b>{c['status']}</b> · Recommendation <b>{c['recommendation']}</b>",""]
+    for b in c["bins"][-6:]: lines.append(f"{b['range']}% · N {b['samples']} · Pred {b['predicted']:.1f}% / Actual {b['actual']:.1f}% · Error {b['error']:+.1f}%p")
+    lines.append("\n자동 Threshold 변경: <b>없음</b> · Shadow Recommendation Only")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def evolutionmemory1159_cmd(update,context):
+    _v1155_track("evolutionmemory"); e=_v1159_evolution_memory(True); lines=[f"🧬 <b>A100 V{V1159_NUMBER} EVOLUTION MEMORY</b>",f"Generation <b>{e['generation']}</b> · Events <b>{len(e['events'])}</b> · Champion Records <b>{e['champion_records']}</b>",""]
+    for x in e["events"][-8:]: lines.append(f"Gen {x['generation']} · {x['event']} · <b>{x['strategy']}</b>\n   {x['reason']}")
+    lines.append("\nPromotion: <b>Recommendation Only</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltsreadiness1159_cmd(update,context):
+    _v1155_track("ltsreadiness"); r=_v1159_lts_readiness(_v91_load_state())
+    lines=[f"🧱 <b>A100 V{V1159_NUMBER} LTS READINESS</b>",f"Intelligence <b>{r['intelligence']:.1f}%</b> · Data <b>{r['data']:.1f}%</b>",f"Strategy <b>{r['strategy']:.1f}%</b> · Market <b>{r['market']:.1f}%</b>",f"Attribution <b>{r['attribution']:.1f}%</b> · Confidence <b>{r['confidence_accuracy']:.1f}%</b>",f"Regression <b>{r['regression']:.1f}%</b> · Overall <b>{r['overall']:.1f}%</b>",f"Status <b>{r['status']}</b>","Blockers: "+(", ".join(r["blockers"]) if r["blockers"] else "NONE"),"Live Trading: <b>OFF</b> · V116.0 안정화 전 활성 금지"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def intelligenceos1159_cmd(update,context):
+    _v1155_track("intelligenceos"); r=_v1159_lts_readiness(_v91_load_state()); m=_v1159_market_intelligence(_v91_load_state(),False); a=_v1159_outcome_attribution(_v91_load_state(),False); c=_v1159_calibration(_v91_load_state(),False); h=_v1155_runtime_health()
+    lines=[f"🧠 <b>A100 V{V1159_NUMBER} INTELLIGENCE DASHBOARD 4.5</b>",f"LTS Readiness <b>{r['overall']:.1f}%</b> · {r['status']}",f"Market <b>{m['current_regime']}</b> · Market Score <b>{r['market']:.1f}%</b>",f"Outcome Attribution <b>{r['attribution']:.1f}%</b> · Confidence Accuracy <b>{r['confidence_accuracy']:.1f}%</b>",f"Calibration <b>{c['status']}</b> · Unattributed <b>{a['unattributed']}</b>",f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Next: <b>V116.0 LTS Integration & Long-Term Stability</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+ "marketintelligence":"시장 국면별 전략 성과와 최적 전략 추천", "marketregime":"현재·누적 시장 국면 분석",
+ "marketmemory":"시장 국면별 장기 성과 기억", "outcomeattribution":"손익 원인별 성과 귀속 분석",
+ "outcomereasons":"Outcome 원인 통계", "datasufficiency":"전략별 목표 표본 진행률",
+ "confidenceaccuracy":"Confidence 예측과 실제 적중률 보정", "evolutionmemory":"Champion 변경·탈락·진화 이력",
+ "ltsreadiness":"V116.0 LTS 통합 준비도", "intelligenceos":"V115.9 Market·Outcome·Calibration Dashboard 4.5"})
+for _c in ("marketintelligence","marketregime","marketmemory","outcomeattribution","outcomereasons","datasufficiency","confidenceaccuracy","evolutionmemory"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append(_c)
+V90_COMMAND_REGISTRY.update({"marketintelligence":marketintelligence1159_cmd,"marketregime":marketregime1159_cmd,"marketmemory":marketmemory1159_cmd,"outcomeattribution":outcomeattribution1159_cmd,"outcomereasons":outcomereasons1159_cmd,"datasufficiency":datasufficiency1159_cmd,"confidenceaccuracy":confidenceaccuracy1159_cmd,"evolutionmemory":evolutionmemory1159_cmd,"ltsreadiness":ltsreadiness1159_cmd,"intelligenceos":intelligenceos1159_cmd,"intel":intelligenceos1159_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1158_PREFLIGHT_FOR_V1159=v91_preflight
+
+
+def _v1159_sync_audit():
+    runtime=set(_v1154_runtime_commands()); required={"marketintelligence","marketregime","marketmemory","outcomeattribution","outcomereasons","datasufficiency","confidenceaccuracy","evolutionmemory","ltsreadiness","intelligenceos","versionaudit"}; d=_v1159_default_state(); m=_v1159_market_intelligence(_v91_default_state(),False)
+    return {"version_manager":V91_VERSION==V1159_VERSION,"required_handlers":required.issubset(runtime),"market_schema":d.get("schema")==1,"shadow_only":d.get("mode")=="SHADOW_ONLY" and m.get("mode")=="SHADOW_ONLY","market_regime_engine":len(m.get("regimes",{}))>=5,"outcome_attribution":isinstance(_v1159_outcome_attribution(_v91_default_state(),False).get("reasons"),list),"confidence_calibration":isinstance(_v1159_calibration(_v91_default_state(),False).get("bins"),list),"recommendation_only":not d.get("paper_changed") and not d.get("live_changed"),"registry_snapshot":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),"help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),"paper_shadow_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"state_schema_preserved":_v91_default_state().get("schema")==1,"live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1159_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1159_sync_audit(); failed=[k for k,v in checks.items() if not v]; runtime=len(_v1154_runtime_commands()); r=_v1159_lts_readiness(_v91_load_state())
+    lines=[f"🧾 <b>A100 V{V1159_NUMBER} VERSION & RELEASE AUDIT</b>",f"Core Version: <b>{V1159_VERSION}</b>",f"Runtime Registry: <b>{runtime}개</b> · Help Coverage <b>{runtime}/{runtime}</b>",f"Market Intelligence: <b>SHADOW ONLY</b> · LTS Readiness <b>{r['overall']:.1f}%</b>",f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V115.9 Market Intelligence·Outcome Attribution·Calibration 2.0·Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1159_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+def v91_preflight():
+    base=_V1158_PREFLIGHT_FOR_V1159(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1158_"): checks[key]=True
+    checks.update({"v1159_"+k:v for k,v in _v1159_sync_audit().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1159-market-intelligence-outcome-attribution"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit = v91_preflight()
+    audit=v91_preflight()
     if not audit.get("ok"):
-        failed = [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V115.8 startup integrity failure: " + ", ".join(failed))
+        failed=[k for k,v in audit.get("checks",{}).items() if not v]
+        raise RuntimeError("V115.9 startup integrity failure: "+", ".join(failed))
     main()

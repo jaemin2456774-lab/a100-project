@@ -1,34 +1,35 @@
 {
-  "release": "A100 V115.8 STRATEGY PERFORMANCE INTELLIGENCE DEVELOPMENT",
-  "baseline": "A100 V115.7 STRATEGY EVOLUTION AI GROWTH DEVELOPMENT",
-  "generated_at_utc": "2026-07-13T03:03:10.868593+00:00",
+  "release": "A100 V115.9 MARKET INTELLIGENCE OUTCOME ATTRIBUTION DEVELOPMENT",
+  "baseline": "A100 V115.8 STRATEGY PERFORMANCE INTELLIGENCE DEVELOPMENT",
+  "generated_at_utc": "2026-07-13T03:29:00.210387+00:00",
   "safety": {
+    "live_trading": false,
     "paper_positions": 20,
     "shadow_positions": 60,
-    "paper_threshold": 60.0,
-    "live_trading": false,
-    "optimization_mode": "SHADOW_ONLY",
-    "data_schema_preserved": true,
-    "automatic_paper_promotion": false
+    "promotion": "RECOMMENDATION_ONLY",
+    "validation": "SHADOW_TO_PAPER_TO_STABLE",
+    "state_schema_preserved": true,
+    "existing_learning_data_preserved": true
   },
   "tests": {
     "python_compile": "PASS",
+    "focused_tests": "4/4 PASS",
     "runtime_import": "PASS",
     "runtime_preflight": "PASS",
-    "v1157_tests": "4/4 PASS",
-    "command_count": 295,
-    "help_coverage": "295/295",
-    "version_sync": "PASS",
     "release_gate": "PASS",
-    "legacy_version_pin_tests": "1 expected V115.6 version mismatch"
+    "command_count": 305,
+    "help_coverage": "305/305",
+    "failed_checks": 0,
+    "legacy_tests": "not modified"
   },
   "features": [
-    "Strategy Performance Intelligence",
-    "Independent Strategy Metrics",
-    "Champion Stability Gate",
-    "Overfit Audit",
-    "LTS Readiness Score",
-    "Shadow Only Recommendation"
+    "Market Intelligence Engine",
+    "Outcome Attribution Engine",
+    "Data Sufficiency Index",
+    "Confidence Calibration 2.0",
+    "Evolution Memory",
+    "Intelligence Dashboard 4.5",
+    "LTS Readiness 2.0"
   ],
   "files": [
     {
@@ -37,24 +38,14 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
-      "path": "FILE_LIST.txt",
-      "size": 4997,
-      "sha256": "c708f9f2649891497bd3c80eb585bec8229c09f4d6ba857adf6caf36d6be4643"
-    },
-    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
       "size": 1265,
       "sha256": "a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3"
     },
     {
       "path": "README.md",
-      "size": 777,
-      "sha256": "d64fad741632562844a571db8158137e50b15159e8bea4484f878b04d7b99dcf"
-    },
-    {
-      "path": "RELEASE_MANIFEST.json",
-      "size": 27815,
-      "sha256": "028f75a1e022e33ed537112b18bf63f5a0b5d255b334817785d937d329eaaca1"
+      "size": 547,
+      "sha256": "f606d92c5d28c2ada565abb3efcce25d8fdffbc99870920ef010f0485529031e"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -185,6 +176,11 @@
       "path": "docs/CHANGELOG_V115_8.md",
       "size": 831,
       "sha256": "6a6bd1da2e23ddda926317cb4003a8c3c417ac95c73b04f950e16fe8d91a32a7"
+    },
+    {
+      "path": "docs/CHANGELOG_V115_9.md",
+      "size": 453,
+      "sha256": "d1a5ca8e69da40611a2c56219bc03b59c0fcaddb638241729319d86f4179e5f6"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -467,6 +463,11 @@
       "sha256": "b5bfc414045edbf43e34e6b799028fa6e1c720ad6dd09c1abf4df121e154547c"
     },
     {
+      "path": "docs/TEST_REPORT_V115_9.md",
+      "size": 276,
+      "sha256": "19e7d10aebc44745eaa58b9e2d827c91ec59ab189a1e94b32ed3198848292fee"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -503,13 +504,13 @@
     },
     {
       "path": "main.py",
-      "size": 1659172,
-      "sha256": "64c069a51409cdb82e22353761161d3a2d712c76ca4314dcc3c1010f8d53f2c4"
+      "size": 1680095,
+      "sha256": "3358d3e004d157274c2645bb6fad1f069f0bcacbad5f50e123f261719a39e961"
     },
     {
       "path": "pytest.ini",
-      "size": 135,
-      "sha256": "e2ccc9774b42888a0c50b1e682b3f3fad26245bd5259c92cd21e46ca5884a2b8"
+      "size": 71,
+      "sha256": "1a8c102d3d37920a997dca76b2a63b44eb90921bca026a0e5886684566ce2035"
     },
     {
       "path": "railway.json",
@@ -655,6 +656,11 @@
       "path": "tests/test_v1158_strategy_performance.py",
       "size": 1724,
       "sha256": "bf1b0e9d674c998849d858d7a707de93de1acfa16c58258acae31178d080d45f"
+    },
+    {
+      "path": "tests/test_v1159_market_intelligence.py",
+      "size": 961,
+      "sha256": "05b2faf5cb0281cc01c325b2a7b69e6f208ace436adf20fb8b3488c4f5912e79"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -882,15 +888,19 @@
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
   ],
-  "version": "115.8",
-  "title": "STRATEGY PERFORMANCE INTELLIGENCE DEVELOPMENT",
+  "version": "115.9",
+  "title": "MARKET INTELLIGENCE OUTCOME ATTRIBUTION DEVELOPMENT",
   "live_trading": false,
   "paper_positions": 20,
   "shadow_positions": 60,
   "new_commands": [
-    "strategyperformance",
-    "championstability",
-    "overfitaudit",
-    "ltsreadiness"
+    "marketintelligence",
+    "marketregime",
+    "marketmemory",
+    "outcomeattribution",
+    "outcomereasons",
+    "datasufficiency",
+    "confidenceaccuracy",
+    "evolutionmemory"
   ]
 }
