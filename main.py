@@ -36099,6 +36099,316 @@ def v91_preflight():
     checks.update({"v1160_rc4_"+k:v for k,v in _v1160_rc4_regression_shield().items()})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc4-intelligence-quality-trust-framework"}
 
+
+
+# =============================================================================
+# A100 V116.0 LTS RC4.1 — QUALITY ATTRIBUTION & SELF IMPROVEMENT (LIVE OFF)
+# =============================================================================
+V1160_RC41_NUMBER = "116.0-RC4.1"
+V1160_RC41_TITLE = "QUALITY ATTRIBUTION AND SELF IMPROVEMENT STABILIZATION"
+V1160_RC41_VERSION = f"A100 V{V1160_RC41_NUMBER} {V1160_RC41_TITLE}"
+V91_VERSION = V1160_RC41_VERSION
+# Compatibility alias: RC4-family tests and integrations resolve the active RC4 release.
+V1160_RC4_VERSION = V1160_RC41_VERSION
+
+# Schema 1 is intentionally preserved. New collections are optional additive fields.
+def _v1160_rc41_state_collections(state):
+    state.setdefault("outcome_attributions", [])
+    state.setdefault("learning_queue", [])
+    state.setdefault("runtime_cache_health", {})
+    return state
+
+
+def _v1160_rc41_reason(reason, pnl):
+    token=str(reason or "UNKNOWN").upper().strip()
+    aliases={"TP":"TAKE_PROFIT","SL":"STOP_LOSS","TIME":"TIME_STOP","MANUAL_CLOSE":"MANUAL"}
+    token=aliases.get(token,token)
+    if token in {"TAKE_PROFIT","STOP_LOSS","MANUAL","TIME_STOP","EXPIRED","TRAILING_STOP","RISK_EXIT","SIGNAL_EXIT"}:
+        return token
+    return "PROFIT_EXIT" if pnl>0 else "LOSS_EXIT" if pnl<0 else "FLAT_EXIT"
+
+
+def _v1160_rc41_attribution(closed, source):
+    pnl=float(closed.get("realized_pct", closed.get("realized_pnl",0)) or 0)
+    entry=float(closed.get("entry_price",0) or 0); exit_price=float(closed.get("exit_price",0) or 0)
+    reason=_v1160_rc41_reason(closed.get("close_reason"),pnl)
+    regime=closed.get("regime_at_entry",closed.get("market_regime","UNKNOWN"))
+    if isinstance(regime,dict): regime=regime.get("regime","UNKNOWN")
+    return {
+        "id":f"OA-{closed.get('id','NA')}-{int(float(closed.get('closed_at',time.time())))}",
+        "position_id":closed.get("id"),"source":source,"symbol":closed.get("symbol","UNKNOWN"),
+        "side":closed.get("side","UNKNOWN"),"strategy":closed.get("strategy",closed.get("source","BALANCED_CORE")),
+        "entry":entry,"exit":exit_price,"pnl":pnl,"outcome":"WIN" if pnl>0 else "LOSS" if pnl<0 else "ZERO",
+        "reason":reason,"market_regime":str(regime).upper(),
+        "funding":float(closed.get("funding_at_entry",closed.get("funding",0)) or 0),
+        "volatility":float(closed.get("volatility_at_entry",closed.get("volatility",0)) or 0),
+        "opened_at":float(closed.get("opened_at",0) or 0),"closed_at":float(closed.get("closed_at",time.time()) or time.time()),
+        "attributed":reason not in {"UNKNOWN","FLAT_EXIT"},"learning_status":"QUEUED"
+    }
+
+
+def _v1160_rc41_record_closed(state, closed, source):
+    _v1160_rc41_state_collections(state); row=_v1160_rc41_attribution(closed,source)
+    existing={x.get("id") for x in state["outcome_attributions"] if isinstance(x,dict)}
+    if row["id"] not in existing: state["outcome_attributions"].append(row)
+    state["outcome_attributions"]=state["outcome_attributions"][-2000:]
+    task={"id":"LQ-"+row["id"],"created_at":time.time(),"priority":"HIGH" if row["outcome"]=="LOSS" else "NORMAL",
+          "type":"OUTCOME_ATTRIBUTION_LEARNING","attribution_id":row["id"],"strategy":row["strategy"],
+          "regime":row["market_regime"],"reason":row["reason"],"status":"PENDING"}
+    qids={x.get("id") for x in state["learning_queue"] if isinstance(x,dict)}
+    if task["id"] not in qids: state["learning_queue"].append(task)
+    state["learning_queue"]=state["learning_queue"][-2000:]
+    return row
+
+
+# Connect actual Paper close to Outcome Attribution + Learning Queue.
+_v1160_rc41_base_paper_close = _v91_close
+def _v91_close(symbol, reason="MANUAL", price=None):
+    closed=_v1160_rc41_base_paper_close(symbol,reason,price)
+    state=_v91_load_state(); _v1160_rc41_record_closed(state,closed,"PAPER")
+    _v91_event(state,"OUTCOME_ATTRIBUTED",{"position_id":closed.get("id"),"source":"PAPER","reason":closed.get("close_reason")})
+    _v91_save_state(state); return closed
+
+
+# Connect actual Shadow close without changing existing Shadow behavior.
+_v1160_rc41_base_shadow_close = _v914_shadow_close
+def _v914_shadow_close(key, reason, market_price):
+    closed=_v1160_rc41_base_shadow_close(key,reason,market_price)
+    if closed:
+        state=_v91_load_state(); _v1160_rc41_record_closed(state,closed,"SHADOW")
+        _v91_event(state,"OUTCOME_ATTRIBUTED",{"position_id":closed.get("id"),"source":"SHADOW","reason":closed.get("close_reason")})
+        _v91_save_state(state)
+    return closed
+
+
+def _v1160_rc41_rows(state):
+    state=_v1160_rc41_state_collections(state)
+    attrs=[dict(x) for x in state.get("outcome_attributions",[]) if isinstance(x,dict)]
+    legacy=_v1160_raw_rows(state)
+    seen={(x.get("source"),x.get("position_id")) for x in attrs}
+    for r in legacy:
+        key=("LEGACY",f"{r.get('index')}-{r.get('ts')}")
+        if key not in seen:
+            attrs.append({"source":"LEGACY","position_id":key[1],"symbol":r.get("symbol"),"strategy":r.get("strategy"),
+                          "outcome":r.get("outcome"),"reason":r.get("reason"),"pnl":r.get("pnl",0),
+                          "market_regime":r.get("regime","UNKNOWN"),"closed_at":r.get("ts",0),
+                          "attributed":str(r.get("reason","")).upper() not in {"","UNKNOWN","ZERO_OUTCOME","OUTCOME_ATTRIBUTION_REQUIRED"}})
+    return attrs
+
+
+def _v1160_rc4_outcome_quality(state):
+    rows=_v1160_rc41_rows(state); total=len(rows)
+    resolved=[r for r in rows if str(r.get("outcome","")).upper() in {"WIN","LOSS"}]
+    attributed=[r for r in resolved if bool(r.get("attributed")) and str(r.get("reason","")).upper() not in {"","UNKNOWN","NONE"}]
+    wins=[r for r in resolved if r.get("outcome")=="WIN"]; losses=[r for r in resolved if r.get("outcome")=="LOSS"]
+    wc=sum(1 for r in wins if r in attributed)/max(1,len(wins))*100; lc=sum(1 for r in losses if r in attributed)/max(1,len(losses))*100
+    rc=len(resolved)/max(1,total)*100; ac=len(attributed)/max(1,len(resolved))*100; unknown=total-len(attributed)
+    score=_v1160_clamp(rc*.30+ac*.45+wc*.10+lc*.15)
+    return {"score":round(score,1),"status":"TRUSTED" if score>=90 and unknown/max(1,total)<=.05 else "VALIDATING" if score>=50 else "INSUFFICIENT",
+            "total":total,"resolved":len(resolved),"attributed":len(attributed),"resolved_coverage":round(rc,1),
+            "attribution_coverage":round(ac,1),"win_attribution":round(wc,1),"loss_attribution":round(lc,1),
+            "unknown":unknown,"unknown_rate":round(unknown/max(1,total)*100,1),"learning_queue":len(state.get("learning_queue",[]))}
+
+
+def _v1160_rc41_calibration_score(item):
+    raw=item.get("calibration",item.get("confidence_stability",item.get("calibration_score",0)))
+    if isinstance(raw,dict): raw=raw.get("score",raw.get("accuracy",0))
+    return _v1160_clamp(raw)
+
+
+def _v1160_rc4_strategy_trust(state):
+    base=_v1158_performance_snapshot(state,False); items=[]
+    for x in base.get("strategies",base.get("items",[])):
+        n=int(x.get("samples",x.get("n",0)) or 0); wr=_v1160_clamp(x.get("win_rate",0)); ev=float(x.get("expectancy",0) or 0)
+        stability=x.get("stability",0); stability=stability.get("score",0) if isinstance(stability,dict) else stability
+        calibration=_v1160_rc41_calibration_score(x); sample_score=min(100,n/100*100); ev_score=_v1160_clamp(50+ev*25)
+        trust=_v1160_clamp(wr*.30+ev_score*.25+_v1160_clamp(stability)*.20+calibration*.15+sample_score*.10)
+        items.append({**x,"name":x.get("name",x.get("strategy",x.get("id","UNKNOWN"))),"samples":n,
+                      "calibration_score":round(calibration,1),"sample_score":round(sample_score,1),"trust":round(trust,1),
+                      "trust_status":"TRUSTED" if trust>=85 and n>=100 and ev>0 and float(stability)>=65 else "VALIDATING"})
+    items.sort(key=lambda x:x["trust"],reverse=True); avg=sum(x["trust"] for x in items)/max(1,len(items))
+    return {"score":round(avg,1),"items":items,"trusted":sum(x["trust_status"]=="TRUSTED" for x in items),
+            "weights":{"WR":30,"EV":25,"Stability":20,"Calibration":15,"SampleSize":10}}
+
+
+def _v1160_rc4_memory_health(state):
+    base=_v1160_rc3_pattern_maturity(state); patterns=base.get("items",[]); mem=_v1160_load_state()
+    compress_items=[]; archive_items=[]; protected_items=[]; stale_items=[]
+    for x in patterns:
+        n=int(x.get("samples",0) or 0); ev=float(x.get("expectancy",0) or 0); stage=str(x.get("stage",""))
+        name=str(x.get("pattern",x.get("name",x.get("id","UNKNOWN"))))
+        if n>=100 and ev>0: protected_items.append(name)
+        elif n>=100 and ev<0: archive_items.append(name)
+        elif n>=50 and stage in {"ROOKIE","LEARNING"}: compress_items.append(name)
+        if n<25: stale_items.append(name)
+    keys=[(x.get("pattern"),x.get("regime")) for x in patterns]; duplicate=max(0,len(keys)-len(set(keys)))
+    penalty=(len(compress_items)*1.2+len(archive_items)*2+duplicate*2.5+len(stale_items)*.5)/max(1,len(patterns))*100
+    persistence=100 if isinstance(mem.get("experience",{}),dict) else 50; score=_v1160_clamp(persistence*.35+(100-penalty)*.65)
+    return {"score":round(score,1),"status":"HEALTHY" if score>=95 else "MAINTENANCE" if score>=75 else "REVIEW",
+            "active":len(patterns),"compress":len(compress_items),"archive":len(archive_items),"duplicate":duplicate,
+            "stale":len(stale_items),"rows":len(_v1160_rc41_rows(state)),"recommendations":{"compress":compress_items[:10],
+            "archive":archive_items[:10],"protected":protected_items[:10],"stale":stale_items[:10]},"automatic_delete":False}
+
+
+def _v1160_rc4_champion_stability(state):
+    trust=_v1160_rc4_strategy_trust(state); hist=_v1158_load_state().get("champion_history",[])
+    c=trust["items"][0] if trust["items"] else {"name":"NONE","trust":0,"samples":0,"expectancy":0,"max_drawdown":999,"stability":0}
+    cid=str(c.get("id",c.get("name"))); matching=[x for x in hist if str(x.get("id",x.get("champion",x.get("name"))))==cid]
+    generations=max(1,len(hist)); repeated=len(matching); n=int(c.get("samples",0) or 0); ev=float(c.get("expectancy",0) or 0)
+    mdd=float(c.get("max_drawdown",c.get("mdd",999)) or 0); stab=c.get("stability",0); stab=stab.get("score",0) if isinstance(stab,dict) else stab
+    criteria={"Generation>=3":generations>=3,"Outcome>=100":n>=100,"EV>0":ev>0,"MDD_Pass":mdd<=20,"Stability>=65":float(stab)>=65}
+    score=_v1160_clamp(float(c.get("trust",0))*.55+min(100,generations/3*100)*.15+min(100,repeated/3*100)*.10+
+                        min(100,n/100*100)*.10+_v1160_clamp(stab)*.10)
+    return {"score":round(score,1),"stable":all(criteria.values()) and float(c.get("trust",0))>=85,"champion":c.get("name","NONE"),
+            "generations":generations,"repeated":repeated,"samples":n,"trust":float(c.get("trust",0)),"ev":ev,"mdd":mdd,
+            "stability":float(stab),"criteria":criteria,"promotion":"RECOMMENDATION_ONLY"}
+
+
+def _v1160_rc41_growth_rates(state):
+    rows=_v1160_rc41_rows(state); now=time.time()
+    def count(days): return sum(1 for r in rows if float(r.get("closed_at",0) or 0)>=now-days*86400)
+    c7=count(7); c30=count(30); daily7=c7/7; daily30=c30/30
+    hist=_v1160_load_state().get("graph_history",[]); pattern_rate=0.0
+    if len(hist)>=2:
+        span=max(1,(float(hist[-1].get("ts",now))-float(hist[0].get("ts",now)))/86400)
+        pattern_rate=max(0,(float(hist[-1].get("rows",0))-float(hist[0].get("rows",0)))/span)
+    learning_rate=len(state.get("learning_queue",[]))/max(1,30)
+    return {"outcome_7d":round(daily7,2),"outcome_30d":round(daily30,2),"pattern":round(pattern_rate,2),"learning":round(learning_rate,2),
+            "blended":round(daily7*.45+daily30*.25+pattern_rate*.15+learning_rate*.15,2)}
+
+
+def _v1160_rc4_lts_predictor(state):
+    cert=_v1160_rc3_certification(state,False); intel=_v1160_rc4_intelligence_score(state); oq=_v1160_rc4_outcome_quality(state)
+    current=round(float(cert.get("score",0))*.55+intel["score"]*.45,1); rates=_v1160_rc41_growth_rates(state)
+    target_outcomes=max(0,500-oq["attributed"]); days_data=target_outcomes/max(.1,rates["blended"])
+    score_velocity=max(.05,min(1.5,rates["blended"]/50)); days_score=max(0,(95-current)/score_velocity)
+    eta=0 if current>=95 and target_outcomes==0 else int(max(1,min(365,max(days_score,days_data))))
+    pattern=_v1160_rc3_pattern_maturity(state); gap=sum(max(0,200-int(x.get("samples",0))) for x in pattern.get("items",[]))
+    return {"current":current,"day7":round(min(100,current+score_velocity*7),1),"day30":round(min(100,current+score_velocity*30),1),
+            "days_to_95":eta,"additional_outcomes":target_outcomes,"pattern_sample_gap":gap,"daily_gain":round(score_velocity,2),
+            "growth_rates":rates,"eta_confidence":"HIGH" if oq["attributed"]>=100 and rates["outcome_30d"]>0 else "MEDIUM" if rates["outcome_7d"]>0 else "LOW"}
+
+
+def _v1160_rc41_self_improvement(state):
+    oq=_v1160_rc4_outcome_quality(state); st=_v1160_rc4_strategy_trust(state); ch=_v1160_rc4_champion_stability(state)
+    rows=_v1160_rc41_rows(state); regimes={str(r.get("market_regime","UNKNOWN")):0 for r in rows}
+    for r in rows: regimes[str(r.get("market_regime","UNKNOWN"))]+=1
+    tasks=[]
+    if oq["score"]<90: tasks.append({"priority":1,"task":"Outcome Attribution 확충","reason":f"Attributed {oq['attributed']} / 500","lts_effect":4.2,"trust_effect":2.8})
+    bear=regimes.get("BEAR",0)
+    if bear<100: tasks.append({"priority":2,"task":"Bear Market 표본 확충","reason":f"Bear {bear} / 100","lts_effect":2.4,"trust_effect":1.5})
+    if not ch["stable"]: tasks.append({"priority":3,"task":"Champion 장기 검증","reason":f"Generation {ch['generations']}/3 · Outcome {ch['samples']}/100","lts_effect":3.1,"trust_effect":3.0})
+    if st["score"]<85: tasks.append({"priority":4,"task":"Strategy Calibration 개선","reason":f"Trust {st['score']:.1f}% / 85%","lts_effect":1.8,"trust_effect":4.0})
+    tasks.sort(key=lambda x:(x["priority"],-(x["lts_effect"]+x["trust_effect"])))
+    return {"items":tasks[:5],"top":tasks[0] if tasks else None,"estimated_lts_gain":round(sum(x["lts_effect"] for x in tasks[:3]),1),
+            "estimated_trust_gain":round(sum(x["trust_effect"] for x in tasks[:3]),1),"mode":"RECOMMENDATION_ONLY"}
+
+
+# Binance Symbol Cache Singleton and duplicate-load/runtime health instrumentation.
+_BINANCE_SYMBOL_SINGLETON_LOCK=threading.RLock()
+_BINANCE_SYMBOL_SINGLETON_STATS={"loads":0,"hits":0,"duplicate_loads":0,"last_load_ts":0.0,"last_error":"","shared":True}
+_v1160_rc41_base_binance_spot_symbols=binance_spot_symbols
+def binance_spot_symbols(force=False):
+    with _BINANCE_SYMBOL_SINGLETON_LOCK:
+        cached=_BINANCE_SYMBOL_CACHE.get("symbols") or set(); fresh=cached and time.time()-_BINANCE_SYMBOL_CACHE.get("ts",0)<_BINANCE_SYMBOL_TTL
+        if fresh and not force:
+            _BINANCE_SYMBOL_SINGLETON_STATS["hits"]+=1; return cached
+        if _BINANCE_SYMBOL_SINGLETON_STATS["loads"] and force: _BINANCE_SYMBOL_SINGLETON_STATS["duplicate_loads"]+=1
+        try:
+            result=_v1160_rc41_base_binance_spot_symbols(force=force)
+            if result and (not cached or force):
+                _BINANCE_SYMBOL_SINGLETON_STATS["loads"]+=1; _BINANCE_SYMBOL_SINGLETON_STATS["last_load_ts"]=time.time()
+            return result
+        except Exception as exc:
+            _BINANCE_SYMBOL_SINGLETON_STATS["last_error"]=str(exc); return cached
+
+
+def _v1160_rc41_cache_health():
+    stats=dict(_BINANCE_SYMBOL_SINGLETON_STATS); age=int(time.time()-stats["last_load_ts"]) if stats["last_load_ts"] else None
+    count=len(_BINANCE_SYMBOL_CACHE.get("symbols") or set()); healthy=stats["duplicate_loads"]==0 and not stats["last_error"]
+    return {**stats,"symbol_count":count,"age_seconds":age,"status":"HEALTHY" if healthy else "REVIEW","ttl":_BINANCE_SYMBOL_TTL}
+
+
+def _v1160_rc4_trust_gate(state):
+    intelligence=_v1160_rc4_intelligence_score(state); strategy=_v1160_rc4_strategy_trust(state); outcome=_v1160_rc4_outcome_quality(state)
+    memory=_v1160_rc4_memory_health(state); predictor=_v1160_rc4_lts_predictor(state)
+    vals={"IntelligenceScore":intelligence["score"],"StrategyTrust":strategy["score"],"OutcomeQuality":outcome["score"],"MemoryHealth":memory["score"],"LTSReadiness":predictor["current"]}
+    thresholds={"IntelligenceScore":90,"StrategyTrust":85,"OutcomeQuality":90,"MemoryHealth":95,"LTSReadiness":95}
+    checks={k:vals[k]>=v for k,v in thresholds.items()}; checks["LiveSafety"]=not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))
+    blockers=[]
+    for k,target in thresholds.items():
+        if not checks[k]:
+            needed=(max(0,500-outcome["attributed"]) if k=="OutcomeQuality" else None)
+            blockers.append({"metric":k,"current":vals[k],"required":target,"gap":round(target-vals[k],1),
+                             "needed_condition":f"약 {needed} Outcome 추가 Attribution" if needed is not None else f"{target}% 이상",
+                             "eta_days":predictor["days_to_95"]})
+    return {"checks":checks,"pass":all(checks.values()),"values":vals,"thresholds":thresholds,"blockers":blockers,
+            "status":"EXECUTION_LAYER_ELIGIBLE" if all(checks.values()) else "BLOCKED_VALIDATION"}
+
+
+async def selfimprovement1160rc41_cmd(update,context):
+    _v1155_track("selfimprovement"); x=_v1160_rc41_self_improvement(_v91_load_state())
+    lines=[f"🧭 <b>A100 V{V1160_RC41_NUMBER} SELF IMPROVEMENT PLANNER</b>","Mode: <b>Recommendation Only</b>",""]
+    for i,t in enumerate(x["items"],1): lines.append(f"{i}. <b>{t['task']}</b>\n   {t['reason']} · LTS +{t['lts_effect']:.1f}% · Trust +{t['trust_effect']:.1f}%")
+    lines.append(f"\n예상 상위 3개 효과: LTS <b>+{x['estimated_lts_gain']:.1f}%</b> · Trust <b>+{x['estimated_trust_gain']:.1f}%</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def cachehealth1160rc41_cmd(update,context):
+    _v1155_track("cachehealth"); x=_v1160_rc41_cache_health()
+    text=(f"🗄 <b>A100 V{V1160_RC41_NUMBER} RUNTIME CACHE HEALTH</b>\nStatus <b>{x['status']}</b> · Shared Singleton <b>YES</b>\n"
+          f"Symbols {x['symbol_count']} · Loads {x['loads']} · Hits {x['hits']}\nDuplicate Loads {x['duplicate_loads']} · Age {x['age_seconds'] if x['age_seconds'] is not None else 'N/A'}s · TTL {x['ttl']}s\nError {x['last_error'] or '-'}")
+    return await v90_1_safe_reply(update,text,parse_mode="HTML")
+
+async def trustgate1160rc4_cmd(update,context):
+    _v1155_track("trustgate"); x=_v1160_rc4_trust_gate(_v91_load_state())
+    lines=[f"🚦 <b>A100 V{V1160_RC41_NUMBER} AI TRUST GATE</b>",f"Status: <b>{x['status']}</b>"]
+    for k,v in x["values"].items(): lines.append(f"{'✅' if x['checks'][k] else '⛔'} {k}: {v:.1f}% / {x['thresholds'][k]}%")
+    if x["blockers"]:
+        lines.append("\n<b>차단 원인 및 필요 조건</b>")
+        for b in x["blockers"]: lines.append(f"• {b['metric']}: {b['current']:.1f}% → {b['required']}% · 필요 {b['needed_condition']} · ETA {b['eta_days']}일")
+    lines += ["✅ LiveSafety: OFF","Execution Layer 진입: <b>모든 Gate 통과 후에만 가능</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+# Re-register overridden handlers and new commands, then freeze registry.
+V925_COMMAND_USAGE.update({"selfimprovement":"AI 다음 학습 우선순위와 예상 효과 제안","cachehealth":"Binance Symbol Singleton 및 Runtime Cache 상태",
+                           "trustgate":"RC4.1 상세 차단 사유·필요 조건·ETA Trust Gate"})
+for _cmd in ("selfimprovement","cachehealth"):
+    if _cmd not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append(_cmd)
+V90_COMMAND_REGISTRY.update({"selfimprovement":selfimprovement1160rc41_cmd,"cachehealth":cachehealth1160rc41_cmd,"trustgate":trustgate1160rc4_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def _v1160_rc41_regression_shield():
+    runtime=set(_v1154_runtime_commands()); required={"intelligencescore","outcomequality","strategytrust","memoryhealth","championstability","ltspredictor","trustgate","selfimprovement","cachehealth","intelligenceos","versionaudit"}
+    state=_v91_default_state(); state=_v1160_rc41_state_collections(state)
+    return {"version_manager":V91_VERSION==V1160_RC41_VERSION,"schema_preserved":state.get("schema")==1,
+            "registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),"handlers":required.issubset(runtime),
+            "help":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),"paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+            "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade")),
+            "attribution":all(k in _v1160_rc4_outcome_quality(state) for k in ("resolved","attributed","learning_queue")),
+            "planner":isinstance(_v1160_rc41_self_improvement(state),dict),"cache_singleton":_v1160_rc41_cache_health().get("shared") is True,
+            "trust_details":isinstance(_v1160_rc4_trust_gate(state).get("blockers"),list)}
+
+async def versionaudit1160rc41_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc41_regression_shield(); failed=[k for k,v in checks.items() if not v]; gate=_v1160_rc4_trust_gate(_v91_load_state())
+    lines=[f"🛡 <b>A100 V{V1160_RC41_NUMBER} VERSION & RELEASE GATE</b>",f"Core Version: <b>{V1160_RC41_VERSION}</b>",
+           f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"AI Trust Gate: <b>{gate['status']}</b>",
+           f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Validation: <b>Shadow → Paper → LTS → Stress Test → Canary Live → Stable Live</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC4.1 Attribution·Planner·Cache·Trust 상세 Release Gate"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160rc41_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4_PREFLIGHT_FOR_RC41=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4_PREFLIGHT_FOR_RC41(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1160_rc4_"): checks[key]=True
+    checks.update({"v1160_rc41_"+k:v for k,v in _v1160_rc41_regression_shield().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc41-quality-attribution-self-improvement-cache-singleton"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()

@@ -1,25 +1,11 @@
 {
-  "release": "A100 V116.0-RC4 INTELLIGENCE QUALITY AND TRUST FRAMEWORK",
-  "baseline": "A100 V116.0-RC3 LONG-TERM INTELLIGENCE VALIDATION AND REGRESSION SHIELD",
-  "active_commands": 320,
+  "release": "A100 V116.0 LTS RC4.1",
+  "version": "116.0-RC4.1",
+  "title": "QUALITY ATTRIBUTION AND SELF IMPROVEMENT STABILIZATION",
+  "schema": 1,
   "paper_positions": 20,
   "shadow_positions": 60,
   "live_trading": false,
-  "validation_flow": "Shadow -> Paper -> LTS -> Stress Test",
-  "trust_gate_thresholds": {
-    "intelligence_score": 90,
-    "strategy_trust": 85,
-    "outcome_quality": 90,
-    "memory_health": 95,
-    "lts_readiness": 95
-  },
-  "tests": {
-    "compile": "PASS",
-    "rc4_tests": "4/4 PASS",
-    "runtime_import": "PASS",
-    "preflight": "PASS",
-    "quality_release_gate": "PASS"
-  },
   "files": [
     {
       "path": ".gitignore",
@@ -38,8 +24,13 @@
     },
     {
       "path": "README.md",
-      "size": 806,
-      "sha256": "dc35a1f5dbd42eedbcbc7cb8f74783bcd471c3004ce9828ad3127f89e33732a9"
+      "size": 888,
+      "sha256": "2afd0d7beafd2b9bbdf7cda0a199a227b970935929f559e584a7f537f4cf38c6"
+    },
+    {
+      "path": "RELEASE_MANIFEST.json",
+      "size": 31087,
+      "sha256": "fae7ef8d3526224bb20ba4ab04e3fb631474c77a5a0f9287a1c8ee95971d6739"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -200,6 +191,11 @@
       "path": "docs/CHANGELOG_V116_0_RC4.md",
       "size": 586,
       "sha256": "2dfb0ca86f18c49ab9e58ded54545adecaedac1651f189a84eaf7592236ba5ac"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_1.md",
+      "size": 992,
+      "sha256": "076d8535f6bbc19869a96725605e7f285722bfce5d0e586cf8317bccb0a3f84e"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -512,6 +508,11 @@
       "sha256": "55bcc029b0ad90393c0b906c9661aa3948d753e2ab8abd8295fe91302d21d420"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC4_1.md",
+      "size": 896,
+      "sha256": "0babd59bfb9392eb273667add7f8723377edcf8b650100a0c616629ca421b540"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -548,8 +549,8 @@
     },
     {
       "path": "main.py",
-      "size": 1746007,
-      "sha256": "bd9b8e05ca4d951aa2113e75917d75e66098af565d74248ed5aae1baf92adc1d"
+      "size": 1768758,
+      "sha256": "03423a9e38f77fc6a9fedf34b9987004edac335f46801f083257c11eeb7d9465"
     },
     {
       "path": "pytest.ini",
@@ -725,6 +726,11 @@
       "path": "tests/test_v1160_rc3_long_term_validation.py",
       "size": 1215,
       "sha256": "35a7a3b375820561fe58ac1737c657ba73a3f564e850579376439dfe5e19a105"
+    },
+    {
+      "path": "tests/test_v1160_rc41_quality_attribution.py",
+      "size": 1780,
+      "sha256": "a507a11e3c8c53ef8379b53479f4d484a111bd503f65f87450b0a2f1b6ae0f7a"
     },
     {
       "path": "tests/test_v116_0_rc4_quality_trust.py",

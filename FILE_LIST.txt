@@ -1,6 +1,8 @@
 .gitignore
+FILE_LIST.txt
 GITHUB_REPLACE_GUIDE_KR.md
 README.md
+RELEASE_MANIFEST.json
 docs/CHANGELOG_V101_0.md
 docs/CHANGELOG_V102_0.md
 docs/CHANGELOG_V103_0.md
@@ -33,6 +35,7 @@ docs/CHANGELOG_V116_0_RC1_1.md
 docs/CHANGELOG_V116_0_RC2.md
 docs/CHANGELOG_V116_0_RC3.md
 docs/CHANGELOG_V116_0_RC4.md
+docs/CHANGELOG_V116_0_RC4_1.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -95,6 +98,7 @@ docs/TEST_REPORT_V116_0_RC1_1.md
 docs/TEST_REPORT_V116_0_RC2.md
 docs/TEST_REPORT_V116_0_RC3.md
 docs/TEST_REPORT_V116_0_RC4.md
+docs/TEST_REPORT_V116_0_RC4_1.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
 docs/TEST_REPORT_V96_0.md
@@ -138,6 +142,7 @@ tests/test_v1160_rc11_name_resolution.py
 tests/test_v1160_rc1_unified_intelligence.py
 tests/test_v1160_rc2_integration.py
 tests/test_v1160_rc3_long_term_validation.py
+tests/test_v1160_rc41_quality_attribution.py
 tests/test_v116_0_rc4_quality_trust.py
 tests/test_v91_8_baseline.py
 tests/test_v91_8_scenario.py
