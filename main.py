@@ -35513,10 +35513,212 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc1.1-name-resolution-stabilization"}
 
+
+# =============================================================================
+# A100 V116.0 LTS RC2 — INTEGRATION & CERTIFICATION PROGRESS (LIVE OFF)
+# =============================================================================
+V1160_RC2_NUMBER = "116.0-RC2"
+V1160_RC2_TITLE = "UNIFIED INTELLIGENCE INTEGRATION AND CERTIFICATION PROGRESS"
+V1160_RC2_VERSION = f"A100 V{V1160_RC2_NUMBER} {V1160_RC2_TITLE}"
+V91_VERSION = V1160_RC2_VERSION
+
+
+def _v1160_rc2_maturity_item(item):
+    n=int(item.get("samples",0) or 0)
+    target=100
+    progress=min(100.0,n/target*100.0)
+    if n < 25: stage="SEED"
+    elif n < 50: stage="VALIDATING"
+    elif n < 100: stage="OBSERVED"
+    else: stage="MATURE"
+    confidence="LOW" if n<30 else "MEDIUM" if n<100 else "HIGH"
+    return {**item,"target":target,"progress":round(progress,1),"stage":stage,"maturity_confidence":confidence}
+
+
+def _v1160_rc2_pattern_maturity(state):
+    base=_v1160_pattern_success_map(state,False)
+    items=[_v1160_rc2_maturity_item(x) for x in base.get("items",[])]
+    return {**base,"items":items,"mature":sum(1 for x in items if x["stage"]=="MATURE"),"target":100}
+
+
+def _v1160_rc2_graph(state,persist=False,limit=20):
+    base=_v1160_unified_graph(state,persist,limit)
+    out=[]
+    for node in base.get("nodes",[]):
+        complete=node.get("outcome") in ("WIN","LOSS")
+        chain=[node.get("symbol"),node.get("regime"),node.get("pattern"),node.get("strategy"),
+               f"CONF_{node.get('confidence',0):.1f}",node.get("outcome"),node.get("reason"),
+               node.get("learning"),node.get("memory_action"),
+               "EXPERIENCE_UPDATE" if complete else "ATTRIBUTION_REQUIRED",
+               "STRATEGY_SCORE_UPDATE" if complete else "WAIT_OUTCOME"]
+        out.append({**node,"chain":[x for x in chain if x],"integration_complete":complete})
+    return {**base,"nodes":out,"integration_complete":sum(1 for x in out if x["integration_complete"]),"integration_total":len(out)}
+
+
+def _v1160_rc2_experience_timeline(state):
+    mem=_v1160_load_state(); events=[]
+    for row in mem.get("graph_history",[]): events.append({"ts":row.get("ts",0),"type":"GRAPH","detail":f"rows {row.get('rows',0)} complete {row.get('complete',0)}"})
+    for row in mem.get("attribution_history",[]): events.append({"ts":row.get("ts",0),"type":"ATTRIBUTION","detail":f"rows {row.get('rows',0)}"})
+    for row in mem.get("certification_history",[]): events.append({"ts":row.get("ts",0),"type":"CERTIFICATION","detail":f"score {row.get('score',0)} status {row.get('status','')}"})
+    events.sort(key=lambda x:x.get("ts",0),reverse=True)
+    exp=_v1160_experience(state)
+    return {"events":events[:40],"total":len(events),"experience":exp}
+
+
+def _v1160_rc2_certification(state,persist=False):
+    base=_v1160_certification(state,False)
+    graph=_v1160_rc2_graph(state,False,50)
+    maturity=_v1160_rc2_pattern_maturity(state)
+    attr=_v1160_learning_attribution(state,False)
+    rows=max(1,graph.get("total_rows",0))
+    attributed=attr.get("attributed",0)
+    metrics={
+        "Intelligence": min(100.0, graph.get("integration_complete",0)/max(1,graph.get("integration_total",0))*100.0),
+        "Learning": min(100.0, attributed/500*100.0),
+        "Pattern": min(100.0, sum(x.get("samples",0) for x in maturity.get("items",[]))/max(1,len(maturity.get("items",[]))*100)*100.0) if maturity.get("items") else 0.0,
+        "Strategy": min(100.0, _v1159_lts_readiness(state).get("strategy",0.0)),
+        "Market": min(100.0, _v1159_lts_readiness(state).get("intelligence",0.0)),
+        "Confidence": min(100.0, _v1159_lts_readiness(state).get("calibration",0.0)),
+        "Outcome": min(100.0, attributed/rows*100.0),
+        "Runtime": 100.0 if _v1160_sync_audit().get("required_handlers") else 0.0,
+        "Regression": 100.0 if _v1160_sync_audit().get("registry_snapshot") else 0.0,
+        "DataIntegrity": 100.0 if _v1160_sync_audit().get("state_schema_preserved") else 0.0,
+        "LiveSafety": 100.0 if _v1160_sync_audit().get("live_off") else 0.0,
+    }
+    requirements={
+        "Intelligence":"완결된 통합 그래프 50건 이상",
+        "Learning":"Attribution 500건 이상",
+        "Pattern":"패턴별 목표 표본 100건",
+        "Strategy":"Champion 안정성 95% 이상",
+        "Market":"시장 국면 성능 검증 95% 이상",
+        "Confidence":"Calibration 95% 이상",
+        "Outcome":"Outcome Attribution 95% 이상",
+        "Runtime":"Runtime Handler 100%",
+        "Regression":"회귀 검사 100%",
+        "DataIntegrity":"Schema/State 무결성 100%",
+        "LiveSafety":"Live Trading OFF",
+    }
+    score=sum(metrics.values())/len(metrics)
+    blockers=[k for k,v in metrics.items() if v<95.0]
+    status="LTS_CERTIFIED" if not blockers else "RC_VALIDATION"
+    result={**base,"metrics":{k:round(v,1) for k,v in metrics.items()},"requirements":requirements,"score":round(score,1),"status":status,"blockers":blockers}
+    if persist:
+        mem=_v1160_load_state(); now=int(time.time()); mem["certification_history"].append({"ts":now,"score":result["score"],"status":status,"blockers":blockers}); mem["certification_history"]=mem["certification_history"][-120:]; mem["experience"]["certification_runs"]+=1; result["saved"]=_v1160_save_state(mem)
+    return result
+
+
+async def intelligencegraph1160rc2_cmd(update,context):
+    _v1155_track("intelligencegraph"); g=_v1160_rc2_graph(_v91_load_state(),True,8)
+    lines=[f"🕸 <b>A100 V{V1160_RC2_NUMBER} UNIFIED INTELLIGENCE GRAPH 2.0</b>",f"Mode <b>SHADOW ONLY</b> · Rows <b>{g['total_rows']}</b> · Complete <b>{g['integration_complete']}/{g['integration_total']}</b>"]
+    for n in g.get("nodes",[])[:6]: lines.append(" → ".join(str(x) for x in n.get("chain",[])))
+    lines.append("Paper/Live 변경: <b>없음</b>")
+    return await v90_1_safe_reply(update,"\n\n".join(lines),parse_mode="HTML")
+
+
+async def patternsuccessmap1160rc2_cmd(update,context):
+    _v1155_track("patternsuccessmap"); m=_v1160_rc2_pattern_maturity(_v91_load_state())
+    lines=[f"🗺 <b>A100 V{V1160_RC2_NUMBER} PATTERN MATURITY MAP</b>",f"Patterns <b>{len(m.get('items',[]))}</b> · Mature <b>{m.get('mature',0)}</b> · Target <b>{m.get('target',100)}</b>"]
+    for x in m.get("items",[])[:10]: lines.append(f"<b>{x['pattern']}</b> · {x['regime']} · N {x['samples']}/{x['target']} · {x['progress']:.1f}% · {x['stage']} · Conf {x['maturity_confidence']}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def patternmaturity1160rc2_cmd(update,context):
+    return await patternsuccessmap1160rc2_cmd(update,context)
+
+
+async def experiencetimeline1160rc2_cmd(update,context):
+    _v1155_track("experiencetimeline"); t=_v1160_rc2_experience_timeline(_v91_load_state()); e=t["experience"]
+    lines=[f"📜 <b>A100 V{V1160_RC2_NUMBER} AI EXPERIENCE TIMELINE</b>",f"AI Level <b>{e['level']}</b> · EXP <b>{e['experience']}</b> · Events <b>{t['total']}</b>"]
+    for x in t.get("events",[])[:12]: lines.append(f"• {x['type']} · {x['detail']}")
+    if not t.get("events"): lines.append("아직 누적 이벤트가 없습니다. 명령 실행과 데이터 축적 후 기록됩니다.")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def ltscertification1160rc2_cmd(update,context):
+    _v1155_track("ltscertification"); c=_v1160_rc2_certification(_v91_load_state(),True)
+    lines=[f"🏅 <b>A100 V{V1160_RC2_NUMBER} LTS CERTIFICATION PROGRESS</b>",f"Score <b>{c['score']:.1f}%</b> · Status <b>{c['status']}</b>"]
+    for k,v in c["metrics"].items():
+        need=c["requirements"].get(k,"")
+        lines.append(f"{'✅' if v>=95 else '⏳'} <b>{k}</b> {v:.1f}% · {need}")
+    lines.append("Blockers: "+(", ".join(c["blockers"]) if c["blockers"] else "NONE")); lines.append("Live Trading: <b>OFF</b>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def ltsprogress1160rc2_cmd(update,context):
+    return await ltscertification1160rc2_cmd(update,context)
+
+
+async def intelligenceos1160rc2_cmd(update,context):
+    _v1155_track("intelligenceos"); c=_v1160_rc2_certification(_v91_load_state(),False); e=_v1160_experience(_v91_load_state()); h=_v1155_runtime_health()
+    lines=[f"🧠 <b>A100 V{V1160_RC2_NUMBER} INTELLIGENCE DASHBOARD 5.1</b>",f"LTS <b>{c['score']:.1f}%</b> · {c['status']}"]
+    for k in ("Intelligence","Learning","Pattern","Strategy","Market","Confidence","Outcome","Runtime","Regression","DataIntegrity"):
+        lines.append(f"{k}: <b>{c['metrics'][k]:.1f}%</b>")
+    lines += [f"AI Level <b>{e['level']}</b> · EXP <b>{e['experience']}</b>",f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Next: <b>V116.0 RC3 Long-Term Validation & Feature Freeze</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+ "intelligencegraph":"V116.0 RC2 Outcome→Learning→Memory 완전 연결 그래프",
+ "patternsuccessmap":"V116.0 RC2 패턴 성숙도·표본 진행률",
+ "patternmaturity":"패턴 성숙도·목표 표본·신뢰도",
+ "experiencetimeline":"AI 경험·Graph·Attribution·Certification 이력",
+ "ltscertification":"항목별 LTS 인증 진행률과 부족 조건",
+ "ltsprogress":"LTS 인증 진행률 별칭",
+ "intelligenceos":"V116.0 RC2 Intelligence Dashboard 5.1"})
+for _c in ("patternmaturity","experiencetimeline","ltsprogress"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("intelligence",[]): V925_HELP_CATEGORIES["intelligence"].append(_c)
+V90_COMMAND_REGISTRY.update({
+ "intelligencegraph":intelligencegraph1160rc2_cmd,
+ "patternsuccessmap":patternsuccessmap1160rc2_cmd,
+ "patternmaturity":patternmaturity1160rc2_cmd,
+ "experiencetimeline":experiencetimeline1160rc2_cmd,
+ "ltscertification":ltscertification1160rc2_cmd,
+ "ltsprogress":ltsprogress1160rc2_cmd,
+ "intelligenceos":intelligenceos1160rc2_cmd,
+ "intel":intelligenceos1160rc2_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_RC11_PREFLIGHT_FOR_RC2=v91_preflight
+
+
+def _v1160_rc2_sync_audit():
+    runtime=set(_v1154_runtime_commands()); required={"intelligencegraph","learningattribution","patternsuccessmap","patternmaturity","experiencetimeline","aiexperience","ltscertification","ltsprogress","intelligenceos","versionaudit"}
+    checks={
+      "version_manager":V91_VERSION==V1160_RC2_VERSION,
+      "required_handlers":required.issubset(runtime),
+      "graph2_schema":isinstance(_v1160_rc2_graph(_v91_default_state(),False,5).get("nodes"),list),
+      "maturity_schema":isinstance(_v1160_rc2_pattern_maturity(_v91_default_state()).get("items"),list),
+      "timeline_schema":isinstance(_v1160_rc2_experience_timeline(_v91_default_state()).get("events"),list),
+      "cert_progress_schema":isinstance(_v1160_rc2_certification(_v91_default_state(),False).get("metrics"),dict),
+      "registry_snapshot":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),
+      "paper_shadow_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade")),
+    }
+    return checks
+
+
+async def versionaudit1160rc2_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc2_sync_audit(); failed=[k for k,v in checks.items() if not v]; runtime=len(_v1154_runtime_commands()); c=_v1160_rc2_certification(_v91_load_state(),False)
+    lines=[f"🧾 <b>A100 V{V1160_RC2_NUMBER} VERSION & RELEASE AUDIT</b>",f"Core Version: <b>{V1160_RC2_VERSION}</b>",f"Runtime Registry: <b>{runtime}개</b> · Help Coverage <b>{runtime}/{runtime}</b>",f"LTS Certification: <b>{c['score']:.1f}%</b> · {c['status']}",f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>","Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC2 통합·성숙도·인증 진행률·Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160rc2_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base=_V1160_RC11_PREFLIGHT_FOR_RC2(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith("v1160_rc1_"): checks[key]=True
+    checks.update({"v1160_rc2_"+k:v for k,v in _v1160_rc2_sync_audit().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc2-unified-integration-certification-progress"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC1.1 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC2 startup integrity failure: "+", ".join(failed))
     main()

@@ -1,8 +1,13 @@
-# A100 V116.0 LTS RC1.1
+# A100 V116.0 LTS RC2
 
-Unified Intelligence Platform — Name Resolution Stabilization release.
+Unified Intelligence Integration & Certification Progress Development Release
 
-## Fixed commands
-`/intelligencegraph`, `/learningattribution`, `/patternsuccessmap`, `/aiexperience`, `/ltscertification`, `/intelligenceos`
+## 핵심
+- Unified Intelligence Graph 2.0
+- Pattern Maturity Engine
+- AI Experience Timeline
+- LTS Certification Progress
+- Intelligence Dashboard 5.1
+- Paper 20 / Shadow 60 / Live Trading OFF
 
-The RC1 runtime `NameError` was fixed and startup name-resolution validation was added. Live Trading remains disabled. Paper 20 and Shadow 60 are preserved.
+기존 학습 데이터와 schema 1을 보존하며 자동 Paper/Live 승격은 수행하지 않습니다.
