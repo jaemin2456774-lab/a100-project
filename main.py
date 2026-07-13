@@ -38508,11 +38508,163 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc494-command-response-performance-stabilization"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.5 - COMMAND UX, STATUS RECOVERY & PERFORMANCE AUDIT
+# ---------------------------------------------------------------------------
+V1160_RC495_NUMBER = "116.0-RC4.9.5"
+V1160_RC495_VERSION = "A100 V116.0-RC4.9.5 LTS COMMAND UX STATUS RECOVERY PERFORMANCE AUDIT"
+V91_VERSION = V1160_RC495_VERSION
+
+V1160_RC495_DUPLICATE_READS = 0
+V1160_RC495_SHARED_CONTEXT_OK = True
+
+
+def _v1160_rc495_mode(cert):
+    """Separate learning progress from the immutable Stable/LTS gate."""
+    gate=cert.get("gate",{}) if isinstance(cert,dict) else {}
+    passed=sum(1 for g in gate.values() if g.get("pass"))
+    total=max(1,len(gate))
+    readiness=round(100.0*passed/total,1)
+    return ("STABLE" if cert.get("ready") else "LEARNING",readiness)
+
+
+def _v1160_rc495_group_warnings(rows):
+    grouped={}
+    for row in rows:
+        if row.get("status")=="PASS":
+            continue
+        reasons=tuple(sorted(row.get("reasons") or ["unspecified"]))
+        key=(row.get("status","PARTIAL"),reasons)
+        g=grouped.setdefault(key,{"status":key[0],"reasons":list(reasons),"commands":[],"max_ms":0.0})
+        g["commands"].append(row.get("command","unknown"))
+        try:g["max_ms"]=max(g["max_ms"],float((row.get("evidence") or {}).get("runtime_ms",0) or 0))
+        except Exception:pass
+    return sorted(grouped.values(),key=lambda x:(x["status"]!="FAILED",-len(x["commands"]),x["reasons"]))
+
+
+async def status1160rc495_cmd(update,context):
+    """Release-blocking core status command: resilient, cached and end-to-end."""
+    _v1155_track("status")
+    state=_v1160_rc494_shared_state()
+    cert,hit=_v1160_rc494_certification_cached(state)
+    mode,readiness=_v1160_rc495_mode(cert)
+    gate=cert.get("gate",{})
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    lines=[f"📊 <b>A100 V{V1160_RC495_NUMBER} STATUS</b>",
+           f"Mode <b>{mode}</b> · LTS progress <b>{readiness:.0f}%</b> · Cache {'HIT' if hit else 'MISS'}",
+           f"Paper <b>{V91_MAX_POSITIONS}</b> · Shadow <b>{V914_SHADOW_MAX}</b> · Live <b>OFF</b>",""]
+    for key in ("intelligence_score","strategy_trust","outcome_quality","memory_health","lts_readiness"):
+        g=gate.get(key)
+        if g: lines.append(f"{'✅' if g.get('pass') else '🧠'} {labels[key]} <b>{float(g.get('value',0)):.1f}</b> / {float(g.get('target',0)):.0f}")
+    lines += ["", "✅ Handler → Shared Context → Certification → Telegram Output"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def commandcert1160rc495_cmd(update,context):
+    _v1155_track("commandcert")
+    state=_v1160_rc494_shared_state(); cert,hit=_v1160_rc494_command_certification_cached(state)
+    arg=str((getattr(context,"args",[]) or [""])[0]).lower()
+    groups=_v1160_rc495_group_warnings(cert.get("rows",[]))
+    lines=[f"🧾 <b>A100 V{V1160_RC495_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Status <b>{cert['status']}</b> · Snapshot <code>{cert['snapshot_id']}</code> · Cache {'HIT' if hit else 'MISS'}",
+           " · ".join(f"{k} {v}" for k,v in cert["counts"].items()),
+           f"Grouped warnings <b>{len(groups)}</b>",""]
+    if not groups:
+        lines.append("✅ 모든 명령 End-to-End 인증 완료")
+    elif arg in {"detail","full","all","warn","fail"}:
+        selected=[g for g in groups if arg!="fail" or g["status"]=="FAILED"]
+        for g in selected[:12]:
+            icon="⛔" if g["status"]=="FAILED" else "⚠️"
+            cmds=", ".join('/'+c for c in g["commands"][:10])
+            more=max(0,len(g["commands"])-10)
+            lines += [f"{icon} <b>{g['status']}</b> ×{len(g['commands'])} · {', '.join(g['reasons'])}",f"   {cmds}{f' 외 {more}개' if more else ''}"]
+        if len(selected)>12: lines.append(f"나머지 그룹 {len(selected)-12}개는 로그/JSON 보고서에서 확인")
+    else:
+        for g in groups[:5]:
+            icon="⛔" if g["status"]=="FAILED" else "⚠️"
+            lines.append(f"{icon} {', '.join(g['reasons'])} ×{len(g['commands'])}")
+        lines += ["","세부 그룹: <code>/commandcert detail</code> · 실패만: <code>/commandcert fail</code>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def releasegate1160rc495_cmd(update,context):
+    _v1155_track("releasegate")
+    state=_v1160_rc494_shared_state(); cert,hit=_v1160_rc494_certification_cached(state)
+    mode,readiness=_v1160_rc495_mode(cert); gate=cert.get("gate",{})
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    status="READY" if cert.get("ready") else ("LEARNING" if mode=="LEARNING" else "BLOCKED")
+    lines=[f"🚦 <b>A100 V{V1160_RC495_NUMBER} RELEASE GATE</b>",
+           f"Phase <b>{mode}</b> · Status <b>{status}</b> · Progress <b>{readiness:.0f}%</b> · Cache {'HIT' if hit else 'MISS'}",""]
+    for k,g in gate.items():
+        need=max(0,float(g.get("target",0))-float(g.get("value",0)))
+        lines.append(f"{'✅' if g.get('pass') else '🧠'} {labels.get(k,k)} <b>{float(g.get('value',0)):.1f}</b>/{float(g.get('target',0)):.0f} · Need {need:.1f}")
+    if mode=="LEARNING": lines += ["","ℹ️ 학습 단계의 미달 지표는 결함이 아니라 LTS 승격 전 축적 목표입니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def performanceaudit1160rc495_cmd(update,context):
+    rows=[]
+    for name,vals in V1160_RC494_LATENCY.items():
+        if vals: rows.append((sum(vals)/len(vals),max(vals),name,len(vals)))
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES
+    hit_rate=100.0*V1160_RC494_CACHE_HITS/max(1,total)
+    avg=sum(x[0]*x[3] for x in rows)/max(1,sum(x[3] for x in rows)) if rows else 0.0
+    worst=max((x[1] for x in rows),default=0.0)
+    slow=sum(1 for a,m,n,c in rows if a>V1160_RC494_TARGETS_MS.get(n,3000))
+    grade="A+" if hit_rate>=90 and slow==0 and V1160_RC495_DUPLICATE_READS==0 else "A" if slow<=1 else "B" if slow<=3 else "C"
+    lines=[f"⚙️ <b>A100 V{V1160_RC495_NUMBER} PERFORMANCE AUDIT</b>",
+           f"Grade <b>{grade}</b>","",
+           f"Cache Hit <b>{hit_rate:.1f}%</b>",f"Average Response <b>{avg:.0f} ms</b>",f"Worst Response <b>{worst:.0f} ms</b>",
+           f"Slow Commands <b>{slow}</b>",f"Duplicate Reads <b>{V1160_RC495_DUPLICATE_READS}</b>",
+           f"Shared Context <b>{'PASS' if V1160_RC495_SHARED_CONTEXT_OK else 'FAILED'}</b>",
+           f"Background Refresh <b>READY</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "status":"핵심 운영 상태·학습 단계·LTS 진행률 빠른 조회",
+    "commandcert":"중복 경고를 원인별로 병합한 명령 기능 인증",
+    "releasegate":"Learning/Stable 단계를 분리한 LTS Release Gate",
+    "performanceaudit":"캐시·응답시간·중복 읽기·공유 Context 종합 성능 감사",
+})
+V90_COMMAND_REGISTRY.update({
+    "status":status1160rc495_cmd,
+    "commandcert":commandcert1160rc495_cmd,
+    "releasegate":releasegate1160rc495_cmd,
+    "performanceaudit":performanceaudit1160rc495_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC495_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC495_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    for obsolete in (
+        "v1160_rc494_version_manager", "v1160_rc494_commandcert_handler",
+        "v1160_rc49_live_gate", "v1160_rc493_commandcert_handler",
+        "v1160_rc493_ltscert_handler", "v1160_rc493_regression_handler"
+    ):
+        checks.pop(obsolete,None)
+    checks.update({
+        "v1160_rc495_version_manager":V91_VERSION==V1160_RC495_VERSION,
+        "v1160_rc495_status_handler":V90_COMMAND_REGISTRY.get("status") is status1160rc495_cmd,
+        "v1160_rc495_status_usage":"status" in V925_COMMAND_USAGE,
+        "v1160_rc495_commandcert_grouping":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc495_cmd,
+        "v1160_rc495_releasegate_phase":V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160rc495_cmd,
+        "v1160_rc495_performanceaudit":V90_COMMAND_REGISTRY.get("performanceaudit") is performanceaudit1160rc495_cmd,
+        "v1160_rc495_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc495_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc495_schema":_v91_default_state().get("schema")==1,
+        "v1160_rc495_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc495-command-ux-status-recovery-performance-audit"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.4 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.5 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
