@@ -38106,11 +38106,226 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc492-execution-command-certification"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.3 - FINAL CERTIFICATION & SNAPSHOT INTEGRITY
+# ---------------------------------------------------------------------------
+V1160_RC493_NUMBER = "116.0-RC4.9.3"
+V1160_RC493_VERSION = "A100 V116.0-RC4.9.3 LTS FINAL CERTIFICATION & SNAPSHOT INTEGRITY"
+V91_VERSION = V1160_RC493_VERSION
+
+
+def _v1160_rc493_snapshot(state=None):
+    """Build one immutable certification snapshot shared by all certification views."""
+    import hashlib, json, datetime, copy
+    state=copy.deepcopy(_v91_load_state() if state is None else state)
+    source=_v1160_rc49_source_snapshot(state)
+    repo=_v1160_rc49_repository_audit(state)
+    revisions=repo.get("revisions",{})
+    canonical={
+        "source":source,
+        "current":revisions.get("current",{}),
+        "latest":revisions.get("latest",{}),
+        "attribution_id":revisions.get("attribution_id"),
+        "queue_completed":len([x for x in state.get("learning_queue",[]) if x.get("status")=="COMPLETED"]),
+    }
+    volatile={"ts","time","timestamp","generated_at","updated_at","created_at","last_run_at","last_verified_at","total_duration_ms","captured_at"}
+    def stable(v):
+        if isinstance(v,dict): return {k:stable(x) for k,x in sorted(v.items()) if k not in volatile}
+        if isinstance(v,list): return [stable(x) for x in v]
+        return v
+    raw=json.dumps(stable(canonical),sort_keys=True,ensure_ascii=False,default=str).encode("utf-8")
+    digest=hashlib.sha256(raw).hexdigest()[:12].upper()
+    return {
+        "snapshot_id":"SG-"+digest,
+        "created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "source":source,
+        "repository":repo,
+        "revisions":revisions,
+        "hash":hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def _v1160_rc493_probe_with_evidence(command, handler, state, snapshot_id):
+    """Return detailed execution evidence without touching live state or external services."""
+    import inspect, time
+    evidence={"engine":"-","repository":"-","result_type":"-","runtime_ms":0.0,
+              "snapshot_id":snapshot_id,"executed":False,"error":None}
+    candidates=_v1160_rc492_probe_candidates(command,handler) if callable(handler) else []
+    if not candidates:
+        return evidence
+    name=candidates[0]; fn=globals().get(name)
+    started=time.perf_counter()
+    try:
+        probe=_v1160_rc492_call_probe(fn,state)
+        evidence.update({"engine":name,"result_type":probe.get("result_type","-"),
+                         "executed":bool(probe.get("ok")),"error":None if probe.get("ok") else probe.get("reason")})
+        if probe.get("ok"):
+            evidence["repository"]="state_repository" if probe.get("result_type") in {"dict","list","tuple","set"} else "runtime_adapter"
+    except Exception as exc:
+        evidence["error"]=f"{type(exc).__name__}:{exc}"
+    evidence["runtime_ms"]=round((time.perf_counter()-started)*1000.0,2)
+    return evidence
+
+
+def _v1160_rc493_command_certification(state=None):
+    """Execution certification with reason-specific PARTIAL statuses and proof fields."""
+    import inspect
+    import copy
+    state=copy.deepcopy(_v91_load_state() if state is None else state)
+    snap=_v1160_rc493_snapshot(state); snapshot_id=snap["snapshot_id"]
+    informational={"start","help","commands","ping","version","about"}
+    rows=[]
+    for name in sorted(set(_v1154_runtime_commands())):
+        handler=V90_COMMAND_REGISTRY.get(name)
+        handler_ok=callable(handler); help_ok=name in V925_COMMAND_USAGE or name in {"help","commands"}
+        try: src=inspect.getsource(handler) if handler_ok else ""
+        except Exception: src=""
+        output_ok=any(t in src for t in ("v90_1_safe_reply","safe_reply","reply_text","reply_html"))
+        if name in informational:
+            ev={"engine":"informational_command","repository":"not_required","result_type":"str","runtime_ms":0.0,
+                "snapshot_id":snapshot_id,"executed":True,"error":None}
+        else:
+            ev=_v1160_rc493_probe_with_evidence(name,handler,state,snapshot_id)
+        engine_ok=bool(ev["executed"])
+        repo_ok=ev["repository"] not in {"-",None}
+        runtime_ok=ev["error"] is None
+        reasons=[]
+        if not handler_ok: reasons.append("handler_not_callable")
+        if not help_ok: reasons.append("help_missing")
+        if not engine_ok: reasons.append("engine_execution_unverified")
+        if engine_ok and not repo_ok: reasons.append("repository_result_unverified")
+        if not output_ok: reasons.append("output_path_unverified")
+        if not runtime_ok: reasons.append("runtime_probe_failed")
+        if not handler_ok: status="FAILED"
+        elif not engine_ok: status="PARTIAL_ENGINE"
+        elif not repo_ok: status="PARTIAL_REPOSITORY"
+        elif not output_ok: status="PARTIAL_OUTPUT"
+        elif not runtime_ok: status="PARTIAL_RUNTIME"
+        elif not help_ok: status="PARTIAL_OUTPUT"
+        else: status="PASS"
+        risk="HIGH" if status=="FAILED" else "MEDIUM" if status.startswith("PARTIAL") else "NONE"
+        rows.append({"command":name,"status":status,"risk":risk,"reasons":reasons,
+                     "handler":handler_ok,"help":help_ok,"output":output_ok,"engine":engine_ok,
+                     "repository":repo_ok,"runtime":runtime_ok,"evidence":ev})
+    status_keys=("PASS","PARTIAL_ENGINE","PARTIAL_REPOSITORY","PARTIAL_OUTPUT","PARTIAL_RUNTIME","FAILED")
+    counts={k:sum(1 for r in rows if r["status"]==k) for k in status_keys}
+    overall="FAILED" if counts["FAILED"] else "PARTIAL" if any(counts[k] for k in status_keys[1:-1]) else "PASS"
+    return {"rows":rows,"counts":counts,"status":overall,"total":len(rows),
+            "mode":"EXECUTION_EVIDENCE_READ_ONLY","snapshot_id":snapshot_id}
+
+
+def _v1160_rc493_regression_report(state=None):
+    state=_v91_load_state() if state is None else state
+    pre=v91_preflight(); cmd=_v1160_rc493_command_certification(state)
+    checks=pre.get("checks",{})
+    passed=sum(1 for v in checks.values() if v); failed=sum(1 for v in checks.values() if not v)
+    known=sum(v for k,v in cmd["counts"].items() if k.startswith("PARTIAL"))
+    coverage=round(100.0*passed/max(1,len(checks)),1)
+    return {"pass":passed,"fixed":0,"new_issue":failed,"known_issue":known,"coverage":coverage,
+            "status":"PASS" if failed==0 else "FAILED","snapshot_id":cmd["snapshot_id"]}
+
+
+def _v1160_rc493_certification(state=None):
+    state=_v91_load_state() if state is None else state
+    snap=_v1160_rc493_snapshot(state)
+    base=_v1160_rc49_certification(state)
+    cmd=_v1160_rc493_command_certification(state)
+    reg=_v1160_rc493_regression_report_without_preflight(state,cmd)
+    latest=snap["revisions"].get("latest",{}); current=snap["revisions"].get("current",{})
+    revision_consistent=all(int(current.get(k,0) or 0)<=int(latest.get(k,0) or 0) for k in ("learning","strategy","trust","champion"))
+    base["snapshot"]=snap; base["commands"]=cmd; base["regression"]=reg
+    base["checks"]["command_integrity"]=cmd["status"]!="FAILED"
+    base["checks"]["snapshot_integrity"]=bool(snap["snapshot_id"] and revision_consistent)
+    base["checks"]["regression"]=reg["status"]=="PASS"
+    base["ready"]=all(base["checks"].values()) and all(g["pass"] for g in base["gate"].values()) and cmd["status"]=="PASS"
+    return base
+
+
+def _v1160_rc493_regression_report_without_preflight(state,cmd=None):
+    """Non-recursive regression summary used by certification and /regression."""
+    cmd=cmd or _v1160_rc493_command_certification(state)
+    structural={
+        "registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "schema":_v91_default_state().get("schema")==1,
+        "limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+        "handlers":all(callable(v) for v in V90_COMMAND_REGISTRY.values()),
+    }
+    passed=sum(structural.values()); failed=len(structural)-passed
+    known=sum(v for k,v in cmd["counts"].items() if k.startswith("PARTIAL"))
+    return {"pass":passed,"fixed":0,"new_issue":failed,"known_issue":known,
+            "coverage":round(100.0*passed/max(1,len(structural)),1),"status":"PASS" if failed==0 else "FAILED",
+            "snapshot_id":cmd["snapshot_id"]}
+
+
+async def commandcert1160rc493_cmd(update,context):
+    _v1155_track("commandcert"); c=_v1160_rc493_command_certification(_v91_load_state())
+    lines=[f"🧾 <b>A100 V{V1160_RC493_NUMBER} COMMAND FUNCTIONAL CERTIFICATION 2.0</b>",
+           f"Status <b>{c['status']}</b> · Snapshot <code>{c['snapshot_id']}</code>",
+           " · ".join(f"{k} {v}" for k,v in c["counts"].items()),""]
+    rows=[r for r in c["rows"] if r["status"]!="PASS"]
+    for r in rows[:30]:
+        e=r["evidence"]; icon="⛔" if r["status"]=="FAILED" else "⚠️"
+        lines.append(f"{icon} /{r['command']} · <b>{r['status']}</b> · {', '.join(r['reasons']) or '-'}")
+        lines.append(f"   Engine <code>{e['engine']}</code> · Repo <code>{e['repository']}</code> · {e['runtime_ms']:.2f} ms")
+    if not rows: lines.append("✅ 모든 명령의 Handler → Engine → Repository → Output → Runtime → Snapshot 인증 완료")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def ltscert1160rc493_cmd(update,context):
+    _v1155_track("ltscert"); c=_v1160_rc493_certification(_v91_load_state()); sid=c["snapshot"]["snapshot_id"]
+    lines=[f"🏅 <b>A100 V{V1160_RC493_NUMBER} LTS FINAL CERTIFICATION</b>",
+           f"Result <b>{'READY FOR LTS' if c['ready'] else 'BLOCKED'}</b> · Snapshot <code>{sid}</code>",""]
+    for k,v in c["checks"].items(): lines.append(f"{'✅' if v else '⛔'} {k.replace('_',' ').title()}")
+    if c.get("blocked"):
+        lines += ["","<b>Blocking Metrics</b>"]
+        labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+        for x in c["blocked"]: lines.append(f"⛔ {labels[x['metric']]} {x['value']:.1f}/{x['target']:.0f} · Need +{x['need']:.1f}")
+    lines += ["",f"Command {c['commands']['status']} · Regression {c['regression']['status']}"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def regression1160rc493_cmd(update,context):
+    _v1155_track("regression"); state=_v91_load_state(); cmd=_v1160_rc493_command_certification(state); r=_v1160_rc493_regression_report_without_preflight(state,cmd)
+    lines=[f"🧪 <b>A100 V{V1160_RC493_NUMBER} REGRESSION REPORT</b>",f"Status <b>{r['status']}</b> · Snapshot <code>{r['snapshot_id']}</code>",
+           f"PASS {r['pass']} · FIXED {r['fixed']} · NEW ISSUE {r['new_issue']} · KNOWN ISSUE {r['known_issue']}",f"Coverage <b>{r['coverage']:.1f}%</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "commandcert":"원인별 PARTIAL과 실행 증거를 표시하는 기능 인증 2.0",
+    "ltscert":"통합 Snapshot 기반 LTS 최종 인증",
+    "regression":"PASS/FIXED/NEW/KNOWN/Coverage 회귀 보고서",
+})
+V90_COMMAND_REGISTRY.update({"commandcert":commandcert1160rc493_cmd,"ltscert":ltscert1160rc493_cmd,"regression":regression1160rc493_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC493_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC493_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    for obsolete in ("v1160_rc492_version_manager","v1160_rc492_commandcert_handler","v1160_rc492_ltscert_handler"):
+        checks.pop(obsolete,None)
+    sample=_v91_default_state(); snap=_v1160_rc493_snapshot(sample)
+    checks.update({
+        "v1160_rc493_version_manager":V91_VERSION==V1160_RC493_VERSION,
+        "v1160_rc493_commandcert_handler":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc493_cmd,
+        "v1160_rc493_ltscert_handler":V90_COMMAND_REGISTRY.get("ltscert") is ltscert1160rc493_cmd,
+        "v1160_rc493_regression_handler":V90_COMMAND_REGISTRY.get("regression") is regression1160rc493_cmd,
+        "v1160_rc493_snapshot":str(snap.get("snapshot_id","")).startswith("SG-"),
+        "v1160_rc493_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc493_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc493_schema":sample.get("schema")==1,
+        "v1160_rc493_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc493-final-certification-snapshot-integrity"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.2 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.3 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
