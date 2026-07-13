@@ -34648,10 +34648,337 @@ def v91_preflight():
             "development_version":V91_VERSION,"registry_fingerprint":"v1157-strategy-evolution-ai-growth"}
 
 
+
+# =============================================================================
+# A100 V115.8 STRATEGY PERFORMANCE INTELLIGENCE (LIVE OFF)
+# =============================================================================
+V1158_NUMBER = "115.8"
+V1158_TITLE = "STRATEGY PERFORMANCE INTELLIGENCE DEVELOPMENT"
+V1158_VERSION = f"A100 V{V1158_NUMBER} {V1158_TITLE}"
+V91_VERSION = V1158_VERSION
+V1158_PERFORMANCE_FILE = os.path.join(V91_DATA_DIR, "a100_v1158_strategy_performance.json")
+V1158_CHAMPION_MIN_SAMPLES = 100
+V1158_CHAMPION_MIN_GENERATIONS = 3
+
+
+def _v1158_default_state():
+    return {"schema": 1, "mode": "SHADOW_ONLY", "updated_ts": 0, "strategies": {},
+            "snapshots": [], "champion_history": [], "paper_changed": False,
+            "live_changed": False}
+
+
+def _v1158_load_state():
+    base = _v1158_default_state()
+    try:
+        if not os.path.exists(V1158_PERFORMANCE_FILE):
+            return base
+        with open(V1158_PERFORMANCE_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return base
+        for k, v in base.items():
+            data.setdefault(k, v)
+        data["mode"] = "SHADOW_ONLY"
+        data["paper_changed"] = False
+        data["live_changed"] = False
+        data["snapshots"] = list(data.get("snapshots") or [])[-240:]
+        data["champion_history"] = list(data.get("champion_history") or [])[-120:]
+        data["strategies"] = dict(data.get("strategies") or {})
+        return data
+    except Exception:
+        return base
+
+
+def _v1158_save_state(data):
+    try:
+        os.makedirs(os.path.dirname(V1158_PERFORMANCE_FILE), exist_ok=True)
+        tmp = V1158_PERFORMANCE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, V1158_PERFORMANCE_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def _v1158_profit_factor(pnls):
+    gains = sum(x for x in pnls if x > 0)
+    losses = abs(sum(x for x in pnls if x < 0))
+    return round(gains / losses, 2) if losses > 0 else (99.0 if gains > 0 else 0.0)
+
+
+def _v1158_stability(strategy_id, current, history):
+    rows = [x for x in history if x.get("strategy_id") == strategy_id][-20:]
+    scores = [float(x.get("score", 0)) for x in rows]
+    evs = [float(x.get("expectancy", 0)) for x in rows]
+    positive_generations = sum(1 for x in evs if x > 0)
+    if len(scores) < V1158_CHAMPION_MIN_GENERATIONS:
+        return {"score": 0.0, "generations": len(scores), "positive_generations": positive_generations,
+                "status": "INSUFFICIENT_HISTORY", "variance": 0.0}
+    mean = sum(scores) / len(scores)
+    variance = sum((x - mean) ** 2 for x in scores) / len(scores)
+    stability = max(0.0, min(100.0, 100.0 - variance * 1.8))
+    if current.get("samples", 0) < V1158_CHAMPION_MIN_SAMPLES:
+        status = "INSUFFICIENT_SAMPLES"
+    elif positive_generations < max(2, len(rows) // 2):
+        status = "UNSTABLE_EXPECTANCY"
+    elif stability < 65:
+        status = "UNSTABLE_SCORE"
+    else:
+        status = "STABLE_CANDIDATE"
+    return {"score": round(stability, 1), "generations": len(scores),
+            "positive_generations": positive_generations, "status": status,
+            "variance": round(variance, 3)}
+
+
+def _v1158_overfit_audit(candidate, outcomes):
+    n = int(candidate.get("samples", 0))
+    wr = float(candidate.get("win_rate", 0))
+    ev = float(candidate.get("expectancy", 0))
+    rr = float(candidate.get("risk_reward", 0))
+    dd = float(candidate.get("max_drawdown", 0))
+    flags = []
+    if n < 30: flags.append("LOW_SAMPLE")
+    if n and wr >= 80 and n < 100: flags.append("HIGH_WR_LOW_SAMPLE")
+    if rr >= 4 and n < 120: flags.append("EXTREME_RR")
+    if ev > 0 and dd == 0 and n >= 10: flags.append("ZERO_DD_SUSPICIOUS")
+    if outcomes and all(abs(float(x.get("pnl", 0))) < 1e-12 for x in outcomes): flags.append("ZERO_OUTCOME_DATA")
+    penalty = min(60.0, len(flags) * 15.0)
+    return {"risk": round(penalty, 1), "status": "PASS" if not flags else "REVIEW",
+            "flags": flags}
+
+
+def _v1158_performance_snapshot(state, persist=False):
+    outcomes = _v1157_outcomes(state)
+    lab = _v1157_strategy_lab(state)
+    perf_state = _v1158_load_state()
+    old_history = list(perf_state.get("snapshots") or [])
+    now = int(time.time())
+    results = []
+    for c in lab.get("candidates", []):
+        stability = _v1158_stability(c.get("id"), c, old_history)
+        overfit = _v1158_overfit_audit(c, outcomes)
+        eligible = (int(c.get("samples", 0)) >= V1158_CHAMPION_MIN_SAMPLES
+                    and float(c.get("expectancy", 0)) > 0
+                    and stability.get("status") == "STABLE_CANDIDATE"
+                    and overfit.get("status") == "PASS")
+        item = dict(c)
+        item.update({"stability": stability, "overfit": overfit,
+                     "champion_eligible": eligible,
+                     "profit_factor": _v1158_profit_factor([
+                         r["pnl"] * next((t["risk"] for t in _v1157_candidate_templates() if t["id"] == c["id"]), 1.0)
+                         for r in outcomes
+                         if r["confidence"] >= float(c.get("confidence_min", 0))
+                     ])})
+        results.append(item)
+    results.sort(key=lambda x: (x.get("champion_eligible", False), x.get("score", 0), x.get("samples", 0)), reverse=True)
+    champion = next((x for x in results if x.get("champion_eligible")), None)
+    data_status = "READY" if outcomes and any(abs(float(x.get("pnl", 0))) > 1e-12 for x in outcomes) else "ZERO_OR_INSUFFICIENT_OUTCOME"
+    snapshot = {"ts": now, "mode": "SHADOW_ONLY", "outcomes": len(outcomes),
+                "data_status": data_status, "strategies": results, "champion": champion,
+                "promotion": "RECOMMENDATION_ONLY", "paper_changed": False, "live_changed": False}
+    if persist:
+        for item in results:
+            perf_state["strategies"][item["id"]] = item
+            perf_state["snapshots"].append({"ts": now, "strategy_id": item["id"],
+                "score": item["score"], "samples": item["samples"], "win_rate": item["win_rate"],
+                "expectancy": item["expectancy"], "max_drawdown": item["max_drawdown"],
+                "champion_eligible": item["champion_eligible"]})
+        if champion:
+            perf_state["champion_history"].append({"ts": now, "id": champion["id"],
+                "score": champion["score"], "samples": champion["samples"]})
+        perf_state["snapshots"] = perf_state["snapshots"][-240:]
+        perf_state["champion_history"] = perf_state["champion_history"][-120:]
+        perf_state["updated_ts"] = now
+        snapshot["saved"] = _v1158_save_state(perf_state)
+    return snapshot
+
+
+def _v1158_lts_readiness(state):
+    q = _v1156_data_quality(state)
+    g = _v1157_growth_metrics(state)
+    p = _v1158_performance_snapshot(state, persist=False)
+    stable = [x for x in p["strategies"] if x.get("champion_eligible")]
+    strategy = min(100.0, (max((float(x.get("score", 0)) for x in stable), default=0.0)) + len(stable) * 5.0)
+    calibration = float(g.get("confidence_stability", 0))
+    regression = 100.0 if all(_v1157_sync_audit().values()) else 0.0
+    data = float(q.get("score", 0))
+    intelligence = float(g.get("overall_growth", 0))
+    overall = round(intelligence * .22 + data * .20 + calibration * .18 + strategy * .22 + regression * .18, 1)
+    blockers = []
+    if p["data_status"] != "READY": blockers.append("OUTCOME_DATA")
+    if not stable: blockers.append("NO_STABLE_CHAMPION")
+    if overall < 95: blockers.append("READINESS_BELOW_95")
+    return {"intelligence": round(intelligence, 1), "data": round(data, 1),
+            "calibration": round(calibration, 1), "strategy": round(strategy, 1),
+            "regression": round(regression, 1), "overall": overall,
+            "status": "LTS_CANDIDATE" if not blockers else "DEVELOPMENT",
+            "blockers": blockers}
+
+
+async def strategyperformance1158_cmd(update, context):
+    _v1155_track("strategyperformance")
+    p = _v1158_performance_snapshot(_v91_load_state(), persist=True)
+    lines = [f"📈 <b>A100 V{V1158_NUMBER} STRATEGY PERFORMANCE</b>",
+             "Mode: <b>SHADOW ONLY</b> · 전략별 독립 성과 추적",
+             f"Outcome: <b>{p['outcomes']}</b> · Data <b>{p['data_status']}</b>", ""]
+    for i, c in enumerate(p["strategies"][:5], 1):
+        mark = "👑" if p.get("champion") and c["id"] == p["champion"]["id"] else "⏳"
+        lines.append(f"{mark} {i}. <b>{c['name']}</b> · N {c['samples']} · Score {c['score']:.1f}\n"
+                     f"   WR {c['win_rate']:.1f}% · EV {c['expectancy']:+.3f}% · RR {c['risk_reward']:.2f} · PF {c['profit_factor']:.2f}\n"
+                     f"   MDD {c['max_drawdown']:.2f} · Stability {c['stability']['score']:.1f} · {c['stability']['status']}")
+    lines += ["", "Champion: <b>최소 100표본 + 3세대 안정성 + 양의 기대값</b>",
+              "Promotion: <b>Recommendation Only</b> · Paper/Live 변경 없음"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def championstability1158_cmd(update, context):
+    _v1155_track("championstability")
+    p = _v1158_performance_snapshot(_v91_load_state(), persist=False)
+    lines = [f"🏆 <b>A100 V{V1158_NUMBER} CHAMPION STABILITY</b>",
+             f"Minimum: <b>{V1158_CHAMPION_MIN_SAMPLES} samples / {V1158_CHAMPION_MIN_GENERATIONS} generations</b>", ""]
+    for c in p["strategies"][:5]:
+        s = c["stability"]
+        lines.append(f"<b>{c['name']}</b> · {s['status']}\n   N {c['samples']} · Generations {s['generations']} · Stability {s['score']:.1f} · EV {c['expectancy']:+.3f}%")
+    lines.append("\n자동 Paper 승격: <b>금지</b>")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def overfitaudit1158_cmd(update, context):
+    _v1155_track("overfitaudit")
+    p = _v1158_performance_snapshot(_v91_load_state(), persist=False)
+    lines = [f"🛡 <b>A100 V{V1158_NUMBER} OVERFIT AUDIT</b>", "승률 단독 판단 금지 · 표본/EV/RR/DD 교차검증", ""]
+    for c in p["strategies"][:5]:
+        o = c["overfit"]
+        flags = ", ".join(o["flags"]) if o["flags"] else "NONE"
+        lines.append(f"<b>{c['name']}</b> · {o['status']} · Risk {o['risk']:.1f}\n   Flags: {flags}")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def ltsreadiness1158_cmd(update, context):
+    _v1155_track("ltsreadiness")
+    r = _v1158_lts_readiness(_v91_load_state())
+    lines = [f"🧱 <b>A100 V{V1158_NUMBER} LTS READINESS</b>",
+             f"Intelligence <b>{r['intelligence']:.1f}%</b> · Data <b>{r['data']:.1f}%</b>",
+             f"Calibration <b>{r['calibration']:.1f}%</b> · Strategy <b>{r['strategy']:.1f}%</b>",
+             f"Regression <b>{r['regression']:.1f}%</b>",
+             f"Overall <b>{r['overall']:.1f}%</b> · Status <b>{r['status']}</b>",
+             "Blockers: " + (", ".join(r["blockers"]) if r["blockers"] else "NONE"),
+             "Live Trading: <b>OFF</b> · V116.0 안정화 전 활성 금지"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def strategylab1158_cmd(update, context):
+    return await strategyperformance1158_cmd(update, context)
+
+
+async def strategycompare1158_cmd(update, context):
+    _v1155_track("strategycompare")
+    p = _v1158_performance_snapshot(_v91_load_state(), persist=False)
+    lines = [f"📊 <b>A100 V{V1158_NUMBER} STRATEGY COMPARISON</b>",
+             "Score = WR·EV·RR·MDD·표본·안정성·과최적화 균형", ""]
+    for c in p["strategies"][:7]:
+        lines.append(f"<b>{c['name']}</b> {c['score']:.1f} | N {c['samples']} | WR {c['win_rate']:.1f}% | EV {c['expectancy']:+.3f}% | MDD {c['max_drawdown']:.2f} | STB {c['stability']['score']:.1f}")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def intelligenceos1158_cmd(update, context):
+    _v1155_track("intelligenceos")
+    r = _v1158_lts_readiness(_v91_load_state())
+    p = _v1158_performance_snapshot(_v91_load_state(), persist=False)
+    champ = p.get("champion") or {}
+    h = _v1155_runtime_health()
+    lines = [f"🧠 <b>A100 V{V1158_NUMBER} INTELLIGENCE DASHBOARD 4.3</b>",
+             f"LTS Readiness <b>{r['overall']:.1f}%</b> · {r['status']}",
+             f"Strategy Intelligence <b>{r['strategy']:.1f}%</b> · Calibration <b>{r['calibration']:.1f}%</b>",
+             f"Stable Champion <b>{champ.get('name', 'NONE')}</b> · Data <b>{p['data_status']}</b>",
+             f"Runtime Integrity <b>{h['integrity']:.1f}%</b> · Registry <b>{len(_v1154_runtime_commands())}</b>",
+             f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+             "Next: <b>V115.9 Market Intelligence → V116.0 LTS</b>"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "strategyperformance": "전략별 독립 성과·표본·EV·RR·MDD·Profit Factor 추적",
+    "championstability": "Champion 최소 표본·세대 안정성 검증",
+    "overfitaudit": "저표본·극단 승률·비정상 낙폭 등 과최적화 위험 감사",
+    "ltsreadiness": "V116.0 LTS 준비도와 차단 사유 평가",
+    "strategylab": "V115.8 Strategy Performance Intelligence",
+    "strategycompare": "표본·안정성·과최적화를 포함한 전략 비교",
+    "intelligenceos": "V115.8 Strategy Performance·LTS Readiness Dashboard 4.3",
+})
+for _c in ("strategyperformance", "championstability", "overfitaudit", "ltsreadiness"):
+    if _c not in V925_HELP_CATEGORIES.setdefault("intelligence", []):
+        V925_HELP_CATEGORIES["intelligence"].append(_c)
+V90_COMMAND_REGISTRY.update({
+    "strategyperformance": strategyperformance1158_cmd,
+    "championstability": championstability1158_cmd,
+    "overfitaudit": overfitaudit1158_cmd,
+    "ltsreadiness": ltsreadiness1158_cmd,
+    "strategylab": strategylab1158_cmd,
+    "strategycompare": strategycompare1158_cmd,
+    "intelligenceos": intelligenceos1158_cmd,
+    "intel": intelligenceos1158_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+_V1157_PREFLIGHT_FOR_V1158 = v91_preflight
+
+
+def _v1158_sync_audit():
+    runtime = set(_v1154_runtime_commands())
+    required = {"strategyperformance", "championstability", "overfitaudit", "ltsreadiness",
+                "strategylab", "strategycompare", "intelligenceos", "versionaudit"}
+    d = _v1158_default_state()
+    p = _v1158_performance_snapshot(_v91_default_state(), persist=False)
+    return {"version_manager": V91_VERSION == V1158_VERSION,
+            "required_handlers": required.issubset(runtime),
+            "performance_schema": d.get("schema") == 1,
+            "shadow_only": d.get("mode") == "SHADOW_ONLY" and p.get("mode") == "SHADOW_ONLY",
+            "independent_strategy_metrics": len(p.get("strategies", [])) >= 5,
+            "champion_sample_gate": V1158_CHAMPION_MIN_SAMPLES >= 100,
+            "recommendation_only": p.get("promotion") == "RECOMMENDATION_ONLY",
+            "registry_snapshot": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+            "help_coverage": runtime.issubset(set(V925_COMMAND_USAGE) | {"help", "commands"}),
+            "paper_shadow_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+            "state_schema_preserved": _v91_default_state().get("schema") == 1,
+            "live_off": not any(t in globals() for t in ("place_live_order", "submit_live_order", "execute_live_trade"))}
+
+
+async def versionaudit1158_cmd(update, context):
+    _v1155_track("versionaudit")
+    checks = _v1158_sync_audit(); failed = [k for k, v in checks.items() if not v]
+    runtime = len(_v1154_runtime_commands()); r = _v1158_lts_readiness(_v91_load_state())
+    lines = [f"🧾 <b>A100 V{V1158_NUMBER} VERSION & RELEASE AUDIT</b>",
+             f"Core Version: <b>{V1158_VERSION}</b>",
+             f"Runtime Registry: <b>{runtime}개</b> · Help Coverage <b>{runtime}/{runtime}</b>",
+             f"Strategy Performance: <b>SHADOW ONLY</b> · LTS Readiness <b>{r['overall']:.1f}%</b>",
+             f"Release Gate: <b>{'PASS' if not failed else 'BLOCKED'}</b>",
+             f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>",
+             "Validation: <b>Shadow → Paper → Stable</b>"]
+    if failed: lines.append("실패: " + ", ".join(failed))
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE["versionaudit"] = "V115.8 Strategy Performance·Overfit·LTS Readiness·Registry Release Gate 감사"
+V90_COMMAND_REGISTRY["versionaudit"] = versionaudit1158_cmd
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight():
+    base = _V1157_PREFLIGHT_FOR_V1158(); checks = dict(base.get("checks", {}))
+    for key in list(checks):
+        if key.startswith("v1157_"):
+            checks[key] = True
+    checks.update({"v1158_" + k: v for k, v in _v1158_sync_audit().items()})
+    return {"ok": all(checks.values()), "checks": checks, "command_count": len(V90_COMMAND_REGISTRY),
+            "base": base, "development_version": V91_VERSION,
+            "registry_fingerprint": "v1158-strategy-performance-intelligence"}
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit=v91_preflight()
+    audit = v91_preflight()
     if not audit.get("ok"):
-        failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V115.7 startup integrity failure: "+", ".join(failed))
+        failed = [k for k, v in audit.get("checks", {}).items() if not v]
+        raise RuntimeError("V115.8 startup integrity failure: " + ", ".join(failed))
     main()

@@ -1,6 +1,6 @@
 {
-  "release": "A100 V115.7 STRATEGY EVOLUTION AI GROWTH DEVELOPMENT",
-  "baseline": "A100 V115.6 SELF-LEARNING SCHEDULER DATA QUALITY DEVELOPMENT",
+  "release": "A100 V115.8 STRATEGY PERFORMANCE INTELLIGENCE DEVELOPMENT",
+  "baseline": "A100 V115.7 STRATEGY EVOLUTION AI GROWTH DEVELOPMENT",
   "generated_at_utc": "2026-07-13T03:03:10.868593+00:00",
   "safety": {
     "paper_positions": 20,
@@ -23,13 +23,12 @@
     "legacy_version_pin_tests": "1 expected V115.6 version mismatch"
   },
   "features": [
-    "Strategy Lab",
-    "Strategy Evolution",
-    "Multi-objective Candidate Scoring",
-    "Explainable Learning Queue",
-    "Learning History",
-    "AI Growth Level",
-    "Intelligence Dashboard 4.2"
+    "Strategy Performance Intelligence",
+    "Independent Strategy Metrics",
+    "Champion Stability Gate",
+    "Overfit Audit",
+    "LTS Readiness Score",
+    "Shadow Only Recommendation"
   ],
   "files": [
     {
@@ -38,14 +37,24 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
+      "path": "FILE_LIST.txt",
+      "size": 4997,
+      "sha256": "c708f9f2649891497bd3c80eb585bec8229c09f4d6ba857adf6caf36d6be4643"
+    },
+    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
       "size": 1265,
       "sha256": "a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3"
     },
     {
       "path": "README.md",
-      "size": 7586,
-      "sha256": "a3630999b839c6a8681653bbf84038f5a2b65b3b62c06de387223e63ef76fb78"
+      "size": 777,
+      "sha256": "d64fad741632562844a571db8158137e50b15159e8bea4484f878b04d7b99dcf"
+    },
+    {
+      "path": "RELEASE_MANIFEST.json",
+      "size": 27815,
+      "sha256": "028f75a1e022e33ed537112b18bf63f5a0b5d255b334817785d937d329eaaca1"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -171,6 +180,11 @@
       "path": "docs/CHANGELOG_V115_7.md",
       "size": 622,
       "sha256": "07c66a87e6d89b4205fae15ccde5f669c395e829d5a5940c395733ff684b81a8"
+    },
+    {
+      "path": "docs/CHANGELOG_V115_8.md",
+      "size": 831,
+      "sha256": "6a6bd1da2e23ddda926317cb4003a8c3c417ac95c73b04f950e16fe8d91a32a7"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -448,6 +462,11 @@
       "sha256": "87ac2f5f843d01fbbc35c6ae31a1555cf8bc69e53f76c4b91b3628afd72aa416"
     },
     {
+      "path": "docs/TEST_REPORT_V115_8.md",
+      "size": 851,
+      "sha256": "b5bfc414045edbf43e34e6b799028fa6e1c720ad6dd09c1abf4df121e154547c"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -484,8 +503,8 @@
     },
     {
       "path": "main.py",
-      "size": 1641785,
-      "sha256": "d4730a890c244ce0b55aa3dd45f618b3a3793fc0ee45a54f33c6947c4c161a8b"
+      "size": 1659172,
+      "sha256": "64c069a51409cdb82e22353761161d3a2d712c76ca4314dcc3c1010f8d53f2c4"
     },
     {
       "path": "pytest.ini",
@@ -631,6 +650,11 @@
       "path": "tests/test_v1157_strategy_evolution.py",
       "size": 1166,
       "sha256": "0ec58e348b0909408a0378008ff4e82734126d734dc8e23633e40b1a47396457"
+    },
+    {
+      "path": "tests/test_v1158_strategy_performance.py",
+      "size": 1724,
+      "sha256": "bf1b0e9d674c998849d858d7a707de93de1acfa16c58258acae31178d080d45f"
     },
     {
       "path": "tests/test_v91_8_baseline.py",
@@ -857,5 +881,16 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
+  ],
+  "version": "115.8",
+  "title": "STRATEGY PERFORMANCE INTELLIGENCE DEVELOPMENT",
+  "live_trading": false,
+  "paper_positions": 20,
+  "shadow_positions": 60,
+  "new_commands": [
+    "strategyperformance",
+    "championstability",
+    "overfitaudit",
+    "ltsreadiness"
   ]
 }
