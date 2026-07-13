@@ -1,11 +1,11 @@
 {
-  "release": "A100_V116_0_LTS_RC4_2_LTS_UX_ATTRIBUTION_VERIFICATION_STABILIZATION_DEVELOPMENT_RELEASE",
-  "version": "A100 V116.0-RC4.2 LTS UX & Attribution Verification Stabilization",
-  "title": "QUALITY ATTRIBUTION AND SELF IMPROVEMENT STABILIZATION",
+  "release": "A100 V116.0 LTS RC4.3",
+  "title": "END TO END RELEASE AUDIT AND PIPELINE REPAIR",
   "schema": 1,
   "paper_positions": 20,
   "shadow_positions": 60,
   "live_trading": false,
+  "generated_at": "2026-07-14T00:00:00+09:00",
   "files": [
     {
       "path": ".gitignore",
@@ -13,9 +13,34 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
+      "path": ".pytest_cache/.gitignore",
+      "size": 37,
+      "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd"
+    },
+    {
+      "path": ".pytest_cache/CACHEDIR.TAG",
+      "size": 191,
+      "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4"
+    },
+    {
+      "path": ".pytest_cache/README.md",
+      "size": 302,
+      "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad"
+    },
+    {
+      "path": ".pytest_cache/v/cache/lastfailed",
+      "size": 97,
+      "sha256": "155ba616829ad079d246d43994ba50fc0fe3a81bb55f14b70d9ddccb1fdc5466"
+    },
+    {
+      "path": ".pytest_cache/v/cache/nodeids",
+      "size": 1423,
+      "sha256": "a49b43aa097d47c0424e41cbb2432282f0a881c3e06914510b340f9625d7b2e8"
+    },
+    {
       "path": "FILE_LIST.txt",
-      "size": 5656,
-      "sha256": "3e8e55aca986a61b37368313d3a566e84ee063365d290d25272ca843417227d8"
+      "size": 7732,
+      "sha256": "c41f2bb0869a6cbd033e5bda0895438d67568b33296aad96a44ad1fb150ff691"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -24,13 +49,123 @@
     },
     {
       "path": "README.md",
-      "size": 888,
-      "sha256": "2afd0d7beafd2b9bbdf7cda0a199a227b970935929f559e584a7f537f4cf38c6"
+      "size": 676,
+      "sha256": "63f5cf74cf20dbe1ffdd969e3f97d2e440239642ea9303252041c55d9f875592"
     },
     {
-      "path": "RELEASE_MANIFEST.json",
-      "size": 31087,
-      "sha256": "fae7ef8d3526224bb20ba4ab04e3fb631474c77a5a0f9287a1c8ee95971d6739"
+      "path": "__pycache__/main.cpython-313.pyc",
+      "size": 2669303,
+      "sha256": "30b7c516d719b40ba49f831412d8aea8aceef54f3dc6d71f72d77382c19f32f7"
+    },
+    {
+      "path": "__pycache__/v1000_learning_intelligence.cpython-313.pyc",
+      "size": 13587,
+      "sha256": "570795643c0a077dcd0de953860c85cd3a930aef70b45fdbdb386b6a0a1175a8"
+    },
+    {
+      "path": "__pycache__/v1010_closed_loop_learning.cpython-313.pyc",
+      "size": 16457,
+      "sha256": "c6ff749b954d26aef2020cec4994905e283b3a0692964979b561140269f17a1b"
+    },
+    {
+      "path": "__pycache__/v1020_evolution_engine.cpython-313.pyc",
+      "size": 14597,
+      "sha256": "5a666c5c0fb68e5bd37b26bcedb46992bdf8ac5ef33cd38c70ce7ecb8153673c"
+    },
+    {
+      "path": "__pycache__/v1030_autonomous_evolution.cpython-313.pyc",
+      "size": 17672,
+      "sha256": "0b9c4bb106b43aec11ca46c25589ee2c77cd0ae0f5220898076cd0bf38219bd8"
+    },
+    {
+      "path": "__pycache__/v1040_experience_intelligence.cpython-313.pyc",
+      "size": 20026,
+      "sha256": "97414a234f32ebccf61334af88756ad4d42e1f0a53dd6cf302ee68de4b0d9808"
+    },
+    {
+      "path": "__pycache__/v1050_autonomous_intelligence_core.cpython-313.pyc",
+      "size": 22190,
+      "sha256": "0a075f8753cd8cf497b791fec2dead4cc797101d975fc15cf2e51ff68dcc2f35"
+    },
+    {
+      "path": "__pycache__/v1060_real_time_intelligence.cpython-313.pyc",
+      "size": 19734,
+      "sha256": "5daa7191b5aaf4bc72ab69c4a7e4b89a9d65300dd51bf187a29f6c62e2682222"
+    },
+    {
+      "path": "__pycache__/v1070_autonomous_market_intelligence.cpython-313.pyc",
+      "size": 15067,
+      "sha256": "52541a0bcfeefba4a3231af2ade3fa316f9337db66ecffaf6da65225687acbac"
+    },
+    {
+      "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
+      "size": 18626,
+      "sha256": "123b47d4c05c3e83a40c9c5289d08cbc2267f8674ac467ca7517bf0bfd88f05a"
+    },
+    {
+      "path": "__pycache__/v925_decision_intelligence.cpython-313.pyc",
+      "size": 3063,
+      "sha256": "55e1c8d35b109de6a57d502c625ec061760e6eee5a741015716d85f425c06cc7"
+    },
+    {
+      "path": "__pycache__/v926_learning_intelligence.cpython-313.pyc",
+      "size": 1394,
+      "sha256": "eebd041af637a5fcf90da9dd3779330cab04325cca7918910a3fe4f8b59e255c"
+    },
+    {
+      "path": "__pycache__/v927_learning_calibration.cpython-313.pyc",
+      "size": 1943,
+      "sha256": "a524931665b25d923dc8e96fa8aab8111acdcaac649e15e58f205d35fc6fd88e"
+    },
+    {
+      "path": "__pycache__/v930_ai_intelligence_core.cpython-313.pyc",
+      "size": 9539,
+      "sha256": "f09560f69018b919dcff0640247a0c604d92bf8eb247dbe4e3e03913c0fc8a98"
+    },
+    {
+      "path": "__pycache__/v931_self_learning_ai.cpython-313.pyc",
+      "size": 12433,
+      "sha256": "190edb0bc8758c238ff80da1c8ef9a94d2cbddb39da76f76ce7c93db55616b57"
+    },
+    {
+      "path": "__pycache__/v940_ai_visualization.cpython-313.pyc",
+      "size": 3724,
+      "sha256": "7b194ca60674eee159fda57378f16cca74b7598d6f7c9b123fb0cf54e3af6086"
+    },
+    {
+      "path": "__pycache__/v950_ai_dashboard.cpython-313.pyc",
+      "size": 3495,
+      "sha256": "b156a845e97b0f5ac07fd41708fec4c8f1a4844a601aa0a2138293d4e1e125ce"
+    },
+    {
+      "path": "__pycache__/v960_ai_quality.cpython-313.pyc",
+      "size": 10121,
+      "sha256": "04d357092e6b541792eb906ed20cfb3a21ac801290acbc88a77c1bd5032755db"
+    },
+    {
+      "path": "__pycache__/v961_ai_intelligence2.cpython-313.pyc",
+      "size": 13272,
+      "sha256": "fceedd63a378f012ba8cb441bd5649195dd63675aaa3056218ca064872453c1c"
+    },
+    {
+      "path": "__pycache__/v962_ai_intelligence3.cpython-313.pyc",
+      "size": 13514,
+      "sha256": "5d0eda779fa7b173680ca31cedf38462b1a2a62dd75df70b0a61adb943a17f39"
+    },
+    {
+      "path": "__pycache__/v970_unified_intelligence.cpython-313.pyc",
+      "size": 9757,
+      "sha256": "441b5f80ddf060a0b5fca647e5a1d3bca1fb99a2dc84f3732f017b7fc7885d71"
+    },
+    {
+      "path": "__pycache__/v980_market_intelligence.cpython-313.pyc",
+      "size": 9555,
+      "sha256": "3cbcb6c11020a56e0dea7b8c06110ba483ab6dc759d7ce9e65caa0b53ad2c554"
+    },
+    {
+      "path": "__pycache__/v990_predictive_intelligence.cpython-313.pyc",
+      "size": 8984,
+      "sha256": "d572bb8809d86ee381233ab9d52105cceb41397736413e64297d77621db0bce0"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -196,6 +331,16 @@
       "path": "docs/CHANGELOG_V116_0_RC4_1.md",
       "size": 992,
       "sha256": "076d8535f6bbc19869a96725605e7f285722bfce5d0e586cf8317bccb0a3f84e"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_2.md",
+      "size": 807,
+      "sha256": "3145ad05ca74c7da17be46a05a13a65d4419e6bfb32e7eda638a642673391eed"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_3.md",
+      "size": 604,
+      "sha256": "d53af9f8b2e7496372d4b5bf4d86f5820493be64b5c362bc7307d5fc851be778"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -513,6 +658,16 @@
       "sha256": "0babd59bfb9392eb273667add7f8723377edcf8b650100a0c616629ca421b540"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC4_2.md",
+      "size": 612,
+      "sha256": "92d127cb433814be0b43df6f2d7aebfdc45848f22afdee850dc581876c020882"
+    },
+    {
+      "path": "docs/TEST_REPORT_V116_0_RC4_3.md",
+      "size": 408,
+      "sha256": "7a49d407b1de91bd6bd982295372706c2f2408c72d1162a97058f90f804060df"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -549,8 +704,8 @@
     },
     {
       "path": "main.py",
-      "size": 1768758,
-      "sha256": "03423a9e38f77fc6a9fedf34b9987004edac335f46801f083257c11eeb7d9465"
+      "size": 1797214,
+      "sha256": "bd9980fe646e7cce53aafb6b7a94b06434ff0e8c0590fd48e439dfbdc0449bb1"
     },
     {
       "path": "pytest.ini",
@@ -566,6 +721,31 @@
       "path": "requirements.txt",
       "size": 99,
       "sha256": "1ee7cd2517fe1e995714813c4e63b9f1255dfcd8d45af1bcbe46b4224472bbdf"
+    },
+    {
+      "path": "tests/__pycache__/conftest.cpython-313-pytest-9.0.2.pyc",
+      "size": 711,
+      "sha256": "0ddf71c34b9fe74300d2855899c626543ffb5ab33a4f20a634eb2ca144dac4b2"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc41_quality_attribution.cpython-313-pytest-9.0.2.pyc",
+      "size": 11962,
+      "sha256": "ea87709cd134a26b9302b0c30e20142417eea399f492ebc9444f5bc6bc5871f9"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc42_ux_attribution_cache.cpython-313-pytest-9.0.2.pyc",
+      "size": 13901,
+      "sha256": "9c5a308f5976bcbc316669881fdf872377d793683ef9a85e0c5cb73a8a0e2ccd"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc43_end_to_end_audit.cpython-313-pytest-9.0.2.pyc",
+      "size": 9804,
+      "sha256": "5205f0f89a2b40c76814f4a176089a66dcfc13b8dc1594c7ecb10de852ec5039"
+    },
+    {
+      "path": "tests/__pycache__/test_v116_0_rc4_quality_trust.cpython-313-pytest-9.0.2.pyc",
+      "size": 12324,
+      "sha256": "61457eb5c51e031e06aaab158065f1f46e93383249984530d63f2d7ecefd204b"
     },
     {
       "path": "tests/conftest.py",
@@ -731,6 +911,16 @@
       "path": "tests/test_v1160_rc41_quality_attribution.py",
       "size": 1780,
       "sha256": "a507a11e3c8c53ef8379b53479f4d484a111bd503f65f87450b0a2f1b6ae0f7a"
+    },
+    {
+      "path": "tests/test_v1160_rc42_ux_attribution_cache.py",
+      "size": 1434,
+      "sha256": "adb7247373954650814e25ad4fe3d5be58f17b6db5f103ff5e0f2f8825532f14"
+    },
+    {
+      "path": "tests/test_v1160_rc43_end_to_end_audit.py",
+      "size": 1313,
+      "sha256": "e982262036651e96ed152faf8bdb458558bafc29a8c84d7b50934793dd747a31"
     },
     {
       "path": "tests/test_v116_0_rc4_quality_trust.py",
@@ -962,13 +1152,5 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ],
-  "features": [
-    "Dynamic Help 3.0 category paging",
-    "Command category index and search",
-    "Outcome Attribution close-event verification",
-    "Detailed Trust Gate blockers and ETA",
-    "Self Improvement evidence display",
-    "Runtime cache hit rate, memory and duplicate-load telemetry"
   ]
 }

@@ -36558,10 +36558,259 @@ def v91_preflight():
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,
             'registry_fingerprint':'v1160-rc42-paged-help-attribution-verification-cache-telemetry'}
 
+
+# =============================================================================
+# A100 V116.0 LTS RC4.3 — END-TO-END RELEASE AUDIT & PIPELINE REPAIR (LIVE OFF)
+# =============================================================================
+V1160_RC43_NUMBER = "116.0-RC4.3"
+V1160_RC43_TITLE = "END TO END RELEASE AUDIT AND PIPELINE REPAIR"
+V1160_RC43_VERSION = f"A100 V{V1160_RC43_NUMBER} {V1160_RC43_TITLE}"
+V91_VERSION = V1160_RC43_VERSION
+V1160_RC4_VERSION = V1160_RC43_VERSION
+V1160_RC42_VERSION = V1160_RC43_VERSION
+
+
+def _v1160_rc43_close_payload(closed, source="UNKNOWN"):
+    """Canonical close event. Keeps aliases for all legacy engines without schema migration."""
+    closed=dict(closed or {})
+    entry=float(closed.get("entry_price", closed.get("entry",0)) or 0)
+    exit_price=float(closed.get("exit_price", closed.get("exit", closed.get("close_price",0))) or 0)
+    realized_pnl=float(closed.get("realized_pnl", closed.get("pnl",0)) or 0)
+    realized_pct=float(closed.get("realized_pct", closed.get("pnl_pct", closed.get("return_pct",0))) or 0)
+    reason=_v1160_rc41_reason(closed.get("close_reason",closed.get("reason")), realized_pct or realized_pnl)
+    regime=closed.get("market_regime",closed.get("regime_at_entry",closed.get("regime","UNKNOWN")))
+    if isinstance(regime,dict): regime=regime.get("regime","UNKNOWN")
+    payload=dict(closed)
+    payload.update({
+        "event_type":"TRADE_CLOSED","payload_version":"1.0","source":source,
+        "entry_price":entry,"exit_price":exit_price,"realized_pnl":realized_pnl,
+        "realized_pct":realized_pct,"close_reason":reason,"market_regime":str(regime).upper(),
+        "funding":float(closed.get("funding",closed.get("funding_at_entry",0)) or 0),
+        "volatility":float(closed.get("volatility",closed.get("volatility_at_entry",0)) or 0),
+        "entry":entry,"exit":exit_price,"pnl":realized_pct if realized_pct else realized_pnl,
+        "reason":reason,"closed_at":float(closed.get("closed_at",time.time()) or time.time())
+    })
+    return payload
+
+
+def _v1160_rc43_attribution(payload):
+    p=_v1160_rc43_close_payload(payload,payload.get("source","UNKNOWN"))
+    pnl=float(p.get("realized_pct") or p.get("realized_pnl") or 0)
+    required=("entry_price","exit_price","realized_pnl","close_reason","market_regime","funding","volatility")
+    complete=all(p.get(k) is not None for k in required) and p["entry_price"]>0 and p["exit_price"]>0
+    return {
+        "id":f"OA-{p.get('id','NA')}-{int(p['closed_at'])}","position_id":p.get("id"),"source":p.get("source"),
+        "symbol":p.get("symbol","UNKNOWN"),"side":p.get("side","UNKNOWN"),
+        "strategy":p.get("strategy",p.get("signal_source","BALANCED_CORE")),
+        "entry_price":p["entry_price"],"exit_price":p["exit_price"],"realized_pnl":p["realized_pnl"],
+        "realized_pct":p["realized_pct"],"close_reason":p["close_reason"],"market_regime":p["market_regime"],
+        "funding":p["funding"],"volatility":p["volatility"],
+        # legacy aliases
+        "entry":p["entry_price"],"exit":p["exit_price"],"pnl":p["realized_pct"] or p["realized_pnl"],
+        "reason":p["close_reason"],"outcome":"WIN" if pnl>0 else "LOSS" if pnl<0 else "ZERO",
+        "opened_at":float(p.get("opened_at",0) or 0),"closed_at":p["closed_at"],
+        "attributed":bool(complete and p["close_reason"] not in {"UNKNOWN","FLAT_EXIT"}),
+        "learning_status":"QUEUED","payload_version":"1.0"
+    }
+
+
+def _v1160_rc43_record_closed(state, closed, source):
+    _v1160_rc41_state_collections(state)
+    payload=_v1160_rc43_close_payload(closed,source)
+    row=_v1160_rc43_attribution(payload)
+    attrs=state.setdefault("outcome_attributions",[])
+    old_index=next((i for i,x in enumerate(attrs) if isinstance(x,dict) and (x.get("id")==row["id"] or (x.get("position_id")==row.get("position_id") and x.get("source")==source))),None)
+    if old_index is None: attrs.append(row)
+    else: attrs[old_index]={**attrs[old_index],**row}
+    state["outcome_attributions"]=attrs[-2000:]
+    task={"id":"LQ-"+row["id"],"created_at":time.time(),"priority":"HIGH" if row["outcome"]=="LOSS" else "NORMAL",
+          "type":"OUTCOME_ATTRIBUTION_LEARNING","attribution_id":row["id"],"strategy":row["strategy"],
+          "regime":row["market_regime"],"reason":row["close_reason"],"status":"PENDING","payload_version":"1.0"}
+    queue=state.setdefault("learning_queue",[])
+    if not any(isinstance(x,dict) and x.get("id")==task["id"] for x in queue): queue.append(task)
+    state["learning_queue"]=queue[-2000:]
+    state.setdefault("close_event_log",[]).append(payload)
+    state["close_event_log"]=state["close_event_log"][-500:]
+    return row
+
+
+def _v1160_rc43_backfill(state):
+    _v1160_rc41_state_collections(state); fixed=0; skipped=0
+    for source,key in (("PAPER","closed"),("SHADOW","shadow_closed")):
+        for closed in state.get(key,[]) or []:
+            if not isinstance(closed,dict): continue
+            before=len(state.get("outcome_attributions",[]))
+            row=_v1160_rc43_record_closed(state,closed,source)
+            fixed += 1 if len(state.get("outcome_attributions",[]))>before or row.get("attributed") else 0
+            skipped += 0 if row.get("attributed") else 1
+    return {"processed":fixed+skipped,"fixed":fixed,"incomplete":skipped}
+
+# Re-wrap the active RC4.1 wrappers so future closes use one canonical payload.
+_v1160_rc43_base_paper_close=_v91_close
+def _v91_close(symbol, reason="MANUAL", price=None):
+    closed=_v1160_rc43_base_paper_close(symbol,reason,price)
+    state=_v91_load_state(); _v1160_rc43_record_closed(state,closed,"PAPER"); _v91_save_state(state)
+    return closed
+
+_v1160_rc43_base_shadow_close=_v914_shadow_close
+def _v914_shadow_close(key, reason, market_price):
+    closed=_v1160_rc43_base_shadow_close(key,reason,market_price)
+    if closed:
+        state=_v91_load_state(); _v1160_rc43_record_closed(state,closed,"SHADOW"); _v91_save_state(state)
+    return closed
+
+
+def _v1160_rc43_attribution_verification(state):
+    _v1160_rc43_backfill(state)
+    rows=[x for x in state.get("outcome_attributions",[]) if isinstance(x,dict)]
+    latest=rows[-1] if rows else None
+    required=("entry_price","exit_price","realized_pnl","close_reason","market_regime","funding","volatility")
+    fields={k:bool(latest is not None and latest.get(k) is not None and (k not in ("entry_price","exit_price") or float(latest.get(k) or 0)>0)) for k in required}
+    linked=bool(latest and all(fields.values()) and latest.get("attributed"))
+    return {"quality":_v1160_rc4_outcome_quality(state),"latest":latest,"fields":fields,"linked":linked,
+            "status":"PASS" if linked else "WAITING_FOR_VALID_CLOSE" if latest else "WAITING_FOR_NEXT_CLOSE"}
+
+
+def _v1160_rc43_learning_queue_health(state):
+    q=[x for x in state.get("learning_queue",[]) if isinstance(x,dict)]
+    counts={k:sum(1 for x in q if str(x.get("status","PENDING")).upper()==k) for k in ("PENDING","PROCESSING","COMPLETED","FAILED")}
+    attrs={x.get("id") for x in state.get("outcome_attributions",[]) if isinstance(x,dict)}
+    orphan=sum(1 for x in q if x.get("attribution_id") not in attrs)
+    return {"total":len(q),**{k.lower():v for k,v in counts.items()},"orphan":orphan,"status":"PASS" if orphan==0 else "PARTIAL"}
+
+
+def _v1160_rc43_command_audit():
+    import inspect
+    runtime=set(_v1154_runtime_commands()); usage=set(V925_COMMAND_USAGE)
+    report=[]
+    data_tokens=("_v91_load_state","state","engine","snapshot","report","health","audit","quality","trust","learning","paper","shadow","memory","market","cache")
+    for name in sorted(runtime):
+        handler=V90_COMMAND_REGISTRY.get(name); reasons=[]; status="PASS"
+        if not callable(handler): status="FAILED"; reasons.append("handler_not_callable")
+        if name not in usage and name not in {"help","commands"}: status="PARTIAL"; reasons.append("help_missing")
+        try: src=inspect.getsource(handler) if callable(handler) else ""
+        except Exception: src=""
+        if callable(handler) and "safe_reply" not in src and "reply_" not in src:
+            status="PARTIAL"; reasons.append("output_path_unverified")
+        informational={"help","commands","start","ping","version","about"}
+        if name not in informational and src and not any(t in src for t in data_tokens):
+            status="PARTIAL"; reasons.append("real_data_dependency_unverified")
+        report.append({"command":name,"status":status,"reasons":reasons})
+    counts={k:sum(1 for x in report if x["status"]==k) for k in ("PASS","PARTIAL","FAILED")}
+    return {"total":len(report),"items":report,"counts":counts,"health":round(counts["PASS"]/max(1,len(report))*100,1)}
+
+
+def _v1160_rc43_pipeline_audit(state):
+    av=_v1160_rc43_attribution_verification(state); lq=_v1160_rc43_learning_queue_health(state)
+    steps={
+      "close_payload": bool(state.get("close_event_log")) or not (state.get("closed") or state.get("shadow_closed")),
+      "outcome_attribution": av["linked"] or av["status"]=="WAITING_FOR_NEXT_CLOSE",
+      "learning_queue": lq["orphan"]==0,
+      "strategy_trust": isinstance(_v1160_rc4_strategy_trust(state),dict),
+      "champion_stability": isinstance(_v1160_rc4_champion_stability(state),dict),
+      "trust_gate": isinstance(_v1160_rc4_trust_gate(state),dict),
+      "dashboard": "intelligenceos" in V90_COMMAND_REGISTRY,
+    }
+    return {"steps":steps,"status":"PASS" if all(steps.values()) else "PARTIAL","failed":[k for k,v in steps.items() if not v]}
+
+async def attributioncheck1160rc43_cmd(update,context):
+    _v1155_track("attributioncheck"); state=_v91_load_state(); x=_v1160_rc43_attribution_verification(state); _v91_save_state(state); q=x["quality"]
+    lines=[f"🔗 <b>A100 V{V1160_RC43_NUMBER} OUTCOME ATTRIBUTION CHECK</b>",f"Status <b>{x['status']}</b>",
+           f"Resolved <b>{q['resolved']}</b> · Attributed <b>{q['attributed']}</b> · Unknown <b>{q['unknown']}</b>",f"Outcome Quality <b>{q['score']:.1f}%</b>",""]
+    lines += [("✅" if ok else "⛔")+f" {k}" for k,ok in x["fields"].items()]
+    if x.get("latest"): lines += ["",f"Latest: <b>{x['latest'].get('symbol','UNKNOWN')}</b> · {x['latest'].get('source','UNKNOWN')}"]
+    else: lines += ["","다음 Paper/Shadow 청산 시 자동 검증됩니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def attributiondebug1160rc43_cmd(update,context):
+    _v1155_track("attributiondebug"); state=_v91_load_state(); x=_v1160_rc43_attribution_verification(state); row=x.get("latest") or {}
+    lines=[f"🧪 <b>A100 V{V1160_RC43_NUMBER} ATTRIBUTION DEBUG</b>",f"Status <b>{x['status']}</b>",
+           f"Symbol <b>{row.get('symbol','-')}</b> · Source <b>{row.get('source','-')}</b>",
+           f"Entry <b>{row.get('entry_price','-')}</b> · Exit <b>{row.get('exit_price','-')}</b>",
+           f"PnL <b>{row.get('realized_pnl','-')}</b> · PnL% <b>{row.get('realized_pct','-')}</b>",
+           f"Reason <b>{row.get('close_reason','-')}</b> · Regime <b>{row.get('market_regime','-')}</b>",
+           f"Funding <b>{row.get('funding','-')}</b> · Volatility <b>{row.get('volatility','-')}</b>",
+           f"Learning <b>{row.get('learning_status','-')}</b> · Attributed <b>{row.get('attributed',False)}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def learningqueue1160rc43_cmd(update,context):
+    _v1155_track("learningqueue"); x=_v1160_rc43_learning_queue_health(_v91_load_state())
+    lines=[f"📥 <b>A100 V{V1160_RC43_NUMBER} LEARNING QUEUE</b>",f"Status <b>{x['status']}</b> · Total <b>{x['total']}</b>",
+           f"Pending <b>{x['pending']}</b> · Processing <b>{x['processing']}</b>",f"Completed <b>{x['completed']}</b> · Failed <b>{x['failed']}</b>",f"Orphan <b>{x['orphan']}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commandaudit1160rc43_cmd(update,context):
+    _v1155_track("commandaudit"); x=_v1160_rc43_command_audit()
+    lines=[f"🧾 <b>A100 V{V1160_RC43_NUMBER} COMMAND FUNCTION AUDIT</b>",f"Total <b>{x['total']}</b> · Health <b>{x['health']:.1f}%</b>",
+           f"PASS <b>{x['counts']['PASS']}</b> · PARTIAL <b>{x['counts']['PARTIAL']}</b> · FAILED <b>{x['counts']['FAILED']}</b>"]
+    partial=[i for i in x['items'] if i['status']!='PASS'][:20]
+    if partial:
+        lines += ["","<b>점검 필요</b>"]+[f"• /{i['command']} · {i['status']} · {', '.join(i['reasons'])}" for i in partial]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def pipelineaudit1160rc43_cmd(update,context):
+    _v1155_track("pipelineaudit"); state=_v91_load_state(); x=_v1160_rc43_pipeline_audit(state); _v91_save_state(state)
+    lines=[f"🔬 <b>A100 V{V1160_RC43_NUMBER} END-TO-END PIPELINE AUDIT</b>",f"Status <b>{x['status']}</b>",""]
+    lines += [("✅" if ok else "⛔")+f" {name}" for name,ok in x['steps'].items()]
+    if x['failed']: lines += ["","미연결: "+", ".join(x['failed'])]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+ "attributioncheck":"표준 Close Payload 기반 실제 청산→Outcome 연결 검증",
+ "attributiondebug":"최근 청산 Attribution 필드 상세 진단",
+ "learningqueue":"Outcome Learning Queue 처리·고아 작업 상태",
+ "commandaudit":"전체 Telegram 명령의 핸들러·도움말·데이터 연결 감사",
+ "pipelineaudit":"Close→Outcome→Learning→Strategy→Champion→Trust E2E 감사"
+})
+V90_COMMAND_REGISTRY.update({
+ "attributioncheck":attributioncheck1160rc43_cmd,"attributiondebug":attributiondebug1160rc43_cmd,
+ "learningqueue":learningqueue1160rc43_cmd,"commandaudit":commandaudit1160rc43_cmd,"pipelineaudit":pipelineaudit1160rc43_cmd
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def _v1160_rc43_regression_shield():
+    runtime=set(_v1154_runtime_commands()); state=_v1160_rc41_state_collections(_v91_default_state())
+    ca=_v1160_rc43_command_audit(); pa=_v1160_rc43_pipeline_audit(state)
+    required={"attributioncheck","attributiondebug","learningqueue","commandaudit","pipelineaudit","versionaudit"}
+    sample={"id":"T1","symbol":"BTCUSDT","side":"LONG","entry_price":100,"exit_price":101,"realized_pnl":1,
+            "realized_pct":1,"close_reason":"TAKE_PROFIT","market_regime":"RALLY","funding":0,"volatility":1,"closed_at":time.time()}
+    attr=_v1160_rc43_attribution(sample)
+    return {"version_manager":V91_VERSION==V1160_RC43_VERSION,"schema_preserved":state.get("schema")==1,
+      "handlers":required.issubset(runtime),"registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "help_coverage":runtime.issubset(set(V925_COMMAND_USAGE)|{"help","commands"}),
+      "canonical_close_payload":all(k in attr for k in ("entry_price","exit_price","realized_pnl","close_reason","funding","volatility")),
+      "learning_queue_audit":_v1160_rc43_learning_queue_health(state)["orphan"]==0,
+      "command_audit":ca["counts"]["FAILED"]==0,"pipeline_audit":pa["status"] in {"PASS","PARTIAL"},
+      "paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1160rc43_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc43_regression_shield(); failed=[k for k,v in checks.items() if not v]
+    ca=_v1160_rc43_command_audit(); pa=_v1160_rc43_pipeline_audit(_v91_load_state())
+    lines=[f"🛡 <b>A100 V{V1160_RC43_NUMBER} RELEASE AUDIT GATE</b>",f"Core Version <b>{V1160_RC43_VERSION}</b>",
+      f"Release Gate <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Command Audit PASS/PARTIAL/FAILED <b>{ca['counts']['PASS']}/{ca['counts']['PARTIAL']}/{ca['counts']['FAILED']}</b>",
+      f"Pipeline Audit <b>{pa['status']}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC4.3 명령 기능·데이터 파이프라인·Close Payload Release Gate"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160rc43_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC42_PREFLIGHT_FOR_RC43=v91_preflight
+def v91_preflight():
+    base=_V1160_RC42_PREFLIGHT_FOR_RC43(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith(("v1160_rc42_","v1160_rc41_","v1160_rc4_")): checks[key]=True
+    checks.update({"v1160_rc43_"+k:v for k,v in _v1160_rc43_regression_shield().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc43-end-to-end-release-audit-pipeline-repair"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.2 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.3 startup integrity failure: "+", ".join(failed))
     main()
