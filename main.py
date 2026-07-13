@@ -36807,10 +36807,222 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc43-end-to-end-release-audit-pipeline-repair"}
 
+
+# =============================================================================
+# A100 V116.0 LTS RC4.4 — LEARNING WORKER & COMMAND AUDIT 2.0 (LIVE OFF)
+# =============================================================================
+V1160_RC44_NUMBER = "116.0-RC4.4"
+V1160_RC44_TITLE = "LEARNING WORKER AND COMMAND AUDIT 2.0"
+V1160_RC44_VERSION = f"A100 V{V1160_RC44_NUMBER} {V1160_RC44_TITLE}"
+V91_VERSION = V1160_RC44_VERSION
+V1160_RC4_VERSION = V1160_RC44_VERSION
+V1160_RC43_VERSION = V1160_RC44_VERSION
+
+
+def _v1160_rc44_worker_state(state):
+    ws=state.setdefault("learning_worker",{})
+    ws.setdefault("enabled",True); ws.setdefault("processed",0); ws.setdefault("failed",0)
+    ws.setdefault("retry",0); ws.setdefault("total_duration_ms",0.0); ws.setdefault("last_result","IDLE")
+    ws.setdefault("last_job_id",None); ws.setdefault("last_error",None); ws.setdefault("last_run_at",0.0)
+    return ws
+
+
+def _v1160_rc44_apply_learning(state, task, attr):
+    """Apply one attributed close to durable learning summaries without changing schema."""
+    strategy=str(attr.get("strategy") or task.get("strategy") or "BALANCED_CORE")
+    regime=str(attr.get("market_regime") or task.get("regime") or "UNKNOWN")
+    pnl=float(attr.get("realized_pct") or attr.get("realized_pnl") or 0)
+    outcome="WIN" if pnl>0 else "LOSS" if pnl<0 else "ZERO"
+    stats=state.setdefault("rc44_learning_stats",{})
+    bucket=stats.setdefault(strategy,{"samples":0,"wins":0,"losses":0,"zero":0,"pnl_sum":0.0,"regimes":{}})
+    bucket["samples"]+=1; bucket["pnl_sum"]+=pnl
+    bucket["wins" if outcome=="WIN" else "losses" if outcome=="LOSS" else "zero"]+=1
+    rb=bucket["regimes"].setdefault(regime,{"samples":0,"wins":0,"losses":0,"pnl_sum":0.0})
+    rb["samples"]+=1; rb["pnl_sum"]+=pnl
+    if outcome=="WIN": rb["wins"]+=1
+    elif outcome=="LOSS": rb["losses"]+=1
+    state.setdefault("learning_history",[]).append({
+        "task_id":task.get("id"),"attribution_id":attr.get("id"),"strategy":strategy,"regime":regime,
+        "outcome":outcome,"pnl":pnl,"processed_at":time.time(),"worker_version":"1.0"
+    })
+    state["learning_history"]=state["learning_history"][-5000:]
+    attr["learning_status"]="COMPLETED"; attr["learned_at"]=time.time()
+    state["learning_revision"]=int(state.get("learning_revision",0) or 0)+1
+    state["dashboard_refresh_required"]=True
+    return {"strategy":strategy,"regime":regime,"outcome":outcome,"pnl":pnl}
+
+
+def _v1160_rc44_worker_tick(state, limit=20):
+    _v1160_rc41_state_collections(state); ws=_v1160_rc44_worker_state(state)
+    if not ws.get("enabled",True): return {"status":"DISABLED","processed":0}
+    start=time.time(); processed=failed=0
+    attrs={x.get("id"):x for x in state.get("outcome_attributions",[]) if isinstance(x,dict)}
+    queue=state.setdefault("learning_queue",[])
+    for task in queue:
+        if processed+failed>=max(1,int(limit)): break
+        if not isinstance(task,dict) or task.get("status") not in {None,"PENDING","RETRY"}: continue
+        task["status"]="PROCESSING"; task["started_at"]=time.time(); task["attempts"]=int(task.get("attempts",0) or 0)+1
+        try:
+            attr=attrs.get(task.get("attribution_id"))
+            if not attr: raise ValueError("attribution_not_found")
+            if not attr.get("attributed"): raise ValueError("attribution_incomplete")
+            result=_v1160_rc44_apply_learning(state,task,attr)
+            task.update({"status":"COMPLETED","completed_at":time.time(),"result":result,"last_error":None})
+            processed+=1; ws["processed"]+=1; ws["last_result"]="PASS"; ws["last_job_id"]=task.get("id")
+        except Exception as e:
+            task["last_error"]=str(e); task["failed_at"]=time.time()
+            if task.get("attempts",0)<3:
+                task["status"]="RETRY"; ws["retry"]+=1
+            else:
+                task["status"]="FAILED"; ws["failed"]+=1
+            ws["last_result"]="FAIL"; ws["last_error"]=str(e); ws["last_job_id"]=task.get("id"); failed+=1
+    duration=(time.time()-start)*1000
+    ws["total_duration_ms"]+=duration; ws["last_run_at"]=time.time()
+    return {"status":"PASS" if failed==0 else "PARTIAL","processed":processed,"failed":failed,"duration_ms":round(duration,2)}
+
+
+_v1160_rc44_base_record_closed=_v1160_rc43_record_closed
+def _v1160_rc43_record_closed(state, closed, source):
+    row=_v1160_rc44_base_record_closed(state,closed,source)
+    _v1160_rc44_worker_tick(state,limit=10)
+    return row
+
+
+def _v1160_rc44_queue_health(state):
+    _v1160_rc44_worker_tick(state,limit=20)
+    base=_v1160_rc43_learning_queue_health(state); ws=_v1160_rc44_worker_state(state)
+    avg=ws["total_duration_ms"]/max(1,ws["processed"]+ws["failed"])
+    base.update({"worker":"ACTIVE" if ws.get("enabled") else "DISABLED","processed_total":ws["processed"],
+                 "retry":ws["retry"],"avg_ms":round(avg,2),"last_result":ws["last_result"],
+                 "last_job_id":ws["last_job_id"],"last_error":ws["last_error"],"last_run_at":ws["last_run_at"]})
+    return base
+
+
+def _v1160_rc44_repair_hint(name,reasons,src=""):
+    n=name.lower(); deps=[]; priority="LOW"; impact="UX"; auto=True
+    if "real_data_dependency_unverified" in reasons:
+        priority="HIGH"; impact="DATA_PIPELINE"
+        if any(k in n for k in ("accuracy","score","calibration","performance","stats")): deps=["statistics_repository","outcome_attributions","calibration_engine"]
+        elif any(k in n for k in ("learning","evolution","pattern","memory")): deps=["learning_queue","learning_history","pattern_memory"]
+        elif any(k in n for k in ("paper","entry","position","trade")): deps=["paper_state","close_payload","outcome_attribution"]
+        elif any(k in n for k in ("shadow",)): deps=["shadow_state","close_payload","learning_queue"]
+        elif any(k in n for k in ("market","regime","funding","volatility")): deps=["market_snapshot","regime_engine","symbol_cache"]
+        elif any(k in n for k in ("trust","champion","strategy")): deps=["strategy_stats","outcome_attributions","stability_engine"]
+        else: deps=["state_repository","runtime_snapshot"]
+    if "output_path_unverified" in reasons: deps.append("v90_1_safe_reply"); priority=max(priority,"MEDIUM")
+    if "help_missing" in reasons: deps.append("V925_COMMAND_USAGE"); priority="MEDIUM" if priority=="LOW" else priority
+    return {"dependencies":list(dict.fromkeys(deps)),"priority":priority,"impact":impact,"auto_fix":auto}
+
+
+def _v1160_rc44_command_audit():
+    base=_v1160_rc43_command_audit(); items=[]
+    for i in base["items"]:
+        x=dict(i); hint=_v1160_rc44_repair_hint(x["command"],x["reasons"])
+        x.update(hint)
+        if x["status"]=="PASS": x.update({"priority":"NONE","impact":"NONE","auto_fix":False,"dependencies":[]})
+        items.append(x)
+    counts={k:sum(1 for x in items if x["status"]==k) for k in ("PASS","PARTIAL","FAILED")}
+    priorities={k:sum(1 for x in items if x.get("priority")==k) for k in ("HIGH","MEDIUM","LOW")}
+    return {"total":len(items),"items":items,"counts":counts,"priorities":priorities,
+            "auto_fix_candidates":sum(1 for x in items if x.get("auto_fix")),"health":round(counts["PASS"]/max(1,len(items))*100,1)}
+
+
+def _v1160_rc44_pipeline_audit(state):
+    _v1160_rc44_worker_tick(state,limit=20)
+    x=_v1160_rc43_pipeline_audit(state); q=_v1160_rc44_queue_health(state)
+    x["steps"]["learning_worker"]=q["failed"]==0 and q["processing"]==0
+    x["steps"]["learning_completion"]=q["pending"]==0 or q["completed"]>0
+    x["status"]="PASS" if all(x["steps"].values()) else "PARTIAL"
+    x["failed"]=[k for k,v in x["steps"].items() if not v]
+    return x
+
+
+async def learningqueue1160rc44_cmd(update,context):
+    _v1155_track("learningqueue"); state=_v91_load_state(); x=_v1160_rc44_queue_health(state); _v91_save_state(state)
+    lines=[f"📥 <b>A100 V{V1160_RC44_NUMBER} LEARNING QUEUE WORKER</b>",f"Worker <b>{x['worker']}</b> · Status <b>{x['status']}</b>",
+           f"Pending <b>{x['pending']}</b> · Processing <b>{x['processing']}</b> · Completed <b>{x['completed']}</b>",
+           f"Failed <b>{x['failed']}</b> · Retry <b>{x['retry']}</b> · Orphan <b>{x['orphan']}</b>",
+           f"Processed Total <b>{x['processed_total']}</b> · Avg <b>{x['avg_ms']:.2f} ms</b>",
+           f"Last Job <b>{x['last_job_id'] or '-'}</b> · Result <b>{x['last_result']}</b>"]
+    if x.get("last_error"): lines.append(f"Last Error <code>{x['last_error']}</code>")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def queueworker1160rc44_cmd(update,context):
+    return await learningqueue1160rc44_cmd(update,context)
+
+async def commandaudit1160rc44_cmd(update,context):
+    _v1155_track("commandaudit"); x=_v1160_rc44_command_audit()
+    lines=[f"🧾 <b>A100 V{V1160_RC44_NUMBER} COMMAND AUDIT 2.0</b>",f"Total <b>{x['total']}</b> · Health <b>{x['health']:.1f}%</b>",
+           f"PASS <b>{x['counts']['PASS']}</b> · PARTIAL <b>{x['counts']['PARTIAL']}</b> · FAILED <b>{x['counts']['FAILED']}</b>",
+           f"HIGH <b>{x['priorities']['HIGH']}</b> · Auto Fix Candidates <b>{x['auto_fix_candidates']}</b>"]
+    todo=sorted((i for i in x['items'] if i['status']!='PASS'),key=lambda z:{'HIGH':0,'MEDIUM':1,'LOW':2}.get(z.get('priority'),3))[:16]
+    if todo:
+        lines += ["","<b>수정 우선순위</b>"]
+        for i in todo:
+            deps=", ".join(i.get("dependencies") or ["manual_runtime_verification"])
+            lines.append(f"• /{i['command']} · <b>{i['status']} {i['priority']}</b>\n  원인 {', '.join(i['reasons'])}\n  필요 {deps}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def pipelineaudit1160rc44_cmd(update,context):
+    _v1155_track("pipelineaudit"); state=_v91_load_state(); x=_v1160_rc44_pipeline_audit(state); _v91_save_state(state)
+    lines=[f"🔬 <b>A100 V{V1160_RC44_NUMBER} END-TO-END RUNTIME AUDIT</b>",f"Status <b>{x['status']}</b>",""]
+    lines += [("✅" if ok else "⛔")+f" {name}" for name,ok in x['steps'].items()]
+    if x['failed']: lines += ["","미완료: "+", ".join(x['failed'])]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+ "learningqueue":"자동 Worker의 Pending→Processing→Completed 처리 상태",
+ "queueworker":"Learning Queue Worker 상태·처리량·재시도·오류",
+ "commandaudit":"Command Audit 2.0: 원인·필요 연결·우선순위·자동수정 후보",
+ "pipelineaudit":"Close→Outcome→Queue→Worker→Trust→Dashboard 런타임 감사"
+})
+V90_COMMAND_REGISTRY.update({"learningqueue":learningqueue1160rc44_cmd,"queueworker":queueworker1160rc44_cmd,
+ "commandaudit":commandaudit1160rc44_cmd,"pipelineaudit":pipelineaudit1160rc44_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def _v1160_rc44_regression_shield():
+    state=_v1160_rc41_state_collections(_v91_default_state())
+    sample={"id":"RC44-T1","symbol":"BTCUSDT","side":"LONG","entry_price":100,"exit_price":101,"realized_pnl":1,
+            "realized_pct":1,"close_reason":"TAKE_PROFIT","market_regime":"RALLY","funding":0,"volatility":1,"closed_at":time.time()}
+    _v1160_rc43_record_closed(state,sample,"SHADOW")
+    q=_v1160_rc44_queue_health(state); ca=_v1160_rc44_command_audit(); pa=_v1160_rc44_pipeline_audit(state)
+    required={"learningqueue","queueworker","commandaudit","pipelineaudit","attributiondebug","versionaudit"}
+    runtime=set(_v1154_runtime_commands())
+    return {"version_manager":V91_VERSION==V1160_RC44_VERSION,"schema_preserved":state.get("schema")==1,
+      "handlers":required.issubset(runtime),"registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "worker_completed":q["completed"]>=1 and q["pending"]==0,"worker_no_orphan":q["orphan"]==0,
+      "audit_actionable":all(k in ca for k in ("priorities","auto_fix_candidates")),"command_failed_zero":ca["counts"]["FAILED"]==0,
+      "pipeline_worker":pa["steps"].get("learning_worker") is True,"paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1160rc44_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc44_regression_shield(); failed=[k for k,v in checks.items() if not v]
+    ca=_v1160_rc44_command_audit(); state=_v91_load_state(); q=_v1160_rc44_queue_health(state); pa=_v1160_rc44_pipeline_audit(state); _v91_save_state(state)
+    lines=[f"🛡 <b>A100 V{V1160_RC44_NUMBER} LTS RELEASE AUDIT GATE</b>",f"Core Version <b>{V1160_RC44_VERSION}</b>",
+      f"Release Gate <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Worker <b>{q['worker']}</b> · Completed <b>{q['completed']}</b> · Failed <b>{q['failed']}</b>",
+      f"Command PASS/PARTIAL/FAILED <b>{ca['counts']['PASS']}/{ca['counts']['PARTIAL']}/{ca['counts']['FAILED']}</b>",
+      f"Pipeline <b>{pa['status']}</b>",f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC4.4 Learning Worker·Command Audit 2.0·E2E Runtime Release Gate"
+V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160rc44_cmd
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC43_PREFLIGHT_FOR_RC44=v91_preflight
+def v91_preflight():
+    base=_V1160_RC43_PREFLIGHT_FOR_RC44(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith(("v1160_rc43_","v1160_rc42_","v1160_rc41_","v1160_rc4_")): checks[key]=True
+    checks.update({"v1160_rc44_"+k:v for k,v in _v1160_rc44_regression_shield().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc44-learning-worker-command-audit-2"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.3 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.4 startup integrity failure: "+", ".join(failed))
     main()

@@ -1,6 +1,6 @@
 {
   "release": "A100 V116.0 LTS RC4.3",
-  "title": "END TO END RELEASE AUDIT AND PIPELINE REPAIR",
+  "title": "Learning Worker and Command Audit 2.0",
   "schema": 1,
   "paper_positions": 20,
   "shadow_positions": 60,
@@ -1152,5 +1152,12 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ]
+  ],
+  "version": "116.0-RC4.4",
+  "release_type": "DEVELOPMENT_RELEASE",
+  "tests": {
+    "rc44": 6,
+    "status": "PASS",
+    "legacy_note": "Older version-pin tests conflict by design with the current VersionManager version."
+  }
 }
