@@ -1,8 +1,12 @@
 .gitignore
+.pytest_cache/.gitignore
+.pytest_cache/CACHEDIR.TAG
+.pytest_cache/README.md
+.pytest_cache/v/cache/lastfailed
+.pytest_cache/v/cache/nodeids
 FILE_LIST.txt
 GITHUB_REPLACE_GUIDE_KR.md
 README.md
-RELEASE_MANIFEST.json
 docs/CHANGELOG_V101_0.md
 docs/CHANGELOG_V102_0.md
 docs/CHANGELOG_V103_0.md
@@ -31,6 +35,7 @@ docs/CHANGELOG_V115_7.md
 docs/CHANGELOG_V115_8.md
 docs/CHANGELOG_V115_9.md
 docs/CHANGELOG_V116_0_RC1.md
+docs/CHANGELOG_V116_0_RC1_1.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -89,6 +94,7 @@ docs/TEST_REPORT_V115_7.md
 docs/TEST_REPORT_V115_8.md
 docs/TEST_REPORT_V115_9.md
 docs/TEST_REPORT_V116_0_RC1.md
+docs/TEST_REPORT_V116_0_RC1_1.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
 docs/TEST_REPORT_V96_0.md
@@ -128,6 +134,7 @@ tests/test_v1156_self_learning_scheduler.py
 tests/test_v1157_strategy_evolution.py
 tests/test_v1158_strategy_performance.py
 tests/test_v1159_market_intelligence.py
+tests/test_v1160_rc11_name_resolution.py
 tests/test_v1160_rc1_unified_intelligence.py
 tests/test_v91_8_baseline.py
 tests/test_v91_8_scenario.py

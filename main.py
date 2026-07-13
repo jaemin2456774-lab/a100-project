@@ -1,5 +1,5 @@
 
-import os, time, asyncio, threading, traceback, requests, math, json
+import os, time, asyncio, threading, traceback, requests, math, json, hashlib
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import Any, Dict, List
@@ -35247,8 +35247,8 @@ def v91_preflight():
 # =============================================================================
 # A100 V116.0 LTS RC1 — UNIFIED INTELLIGENCE PLATFORM (LIVE OFF)
 # =============================================================================
-V1160_RC1_NUMBER = "116.0-RC1"
-V1160_RC1_TITLE = "UNIFIED INTELLIGENCE PLATFORM LTS RELEASE CANDIDATE 1"
+V1160_RC1_NUMBER = "116.0-RC1.1"
+V1160_RC1_TITLE = "UNIFIED INTELLIGENCE PLATFORM LTS RC1.1 NAME RESOLUTION STABILIZATION"
 V1160_RC1_VERSION = f"A100 V{V1160_RC1_NUMBER} {V1160_RC1_TITLE}"
 V91_VERSION = V1160_RC1_VERSION
 V1160_RC1_FILE = os.path.join(V91_DATA_DIR, "a100_v1160_rc1_unified_intelligence.json")
@@ -35454,10 +35454,37 @@ V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 _V1159_PREFLIGHT_FOR_V1160_RC1=v91_preflight
 
 
+def _v1160_name_resolution_audit():
+    required_handlers = {
+        "intelligencegraph": intelligencegraph1160_cmd,
+        "learningattribution": learningattribution1160_cmd,
+        "patternsuccessmap": patternsuccessmap1160_cmd,
+        "aiexperience": aiexperience1160_cmd,
+        "ltscertification": ltscertification1160_cmd,
+        "intelligenceos": intelligenceos1160_cmd,
+    }
+    checks = {"hashlib_available": callable(getattr(hashlib, "sha1", None))}
+    for name, handler in required_handlers.items():
+        checks[f"handler_{name}"] = callable(handler) and V90_COMMAND_REGISTRY.get(name) is handler
+    try:
+        hashlib.sha1(b"a100-v1160-rc1.1").hexdigest()
+        _v1160_unified_graph(_v91_default_state(), False, 5)
+        _v1160_learning_attribution(_v91_default_state(), False)
+        _v1160_pattern_success_map(_v91_default_state(), False)
+        _v1160_experience(_v91_default_state())
+        _v1160_certification(_v91_default_state(), False)
+        checks["core_smoke_execution"] = True
+    except Exception:
+        checks["core_smoke_execution"] = False
+    return checks
+
+
 def _v1160_sync_audit():
     runtime=set(_v1154_runtime_commands()); required={"intelligencegraph","learningattribution","patternsuccessmap","aiexperience","ltscertification","intelligenceos","versionaudit"}
     d=_v1160_default_state(); g=_v1160_unified_graph(_v91_default_state(),False,5); p=_v1160_pattern_success_map(_v91_default_state(),False)
+    name_checks=_v1160_name_resolution_audit()
     return {"version_manager":V91_VERSION==V1160_RC1_VERSION,"required_handlers":required.issubset(runtime),
+            "name_resolution":all(name_checks.values()),
             "schema":d.get("schema")==1,"shadow_only":d.get("mode")=="SHADOW_ONLY" and g.get("mode")=="SHADOW_ONLY",
             "graph_schema":isinstance(g.get("nodes"),list),"attribution_schema":isinstance(_v1160_learning_attribution(_v91_default_state(),False).get("items"),list),
             "pattern_map_schema":isinstance(p.get("items"),list),"experience_schema":_v1160_experience(_v91_default_state()).get("level",0)>=1,
@@ -35474,7 +35501,7 @@ async def versionaudit1160_cmd(update,context):
     if failed: lines.append("실패: "+", ".join(failed))
     return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
 
-V925_COMMAND_USAGE["versionaudit"]="V116.0 RC1 Unified Intelligence·LTS Certification·Release Gate 감사"
+V925_COMMAND_USAGE["versionaudit"]="V116.0 RC1.1 Unified Intelligence·Name Resolution·Release Gate 감사"
 V90_COMMAND_REGISTRY["versionaudit"]=versionaudit1160_cmd
 V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 
@@ -35484,12 +35511,12 @@ def v91_preflight():
         if key.startswith("v1159_"): checks[key]=True
     checks.update({"v1160_rc1_"+k:v for k,v in _v1160_sync_audit().items()})
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
-            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc1-unified-intelligence-platform"}
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc1.1-name-resolution-stabilization"}
 
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC1 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC1.1 startup integrity failure: "+", ".join(failed))
     main()
