@@ -1,12 +1,11 @@
 {
-  "release": "A100 V116.0 LTS RC4.5",
-  "title": "TRUE E2E LEARNING INTEGRATION AND READ-ONLY AUDIT",
-  "generated_at_utc": "2026-07-13T16:00:17.621107+00:00",
-  "schema_preserved": 1,
-  "paper_positions": 20,
-  "shadow_positions": 60,
+  "version": "A100 V116.0-RC4.8",
+  "release": "LTS Certification & Integrity Validation Development Release",
+  "created_at": "2026-07-13T16:41:15",
+  "schema": 1,
+  "paper_max": 20,
+  "shadow_max": 60,
   "live_trading": false,
-  "release_gate_tests": "9 PASS",
   "files": [
     {
       "path": ".gitignore",
@@ -30,13 +29,18 @@
     },
     {
       "path": ".pytest_cache/v/cache/lastfailed",
-      "size": 2592,
-      "sha256": "a7832412e8a373f026b22767f3c598805092e800b4c3fb8c55d1ed9b3b8e9b9c"
+      "size": 2681,
+      "sha256": "630cb1a88325ae0c17bda60f728820d214415fbb17ba4fb80ee702e8eea4c9d5"
     },
     {
       "path": ".pytest_cache/v/cache/nodeids",
-      "size": 12660,
-      "sha256": "9828672088e9876b3a00270b0df80a5359503b72f0d642182349e4538be17692"
+      "size": 13473,
+      "sha256": "c0141a5a9bcc5348b1b18013b68863d5cf9c1fa8d2cc5e59ca79d647b065d093"
+    },
+    {
+      "path": "FILE_LIST.txt",
+      "size": 13252,
+      "sha256": "4071e610e415c15d9b22dd9bb6af79b7038bed0dc9d50e7aa35ed4504ca7384c"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -44,14 +48,34 @@
       "sha256": "a932980593c3f62909b54704dbc7fbb5e32a66341023b105444e8ba43da7abb3"
     },
     {
+      "path": "RC4_6_RELEASE_REPORT_KR.md",
+      "size": 1288,
+      "sha256": "0b1882504e61e275c1a853f707fb6f7953f7ba84e6ec3187fa0161a01218e770"
+    },
+    {
+      "path": "RC4_7_RELEASE_REPORT_KR.md",
+      "size": 1420,
+      "sha256": "913fb7a2932f4f1a19a115cb80ecff9e53661384d7cc806f6f6db18f4766f2e1"
+    },
+    {
       "path": "README.md",
-      "size": 611,
-      "sha256": "3b7a902f10abad0137f1a4532ce8533d7614495b2807df23c89e56478df76ab7"
+      "size": 641,
+      "sha256": "01d0109d4d195395880d3809b123f15900f13a383e136751223072a24ac91acf"
+    },
+    {
+      "path": "RELEASE_MANIFEST_RC4_6.json",
+      "size": 406,
+      "sha256": "b26d2ad81fe0cc598182f7a4fbe3727041558c49ce3a18ca51e2ed75c7643f44"
+    },
+    {
+      "path": "RELEASE_MANIFEST_RC4_7.json",
+      "size": 595,
+      "sha256": "b3d67d3e8f38626a7c13a9c0cc9d073ebf83f8f4a9a8ebc09cd74c7279e291dc"
     },
     {
       "path": "__pycache__/main.cpython-313.pyc",
-      "size": 2713162,
-      "sha256": "a1873e2f7e6794ae4311a511eceadec8d8c29f3765dda73c2df02b6843a6ea5c"
+      "size": 2759565,
+      "sha256": "340ea7efe07dfed656b4e43347d020ecd6a72e28ff1c309acb7761347f296ea1"
     },
     {
       "path": "__pycache__/v1000_learning_intelligence.cpython-313.pyc",
@@ -347,6 +371,11 @@
       "path": "docs/CHANGELOG_V116_0_RC4_5.md",
       "size": 911,
       "sha256": "1635f03086087828ff72a9c8c678e1820102e75fee38ad584610c9c8ebb27bc5"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_8.md",
+      "size": 668,
+      "sha256": "b47c225126d3c79b6a3099ac94103fa0eb42c2cbc5e6e074d39b305fb1db7ea4"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -684,6 +713,11 @@
       "sha256": "0dde6f0226765c789d4da64fd81b4e8aea53b3e8216bf4f0396860f2ce117769"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC4_8.md",
+      "size": 472,
+      "sha256": "38172c9cfa193f4a1cbab4b9a5e180a634046fd9712a60bafe023b00d3e8a1c7"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -720,13 +754,13 @@
     },
     {
       "path": "main.py",
-      "size": 1827050,
-      "sha256": "dbc42cfa3e27fa896fa398ebfb309fb417398d87cf1a77b361a1807880e3c65b"
+      "size": 1860205,
+      "sha256": "73f732ef11ab0c6fafcbb394421c7c63aea4e5d28e00fc462819b166233b01b2"
     },
     {
       "path": "pytest.ini",
-      "size": 97,
-      "sha256": "97de5df90f49bc4d329d47dedda34f897b4bb21e92d635cff068fcac40fca6d7"
+      "size": 76,
+      "sha256": "7929c906d7bf8b04baee7de8817f78435a01d49f405baa3f071fc26150cb7ede"
     },
     {
       "path": "railway.json",
@@ -922,6 +956,16 @@
       "path": "tests/__pycache__/test_v1160_rc45_true_e2e.cpython-313-pytest-9.0.2.pyc",
       "size": 10703,
       "sha256": "6fe30f028b9d9729cc065a1eb11f70ffb54b08f0bce5e4bca10cdb4c9a7945a8"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc47_lts_final_integration.cpython-313-pytest-9.0.2.pyc",
+      "size": 14761,
+      "sha256": "62f11da43b1fd2cee27efbb5ccd6cd480c8ad992f9e2b93b20f4897f7f70bfdc"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc48_lts_certification.cpython-313-pytest-9.0.2.pyc",
+      "size": 5669,
+      "sha256": "e1ce2e043e263ce18cdb76c1a029063ab6c3baf2ae1cbccf2fe9bb2f58619a1d"
     },
     {
       "path": "tests/__pycache__/test_v116_0_rc4_quality_trust.cpython-313-pytest-9.0.2.pyc",
@@ -1227,6 +1271,16 @@
       "path": "tests/test_v1160_rc45_true_e2e.py",
       "size": 1616,
       "sha256": "71fbb0204ef6578711481709f40f4aba805da0de960b004204208ca21066d263"
+    },
+    {
+      "path": "tests/test_v1160_rc47_lts_final_integration.py",
+      "size": 1991,
+      "sha256": "723f2a58a75e11cf8788dee1a79900bb8355f1bf4ff22f2afd678f33b2e8be06"
+    },
+    {
+      "path": "tests/test_v1160_rc48_lts_certification.py",
+      "size": 676,
+      "sha256": "b25d4cce3749d03a5c66fcf15cf01ed26365fdefbdffac1b2d543486027d3fed"
     },
     {
       "path": "tests/test_v116_0_rc4_quality_trust.py",

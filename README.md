@@ -1,20 +1,9 @@
-# A100 V116.0 LTS RC4.7 – LTS Final Integration Completion
+# A100 V116.0 LTS RC4.8
+## LTS Certification & Integrity Validation Development Release
 
-RC4.6 검수 피드백을 반영한 개발 릴리스입니다. 자세한 내용은 `RC4_7_RELEASE_REPORT_KR.md`를 확인하세요.
+RC4.7을 기준으로 Release Gate 실제 엔진 데이터 통합, Current/Latest Revision 무결성 구분, `/ltscert`, `/commandcert`, `/releasegate`를 추가한 LTS 최종 인증 개발 버전입니다.
 
-# A100 V116.0 LTS RC4.5
+보존 원칙: 기존 기능·학습 데이터·Schema 1 보존, Paper 20 / Shadow 60 유지, Live Trading OFF, VersionManager 중앙 관리, 회귀 방지 우선.
 
-True E2E Learning Integration & Read-Only Audit development release.
-
-Core flow:
-`Outcome Attribution → Learning Queue → Strategy Performance → Strategy Trust → Champion Stability`
-
-Operational commands:
-- `/learningqueue` — read-only queue health
-- `/queueworker` — read-only worker health
-- `/queueworkerrun` — manual one-cycle worker execution
-- `/pipelineaudit` — read-only revision-trace E2E audit
-- `/commandaudit` — command connection audit
-- `/versionaudit` — LTS release gate
-
-Safety is unchanged: Schema 1 preserved, Paper 20, Shadow 60, Live Trading OFF.
+권장 검증 명령:
+`/version`, `/versionaudit`, `/runtimehealth`, `/releasegate`, `/ltscert`, `/commandcert`, `/pipelineaudit`, `/strategytrust`, `/champion`, `/dashboard BTC`

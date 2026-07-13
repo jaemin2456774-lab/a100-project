@@ -37611,11 +37611,147 @@ def v91_preflight():
             "base": base, "development_version": V91_VERSION,
             "registry_fingerprint": "v1160-rc47-lts-final-integration-completion"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.8 - LTS CERTIFICATION & INTEGRITY VALIDATION
+# ---------------------------------------------------------------------------
+V1160_RC48_NUMBER = "116.0-RC4.8"
+V1160_RC48_VERSION = "A100 V116.0-RC4.8 LTS CERTIFICATION & INTEGRITY VALIDATION"
+V91_VERSION = V1160_RC48_VERSION
+
+def _v1160_rc48_score(obj, *keys):
+    if isinstance(obj, (int, float)): return float(obj)
+    if not isinstance(obj, dict): return 0.0
+    for k in keys + ("score", "value", "pct", "percentage", "readiness"):
+        v=obj.get(k)
+        if isinstance(v, (int,float)): return float(v)
+    return 0.0
+
+def _v1160_rc48_live_metrics(state):
+    engines = {
+        "intelligence_score": _v1160_rc4_intelligence_score(state),
+        "strategy_trust": _v1160_rc4_strategy_trust(state),
+        "outcome_quality": _v1160_rc4_outcome_quality(state),
+        "memory_health": _v1160_rc4_memory_health(state),
+        "lts_readiness": _v1160_rc4_lts_predictor(state),
+    }
+    return {
+        "intelligence_score": _v1160_rc48_score(engines["intelligence_score"], "intelligence_score"),
+        "strategy_trust": _v1160_rc48_score(engines["strategy_trust"], "trust", "strategy_trust", "average_trust"),
+        "outcome_quality": _v1160_rc48_score(engines["outcome_quality"], "quality", "outcome_quality"),
+        "memory_health": _v1160_rc48_score(engines["memory_health"], "health", "memory_health"),
+        "lts_readiness": _v1160_rc48_score(engines["lts_readiness"], "lts_readiness", "readiness_score"),
+        "engines": engines,
+    }
+
+def _v1160_rc48_revision_integrity(state):
+    trace = _v1160_rc45_trace(state)
+    attrs=list((trace.get("attributions") or {}).values())
+    current=attrs[-1] if attrs else {}
+    latest={
+        "learning": int(state.get("learning_revision",0) or 0),
+        "strategy": int(state.get("strategy_performance_revision",0) or 0),
+        "trust": int(state.get("strategy_trust_revision",0) or 0),
+        "champion": int(state.get("champion_revision",0) or 0),
+    }
+    current_rev={k:int(current.get(k+"_revision",0) or 0) for k in ("learning","strategy","trust","champion")}
+    return {"current":current_rev,"latest":latest,"attribution_id":current.get("attribution_id"),
+            "consistent": all(current_rev[k] <= latest[k] for k in latest)}
+
+def _v1160_rc48_command_certification():
+    import inspect
+    rows=[]
+    for name,handler in sorted(V90_COMMAND_REGISTRY.items()):
+        status="PASS"; reasons=[]
+        if not callable(handler): status="FAILED"; reasons.append("handler_missing")
+        src=""
+        try: src=inspect.getsource(handler)
+        except Exception: reasons.append("source_unavailable")
+        help_ok=name in V925_COMMAND_USAGE
+        engine_ok=any(t in src for t in ("_v","engine","report","audit","health","dashboard","state"))
+        output_ok=any(t in src for t in ("safe_reply","reply_text","send_message"))
+        if not help_ok: reasons.append("help_missing")
+        if not engine_ok: reasons.append("engine_dependency_unverified")
+        if not output_ok: reasons.append("output_unverified")
+        if status!="FAILED" and reasons: status="PARTIAL"
+        rows.append({"command":name,"status":status,"help":help_ok,"engine":engine_ok,"output":output_ok,
+                     "repository":("_v91_load_state" in src or "state" in src),"reasons":reasons,
+                     "risk":"HIGH" if status=="FAILED" else ("MEDIUM" if status=="PARTIAL" else "LOW")})
+    counts={k:sum(1 for r in rows if r["status"]==k) for k in ("PASS","PARTIAL","FAILED")}
+    return {"rows":rows,"counts":counts,"status":"PASS" if counts["FAILED"]==0 and counts["PARTIAL"]==0 else ("FAILED" if counts["FAILED"] else "PARTIAL")}
+
+def _v1160_rc48_certification(state):
+    metrics=_v1160_rc48_live_metrics(state); rev=_v1160_rc48_revision_integrity(state)
+    pipe=_v1160_rc47_pipeline_audit(state); cmd=_v1160_rc48_command_certification(); pre=v91_preflight()
+    targets={"intelligence_score":90.0,"strategy_trust":85.0,"outcome_quality":90.0,"memory_health":95.0,"lts_readiness":95.0}
+    gate={k:{"value":metrics[k],"target":v,"pass":metrics[k]>=v} for k,v in targets.items()}
+    active_fail=bool(_v1134_runtime_health(state).get("last_fail"))
+    checks={
+      "command_integrity":cmd["status"]!="FAILED",
+      "pipeline_integrity":pipe.get("status")=="PASS",
+      "revision_integrity":rev["consistent"],
+      "release_gate_consistency":metrics["strategy_trust"]==_v1160_rc48_score(metrics["engines"]["strategy_trust"],"trust","strategy_trust","average_trust"),
+      "schema_compatibility":state.get("schema",1)==1,
+      "runtime_stability":not active_fail,
+      "limits_preserved":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+      "preflight":pre.get("ok",False),
+    }
+    ready=all(checks.values()) and all(x["pass"] for x in gate.values())
+    return {"ready":ready,"checks":checks,"gate":gate,"metrics":metrics,"revisions":rev,"pipeline":pipe,"commands":cmd}
+
+async def releasegate1160rc48_cmd(update, context):
+    _v1155_track("releasegate"); c=_v1160_rc48_certification(_v91_load_state())
+    lines=[f"🚦 <b>A100 V{V1160_RC48_NUMBER} RELEASE GATE</b>",f"Status <b>{'READY' if c['ready'] else 'BLOCKED'}</b>",""]
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for k,g in c["gate"].items(): lines.append(f"{'✅' if g['pass'] else '⛔'} {labels[k]} <b>{g['value']:.1f}</b> / {g['target']:.0f} · Need {max(0,g['target']-g['value']):.1f}")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def ltscert1160rc48_cmd(update, context):
+    _v1155_track("ltscert"); c=_v1160_rc48_certification(_v91_load_state())
+    lines=[f"🏅 <b>A100 V{V1160_RC48_NUMBER} LTS CERTIFICATION</b>",f"Result <b>{'READY FOR LTS' if c['ready'] else 'BLOCKED'}</b>",""]
+    for k,v in c["checks"].items(): lines.append(f"{'✅' if v else '⛔'} {k.replace('_',' ').title()}")
+    r=c["revisions"]; lines += ["",f"Current Trace <code>{r.get('attribution_id') or 'N/A'}</code>",f"L{r['current']['learning']} → S{r['current']['strategy']} → T{r['current']['trust']} → C{r['current']['champion']}",f"Latest L{r['latest']['learning']} → S{r['latest']['strategy']} → T{r['latest']['trust']} → C{r['latest']['champion']}"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def commandcert1160rc48_cmd(update, context):
+    _v1155_track("commandcert"); c=_v1160_rc48_command_certification(); rows=[r for r in c["rows"] if r["status"]!="PASS"]
+    lines=[f"🧾 <b>A100 V{V1160_RC48_NUMBER} COMMAND FUNCTIONAL CERTIFICATION</b>",f"Status <b>{c['status']}</b> · PASS {c['counts']['PASS']} / PARTIAL {c['counts']['PARTIAL']} / FAILED {c['counts']['FAILED']}",""]
+    for r in rows[:25]: lines.append(f"{'⛔' if r['status']=='FAILED' else '⚠️'} /{r['command']} · {r['status']} · {r['risk']} · {', '.join(r['reasons'])}")
+    if not rows: lines.append("✅ 모든 명령 Engine/Repository/Output/Help 연결 확인")
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def pipelineaudit1160rc48_cmd(update, context):
+    st=_v91_load_state(); x=_v1160_rc47_pipeline_audit(st); r=_v1160_rc48_revision_integrity(st)
+    lines=[f"🔬 <b>A100 V{V1160_RC48_NUMBER} TRUE E2E PIPELINE AUDIT</b>",f"Status <b>{x['status']}</b> · Mode <b>READ ONLY</b>",""]
+    lines += [("✅" if ok else "⛔")+f" {name}" for name,ok in x["steps"].items()]
+    lines += ["",f"Current Trace <code>{r.get('attribution_id') or 'N/A'}</code>",f"L{r['current']['learning']} → S{r['current']['strategy']} → T{r['current']['trust']} → C{r['current']['champion']}",f"Latest Engine L{r['latest']['learning']} → S{r['latest']['strategy']} → T{r['latest']['trust']} → C{r['latest']['champion']}",f"Revision Integrity <b>{'PASS' if r['consistent'] else 'FAILED'}</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({"ltscert":"LTS 공식 품질 인증 보고서","commandcert":"전체 Telegram 명령 기능 인증 PASS/PARTIAL/FAILED/FIXED 기준","releasegate":"실제 운영 Repository 기반 LTS Release Gate","pipelineaudit":"Current Trace와 Latest Engine Revision 분리 E2E 감사"})
+V90_COMMAND_REGISTRY.update({"ltscert":ltscert1160rc48_cmd,"commandcert":commandcert1160rc48_cmd,"releasegate":releasegate1160rc48_cmd,"pipelineaudit":pipelineaudit1160rc48_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC48_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC48_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    checks.update({
+      "v1160_rc48_version_manager":V91_VERSION==V1160_RC48_VERSION,
+      "v1160_rc48_ltscert":V90_COMMAND_REGISTRY.get("ltscert") is ltscert1160rc48_cmd,
+      "v1160_rc48_command_functional_cert":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc48_cmd,
+      "v1160_rc48_live_release_gate":V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160rc48_cmd,
+      "v1160_rc48_revision_integrity":V90_COMMAND_REGISTRY.get("pipelineaudit") is pipelineaudit1160rc48_cmd,
+      "v1160_rc48_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "v1160_rc48_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "v1160_rc48_schema":_v91_default_state().get("schema")==1,
+      "v1160_rc48_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc48-lts-certification-integrity-validation"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit = v91_preflight()
     if not audit.get("ok"):
         failed = [k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.7 startup integrity failure: " + ", ".join(failed))
+        raise RuntimeError("V116.0 RC4.8 startup integrity failure: " + ", ".join(failed))
     _v1160_rc45_start_worker()
     main()

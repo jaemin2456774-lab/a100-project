@@ -72,6 +72,7 @@
 ./docs/CHANGELOG_V116_0_RC4_3.md
 ./docs/CHANGELOG_V116_0_RC4_4.md
 ./docs/CHANGELOG_V116_0_RC4_5.md
+./docs/CHANGELOG_V116_0_RC4_8.md
 ./docs/CHANGELOG_V94_0.md
 ./docs/CHANGELOG_V95_0.md
 ./docs/CHANGELOG_V96_0.md
@@ -139,6 +140,7 @@
 ./docs/TEST_REPORT_V116_0_RC4_3.md
 ./docs/TEST_REPORT_V116_0_RC4_4.md
 ./docs/TEST_REPORT_V116_0_RC4_5.md
+./docs/TEST_REPORT_V116_0_RC4_8.md
 ./docs/TEST_REPORT_V94_0.md
 ./docs/TEST_REPORT_V95_0.md
 ./docs/TEST_REPORT_V96_0.md
@@ -188,6 +190,7 @@
 ./tests/__pycache__/test_v1160_rc44_learning_worker_audit2.cpython-313-pytest-9.0.2.pyc
 ./tests/__pycache__/test_v1160_rc45_true_e2e.cpython-313-pytest-9.0.2.pyc
 ./tests/__pycache__/test_v1160_rc47_lts_final_integration.cpython-313-pytest-9.0.2.pyc
+./tests/__pycache__/test_v1160_rc48_lts_certification.cpython-313-pytest-9.0.2.pyc
 ./tests/__pycache__/test_v116_0_rc4_quality_trust.cpython-313-pytest-9.0.2.pyc
 ./tests/__pycache__/test_v91_8_baseline.cpython-313-pytest-9.0.2.pyc
 ./tests/__pycache__/test_v91_8_scenario.cpython-313-pytest-9.0.2.pyc
@@ -250,6 +253,7 @@
 ./tests/test_v1160_rc44_learning_worker_audit2.py
 ./tests/test_v1160_rc45_true_e2e.py
 ./tests/test_v1160_rc47_lts_final_integration.py
+./tests/test_v1160_rc48_lts_certification.py
 ./tests/test_v116_0_rc4_quality_trust.py
 ./tests/test_v91_8_baseline.py
 ./tests/test_v91_8_scenario.py
