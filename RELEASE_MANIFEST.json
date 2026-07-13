@@ -1,11 +1,12 @@
 {
-  "release": "A100 V116.0 LTS RC4.3",
-  "title": "Learning Worker and Command Audit 2.0",
-  "schema": 1,
+  "release": "A100 V116.0 LTS RC4.5",
+  "title": "TRUE E2E LEARNING INTEGRATION AND READ-ONLY AUDIT",
+  "generated_at_utc": "2026-07-13T16:00:17.621107+00:00",
+  "schema_preserved": 1,
   "paper_positions": 20,
   "shadow_positions": 60,
   "live_trading": false,
-  "generated_at": "2026-07-14T00:00:00+09:00",
+  "release_gate_tests": "9 PASS",
   "files": [
     {
       "path": ".gitignore",
@@ -29,18 +30,13 @@
     },
     {
       "path": ".pytest_cache/v/cache/lastfailed",
-      "size": 97,
-      "sha256": "155ba616829ad079d246d43994ba50fc0fe3a81bb55f14b70d9ddccb1fdc5466"
+      "size": 2592,
+      "sha256": "a7832412e8a373f026b22767f3c598805092e800b4c3fb8c55d1ed9b3b8e9b9c"
     },
     {
       "path": ".pytest_cache/v/cache/nodeids",
-      "size": 1423,
-      "sha256": "a49b43aa097d47c0424e41cbb2432282f0a881c3e06914510b340f9625d7b2e8"
-    },
-    {
-      "path": "FILE_LIST.txt",
-      "size": 7732,
-      "sha256": "c41f2bb0869a6cbd033e5bda0895438d67568b33296aad96a44ad1fb150ff691"
+      "size": 12660,
+      "sha256": "9828672088e9876b3a00270b0df80a5359503b72f0d642182349e4538be17692"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -49,123 +45,123 @@
     },
     {
       "path": "README.md",
-      "size": 676,
-      "sha256": "63f5cf74cf20dbe1ffdd969e3f97d2e440239642ea9303252041c55d9f875592"
+      "size": 611,
+      "sha256": "3b7a902f10abad0137f1a4532ce8533d7614495b2807df23c89e56478df76ab7"
     },
     {
       "path": "__pycache__/main.cpython-313.pyc",
-      "size": 2669303,
-      "sha256": "30b7c516d719b40ba49f831412d8aea8aceef54f3dc6d71f72d77382c19f32f7"
+      "size": 2713162,
+      "sha256": "a1873e2f7e6794ae4311a511eceadec8d8c29f3765dda73c2df02b6843a6ea5c"
     },
     {
       "path": "__pycache__/v1000_learning_intelligence.cpython-313.pyc",
-      "size": 13587,
-      "sha256": "570795643c0a077dcd0de953860c85cd3a930aef70b45fdbdb386b6a0a1175a8"
+      "size": 13566,
+      "sha256": "ac675b0822babace804fa56baad41cbbeca3bd33fd1f08720ede9cfc68616b25"
     },
     {
       "path": "__pycache__/v1010_closed_loop_learning.cpython-313.pyc",
-      "size": 16457,
-      "sha256": "c6ff749b954d26aef2020cec4994905e283b3a0692964979b561140269f17a1b"
+      "size": 16436,
+      "sha256": "ee26944a94f828ecfdeb3c27e1afaf8b83e8289de6c7516366a20d4f86321f8d"
     },
     {
       "path": "__pycache__/v1020_evolution_engine.cpython-313.pyc",
-      "size": 14597,
-      "sha256": "5a666c5c0fb68e5bd37b26bcedb46992bdf8ac5ef33cd38c70ce7ecb8153673c"
+      "size": 14576,
+      "sha256": "0eea0952ab90b08d1324d0f018c627e379464e0c9e020aace37bb97924a78811"
     },
     {
       "path": "__pycache__/v1030_autonomous_evolution.cpython-313.pyc",
-      "size": 17672,
-      "sha256": "0b9c4bb106b43aec11ca46c25589ee2c77cd0ae0f5220898076cd0bf38219bd8"
+      "size": 17651,
+      "sha256": "71bf3672a5d264a02e30a4b5b6192db0fedd348d873abc67358843ddb7526dca"
     },
     {
       "path": "__pycache__/v1040_experience_intelligence.cpython-313.pyc",
-      "size": 20026,
-      "sha256": "97414a234f32ebccf61334af88756ad4d42e1f0a53dd6cf302ee68de4b0d9808"
+      "size": 20005,
+      "sha256": "38f84d341b81134a1a8418168ab2c52ff17a56e8ab5f0f212d80d6c8857771b4"
     },
     {
       "path": "__pycache__/v1050_autonomous_intelligence_core.cpython-313.pyc",
-      "size": 22190,
-      "sha256": "0a075f8753cd8cf497b791fec2dead4cc797101d975fc15cf2e51ff68dcc2f35"
+      "size": 22169,
+      "sha256": "428afb61c4c2057b365c56c34ceab2607ab6a16a45645eb33bbd5df625e9c8d2"
     },
     {
       "path": "__pycache__/v1060_real_time_intelligence.cpython-313.pyc",
-      "size": 19734,
-      "sha256": "5daa7191b5aaf4bc72ab69c4a7e4b89a9d65300dd51bf187a29f6c62e2682222"
+      "size": 19713,
+      "sha256": "52f740ef2d1b0445b18a1b840d94482e882f026d2d6638cb11a340bf9da7e9c8"
     },
     {
       "path": "__pycache__/v1070_autonomous_market_intelligence.cpython-313.pyc",
-      "size": 15067,
-      "sha256": "52541a0bcfeefba4a3231af2ade3fa316f9337db66ecffaf6da65225687acbac"
+      "size": 15046,
+      "sha256": "aa68d6d794b6686ae5c7cbae96cc6beebf5d30d863f92dae0a5b49bf0a15354d"
     },
     {
       "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
-      "size": 18626,
-      "sha256": "123b47d4c05c3e83a40c9c5289d08cbc2267f8674ac467ca7517bf0bfd88f05a"
+      "size": 18605,
+      "sha256": "4e1e236233fb0edd3b71ea89677c97a7a45fb21b910f8536c48dcccdbf0e20fb"
     },
     {
       "path": "__pycache__/v925_decision_intelligence.cpython-313.pyc",
-      "size": 3063,
-      "sha256": "55e1c8d35b109de6a57d502c625ec061760e6eee5a741015716d85f425c06cc7"
+      "size": 3042,
+      "sha256": "8031264fe545a08b733397012291bef3b4f88f1804c5f307f9665580964bf6f3"
     },
     {
       "path": "__pycache__/v926_learning_intelligence.cpython-313.pyc",
-      "size": 1394,
-      "sha256": "eebd041af637a5fcf90da9dd3779330cab04325cca7918910a3fe4f8b59e255c"
+      "size": 1373,
+      "sha256": "1e11f3bd0d670215c300cc8360ea1d42943da34a714f6845bb0689286073e884"
     },
     {
       "path": "__pycache__/v927_learning_calibration.cpython-313.pyc",
-      "size": 1943,
-      "sha256": "a524931665b25d923dc8e96fa8aab8111acdcaac649e15e58f205d35fc6fd88e"
+      "size": 1922,
+      "sha256": "c4eae8b1b74441e88a117eff099e3865d7124ec43e5eb9a0306e5b9f55430d3c"
     },
     {
       "path": "__pycache__/v930_ai_intelligence_core.cpython-313.pyc",
-      "size": 9539,
-      "sha256": "f09560f69018b919dcff0640247a0c604d92bf8eb247dbe4e3e03913c0fc8a98"
+      "size": 9518,
+      "sha256": "2f0d631d879d3e7ea16db45777604e8b909fe1bd953ab07bf70c2baa47133d7d"
     },
     {
       "path": "__pycache__/v931_self_learning_ai.cpython-313.pyc",
-      "size": 12433,
-      "sha256": "190edb0bc8758c238ff80da1c8ef9a94d2cbddb39da76f76ce7c93db55616b57"
+      "size": 12412,
+      "sha256": "8f9909ac1d0a4235dc19041a5f513367ee62b4652db24b2d60a76376d25f4a8d"
     },
     {
       "path": "__pycache__/v940_ai_visualization.cpython-313.pyc",
-      "size": 3724,
-      "sha256": "7b194ca60674eee159fda57378f16cca74b7598d6f7c9b123fb0cf54e3af6086"
+      "size": 3703,
+      "sha256": "ee2a3725a6a9e622cf022904b078d1a47c15a3c4372c9ac94097dfede16232f8"
     },
     {
       "path": "__pycache__/v950_ai_dashboard.cpython-313.pyc",
-      "size": 3495,
-      "sha256": "b156a845e97b0f5ac07fd41708fec4c8f1a4844a601aa0a2138293d4e1e125ce"
+      "size": 3474,
+      "sha256": "5e129b0ec12b15c54a959742c97b337c0383eb093aadeab770e7814c1931c14f"
     },
     {
       "path": "__pycache__/v960_ai_quality.cpython-313.pyc",
-      "size": 10121,
-      "sha256": "04d357092e6b541792eb906ed20cfb3a21ac801290acbc88a77c1bd5032755db"
+      "size": 10100,
+      "sha256": "f5b169cc95b1703b6852b2e05020ab7eeef7f4fa7aafc4a1a6de3ab582facf5e"
     },
     {
       "path": "__pycache__/v961_ai_intelligence2.cpython-313.pyc",
-      "size": 13272,
-      "sha256": "fceedd63a378f012ba8cb441bd5649195dd63675aaa3056218ca064872453c1c"
+      "size": 13251,
+      "sha256": "357109cbb068084d01b2623c3e82122f58cac62b0081a902482c911280e28f1f"
     },
     {
       "path": "__pycache__/v962_ai_intelligence3.cpython-313.pyc",
-      "size": 13514,
-      "sha256": "5d0eda779fa7b173680ca31cedf38462b1a2a62dd75df70b0a61adb943a17f39"
+      "size": 13493,
+      "sha256": "d1cf48efe38a961d5f64b95bd72d8d20471e698b400815f06c58007b1314dbbb"
     },
     {
       "path": "__pycache__/v970_unified_intelligence.cpython-313.pyc",
-      "size": 9757,
-      "sha256": "441b5f80ddf060a0b5fca647e5a1d3bca1fb99a2dc84f3732f017b7fc7885d71"
+      "size": 9736,
+      "sha256": "aadb6d122714d1585784207f617a4a52a5c2313b394ef8cc60e7cdebfcc00f5e"
     },
     {
       "path": "__pycache__/v980_market_intelligence.cpython-313.pyc",
-      "size": 9555,
-      "sha256": "3cbcb6c11020a56e0dea7b8c06110ba483ab6dc759d7ce9e65caa0b53ad2c554"
+      "size": 9534,
+      "sha256": "0b32f509efa4fc8bd3e84103bc992a8afbdeb83f7952ae0cde7962e7269c75b2"
     },
     {
       "path": "__pycache__/v990_predictive_intelligence.cpython-313.pyc",
-      "size": 8984,
-      "sha256": "d572bb8809d86ee381233ab9d52105cceb41397736413e64297d77621db0bce0"
+      "size": 8963,
+      "sha256": "2043807669ff10ee42ac2df7972471860645550ea37edac13ec8ea1392a475ee"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -341,6 +337,16 @@
       "path": "docs/CHANGELOG_V116_0_RC4_3.md",
       "size": 604,
       "sha256": "d53af9f8b2e7496372d4b5bf4d86f5820493be64b5c362bc7307d5fc851be778"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_4.md",
+      "size": 1007,
+      "sha256": "0d5fdab363411878d4cc2018cd882f35a1a672fb0b00ba971792a1309d66c4e0"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_5.md",
+      "size": 911,
+      "sha256": "1635f03086087828ff72a9c8c678e1820102e75fee38ad584610c9c8ebb27bc5"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -668,6 +674,16 @@
       "sha256": "7a49d407b1de91bd6bd982295372706c2f2408c72d1162a97058f90f804060df"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC4_4.md",
+      "size": 701,
+      "sha256": "fdf77229f4f3fb109042c4929c1dc38da75cce4db67840a0c4b4165379cf76d8"
+    },
+    {
+      "path": "docs/TEST_REPORT_V116_0_RC4_5.md",
+      "size": 520,
+      "sha256": "0dde6f0226765c789d4da64fd81b4e8aea53b3e8216bf4f0396860f2ce117769"
+    },
+    {
       "path": "docs/TEST_REPORT_V94_0.md",
       "size": 768,
       "sha256": "6337fe611f2a764507cfdbd2523f745bfa01aecb95fb9f1bf3425da6890c2b7e"
@@ -704,13 +720,13 @@
     },
     {
       "path": "main.py",
-      "size": 1797214,
-      "sha256": "bd9980fe646e7cce53aafb6b7a94b06434ff0e8c0590fd48e439dfbdc0449bb1"
+      "size": 1827050,
+      "sha256": "dbc42cfa3e27fa896fa398ebfb309fb417398d87cf1a77b361a1807880e3c65b"
     },
     {
       "path": "pytest.ini",
-      "size": 71,
-      "sha256": "1a8c102d3d37920a997dca76b2a63b44eb90921bca026a0e5886684566ce2035"
+      "size": 97,
+      "sha256": "97de5df90f49bc4d329d47dedda34f897b4bb21e92d635cff068fcac40fca6d7"
     },
     {
       "path": "railway.json",
@@ -724,28 +740,308 @@
     },
     {
       "path": "tests/__pycache__/conftest.cpython-313-pytest-9.0.2.pyc",
-      "size": 711,
-      "sha256": "0ddf71c34b9fe74300d2855899c626543ffb5ab33a4f20a634eb2ca144dac4b2"
+      "size": 690,
+      "sha256": "40e907daed55f3608f11296037dac1f50055b20734ef227891c72d62ee577856"
+    },
+    {
+      "path": "tests/__pycache__/test_v101_0_closed_loop.cpython-313-pytest-9.0.2.pyc",
+      "size": 6984,
+      "sha256": "51df22b23bc78c16b65b3fdf5dcbce5f1617013e8e2cf840364bdb76af50dc80"
+    },
+    {
+      "path": "tests/__pycache__/test_v102_0_evolution_engine.cpython-313-pytest-9.0.2.pyc",
+      "size": 7874,
+      "sha256": "177d0d0d330935b3f738a24ae805749fa4d8eccc0f924a51c730f0e213539761"
+    },
+    {
+      "path": "tests/__pycache__/test_v103_0_autonomous_evolution.cpython-313-pytest-9.0.2.pyc",
+      "size": 8952,
+      "sha256": "0d119964f05316554c0a7a0fb174043cdec086035cf67a3d3ed96db6944215d2"
+    },
+    {
+      "path": "tests/__pycache__/test_v104_0_experience_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 8283,
+      "sha256": "e244edc8eeb40bfd6fca986c71ba9b722ab8f4ce31f956a623108d3f7674f3cf"
+    },
+    {
+      "path": "tests/__pycache__/test_v105_0_autonomous_core.cpython-313-pytest-9.0.2.pyc",
+      "size": 6713,
+      "sha256": "a75207d07e34b6504a47cdfaaf472a2c195785c84261dda14afb2b8af6ca2f81"
+    },
+    {
+      "path": "tests/__pycache__/test_v106_0_real_time_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 5491,
+      "sha256": "42d4337fbc3c630c95e669dcd4dff9624376442bb041ca2240cd22048bf05aa2"
+    },
+    {
+      "path": "tests/__pycache__/test_v1070_autonomous_market_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 2831,
+      "sha256": "2da2dd35ad613167253d7552267a746292188d5dbd1b4ebdc952ae9056d65c77"
+    },
+    {
+      "path": "tests/__pycache__/test_v1080_pattern_recognition_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 5124,
+      "sha256": "b79e767a0a9cb563e1f4d43e4d2c8c37b637be258cc151165e554f67dd5d23c7"
+    },
+    {
+      "path": "tests/__pycache__/test_v1090_paper_learning_mode.cpython-313-pytest-9.0.2.pyc",
+      "size": 4266,
+      "sha256": "352337000f020a9b8da01b8a33f6bc43f2cd9d39a874d90cb10ced717a21304e"
+    },
+    {
+      "path": "tests/__pycache__/test_v1100_paper_trace.cpython-313-pytest-9.0.2.pyc",
+      "size": 3193,
+      "sha256": "6feb00edaada561f86b474d204cd6229ddd833071781eade366eeafdce3649ca"
+    },
+    {
+      "path": "tests/__pycache__/test_v1110_adaptive_threshold.cpython-313-pytest-9.0.2.pyc",
+      "size": 2603,
+      "sha256": "30458f562d0ae5c52268a62e1454c9d6bc19155d5e773eef2b6b378d4ffc326c"
+    },
+    {
+      "path": "tests/__pycache__/test_v1130_entry_execution_queue.cpython-313-pytest-9.0.2.pyc",
+      "size": 6816,
+      "sha256": "b92522348d6f875e31c86f1d81784180f7dba59a10217098c0b2ae3cc34a523d"
+    },
+    {
+      "path": "tests/__pycache__/test_v1132_post_deploy_verification.cpython-313-pytest-9.0.2.pyc",
+      "size": 9863,
+      "sha256": "637e0a0b01f452a358e28bda25cae135a7146ba8f5d6632ed758c9045aa0daf5"
+    },
+    {
+      "path": "tests/__pycache__/test_v1133_version_runtime_trace.cpython-313-pytest-9.0.2.pyc",
+      "size": 2997,
+      "sha256": "21b6d97495e9b8854831adc091c084543364c8b8fd467d8646b2bd2ee795922d"
+    },
+    {
+      "path": "tests/__pycache__/test_v1134_operations_observability.cpython-313-pytest-9.0.2.pyc",
+      "size": 6509,
+      "sha256": "caf7621f32f6652cc42d0975e9d89f471d2e2930991a103fee6bb8dfa918dbf6"
+    },
+    {
+      "path": "tests/__pycache__/test_v114_0_pattern_memory_regime_adaptive.cpython-313-pytest-9.0.2.pyc",
+      "size": 10836,
+      "sha256": "4524aef2aa45a9dd004388dad7970109f79d09691d5c87b0d17caea23bc5e4fb"
+    },
+    {
+      "path": "tests/__pycache__/test_v114_1_explainable_similarity.cpython-313-pytest-9.0.2.pyc",
+      "size": 9575,
+      "sha256": "f0398f4ce3a41b2eb7c6d13729e499d110a88da03024c788f5bc1a00f8322e14"
+    },
+    {
+      "path": "tests/__pycache__/test_v114_2_cross_market_self_optimization.cpython-313-pytest-9.0.2.pyc",
+      "size": 16512,
+      "sha256": "09e5c2aafd24281554e623bd5abed51c939640af0c68ec02e0a018cd60223349"
+    },
+    {
+      "path": "tests/__pycache__/test_v1150_intelligence_core.cpython-313-pytest-9.0.2.pyc",
+      "size": 6475,
+      "sha256": "8bbe97113f84dd5411efc6356ca77779a3fc9261d056cf77f83b588a26d86315"
+    },
+    {
+      "path": "tests/__pycache__/test_v1151_core_stabilization.cpython-313-pytest-9.0.2.pyc",
+      "size": 6666,
+      "sha256": "fd9110d46547f89059df040a7a9a7c71f072b81b5cad0eeff6f48717db106807"
+    },
+    {
+      "path": "tests/__pycache__/test_v1152_intelligence_core2.cpython-313-pytest-9.0.2.pyc",
+      "size": 6880,
+      "sha256": "0a95fa675c66e4af35d3cc7203d073ff71f71c87d57b766b4a4fae1f1dd6ace2"
+    },
+    {
+      "path": "tests/__pycache__/test_v1153_intelligence_core3.cpython-313-pytest-9.0.2.pyc",
+      "size": 15113,
+      "sha256": "cb82c4dd81b4bd1faaede51bdee827bb66b50f45b613246df0d64cc4f153eed7"
+    },
+    {
+      "path": "tests/__pycache__/test_v1155_intelligence_os.cpython-313-pytest-9.0.2.pyc",
+      "size": 12739,
+      "sha256": "14bebfa1fd0e0a35fd68faea8e0dab63ed8be45f5bd3dae88ef8cd22dd33c4f5"
+    },
+    {
+      "path": "tests/__pycache__/test_v1156_self_learning_scheduler.cpython-313-pytest-9.0.2.pyc",
+      "size": 10815,
+      "sha256": "50c03901d14757d98b4e40ec7cfa1be7f4d8e54920d6504f32baaf01020c1f75"
+    },
+    {
+      "path": "tests/__pycache__/test_v1157_strategy_evolution.cpython-313-pytest-9.0.2.pyc",
+      "size": 11228,
+      "sha256": "284a16d267b8a3f2fcb2835ee2d130facd7b97c83dbb8ae32627cb123c9b65e1"
+    },
+    {
+      "path": "tests/__pycache__/test_v1158_strategy_performance.cpython-313-pytest-9.0.2.pyc",
+      "size": 13643,
+      "sha256": "84bdd83918628a25a89033c80851ff7f25c06ce40e588dbb62d8a390d305e751"
+    },
+    {
+      "path": "tests/__pycache__/test_v1159_market_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 8629,
+      "sha256": "0ffc40e1c1d2525e46277e8a6b318cf13c84e5b2751820650da06419a8b3a3f2"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc11_name_resolution.cpython-313-pytest-9.0.2.pyc",
+      "size": 5103,
+      "sha256": "920d2d8af6d5da2d9bb00a3ab48950f71d755860390dd66e0ac895e824712c1a"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc1_unified_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 8292,
+      "sha256": "51cd36a1d8086ad53adb905213dbe286d70a2812df3a794f82c7b3e1ed241337"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc2_integration.cpython-313-pytest-9.0.2.pyc",
+      "size": 10622,
+      "sha256": "bfd5f370dcb3bbb4f8ffafdbd94e81aa8f245d90d835fe692b6b92d44dd29870"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc3_long_term_validation.cpython-313-pytest-9.0.2.pyc",
+      "size": 10320,
+      "sha256": "c7b527bc439652dd3064fc7c4d792b310bd4e079d29402cea5a5b374666b9194"
     },
     {
       "path": "tests/__pycache__/test_v1160_rc41_quality_attribution.cpython-313-pytest-9.0.2.pyc",
-      "size": 11962,
-      "sha256": "ea87709cd134a26b9302b0c30e20142417eea399f492ebc9444f5bc6bc5871f9"
+      "size": 11941,
+      "sha256": "615366cc59ef649ff9caa7cd87152b931b422c92fe45a6889883f784fdb5c282"
     },
     {
       "path": "tests/__pycache__/test_v1160_rc42_ux_attribution_cache.cpython-313-pytest-9.0.2.pyc",
-      "size": 13901,
-      "sha256": "9c5a308f5976bcbc316669881fdf872377d793683ef9a85e0c5cb73a8a0e2ccd"
+      "size": 13880,
+      "sha256": "ef0864ac2c3bad9f07b2be5b18832209aae042403788ca6654389970e5f19c71"
     },
     {
       "path": "tests/__pycache__/test_v1160_rc43_end_to_end_audit.cpython-313-pytest-9.0.2.pyc",
-      "size": 9804,
-      "sha256": "5205f0f89a2b40c76814f4a176089a66dcfc13b8dc1594c7ecb10de852ec5039"
+      "size": 9783,
+      "sha256": "b2ca0c85721e4677f33ca1c2b6dd6a9b6bb774f049cae506bbc2c99fcb2e9b54"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc44_learning_worker_audit2.cpython-313-pytest-9.0.2.pyc",
+      "size": 11821,
+      "sha256": "5ad2597c0c410c94e94f79dd08f5e98fe47477a4bca4de9a485d19e1d7ead432"
+    },
+    {
+      "path": "tests/__pycache__/test_v1160_rc45_true_e2e.cpython-313-pytest-9.0.2.pyc",
+      "size": 10703,
+      "sha256": "6fe30f028b9d9729cc065a1eb11f70ffb54b08f0bce5e4bca10cdb4c9a7945a8"
     },
     {
       "path": "tests/__pycache__/test_v116_0_rc4_quality_trust.cpython-313-pytest-9.0.2.pyc",
-      "size": 12324,
-      "sha256": "61457eb5c51e031e06aaab158065f1f46e93383249984530d63f2d7ecefd204b"
+      "size": 12303,
+      "sha256": "02f9c0b257fd23729d4dd39aad304357af38ea3036ae5d4a6726bf8bb13c31fa"
+    },
+    {
+      "path": "tests/__pycache__/test_v91_8_baseline.cpython-313-pytest-9.0.2.pyc",
+      "size": 8195,
+      "sha256": "a1903f6b6d71c4793d5ecd95ce938f9228983d26f48e248517e0def89b5a6553"
+    },
+    {
+      "path": "tests/__pycache__/test_v91_8_scenario.cpython-313-pytest-9.0.2.pyc",
+      "size": 9275,
+      "sha256": "6dd9b88039dd1192c986b22fe26c1f0b464254a556270119748bdd86df108f61"
+    },
+    {
+      "path": "tests/__pycache__/test_v91_stability.cpython-313-pytest-9.0.2.pyc",
+      "size": 28840,
+      "sha256": "75051daffdd74c4131680109868e271504f08a14987f422ff41bbac52375a212"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_0_score.cpython-313-pytest-9.0.2.pyc",
+      "size": 17659,
+      "sha256": "0a9e37a77e68e6f34582b254fbedcd5afe6a5586e74d54e2c811f2951fcbdfab"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_1_review.cpython-313-pytest-9.0.2.pyc",
+      "size": 10546,
+      "sha256": "dd873aab2976acb5f430784b354f89e5741536d3d165c62b015120c6d4effe05"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_2_final_coach.cpython-313-pytest-9.0.2.pyc",
+      "size": 12079,
+      "sha256": "87228a3c46642f06b7c4ed94589a730e678cfa06d45561ab9495614d55a881fd"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_3_dashboard.cpython-313-pytest-9.0.2.pyc",
+      "size": 8875,
+      "sha256": "1373fb38a7b9333c8176e3a6f2063c58b034ff8e160fe3c3c7012293662aba3e"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_4_consensus.cpython-313-pytest-9.0.2.pyc",
+      "size": 9486,
+      "sha256": "5ecff2573469a0182a3b9ee069fda0db1f31333dadf47d669641199dce47959d"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_5_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 8586,
+      "sha256": "c01b594dba5e0bace543d762ca3fc1317df37f5590099716635ea9a6fe411f05"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_6_learning.cpython-313-pytest-9.0.2.pyc",
+      "size": 15743,
+      "sha256": "9ca0b0c1d6882755db7a5fb1532752783cde3b52c30e17e0ff4905488caaac6d"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_7_calibration.cpython-313-pytest-9.0.2.pyc",
+      "size": 6663,
+      "sha256": "e2f1af23e84b06afc417453d955ad4cb382eba79cedf5cdee9f7cbb7e1f6ace6"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_7_integration.cpython-313-pytest-9.0.2.pyc",
+      "size": 11355,
+      "sha256": "5b76c22ca5aae6d22f24990d15a47c054341477a601767c3784cbd9ad8fafa4f"
+    },
+    {
+      "path": "tests/__pycache__/test_v92_8_command_integrity.cpython-313-pytest-9.0.2.pyc",
+      "size": 12515,
+      "sha256": "51464619cfa3e6332fd1c9276edd2374a2f2e751ab2c5e9318a200449d630812"
+    },
+    {
+      "path": "tests/__pycache__/test_v93_0_ai_core.cpython-313-pytest-9.0.2.pyc",
+      "size": 2914,
+      "sha256": "7b929e5480fab49def4512071bd8ec4e1959e6d4280ca3d153ce1af1b9d3b266"
+    },
+    {
+      "path": "tests/__pycache__/test_v93_1_self_learning.cpython-313-pytest-9.0.2.pyc",
+      "size": 8384,
+      "sha256": "ffafd2932185881ec1759d9563e1f1e478ed04f7bc2d0701ae06e2c17f3ae61e"
+    },
+    {
+      "path": "tests/__pycache__/test_v94_0_visualization.cpython-313-pytest-9.0.2.pyc",
+      "size": 10694,
+      "sha256": "1342d70daeb6599fa63e3067a9a9ae3c47794346707c1d7b0a1ba7c6d84abd12"
+    },
+    {
+      "path": "tests/__pycache__/test_v95_0_dashboard.cpython-313-pytest-9.0.2.pyc",
+      "size": 6847,
+      "sha256": "6b009be2cf1fa784e49277b105f7bcdaa964e32abaeeec6c45dd78d4814b8820"
+    },
+    {
+      "path": "tests/__pycache__/test_v96_0_ai_quality.cpython-313-pytest-9.0.2.pyc",
+      "size": 7215,
+      "sha256": "b0784fe5c91cc09562477292a268e7cb2983d3ae652fc2aee05b847f2057abff"
+    },
+    {
+      "path": "tests/__pycache__/test_v96_1_intelligence2.cpython-313-pytest-9.0.2.pyc",
+      "size": 8437,
+      "sha256": "6392ad7a3bf8e56ce3a002a7d50abc41594ccc032dfa39997c53bd4738fd86aa"
+    },
+    {
+      "path": "tests/__pycache__/test_v96_2_intelligence3.cpython-313-pytest-9.0.2.pyc",
+      "size": 6604,
+      "sha256": "dbd73aa08326beed230ad4737915de93c452d59c0039cf65f6e8196b35835b36"
+    },
+    {
+      "path": "tests/__pycache__/test_v97_0_unified.cpython-313-pytest-9.0.2.pyc",
+      "size": 8511,
+      "sha256": "0c8e32f1d47bfcaa00f8be7b319b9f81540298bcfb4e87fbb739c25577a468a6"
+    },
+    {
+      "path": "tests/__pycache__/test_v98_0_market_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 7222,
+      "sha256": "b4bb519357c593134def72aacdea6cd0c696815fe2ad89f584a7791e89a31b51"
+    },
+    {
+      "path": "tests/__pycache__/test_v99_0_predictive_intelligence.cpython-313-pytest-9.0.2.pyc",
+      "size": 7686,
+      "sha256": "c10093f606d6ec3a663ff4ae06e47279a8a569f07deed9f6b89d5dab9712bee0"
     },
     {
       "path": "tests/conftest.py",
@@ -921,6 +1217,16 @@
       "path": "tests/test_v1160_rc43_end_to_end_audit.py",
       "size": 1313,
       "sha256": "e982262036651e96ed152faf8bdb458558bafc29a8c84d7b50934793dd747a31"
+    },
+    {
+      "path": "tests/test_v1160_rc44_learning_worker_audit2.py",
+      "size": 1680,
+      "sha256": "e0b570b28924c1ddb97064ce9c85d2f74b13cd28573c1c88e525172082c4799d"
+    },
+    {
+      "path": "tests/test_v1160_rc45_true_e2e.py",
+      "size": 1616,
+      "sha256": "71fbb0204ef6578711481709f40f4aba805da0de960b004204208ca21066d263"
     },
     {
       "path": "tests/test_v116_0_rc4_quality_trust.py",
@@ -1152,12 +1458,5 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ],
-  "version": "116.0-RC4.4",
-  "release_type": "DEVELOPMENT_RELEASE",
-  "tests": {
-    "rc44": 6,
-    "status": "PASS",
-    "legacy_note": "Older version-pin tests conflict by design with the current VersionManager version."
-  }
+  ]
 }

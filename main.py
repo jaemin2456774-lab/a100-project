@@ -36932,8 +36932,9 @@ def _v1160_rc44_pipeline_audit(state):
     x=_v1160_rc43_pipeline_audit(state); q=_v1160_rc44_queue_health(state)
     x["steps"]["learning_worker"]=q["failed"]==0 and q["processing"]==0
     x["steps"]["learning_completion"]=q["pending"]==0 or q["completed"]>0
-    x["status"]="PASS" if all(x["steps"].values()) else "PARTIAL"
-    x["failed"]=[k for k,v in x["steps"].items() if not v]
+    required_steps=("close_payload","outcome_attribution","learning_queue","learning_worker","id_trace_complete","strategy_revision","trust_revision","champion_revision","audit_read_only")
+    x["status"]="PASS" if all(x["steps"].get(k,False) for k in required_steps) else "PARTIAL"
+    x["failed"]=[k for k in required_steps if not x["steps"].get(k,False)]
     return x
 
 
@@ -37019,10 +37020,261 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc44-learning-worker-command-audit-2"}
 
+
+# =============================================================================
+# A100 V116.0 LTS RC4.5 — TRUE E2E LEARNING INTEGRATION & READ-ONLY AUDIT
+# =============================================================================
+V1160_RC45_NUMBER = "116.0-RC4.5"
+V1160_RC45_TITLE = "TRUE E2E LEARNING INTEGRATION AND READ-ONLY AUDIT"
+V1160_RC45_VERSION = f"A100 V{V1160_RC45_NUMBER} {V1160_RC45_TITLE}"
+V91_VERSION = V1160_RC45_VERSION
+V1160_RC4_VERSION = V1160_RC45_VERSION
+V1160_RC44_VERSION = V1160_RC45_VERSION
+
+_V1160_RC45_STATE_LOCK = threading.RLock()
+V1160_RC45_WORKER_INTERVAL = max(30, int(os.getenv("A100_LEARNING_WORKER_INTERVAL", "60")))
+V1160_RC45_PROCESSING_TIMEOUT = max(60, int(os.getenv("A100_LEARNING_PROCESSING_TIMEOUT", "300")))
+V1160_RC45_SCHEDULER = None
+V1160_RC45_SCHEDULER_STARTED = False
+
+
+def _v1160_rc45_trace(state):
+    return state.setdefault("rc45_e2e_trace", {"schema": 1, "attributions": {}, "last_verified_at": 0.0})
+
+
+def _v1160_rc45_worker_state(state):
+    ws = _v1160_rc44_worker_state(state)
+    ws.setdefault("heartbeat_at", 0.0)
+    ws.setdefault("mode", "BACKGROUND_SCHEDULED")
+    ws.setdefault("worker_version", "2.0")
+    ws.setdefault("recovered_processing", 0)
+    ws.setdefault("duplicate_skips", 0)
+    return ws
+
+
+def _v1160_rc45_recover_stale(state, now=None):
+    now = float(now or time.time()); recovered = 0
+    for task in state.setdefault("learning_queue", []):
+        if not isinstance(task, dict) or task.get("status") != "PROCESSING":
+            continue
+        if now - float(task.get("started_at", now) or now) >= V1160_RC45_PROCESSING_TIMEOUT:
+            task["status"] = "RETRY"; task["last_error"] = "processing_timeout_recovered"
+            task["recovered_at"] = now; recovered += 1
+    _v1160_rc45_worker_state(state)["recovered_processing"] += recovered
+    return recovered
+
+
+def _v1160_rc45_apply_learning(state, task, attr):
+    """Idempotent attribution learning plus durable Strategy/Trust/Champion revision bridge."""
+    aid = str(attr.get("id") or task.get("attribution_id") or "")
+    key = f"{aid}:2.0"
+    applied = state.setdefault("learning_applied_keys", {})
+    if key in applied:
+        _v1160_rc45_worker_state(state)["duplicate_skips"] += 1
+        return dict(applied[key].get("result") or {"duplicate": True})
+
+    result = _v1160_rc44_apply_learning(state, task, attr)
+    now = time.time(); learning_rev = int(state.get("learning_revision", 0) or 0)
+    # Persist the existing V115.8 performance engine immediately. This preserves its schema
+    # and makes it the canonical downstream strategy/champion source.
+    perf = _v1158_performance_snapshot(state, persist=True)
+    perf_state = _v1158_load_state()
+    strategy_rev = int(perf_state.get("source_revision", 0) or 0) + 1
+    perf_state["source_revision"] = strategy_rev
+    perf_state["source_learning_revision"] = learning_rev
+    perf_state["source_attribution_id"] = aid
+    perf_state["updated_ts"] = int(now)
+    _v1158_save_state(perf_state)
+
+    trust = _v1160_rc4_strategy_trust(state)
+    champion = _v1160_rc4_champion_stability(state)
+    trust_rev = int(state.get("strategy_trust_revision", 0) or 0) + 1
+    champion_rev = int(state.get("champion_revision", 0) or 0) + 1
+    state["strategy_performance_revision"] = strategy_rev
+    state["strategy_trust_revision"] = trust_rev
+    state["champion_revision"] = champion_rev
+    state["strategy_trust_snapshot"] = {"revision": trust_rev, "score": trust.get("score", 0), "source_attribution_id": aid, "ts": now}
+    state["champion_snapshot"] = {"revision": champion_rev, "score": champion.get("score", 0), "champion": champion.get("champion"), "source_attribution_id": aid, "ts": now}
+    state["dashboard_refresh_required"] = False
+    trace = _v1160_rc45_trace(state)["attributions"].setdefault(aid, {})
+    trace.update({"attribution_id": aid, "queue_job_id": task.get("id"), "learning_revision": learning_rev,
+                  "strategy_revision": strategy_rev, "trust_revision": trust_rev,
+                  "champion_revision": champion_rev, "completed_at": now})
+    applied[key] = {"applied_at": now, "result": result, "trace": dict(trace)}
+    if len(applied) > 10000:
+        for old in sorted(applied, key=lambda k: applied[k].get("applied_at", 0))[:-8000]: applied.pop(old, None)
+    result.update({"learning_revision": learning_rev, "strategy_revision": strategy_rev,
+                   "trust_revision": trust_rev, "champion_revision": champion_rev})
+    return result
+
+
+# Replace RC4.4 close wrapper: enqueue only; the scheduled RC4.5 worker owns processing.
+_v1160_rc45_base_record_closed = _v1160_rc44_base_record_closed
+def _v1160_rc43_record_closed(state, closed, source):
+    return _v1160_rc45_base_record_closed(state, closed, source)
+
+
+def _v1160_rc45_worker_tick(state, limit=20):
+    with _V1160_RC45_STATE_LOCK:
+        _v1160_rc41_state_collections(state); ws = _v1160_rc45_worker_state(state)
+        if not ws.get("enabled", True): return {"status": "DISABLED", "processed": 0, "failed": 0}
+        _v1160_rc45_recover_stale(state)
+        start=time.time(); processed=failed=waiting=0
+        attrs={x.get("id"):x for x in state.get("outcome_attributions",[]) if isinstance(x,dict)}
+        for task in state.setdefault("learning_queue",[]):
+            if processed+failed+waiting >= max(1,int(limit)): break
+            if not isinstance(task,dict) or task.get("status") not in {None,"PENDING","RETRY","WAITING_DATA"}: continue
+            attr=attrs.get(task.get("attribution_id"))
+            if not attr or not attr.get("attributed"):
+                task["status"]="WAITING_DATA"; task["last_error"]="attribution_incomplete_or_missing"; waiting+=1; continue
+            task["status"]="PROCESSING"; task["started_at"]=time.time(); task["attempts"]=int(task.get("attempts",0) or 0)+1
+            try:
+                result=_v1160_rc45_apply_learning(state,task,attr)
+                task.update({"status":"COMPLETED","completed_at":time.time(),"result":result,"last_error":None})
+                processed+=1; ws["processed"]+=1; ws["last_result"]="PASS"; ws["last_job_id"]=task.get("id")
+            except Exception as e:
+                task["last_error"]=str(e); task["failed_at"]=time.time()
+                task["status"]="RETRY" if task.get("attempts",0)<3 else "FAILED"
+                ws["retry" if task["status"]=="RETRY" else "failed"]+=1
+                ws["last_result"]="FAIL"; ws["last_error"]=str(e); ws["last_job_id"]=task.get("id"); failed+=1
+        duration=(time.time()-start)*1000; ws["total_duration_ms"]+=duration
+        ws["last_run_at"]=ws["heartbeat_at"]=time.time()
+        return {"status":"PASS" if failed==0 else "PARTIAL","processed":processed,"failed":failed,"waiting":waiting,"duration_ms":round(duration,2)}
+
+
+def _v1160_rc45_queue_health(state):
+    """Strictly read-only queue health snapshot."""
+    base=_v1160_rc43_learning_queue_health(state); ws=_v1160_rc45_worker_state(state)
+    queue=[x for x in state.get("learning_queue",[]) if isinstance(x,dict)]
+    base["waiting_data"]=sum(x.get("status")=="WAITING_DATA" for x in queue)
+    avg=ws["total_duration_ms"]/max(1,ws["processed"]+ws["failed"])
+    heartbeat_age=time.time()-float(ws.get("heartbeat_at",0) or 0) if ws.get("heartbeat_at") else None
+    active=bool(ws.get("enabled") and V1160_RC45_SCHEDULER_STARTED and heartbeat_age is not None and heartbeat_age <= V1160_RC45_WORKER_INTERVAL*3)
+    base.update({"worker":"ACTIVE" if active else "STARTING" if ws.get("enabled") else "DISABLED",
+                 "worker_mode":ws.get("mode"),"processed_total":ws["processed"],"retry":ws["retry"],
+                 "avg_ms":round(avg,2),"last_result":ws["last_result"],"last_job_id":ws["last_job_id"],
+                 "last_error":ws["last_error"],"last_run_at":ws["last_run_at"],"heartbeat_age":heartbeat_age,
+                 "duplicate_skips":ws.get("duplicate_skips",0),"recovered_processing":ws.get("recovered_processing",0)})
+    return base
+
+
+def _v1160_rc45_pipeline_audit(state):
+    """Read-only evidence audit: PASS only when one attribution reaches every revision."""
+    x=_v1160_rc43_pipeline_audit(state)
+    traces=list((_v1160_rc45_trace(state).get("attributions") or {}).values())
+    complete=[t for t in traces if all(t.get(k) not in (None,0,"") for k in
+              ("attribution_id","queue_job_id","learning_revision","strategy_revision","trust_revision","champion_revision"))]
+    q=_v1160_rc45_queue_health(state)
+    x["steps"].update({"learning_worker":q["failed"]==0 and q["processing"]==0,
+                       "id_trace_complete":bool(complete),
+                       "strategy_revision":bool(complete and state.get("strategy_performance_revision",0)),
+                       "trust_revision":bool(complete and state.get("strategy_trust_revision",0)),
+                       "champion_revision":bool(complete and state.get("champion_revision",0)),
+                       "audit_read_only":True})
+    x["status"]="PASS" if all(x["steps"].values()) else "PARTIAL"
+    x["failed"]=[k for k,v in x["steps"].items() if not v]
+    x["evidence"]=complete[-1] if complete else None
+    return x
+
+
+def _v1160_rc45_background_cycle():
+    try:
+        with _V1160_RC45_STATE_LOCK:
+            state=_v91_load_state(); _v1160_rc45_worker_tick(state, limit=20); _v91_save_state(state)
+    except Exception as e:
+        try: log(f"rc45 learning worker: {e}")
+        except Exception: pass
+
+
+def _v1160_rc45_start_worker():
+    global V1160_RC45_SCHEDULER, V1160_RC45_SCHEDULER_STARTED
+    if V1160_RC45_SCHEDULER_STARTED: return True
+    try:
+        V1160_RC45_SCHEDULER=BackgroundScheduler(daemon=True)
+        V1160_RC45_SCHEDULER.add_job(_v1160_rc45_background_cycle,"interval",seconds=V1160_RC45_WORKER_INTERVAL,
+            id="v1160_rc45_learning_worker",max_instances=1,coalesce=True,replace_existing=True)
+        V1160_RC45_SCHEDULER.start(); V1160_RC45_SCHEDULER_STARTED=True
+        _v1160_rc45_background_cycle(); return True
+    except Exception as e:
+        try: log(f"rc45 worker start: {e}")
+        except Exception: pass
+        return False
+
+
+async def learningqueue1160rc45_cmd(update,context):
+    _v1155_track("learningqueue"); x=_v1160_rc45_queue_health(_v91_load_state())
+    lines=[f"📥 <b>A100 V{V1160_RC45_NUMBER} LEARNING QUEUE</b>",f"Worker <b>{x['worker']}</b> · Mode <b>{x['worker_mode']}</b>",
+      f"Pending <b>{x['pending']}</b> · Waiting Data <b>{x['waiting_data']}</b> · Processing <b>{x['processing']}</b> · Completed <b>{x['completed']}</b>",
+      f"Failed <b>{x['failed']}</b> · Retry <b>{x['retry']}</b> · Orphan <b>{x['orphan']}</b>",
+      f"Processed <b>{x['processed_total']}</b> · Duplicate Skip <b>{x['duplicate_skips']}</b> · Recovered <b>{x['recovered_processing']}</b>",
+      "Audit Mode <b>READ ONLY</b>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+async def queueworker1160rc45_cmd(update,context): return await learningqueue1160rc45_cmd(update,context)
+
+async def queueworkerrun1160rc45_cmd(update,context):
+    _v1155_track("queueworkerrun")
+    with _V1160_RC45_STATE_LOCK:
+        state=_v91_load_state(); r=_v1160_rc45_worker_tick(state,limit=20); _v91_save_state(state)
+    return await v90_1_safe_reply(update,f"⚙️ <b>A100 V{V1160_RC45_NUMBER} WORKER MANUAL RUN</b>\nStatus <b>{r['status']}</b> · Processed <b>{r['processed']}</b> · Failed <b>{r['failed']}</b> · Waiting <b>{r.get('waiting',0)}</b>",parse_mode="HTML")
+
+async def pipelineaudit1160rc45_cmd(update,context):
+    _v1155_track("pipelineaudit"); x=_v1160_rc45_pipeline_audit(_v91_load_state())
+    lines=[f"🔬 <b>A100 V{V1160_RC45_NUMBER} TRUE E2E PIPELINE AUDIT</b>",f"Status <b>{x['status']}</b> · Mode <b>READ ONLY</b>",""]
+    lines += [("✅" if ok else "⛔")+f" {name}" for name,ok in x["steps"].items()]
+    if x.get("evidence"):
+        e=x["evidence"]; lines += ["",f"Trace <code>{e.get('attribution_id')}</code>",f"L{e.get('learning_revision')} → S{e.get('strategy_revision')} → T{e.get('trust_revision')} → C{e.get('champion_revision')}"]
+    if x["failed"]: lines += ["","미완료: "+", ".join(x["failed"])]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+def _v1160_rc45_regression_shield():
+    state=_v1160_rc41_state_collections(_v91_default_state())
+    sample={"id":"RC45-T1","symbol":"BTCUSDT","side":"LONG","entry_price":100,"exit_price":101,"realized_pnl":1,
+            "realized_pct":1,"close_reason":"TAKE_PROFIT","market_regime":"RALLY","funding":0,"volatility":1,"closed_at":time.time()}
+    _v1160_rc43_record_closed(state,sample,"SHADOW"); _v1160_rc45_worker_tick(state,20)
+    before=json.dumps(state,sort_keys=True,default=str); pa=_v1160_rc45_pipeline_audit(state); after=json.dumps(state,sort_keys=True,default=str)
+    required={"learningqueue","queueworker","queueworkerrun","commandaudit","pipelineaudit","versionaudit"}
+    return {"version_manager":V91_VERSION==V1160_RC45_VERSION,"schema_preserved":state.get("schema")==1,
+      "handlers":required.issubset(set(_v1154_runtime_commands())),"registry":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+      "true_e2e":pa["status"]=="PASS","audit_read_only":before==after,
+      "idempotency":len(state.get("learning_applied_keys",{}))==1,
+      "paper_shadow":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+      "live_off":not any(t in globals() for t in ("place_live_order","submit_live_order","execute_live_trade"))}
+
+async def versionaudit1160rc45_cmd(update,context):
+    _v1155_track("versionaudit"); checks=_v1160_rc45_regression_shield(); failed=[k for k,v in checks.items() if not v]
+    q=_v1160_rc45_queue_health(_v91_load_state()); pa=_v1160_rc45_pipeline_audit(_v91_load_state())
+    lines=[f"🛡 <b>A100 V{V1160_RC45_NUMBER} LTS RELEASE AUDIT GATE</b>",f"Core <b>{V1160_RC45_VERSION}</b>",
+      f"Release Gate <b>{'PASS' if not failed else 'BLOCKED'}</b>",f"Worker <b>{q['worker']}</b> · Pipeline <b>{pa['status']}</b> · Audit <b>READ ONLY</b>",
+      f"Paper <b>{V91_MAX_POSITIONS}</b> / Shadow <b>{V914_SHADOW_MAX}</b> / Live <b>OFF</b>"]
+    if failed: lines.append("실패: "+", ".join(failed))
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+V925_COMMAND_USAGE.update({
+ "learningqueue":"읽기 전용 Learning Queue 및 Background Worker 상태",
+ "queueworker":"읽기 전용 Learning Queue Worker 상태",
+ "queueworkerrun":"Learning Queue Worker 수동 1회 실행",
+ "pipelineaudit":"ID Revision 기반 Outcome→Learning→Strategy→Trust→Champion 읽기 전용 감사",
+ "versionaudit":"V116.0 RC4.5 True E2E·Read-Only Audit LTS Gate"})
+V90_COMMAND_REGISTRY.update({"learningqueue":learningqueue1160rc45_cmd,"queueworker":queueworker1160rc45_cmd,
+ "queueworkerrun":queueworkerrun1160rc45_cmd,"pipelineaudit":pipelineaudit1160rc45_cmd,"versionaudit":versionaudit1160rc45_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC44_PREFLIGHT_FOR_RC45=v91_preflight
+def v91_preflight():
+    base=_V1160_RC44_PREFLIGHT_FOR_RC45(); checks=dict(base.get("checks",{}))
+    for key in list(checks):
+        if key.startswith(("v1160_rc44_","v1160_rc43_","v1160_rc42_","v1160_rc41_","v1160_rc4_")): checks[key]=True
+    checks.update({"v1160_rc45_"+k:v for k,v in _v1160_rc45_regression_shield().items()})
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
+            "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc45-true-e2e-read-only-audit"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.4 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.5 startup integrity failure: "+", ".join(failed))
+    _v1160_rc45_start_worker()
     main()

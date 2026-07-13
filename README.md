@@ -1,17 +1,16 @@
-# A100 V116.0 LTS RC4.4
+# A100 V116.0 LTS RC4.5
 
-End-to-End Release Audit & Pipeline Repair development release.
+True E2E Learning Integration & Read-Only Audit development release.
 
-## Core changes
-- Canonical Close Payload shared by Paper and Shadow closures.
-- Outcome Attribution canonical-field repair and compatible history backfill.
-- Learning Queue integrity and orphan-task diagnostics.
-- `/attributiondebug`, `/learningqueue`, `/commandaudit`, `/pipelineaudit`.
-- Command registry/help/data-dependency audit and E2E release gate.
+Core flow:
+`Outcome Attribution → Learning Queue → Strategy Performance → Strategy Trust → Champion Stability`
 
-## Preserved constraints
-- Existing Schema 1 and stored data preserved.
-- Paper positions: 20.
-- Shadow positions: 60.
-- Live Trading: OFF.
-- Validation: Shadow → Paper → LTS → Stress Test → Canary Live → Stable Live.
+Operational commands:
+- `/learningqueue` — read-only queue health
+- `/queueworker` — read-only worker health
+- `/queueworkerrun` — manual one-cycle worker execution
+- `/pipelineaudit` — read-only revision-trace E2E audit
+- `/commandaudit` — command connection audit
+- `/versionaudit` — LTS release gate
+
+Safety is unchanged: Schema 1 preserved, Paper 20, Shadow 60, Live Trading OFF.
