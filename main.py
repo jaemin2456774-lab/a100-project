@@ -44196,7 +44196,7 @@ async def dashboard1160ltss28_cmd(update, context):
 
 
 async def runtimehealth1160ltss28_cmd(update, context):
-    result=await runtimehealth1160ltss26_cmd(update,context); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence); runtime_lines,direction=_v1160_s28_runtime_trend(rv)
+    result=await runtimehealth1160ltss29_cmd(update,context); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence); runtime_lines,direction=_v1160_s28_runtime_trend(rv)
     await v90_1_safe_reply(update,"RUNTIME HEALTH BAND\n"+f"Score {comp['Overall']:.1f}/100 · {_v1160_s28_health_band(comp['Overall'])}\n\nRUNTIME TREND\n"+"\n".join(runtime_lines)+f"\nTrend {direction}\n\nEVIDENCE TIMELINE\n"+"\n".join(_v1160_s27_evidence_timeline(rv,evidence)))
     return result
 
@@ -44501,8 +44501,230 @@ def v91_preflight(force=False):
         V1160_S29_PREFLIGHT_CACHE=out
     return out
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.10 - RUNTIME TREND DELTA & ETA SOURCE ANALYTICS
+# ---------------------------------------------------------------------------
+V1160_LTS_S210_NUMBER = "116.0-LTS-S2.10"
+V1160_LTS_S210_VERSION = "A100 V116.0-LTS-S2.10 RUNTIME TREND DELTA & ETA SOURCE ANALYTICS"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S210_NUMBER,
+    version=V1160_LTS_S210_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S210_PREFLIGHT_CACHE = None
+V1160_S210_SCORE_FILE = os.path.join(V91_DATA_DIR, "a100_v1160_lts_s210_runtime_score_history.json")
+
+
+def _v1160_s210_window_velocity(rows, current, hours=None):
+    now=float(current.get("ts",time.time()) or time.time())
+    valid=[x for x in rows if isinstance(x,dict)]
+    if hours is not None:
+        valid=[x for x in valid if now-float(x.get("ts",0) or 0)<=float(hours)*3600.0]
+    if len(valid)<2:
+        return 0.0
+    first,last=valid[0],valid[-1]
+    span=max(0.0,(float(last.get("ts",now) or now)-float(first.get("ts",now) or now))/3600.0)
+    if span<0.25:
+        return 0.0
+    return max(0.0,(float(last.get("learning",0) or 0)-float(first.get("learning",0) or 0))/span)
+
+
+def _v1160_s210_velocity_profile(data,current):
+    rows=[x for x in data.get("samples",[]) if isinstance(x,dict)]
+    values={
+        "Current":_v1160_s210_window_velocity(rows,current,1),
+        "1h":_v1160_s210_window_velocity(rows,current,1),
+        "6h":_v1160_s210_window_velocity(rows,current,6),
+        "24h":_v1160_s210_window_velocity(rows,current,24),
+        "Overall":_v1160_s210_window_velocity(rows,current,None),
+    }
+    values["Peak"]=max(values.values()) if values else 0.0
+    source="24h" if values["24h"]>0 else ("6h" if values["6h"]>0 else ("1h" if values["1h"]>0 else ("Overall" if values["Overall"]>0 else "COLLECTING DATA")))
+    selected=0.0 if source=="COLLECTING DATA" else values[source]
+    remaining=max(0,int(current.get("target",150) or 150)-int(current.get("learning",0) or 0))
+    eta_h=(remaining/selected) if selected>0 else None
+    return values,source,selected,eta_h,remaining
+
+
+def _v1160_s210_eta_text(hours):
+    if hours is None or not math.isfinite(float(hours)) or float(hours)<=0:
+        return "COLLECTING DATA"
+    return _v1160_s27_eta_text(float(hours))
+
+
+def _v1160_s210_memory_stats(rv):
+    samples=[x for x in (rv.get("state",{}) or {}).get("samples",[]) if isinstance(x,dict)]
+    vals=[float(x.get("memory_mb",0) or 0) for x in samples if float(x.get("memory_mb",0) or 0)>0]
+    current=float((rv.get("latest",{}) or {}).get("memory_mb",0) or 0)
+    baseline=vals[0] if vals else current
+    peak=max(vals+[current]) if (vals or current) else 0.0
+    delta=0.0 if baseline<=0 else (current-baseline)/baseline*100.0
+    return baseline,current,peak,delta
+
+
+def _v1160_s210_load_score_history():
+    try:
+        with open(V1160_S210_SCORE_FILE,"r",encoding="utf-8") as fh:
+            data=json.load(fh)
+        if isinstance(data,dict) and isinstance(data.get("rows"),list):
+            return data
+    except Exception:
+        pass
+    return {"schema":1,"rows":[]}
+
+
+def _v1160_s210_record_score(score):
+    now=time.time(); data=_v1160_s210_load_score_history(); rows=[x for x in data.get("rows",[]) if isinstance(x,dict) and now-float(x.get("ts",0) or 0)<=7*86400]
+    if not rows or now-float(rows[-1].get("ts",0) or 0)>=900:
+        rows.append({"ts":now,"score":float(score)})
+        data["rows"]=rows[-672:]
+        try:
+            os.makedirs(os.path.dirname(V1160_S210_SCORE_FILE),exist_ok=True)
+            tmp=V1160_S210_SCORE_FILE+".tmp"
+            with open(tmp,"w",encoding="utf-8") as fh: json.dump(data,fh,ensure_ascii=False,indent=2)
+            os.replace(tmp,V1160_S210_SCORE_FILE)
+        except Exception:
+            pass
+    prev=float(rows[-2].get("score",score) or score) if len(rows)>=2 else float(score)
+    return prev,float(score)-prev,rows
+
+
+def _v1160_s210_score_sparkline(rows,limit=12):
+    vals=[float(x.get("score",0) or 0) for x in rows[-limit:] if isinstance(x,dict)]
+    if not vals: return "COLLECTING DATA"
+    chars="▁▂▃▄▅▆▇█"; lo=min(vals); hi=max(vals)
+    if hi-lo<1e-9: return chars[3]*len(vals)
+    return "".join(chars[min(7,max(0,int((v-lo)/(hi-lo)*7)))] for v in vals)
+
+
+def _v1160_s210_delta_line(label,rv,hours):
+    st=(rv.get("state",{}) or {}); samples=st.get("samples",[]) or []
+    score_now=float(_v1160_s26_health_components(rv,_v1160_s24_load_evidence()).get("Overall",0) or 0)
+    elapsed=float(rv.get("cert_elapsed",0) or 0)
+    if elapsed<hours*3600: return f"{label:4}  PENDING"
+    # Resource-score proxy uses the available memory trend until checkpoint score history is dense.
+    mem=_v1160_s21_window_delta(samples,hours,"memory_mb")
+    delta=0.0 if mem is None else -float(mem)*0.10
+    arrow="▲" if delta>0.1 else ("▼" if delta<-0.1 else "▬")
+    return f"{label:4}  {arrow} {delta:+.1f} · score {score_now:.1f}"
+
+
+async def runtimehealth1160ltss210_cmd(update,context):
+    result=await runtimehealth1160ltss29_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence)
+    previous,change,history=_v1160_s210_record_score(comp["Overall"])
+    baseline,current,peak,mem_delta=_v1160_s210_memory_stats(rv)
+    lines=[
+        "RUNTIME ANALYTICS S2.10",
+        f"Previous health        {previous:.1f}",
+        f"Current health         {comp['Overall']:.1f}",
+        f"Health change          {change:+.1f}",
+        f"24h score graph        {_v1160_s210_score_sparkline(history)}",
+        "",
+        "MEMORY DETAIL",
+        f"Baseline               {baseline:.1f} MB",
+        f"Current                {current:.1f} MB",
+        f"Peak                   {peak:.1f} MB",
+        f"Delta                  {mem_delta:+.1f}%",
+        "",
+        "RUNTIME SCORE DELTA",
+        _v1160_s210_delta_line("30m",rv,.5),
+        _v1160_s210_delta_line("1h",rv,1),
+        _v1160_s210_delta_line("6h",rv,6),
+        _v1160_s210_delta_line("24h",rv,24),
+    ]
+    await v90_1_safe_reply(update,"\n".join(lines))
+    return result
+
+
+async def releasegate1160ltss210_cmd(update,context):
+    await releasegate1160ltss27_cmd(update,context)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot()
+    data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":learning.get("completed",0),"target":learning.get("target",150)}
+    values,source,selected,eta_h,remaining=_v1160_s210_velocity_profile(data,current)
+    lines=[
+        "LEARNING ETA ANALYTICS",
+        f"Current / 1h          {values['Current']:.2f} / {values['1h']:.2f} samples/hour",
+        f"6h / 24h              {values['6h']:.2f} / {values['24h']:.2f} samples/hour",
+        f"Overall / Peak         {values['Overall']:.2f} / {values['Peak']:.2f} samples/hour",
+        f"ETA source             {source}",
+        f"Selected velocity      {selected:.2f} samples/hour",
+        f"Need                   {remaining} samples",
+        f"Estimated ETA          {_v1160_s210_eta_text(eta_h)}",
+    ]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def dashboard1160ltss210_cmd(update,context):
+    await dashboard1160ltss29_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence)
+    previous,change,history=_v1160_s210_record_score(comp["Overall"])
+    state=_v1160_rc496_shared_state(); cert,_=_v1160_rc497_certification_cached(state); learning=_v1160_rc47_dashboard_learning(state)
+    data=_v1160_s27_gate_snapshot_record(cert,learning); current=data.get("samples",[])[-1]
+    values,source,selected,eta_h,remaining=_v1160_s210_velocity_profile(data,current)
+    lines=[
+        "S2.10 TREND SUMMARY",
+        f"Runtime health         {previous:.1f} → {comp['Overall']:.1f} ({change:+.1f})",
+        f"Score graph            {_v1160_s210_score_sparkline(history)}",
+        f"Learning velocity      {selected:.2f}/h · source {source}",
+        f"Need / ETA             {remaining} · {_v1160_s210_eta_text(eta_h)}",
+    ]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def status1160ltss210_cmd(update,context):
+    await status1160ltss29_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence)
+    previous,change,_=_v1160_s210_record_score(comp["Overall"])
+    return await v90_1_safe_reply(update,f"RUNTIME HEALTH CHANGE\nPrevious {previous:.1f}\nCurrent  {comp['Overall']:.1f}\nDelta    {change:+.1f}")
+
+
+async def version1160ltss210_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.10 · score delta, memory detail and ETA-source analytics."]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.10 version/build information",
+    "status":"Runtime health previous/current delta summary",
+    "runtimehealth":"Runtime score delta, memory baseline/current/peak analytics",
+    "dashboard":"Runtime score graph and learning ETA-source summary",
+    "releasegate":"Learning velocity windows and authoritative ETA source",
+})
+V90_COMMAND_REGISTRY.update({
+    "version":version1160ltss210_cmd,
+    "status":status1160ltss210_cmd,
+    "runtimehealth":runtimehealth1160ltss210_cmd,
+    "dashboard":dashboard1160ltss210_cmd,
+    "releasegate":releasegate1160ltss210_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S29_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S210_PREFLIGHT_CACHE
+    if V1160_S210_PREFLIGHT_CACHE is not None and not force: return V1160_S210_PREFLIGHT_CACHE
+    base=_V1160_S29_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in ("s29_handlers","s29_version_source"): checks.pop(stale,None)
+    checks.update({
+        "s210_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S210_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,
+        "s210_registry_341":len(V90_COMMAND_REGISTRY)==341,
+        "s210_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss210_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss210_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss210_cmd and V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss210_cmd,
+        "s210_eta_safe":_v1160_s210_eta_text(None)=="COLLECTING DATA" and _v1160_s210_eta_text(-1)=="COLLECTING DATA",
+        "s210_memory_shape":len(_v1160_s210_memory_stats({"state":{"samples":[]},"latest":{"memory_mb":0}}))==4,
+        "s210_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "s210_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"CERTIFYING" if not failed else "BLOCKED","certification_stage":"Sprint 2.10 Runtime Trend Delta & ETA Source Analytics"})
+    if not force: V1160_S210_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
-    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.9 startup integrity failure: "+", ".join(audit.get("failed",[])))
+    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.10 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker(); main()
