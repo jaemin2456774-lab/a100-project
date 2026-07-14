@@ -41597,11 +41597,20 @@ V1160_RC4923_VERSION = V1160_VERSION_MANAGER.version
 V91_VERSION = V1160_VERSION_MANAGER.version
 
 # Replace every late release display constant from one immutable source.
-for _key in list(globals()):
-    if _key.startswith("V1160_RC") and _key.endswith("_NUMBER"):
-        globals()[_key] = V1160_VERSION_MANAGER.number
-    elif _key.startswith("V1160_RC") and _key.endswith("_VERSION"):
-        globals()[_key] = V1160_VERSION_MANAGER.version
+# Historical release constants are immutable audit evidence.  Never rewrite
+# earlier RC identifiers to the current release: doing so makes archived
+# regression tests and change-ledger evidence report false version data.
+# V91_VERSION and V1160_VERSION_MANAGER remain the single source for the
+# currently running build.
+_V1160_HISTORICAL_VERSION_SNAPSHOTS = {
+    "V1160_RC41_VERSION": "A100 V116.0-RC4.2 QUALITY & OUTCOME ATTRIBUTION",
+    "V1160_RC42_VERSION": "A100 V116.0-RC4.3 UX, ATTRIBUTION & CACHE",
+    "V1160_RC43_VERSION": "A100 V116.0-RC4.4 END-TO-END AUDIT",
+    "V1160_RC44_VERSION": "A100 V116.0-RC4.5 LEARNING WORKER AUDIT",
+    "V1160_RC45_VERSION": "A100 V116.0-RC4.5 TRUE E2E CERTIFICATION",
+}
+for _key, _value in _V1160_HISTORICAL_VERSION_SNAPSHOTS.items():
+    globals()[_key] = _value
 
 V1160_RC4923_USER_LIFETIME = defaultdict(list)
 V1160_RC4923_BACKGROUND = defaultdict(lambda: _rc4923_deque(maxlen=500))
@@ -41766,11 +41775,20 @@ V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
 V1160_RC4924_NUMBER = V1160_VERSION_MANAGER.number
 V1160_RC4924_VERSION = V1160_VERSION_MANAGER.version
 V91_VERSION = V1160_VERSION_MANAGER.version
-for _key in list(globals()):
-    if _key.startswith("V1160_RC") and _key.endswith("_NUMBER"):
-        globals()[_key] = V1160_VERSION_MANAGER.number
-    elif _key.startswith("V1160_RC") and _key.endswith("_VERSION"):
-        globals()[_key] = V1160_VERSION_MANAGER.version
+# Historical release constants are immutable audit evidence.  Never rewrite
+# earlier RC identifiers to the current release: doing so makes archived
+# regression tests and change-ledger evidence report false version data.
+# V91_VERSION and V1160_VERSION_MANAGER remain the single source for the
+# currently running build.
+_V1160_HISTORICAL_VERSION_SNAPSHOTS = {
+    "V1160_RC41_VERSION": "A100 V116.0-RC4.2 QUALITY & OUTCOME ATTRIBUTION",
+    "V1160_RC42_VERSION": "A100 V116.0-RC4.3 UX, ATTRIBUTION & CACHE",
+    "V1160_RC43_VERSION": "A100 V116.0-RC4.4 END-TO-END AUDIT",
+    "V1160_RC44_VERSION": "A100 V116.0-RC4.5 LEARNING WORKER AUDIT",
+    "V1160_RC45_VERSION": "A100 V116.0-RC4.5 TRUE E2E CERTIFICATION",
+}
+for _key, _value in _V1160_HISTORICAL_VERSION_SNAPSHOTS.items():
+    globals()[_key] = _value
 
 
 def _v1160_rc4924_gate_snapshot():
@@ -41936,18 +41954,31 @@ def v91_preflight(force=False):
 # ---------------------------------------------------------------------------
 # A100 V116.0 LTS RC4.9.25 - RC FREEZE COMPLETION
 # ---------------------------------------------------------------------------
+# RC4.9.25 is the immutable frozen RC baseline.  FC1 is the first
+# evidence-based LTS certification build produced from that baseline.
+V1160_RC4925_NUMBER = "116.0-RC4.9.25"
+V1160_RC4925_VERSION = "A100 V116.0-RC4.9.25 LTS RC FREEZE COMPLETION"
+V1160_LTS_FC1_NUMBER = "116.0-LTS-FC1"
+V1160_LTS_FC1_VERSION = "A100 V116.0-LTS-FC1 FINAL CERTIFICATION SPRINT 1"
 V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
-    number="116.0-RC4.9.25",
-    version="A100 V116.0-RC4.9.25 LTS RC FREEZE COMPLETION",
+    number=V1160_LTS_FC1_NUMBER,
+    version=V1160_LTS_FC1_VERSION,
 )
-V1160_RC4925_NUMBER = V1160_VERSION_MANAGER.number
-V1160_RC4925_VERSION = V1160_VERSION_MANAGER.version
 V91_VERSION = V1160_VERSION_MANAGER.version
-for _key in list(globals()):
-    if _key.startswith("V1160_RC") and _key.endswith("_NUMBER"):
-        globals()[_key] = V1160_VERSION_MANAGER.number
-    elif _key.startswith("V1160_RC") and _key.endswith("_VERSION"):
-        globals()[_key] = V1160_VERSION_MANAGER.version
+# Historical release constants are immutable audit evidence.  Never rewrite
+# earlier RC identifiers to the current release: doing so makes archived
+# regression tests and change-ledger evidence report false version data.
+# V91_VERSION and V1160_VERSION_MANAGER remain the single source for the
+# currently running build.
+_V1160_HISTORICAL_VERSION_SNAPSHOTS = {
+    "V1160_RC41_VERSION": "A100 V116.0-RC4.2 QUALITY & OUTCOME ATTRIBUTION",
+    "V1160_RC42_VERSION": "A100 V116.0-RC4.3 UX, ATTRIBUTION & CACHE",
+    "V1160_RC43_VERSION": "A100 V116.0-RC4.4 END-TO-END AUDIT",
+    "V1160_RC44_VERSION": "A100 V116.0-RC4.5 LEARNING WORKER AUDIT",
+    "V1160_RC45_VERSION": "A100 V116.0-RC4.5 TRUE E2E CERTIFICATION",
+}
+for _key, _value in _V1160_HISTORICAL_VERSION_SNAPSHOTS.items():
+    globals()[_key] = _value
 
 V1160_RC4925_STARTED_AT = time.time()
 V1160_RC4925_STARTUP_SAMPLES = defaultdict(list)
@@ -42101,6 +42132,6 @@ def v91_preflight(force=False):
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.25 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 LTS-FC1 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
