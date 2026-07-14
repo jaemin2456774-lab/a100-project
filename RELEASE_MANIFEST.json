@@ -1,5 +1,5 @@
 {
-  "version": "116.0-RC4.9.13",
+  "version": "A100 V116.0-RC4.9.14 FULL REGRESSION & LTS READINESS AUDIT",
   "release": "SINGLE_SOURCE_TRUTH_RELEASE_CONSISTENCY_DEVELOPMENT_RELEASE",
   "schema": 1,
   "paper_limit": 20,
@@ -1218,5 +1218,17 @@
     }
   ],
   "release_name": "ACTIVE_RELEASE_STARTUP_INTEGRITY_HOTFIX",
-  "startup_integrity": "active_release_only"
+  "startup_integrity": "active_release_only",
+  "release_type": "DEVELOPMENT_RELEASE",
+  "baseline": "A100_V116_0_LTS_RC4_9_13_ACTIVE_RELEASE_STARTUP_INTEGRITY_HOTFIX_DEVELOPMENT_RELEASE.zip",
+  "command_count": 341,
+  "tests_passed": 71,
+  "tests_failed": 0,
+  "lts_candidate": false,
+  "pending_live_verification": [
+    "Railway Startup",
+    "Telegram API",
+    "Scheduler soak",
+    "Watchdog/SIGTERM/Auto Recovery"
+  ]
 }

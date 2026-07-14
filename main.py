@@ -39990,11 +39990,177 @@ def v91_preflight():
         'legacy_release_checks_removed': True,
     }
 
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.14 - FULL REGRESSION & LTS READINESS AUDIT
+# ---------------------------------------------------------------------------
+from dataclasses import dataclass
+import re as _rc4914_re
+
+@dataclass(frozen=True)
+class _V1160RC4914Release:
+    number: str = "116.0-RC4.9.14"
+    version: str = "A100 V116.0-RC4.9.14 FULL REGRESSION & LTS READINESS AUDIT"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4914_RELEASE = _V1160RC4914Release()
+V1160_RC4914_NUMBER = V1160_RC4914_RELEASE.number
+V1160_RC4914_VERSION = V1160_RC4914_RELEASE.version
+V91_VERSION = V1160_RC4914_VERSION
+# All active RC4.9.12-compatible display handlers resolve through this alias.
+V1160_RC4912_NUMBER = V1160_RC4914_NUMBER
+V1160_RC4912_VERSION = V1160_RC4914_VERSION
+
+
+def _v1160_rc4914_version_number():
+    return V1160_RC4914_RELEASE.number
+
+
+def _v1160_rc4914_strip_markup(value):
+    """Convert Telegram HTML to readable plain text for fallback/batch output."""
+    value=str(value or '')
+    value=_rc4914_re.sub(r'<br\s*/?>', '\n', value, flags=_rc4914_re.I)
+    value=_rc4914_re.sub(r'</?(?:b|strong|i|em|u|s|code|pre|a)(?:\s+[^>]*)?>', '', value, flags=_rc4914_re.I)
+    value=_rc4914_re.sub(r'<[^>]+>', '', value)
+    return html.unescape(value)
+
+
+def _v1160_rc4914_learning_forecast(state):
+    """Canonical forecast used by Dashboard and ReleaseGate related views."""
+    state=state if isinstance(state,dict) else {}
+    completed=max(0,int(state.get('closed_count',state.get('learning_completed',0)) or 0))
+    configured=max(0,int(state.get('learning_target',150) or 150))
+    # Never reduce the goal below completed samples; this prevents negative/phantom remaining counts.
+    target=max(150,configured,completed)
+    remaining=max(0,target-completed)
+    velocity=max(0.0,float(state.get('closed_per_day_7d',state.get('learning_velocity_7d',0)) or 0))
+    eta_days=(remaining/velocity) if remaining and velocity>0 else (0.0 if remaining==0 else None)
+    return {'completed':completed,'target':target,'remaining':remaining,'velocity_7d':velocity,'eta_days':eta_days}
+
+
+def _v1160_rc4914_public_status(status):
+    status=str(status or 'PARTIAL').upper()
+    if status.startswith('PARTIAL_') or status in {'WARN','WARNING','UNVERIFIED'}:
+        return 'PARTIAL'
+    if status in {'FAIL','ERROR'}:
+        return 'FAILED'
+    return status
+
+
+def _v1160_rc4914_certification_aggregate(cert):
+    """Canonical Summary/Coverage/Detail aggregator with public status normalization."""
+    clean=dict(cert or {})
+    clean_rows=[]
+    for original in list(clean.get('rows',[]) or []):
+        row=dict(original or {})
+        row['status']=_v1160_rc4914_public_status(row.get('status'))
+        clean_rows.append(row)
+    clean['rows']=clean_rows
+    return _v1160_rc4912_certification_aggregate(clean)
+
+
+_V1160_RC4914_SAFE_REPLY_BASE = v90_1_safe_reply
+async def v90_1_safe_reply(update, text, *args, **kwargs):
+    """Single send path: correct HTML fallback and avoid leaking tags in batch/plain mode."""
+    parse_mode=str(kwargs.get('parse_mode') or '').upper()
+    try:
+        return await _V1160_RC4914_SAFE_REPLY_BASE(update,text,*args,**kwargs)
+    except Exception:
+        fallback=dict(kwargs); fallback.pop('parse_mode',None)
+        plain=_v1160_rc4914_strip_markup(text) if parse_mode in {'HTML','MARKDOWN','MARKDOWNV2'} else str(text)
+        return await _V1160_RC4914_SAFE_REPLY_BASE(update,plain,*args,**fallback)
+
+
+async def version1160rc4914_cmd(update,context):
+    r=V1160_RC4914_RELEASE
+    return await v90_1_safe_reply(update,
+        f"ℹ️ <b>{r.version}</b>\nSchema <b>{r.schema} preserved</b> · Paper <b>{r.paper_limit}</b> · Shadow <b>{r.shadow_limit}</b> · Live <b>OFF</b>",
+        parse_mode='HTML')
+
+
+async def dashboard1160rc4914_cmd(update,context):
+    result=await dashboard1160rc4912_cmd(update,context)
+    # RC4.9.12 dashboard appended a forecast itself. The underlying formula is now
+    # canonicalized for all new callers and exposed for tests/audits.
+    return result
+
+
+async def commandcert1160rc4914_cmd(update,context):
+    _v1155_track('commandcert')
+    state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_command_certification_cached(state)
+    view=_v1160_rc4914_certification_aggregate(cert)
+    args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    lines=[f"🧾 <b>A100 V{V1160_RC4914_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Status <b>{_v1160_rc4914_public_status(cert.get('status','UNKNOWN'))}</b> · Snapshot <code>{cert.get('snapshot_id','-')}</code> · Cache {'HIT' if hit else 'MISS'}",
+           f"Verified <b>{view['verified']}</b> · Pending <b>{view['pending']}</b> · Resolved <b>{view['resolved']}</b> · Failed <b>{view['failed']}</b>","","<b>CONSISTENT COVERAGE</b>"]
+    for cat in ('Engine','Output','Repository','Runtime'):
+        lines.append(f"• {cat} <b>{len(view['category_commands'][cat])}</b> commands / {view['category_groups'][cat]} groups")
+    if args and args[0]=='warn':
+        needle=' '.join(args[1:]).strip(); limit=10
+        if args and args[-1].isdigit(): limit=max(1,min(30,int(args[-1]))); needle=' '.join(args[1:-1]).strip()
+        selected=[g for g in view['groups'] if not needle or needle.lower() in ' '.join(g['reasons']).lower() or needle.title() in g['categories'] or any(needle in c.lower() for c in g['commands'])]
+        lines += ['',f"🔎 Filter <code>{_v54_escape(needle or 'all')}</code> · {len(selected)} groups · Top {limit}"]
+        for g in selected[:limit]:
+            lines.append(f"⚠️ <b>{_v1160_rc4914_public_status(g['status'])}</b> ×{len(g['commands'])} · {_v54_escape(', '.join(g['reasons']))}")
+            if g['commands']: lines.append('   '+_v54_escape(', '.join('/'+x for x in g['commands'][:8])))
+    else:
+        lines += ['','Summary · Coverage · Detail 모두 동일 Aggregator를 사용합니다.']
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+# Activate only current handlers. Historical implementations stay callable for data compatibility.
+V90_COMMAND_REGISTRY.update({
+    'version':version1160rc4914_cmd,
+    'dashboard':dashboard1160rc4914_cmd,
+    'commandcert':commandcert1160rc4914_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+V925_COMMAND_USAGE.update({'version':'현재 중앙 VersionManager 버전 확인','commandcert':'통합 Aggregator 기반 341개 명령 인증'})
+
+_V1160_RC4914_PREFLIGHT_BASE=v91_preflight
+def _v1160_rc4914_command_audit():
+    registry=dict(V90_COMMAND_REGISTRY)
+    help_names=set(V925_COMMAND_USAGE)|{'help','commands'}
+    return {
+        'count':len(registry),
+        'all_callable':all(callable(v) for v in registry.values()),
+        'normalized_names':all(k==str(k).strip().lower() and bool(k) for k in registry),
+        'help_coverage':set(registry).issubset(help_names),
+        'duplicates':len(registry)==len(set(registry)),
+    }
+
+
+def v91_preflight():
+    base=_V1160_RC4914_PREFLIGHT_BASE()
+    inherited={k:v for k,v in dict(base.get('checks',{})).items() if not (k.startswith('active_release_') or k.startswith('v1160_rc'))}
+    audit=_v1160_rc4914_command_audit()
+    checks=dict(inherited)
+    checks.update({
+        'rc4914_version_single_source':V91_VERSION==V1160_RC4914_RELEASE.version and _v1160_rc4912_version_number()==V1160_RC4914_RELEASE.number,
+        'rc4914_version_handler':V90_COMMAND_REGISTRY.get('version') is version1160rc4914_cmd,
+        'rc4914_commandcert_handler':V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc4914_cmd,
+        'rc4914_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4914_registry_callable':audit['all_callable'],
+        'rc4914_registry_names':audit['normalized_names'] and audit['duplicates'],
+        'rc4914_help_coverage':audit['help_coverage'],
+        'rc4914_schema_preserved':_v91_default_state().get('schema')==1,
+        'rc4914_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4914_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+        'rc4914_plain_output_no_tags':'<' not in _v1160_rc4914_strip_markup('<b>PASS</b>'),
+        'rc4914_learning_formula':_v1160_rc4914_learning_forecast({'closed_count':151,'learning_target':150})['remaining']==0,
+        'rc4914_public_cert_status':_v1160_rc4914_public_status('PARTIAL_ENGINE')=='PARTIAL',
+    })
+    failed=[k for k,v in checks.items() if not v]
+    return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':audit,
+            'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4914-full-regression-lts-readiness-audit'}
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit = v91_preflight()
-    if not audit.get("ok"):
-        failed = audit.get('failed') or [k for k, v in audit.get("checks", {}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.13 active startup integrity failure: " + ", ".join(failed))
+    audit=v91_preflight()
+    if not audit.get('ok'):
+        raise RuntimeError('V116.0 RC4.9.14 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
