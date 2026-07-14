@@ -44088,8 +44088,8 @@ def v91_preflight(force=False):
 # ---------------------------------------------------------------------------
 # A100 V116.0 LTS S2.8 - 72H TREND / HISTORY / PREDICTION OBSERVABILITY
 # ---------------------------------------------------------------------------
-V1160_LTS_S28_NUMBER = "116.0-LTS-S2.8"
-V1160_LTS_S28_VERSION = "A100 V116.0-LTS-S2.8 72H TREND HISTORY PREDICTION OBSERVABILITY"
+V1160_LTS_S28_NUMBER = "116.0-LTS-S2.8.1"
+V1160_LTS_S28_VERSION = "A100 V116.0-LTS-S2.8.1 RUNTIMEHEALTH NAMEERROR HOTFIX"
 V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
     number=V1160_LTS_S28_NUMBER,
     version=V1160_LTS_S28_VERSION,
@@ -44149,7 +44149,7 @@ def _v1160_s28_gate_history(data, limit=5):
 def _v1160_s28_runtime_trend(rv):
     # Honest trend classification from currently available windows; unavailable windows remain pending.
     elapsed=float(rv.get("cert_elapsed",0) or 0); samples=int(rv.get("samples",0) or 0)
-    base=float(_v1160_s26_health_components(rv,_v1160_s26_load_evidence()).get("Overall",0) or 0)
+    base=float(_v1160_s26_health_components(rv,_v1160_s24_load_evidence()).get("Overall",0) or 0)
     points=((1800,"30m"),(3600,"1h"),(21600,"6h"),(86400,"24h"),(172800,"48h"),(259200,"72h"))
     out=[]
     for sec,label in points:
@@ -44211,7 +44211,7 @@ async def status1160ltss28_cmd(update, context):
 
 
 async def version1160ltss28_cmd(update, context):
-    vm=_v1160_rc4923_version_snapshot(); lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.8 · 72H Trend / History / Prediction observability enabled."]
+    vm=_v1160_rc4923_version_snapshot(); lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.8.1 · Runtimehealth NameError hotfix applied."]
     return await v90_1_safe_reply(update,"\n".join(lines))
 
 
@@ -44226,12 +44226,12 @@ def v91_preflight(force=False):
     base=_V1160_S27_PREFLIGHT(force); checks=dict(base.get("checks",{}))
     for stale in ("s27_handlers","s27_version_source"): checks.pop(stale,None)
     checks.update({"s28_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S28_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,"s28_registry_341":len(V90_COMMAND_REGISTRY)==341,"s28_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss28_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss28_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss28_cmd and V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss28_cmd,"s28_trend_schema":_v1160_s27_load_trend().get("schema")==1,"s28_progress_bar":_v1160_s28_progress_bar(2,7).endswith("29%"),"s28_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"s28_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade"))})
-    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"CERTIFYING" if not failed else "BLOCKED","certification_stage":"Sprint 2.8 72H Trend History Prediction Observability"})
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"CERTIFYING" if not failed else "BLOCKED","certification_stage":"Sprint 2.8.1 Runtimehealth NameError Hotfix"})
     if not force: V1160_S28_PREFLIGHT_CACHE=out
     return out
 
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
-    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.8 startup integrity failure: "+", ".join(audit.get("failed",[])))
+    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.8.1 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker(); main()
