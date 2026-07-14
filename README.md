@@ -1,23 +1,11 @@
-# A100 V116.0 LTS-S2.1 Long Runtime Certification
+# A100 V116.0 LTS-S2.2 Long Runtime Certification Refinement
 
-현재 단계: **Sprint 2 MEASURING**  
-Feature Freeze 유지 · Schema 1 · Paper 20 · Shadow 60 · Live OFF
+Sprint 2 장시간 인증 계측 품질 개선 릴리스입니다.
 
-# A100 V116.0 LTS-FC1.2 Final Product Polish
-
-Sprint 1 closeout release. AI learning targets and system release readiness are separated, low-sample performance windows use WARMING UP, and build bottlenecks include percentages and the longest stage.
-
-# A100 V116.0 LTS-FC1.1
-
-Product Polish & Certification development release based on the certified FC1 baseline.
-
-- Feature additions: 0
-- Registry: 341/341
-- Schema: 1
-- Paper: 20
-- Shadow: 60
-- Live Trading: OFF
-- Release Freeze: ACTIVE
-- Regression Risk: NONE
-
-설치 후 `POST_INSTALL_SCREENSHOT_CHECKLIST_LTS_FC1_1_KR.md` 순서로 Telegram 화면을 확인하세요.
+- 30분/30샘플 Warm-up Gate
+- Runtime 단계: MEASURING → COLLECTING → CERTIFYING → CERTIFIED
+- 72시간 Remaining/ETA 표시
+- Release Readiness 가중치 근거 표시
+- Last Recovery/Restart/Snapshot/Exception 시각 표시
+- Schema 1 / Paper 20 / Shadow 60 / Live OFF 유지
+- Release Freeze ACTIVE / Regression Risk NONE

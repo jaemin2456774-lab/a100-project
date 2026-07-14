@@ -8,7 +8,7 @@
   "paper": 20,
   "shadow": 60,
   "live": "OFF",
-  "certification_stage": "Sprint 2 MEASURING",
+  "certification_stage": "Sprint 2.2 Long Runtime Refinement",
   "long_runtime_target_hours": 72,
   "test_result": {
     "pytest_passed": 83,
@@ -1451,5 +1451,9 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ]
+  ],
+  "version": "116.0-LTS-S2.2",
+  "release_name": "A100_V116_0_LTS_S2_2_LONG_RUNTIME_CERTIFICATION_REFINEMENT_DEVELOPMENT_RELEASE",
+  "release_freeze": "ACTIVE",
+  "live_trading": "OFF"
 }
