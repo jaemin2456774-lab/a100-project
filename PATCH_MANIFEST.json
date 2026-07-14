@@ -1,15 +1,20 @@
 {
-  "package": "A100 V116.0 LTS-S2.14 Unified Certification Score Engine Patch",
-  "baseline": "A100 V116.0 LTS-S2.13 Final Calibration Activation",
-  "deployment_type": "PATCH_CHANGED_FILES_ONLY",
+  "package": "A100_V116_0_LTS_S2_15_FINAL_CONSISTENCY_CERTIFICATION_PATCH",
+  "version": "116.0-LTS-S2.15",
+  "type": "PATCH",
+  "baseline": "A100 V116.0 LTS-S2.14 Unified Certification Score Engine",
   "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": "OFF",
-  "feature_freeze": "ACTIVE",
-  "release_freeze": "ACTIVE",
+  "paper_positions": 20,
+  "shadow_positions": 60,
+  "live_trading": false,
   "changed_files": [
     "main.py"
   ],
-  "generated_utc": "2026-07-14T23:01:49.287103+00:00"
+  "documentation": [
+    "CHANGELOG_S2.15.md",
+    "PATCH_INSTALL_GUIDE_KR.md"
+  ],
+  "tests": [
+    "test_v1160_lts_s215_final_consistency.py"
+  ]
 }
