@@ -1,5 +1,5 @@
 {
-  "version": "A100 V116.0-RC4.9.19 LTS RUNTIME PERFORMANCE ACCELERATION & CERTIFICATION CACHE",
+  "version": "116.0-RC4.9.20",
   "schema": 1,
   "paper_limit": 20,
   "shadow_limit": 60,
@@ -1324,5 +1324,6 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ]
+  ],
+  "name": "A100 V116.0 RC4.9.20 AI Performance Engine & Incremental Runtime Certification"
 }

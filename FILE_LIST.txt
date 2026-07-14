@@ -1,9 +1,5 @@
 .gitignore
-.pytest_cache/.gitignore
-.pytest_cache/CACHEDIR.TAG
-.pytest_cache/README.md
-.pytest_cache/v/cache/lastfailed
-.pytest_cache/v/cache/nodeids
+FILE_LIST.txt
 GITHUB_REPLACE_GUIDE_KR.md
 POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md
 RC4_9_11_RELEASE_REPORT_KR.md
@@ -16,6 +12,7 @@ RC4_9_17_RELEASE_REPORT_KR.md
 RC4_9_18_RELEASE_REPORT_KR.md
 RC4_9_19_RELEASE_REPORT_KR.md
 RC4_9_1_STARTUP_HOTFIX_REPORT_KR.md
+RC4_9_20_RELEASE_REPORT_KR.md
 RC4_9_2_RELEASE_REPORT_KR.md
 RC4_9_3_RELEASE_REPORT_KR.md
 RC4_9_4_RELEASE_REPORT_KR.md
@@ -26,6 +23,7 @@ README.md
 README_RC4_9_2.md
 README_RC4_9_3.md
 README_RC4_9_4.md
+RELEASE_MANIFEST.json
 RELEASE_MANIFEST_RC4_9_3.json
 RELEASE_MANIFEST_RC4_9_4.json
 docs/CHANGELOG_V101_0.md
@@ -69,6 +67,7 @@ docs/CHANGELOG_V116_0_RC4_8.md
 docs/CHANGELOG_V116_0_RC4_9_10.md
 docs/CHANGELOG_V116_0_RC4_9_11.md
 docs/CHANGELOG_V116_0_RC4_9_12.md
+docs/CHANGELOG_V116_0_RC4_9_20.md
 docs/CHANGELOG_V116_0_RC4_9_5.md
 docs/CHANGELOG_V116_0_RC4_9_6.md
 docs/CHANGELOG_V116_0_RC4_9_7.md
@@ -204,6 +203,7 @@ tests/test_v1160_rc4910_operations_clarity.py
 tests/test_v1160_rc4914_full_regression.py
 tests/test_v1160_rc4918_final_stabilization.py
 tests/test_v1160_rc491_startup_hotfix.py
+tests/test_v1160_rc4920_ai_performance_engine.py
 tests/test_v1160_rc494_command_performance.py
 tests/test_v1160_rc495_status_ux_performance.py
 tests/test_v1160_rc496_consistency.py

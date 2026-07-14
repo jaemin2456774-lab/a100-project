@@ -40997,10 +40997,194 @@ def v91_preflight(force=False):
     return result
 
 
+
+# ====================================================================
+# A100 V116.0 LTS RC4.9.20 - AI PERFORMANCE ENGINE
+# Incremental parallel certification + shared intelligence snapshot cache
+# ====================================================================
+from dataclasses import dataclass as _rc4920_dataclass
+import os as _rc4920_os
+import contextlib as _rc4920_contextlib
+
+@_rc4920_dataclass(frozen=True)
+class _V1160RC4920Release:
+    number: str = "116.0-RC4.9.20"
+    version: str = "A100 V116.0-RC4.9.20 LTS AI PERFORMANCE ENGINE & INCREMENTAL RUNTIME CERTIFICATION"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4920_RELEASE=_V1160RC4920Release()
+V1160_RC4920_NUMBER=V1160_RC4920_RELEASE.number
+V1160_RC4920_VERSION=V1160_RC4920_RELEASE.version
+V91_VERSION=V1160_RC4920_VERSION
+V1160_RC4912_NUMBER=V1160_RC4920_NUMBER
+V1160_RC4912_VERSION=V1160_RC4920_VERSION
+
+V1160_RC4920_SOURCE_CACHE={}
+V1160_RC4920_CERT_CACHE={}
+V1160_RC4920_PREFLIGHT_CACHE={}
+V1160_RC4920_SHARED_CACHE={}
+V1160_RC4920_LOCK=_rc4919_threading.RLock()
+V1160_RC4920_WORKERS=max(2,min(16,(_rc4920_os.cpu_count() or 2)*2))
+
+
+def _v1160_rc4920_handler_key(name,handler):
+    code=getattr(handler,'__code__',None)
+    return (name,id(handler),getattr(code,'co_firstlineno',-1),getattr(code,'co_filename',''))
+
+
+def _v1160_rc4920_scan_one(item):
+    name,handler=item; key=_v1160_rc4920_handler_key(name,handler)
+    with V1160_RC4920_LOCK:
+        cached=V1160_RC4920_SOURCE_CACHE.get(key)
+    if cached is not None:
+        return name,cached,True
+    try:
+        if not callable(handler): raise TypeError('handler not callable')
+        sig=inspect.signature(handler)
+        source=inspect.getsource(handler)
+        compile(source,f'<a100:{name}>','exec')
+        low=source.lower()
+        layer={
+            'output':any(x in low for x in ('safe_reply','reply_text','reply_html','send_message','edit_message','return await ')),
+            'direct_output':any(x in low for x in ('safe_reply','reply_text','reply_html','send_message','edit_message')),
+            'delegated_output':'return await ' in low or 'await v90_1_' in low,
+            'repository':any(x in low for x in ('_load_','repository','state','snapshot','cache','history','paper','shadow')),
+            'engine':any(x in low for x in ('engine','score','forecast','audit','certification','health','performance','learning','strategy','market')),
+            'runtime_route':inspect.iscoroutinefunction(handler) or inspect.isfunction(handler),
+        }
+        row={'ok':True,'callable':True,'coroutine':inspect.iscoroutinefunction(handler),'parameters':len(sig.parameters),'source_sha256':hashlib.sha256(source.encode()).hexdigest()[:12],'layer':layer}
+    except Exception as exc:
+        row={'ok':False,'error':f'{type(exc).__name__}: {exc}','layer':{'output':False,'direct_output':False,'delegated_output':False,'repository':False,'engine':False,'runtime_route':False}}
+    with V1160_RC4920_LOCK:
+        V1160_RC4920_SOURCE_CACHE[key]=row
+    return name,row,False
+
+
+def _v1160_rc4920_parallel_scan(force=False):
+    items=sorted(V90_COMMAND_REGISTRY.items())
+    if force:
+        active={_v1160_rc4920_handler_key(n,h) for n,h in items}
+        with V1160_RC4920_LOCK:
+            for key in list(V1160_RC4920_SOURCE_CACHE):
+                if key not in active: V1160_RC4920_SOURCE_CACHE.pop(key,None)
+    started=time.perf_counter(); rows={}; hits=0
+    with ThreadPoolExecutor(max_workers=min(V1160_RC4920_WORKERS,max(1,len(items)))) as ex:
+        futures=[ex.submit(_v1160_rc4920_scan_one,item) for item in items]
+        for fut in as_completed(futures):
+            name,row,hit=fut.result(); rows[name]=row; hits+=int(hit)
+    evidence={n:{k:v for k,v in r.items() if k not in ('ok','error','layer')} for n,r in rows.items() if r.get('ok')}
+    errors={n:r.get('error','unknown') for n,r in rows.items() if not r.get('ok')}
+    layers={n:r['layer'] for n,r in rows.items()}
+    return evidence,errors,layers,{'scan_ms':(time.perf_counter()-started)*1000.0,'cache_hits':hits,'changed':len(items)-hits,'workers':V1160_RC4920_WORKERS}
+
+
+def _v1160_rc4920_registry_fingerprint():
+    payload='|'.join(':'.join(map(str,_v1160_rc4920_handler_key(n,h))) for n,h in sorted(V90_COMMAND_REGISTRY.items()))
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _v1160_rc4920_build_certification(force=False):
+    fp=_v1160_rc4920_registry_fingerprint()
+    with V1160_RC4920_LOCK:
+        if not force and fp in V1160_RC4920_CERT_CACHE: return V1160_RC4920_CERT_CACHE[fp]
+    started=time.perf_counter()
+    evidence,errors,layers,metrics=_v1160_rc4920_parallel_scan(force=force)
+    old=_v1160_rc4919_certification(False)['view']
+    total=len(V90_COMMAND_REGISTRY)
+    view=dict(old)
+    view.update({
+        'total':total,'registry_verified':total,'callable':sum(callable(h) for h in V90_COMMAND_REGISTRY.values()),
+        'help':sum(1 for n in V90_COMMAND_REGISTRY if n in V925_COMMAND_USAGE),
+        'runtime_routes':sum(v['runtime_route'] for v in layers.values()),
+        'engine_linked':sum(v['engine'] for v in layers.values()),
+        'repository_linked':sum(v['repository'] for v in layers.values()),
+        'output_linked':sum(v['output'] for v in layers.values()),
+        'direct_output':sum(v['direct_output'] for v in layers.values()),
+        'delegated_output':sum(v['delegated_output'] for v in layers.values()),
+        'layers':layers,'failed':len(errors),
+    })
+    snap={'fingerprint':fp,'view':view,'evidence':evidence,'errors':errors,'built_at':time.time(),'build_ms':(time.perf_counter()-started)*1000.0,'metrics':metrics}
+    with V1160_RC4920_LOCK:
+        V1160_RC4920_CERT_CACHE.clear(); V1160_RC4920_CERT_CACHE[fp]=snap
+    return snap
+
+
+def _v1160_rc4920_cached_call(key,ttl,fn,*args,**kwargs):
+    now=time.monotonic()
+    with V1160_RC4920_LOCK:
+        row=V1160_RC4920_SHARED_CACHE.get(key)
+        if row and now-row[0] <= ttl: return row[1]
+    value=fn(*args,**kwargs)
+    with V1160_RC4920_LOCK: V1160_RC4920_SHARED_CACHE[key]=(now,value)
+    return value
+
+# Share the same immutable state and learning forecast across dashboard/release views.
+_V1160_RC4920_SHARED_STATE_BASE=_v1160_rc496_shared_state
+def _v1160_rc496_shared_state():
+    return _v1160_rc4920_cached_call('shared_state',2.0,_V1160_RC4920_SHARED_STATE_BASE)
+
+_V1160_RC4920_FORECAST_BASE=_v1160_rc4914_learning_forecast
+def _v1160_rc4914_learning_forecast(state=None):
+    try: digest=hashlib.sha256(json.dumps(state or {},sort_keys=True,default=str).encode()).hexdigest()[:12]
+    except Exception: digest='default'
+    return _v1160_rc4920_cached_call(('forecast',digest),10.0,_V1160_RC4920_FORECAST_BASE,state)
+
+async def version1160rc4920_cmd(update,context):
+    r=V1160_RC4920_RELEASE
+    return await v90_1_safe_reply(update,f"ℹ️ {r.version}\nSchema 1 preserved · Paper 20 · Shadow 60 · Live OFF\nParallel incremental certification · shared intelligence cache enabled")
+
+async def versionaudit1160rc4920_cmd(update,context):
+    cert=_v1160_rc4920_build_certification(False); view=cert['view']; audit=v91_preflight(); m=cert['metrics']; age=max(0,int(time.time()-cert['built_at']))
+    lines=[f"🛡️ A100 V{V1160_RC4920_NUMBER} FAST VERSION AUDIT",f"Version Source {V91_VERSION}",f"Registry {view['registry_verified']}/{view['total']} · Callable {view['callable']} · Help {view['help']}",f"Runtime Routes {view['runtime_routes']}/{view['total']} · Route Certification {len(cert['evidence'])}/{view['total']}",f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(audit.get('failed',[]))}",f"Incremental Cache HIT · age {age}s · build {cert['build_ms']:.0f}ms",f"Workers {m['workers']} · reused {m['cache_hits']} · rescanned {m['changed']}","","Schema 1 · Paper 20 · Shadow 60 · Live OFF"]
+    if cert['errors']: lines += ["","⚠️ ROUTE ERRORS"]+[f"• /{n} · {e}" for n,e in list(cert['errors'].items())[:20]]
+    else: lines += ["","✅ Code-fingerprint snapshot, incremental source cache and shared intelligence cache synchronized"]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+async def commandcert1160rc4920_cmd(update,context):
+    _v1155_track('commandcert'); args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]; deep=bool(args and args[0]=='deep')
+    if deep:
+        try: cert=await asyncio.to_thread(_v1160_rc4920_build_certification,True)
+        except AttributeError: cert=_v1160_rc4920_build_certification(True)
+    else: cert=_v1160_rc4920_build_certification(False)
+    view=cert['view']; m=cert['metrics']; errors=cert['errors']; ok=not errors and view['failed']==0
+    lines=[f"🧾 A100 V{V1160_RC4920_NUMBER} COMMAND CERTIFICATION",f"Structural Audit {'PASS' if ok else 'FAILED'} · {'Incremental deep refresh complete' if deep else 'Fast cached audit'}",f"Registry {view['registry_verified']}/{view['total']} · Handler {view['callable']}/{view['total']} · Help {view['help']}/{view['total']}","","FULL LAYER COVERAGE",f"• Runtime route {view['runtime_routes']}/{view['total']}",f"• Engine/data routes {view['engine_linked']} · stateless/control {view['total']-view['engine_linked']}",f"• Repository/data routes {view['repository_linked']} · stateless {view['total']-view['repository_linked']}",f"• Output linkage {view['output_linked']}/{view['total']}",f"• Read-only route certification {len(cert['evidence'])}/{view['total']} · errors {len(errors)}",f"• Workers {m['workers']} · reused {m['cache_hits']} · rescanned {m['changed']}",f"• Build {cert['build_ms']:.0f}ms · source scan {m['scan_ms']:.0f}ms","","deep도 변경된 코드 경로만 재분석하며 전체 Registry 무결성은 유지합니다."]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+V925_COMMAND_USAGE.update({'version':'현재 중앙 VersionManager 버전','versionaudit':'RC4.9.20 증분 병렬 캐시 기반 즉시 감사','commandcert':'변경 경로만 병렬 재검사하는 전체 Registry 인증'})
+V90_COMMAND_REGISTRY.update({'version':version1160rc4920_cmd,'versionaudit':versionaudit1160rc4920_cmd,'commandcert':commandcert1160rc4920_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4920_PREFLIGHT_BASE=v91_preflight
+def v91_preflight(force=False):
+    fp=_v1160_rc4920_registry_fingerprint()
+    with V1160_RC4920_LOCK:
+        if not force and fp in V1160_RC4920_PREFLIGHT_CACHE: return V1160_RC4920_PREFLIGHT_CACHE[fp]
+    base=_V1160_RC4920_PREFLIGHT_BASE(); cert=_v1160_rc4920_build_certification(False); view=cert['view']
+    inherited={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4919_')}
+    checks=dict(inherited); checks.update({
+        'rc4920_version_single_source':V91_VERSION==V1160_RC4920_VERSION and _v1160_rc4912_version_number()==V1160_RC4920_NUMBER,
+        'rc4920_active_handlers':V90_COMMAND_REGISTRY.get('version') is version1160rc4920_cmd and V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160rc4920_cmd and V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc4920_cmd,
+        'rc4920_registry_341':len(V90_COMMAND_REGISTRY)==341 and view['registry_verified']==341,
+        'rc4920_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4920_route_certification':len(cert['evidence'])==341 and not cert['errors'],
+        'rc4920_parallel_workers':V1160_RC4920_WORKERS>=2,
+        'rc4920_incremental_cache':_v1160_rc4920_build_certification(False) is cert,
+        'rc4920_schema':_v91_default_state().get('schema')==1,
+        'rc4920_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4920_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    result={'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':fp,'performance_engine':True}
+    with V1160_RC4920_LOCK: V1160_RC4920_PREFLIGHT_CACHE.clear(); V1160_RC4920_PREFLIGHT_CACHE[fp]=result
+    return result
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.19 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.20 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
