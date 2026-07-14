@@ -42638,8 +42638,8 @@ def v91_preflight(force=False):
 # ---------------------------------------------------------------------------
 # A100 V116.0 LTS S2.2 - LONG RUNTIME CERTIFICATION REFINEMENT
 # ---------------------------------------------------------------------------
-V1160_LTS_S21_NUMBER = "116.0-LTS-S2.2"
-V1160_LTS_S21_VERSION = "A100 V116.0-LTS-S2.2 LONG RUNTIME CERTIFICATION REFINEMENT"
+V1160_LTS_S21_NUMBER = "116.0-LTS-S2.2.1"
+V1160_LTS_S21_VERSION = "A100 V116.0-LTS-S2.2.1 STATUS COMMAND HOTFIX"
 V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
     number=V1160_LTS_S21_NUMBER,
     version=V1160_LTS_S21_VERSION,
@@ -42892,7 +42892,7 @@ async def performanceaudit1160ltss21_cmd(update, context):
 
 
 async def status1160ltss21_cmd(update, context):
-    _v1155_track("status"); rv = _v1160_s21_runtime_view(); state = _v1160_rc496_shared_state(); cert,_ = _v1160_rc497_certification_cached(state)
+    _v1155_track("status"); rv = _v1160_s21_runtime_view(); st = rv["state"]; state = _v1160_rc496_shared_state(); cert,_ = _v1160_rc497_certification_cached(state)
     gate = cert.get("gate",{}) or {}; structural=_v1160_rc4920_build_certification(False); view=structural['view']
     lines = _v1160_s21_badge(True, rv["stage"]) + ["", "SPRINT 2 CERTIFICATION STATUS",
         f"Runtime progress     {rv['progress']:5.1f}% / 72h",
@@ -42943,7 +42943,7 @@ async def commandcert1160ltss21_cmd(update, context):
 
 
 V925_COMMAND_USAGE.update({
-    'version':'LTS Sprint 2.2 Long Runtime 중앙 VersionManager',
+    'version':'LTS Sprint 2.2.1 Status Hotfix 중앙 VersionManager',
     'status':'72시간 장시간 인증 진행률과 시스템 무결성',
     'runtimehealth':'장시간 Runtime·Resource Trend·Recovery Counter 인증',
     'performanceaudit':'P50/P95 장시간 Drift와 Resource Trend 성능 감사',
@@ -42975,7 +42975,7 @@ def v91_preflight(force=False):
         's21_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
     })
     failed=[k for k,v in checks.items() if not v]
-    out=dict(base); out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,'version_source':'Single','regression_risk':'NONE' if not failed else 'HIGH','release_freeze':'ACTIVE','lts_readiness':'MEASURING' if not failed else 'BLOCKED','certification_stage':'Sprint 2.2 Long Runtime Refinement'})
+    out=dict(base); out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,'version_source':'Single','regression_risk':'NONE' if not failed else 'HIGH','release_freeze':'ACTIVE','lts_readiness':'MEASURING' if not failed else 'BLOCKED','certification_stage':'Sprint 2.2.1 Status Command Hotfix'})
     if not force: V1160_S21_PREFLIGHT_CACHE=out
     return out
 
@@ -42983,6 +42983,6 @@ def v91_preflight(force=False):
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 LTS-S2.2 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 LTS-S2.2.1 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
