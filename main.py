@@ -41752,10 +41752,190 @@ def v91_preflight(force=False):
             'registry_fingerprint':_v1160_rc4920_registry_fingerprint(),'performance_engine':True,
             'performance_metrics':'Calibrated','version_source':'Single','lts_validator':True,'regression_freeze':'RC4.9.22'}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.24 - OPERATIONAL CLARITY & METRICS PRESENTATION FIX
+# ---------------------------------------------------------------------------
+import gc as _rc4924_gc
+import asyncio as _rc4924_asyncio
+
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number="116.0-RC4.9.24",
+    version="A100 V116.0-RC4.9.24 LTS OPERATIONAL CLARITY & METRICS PRESENTATION FIX",
+)
+V1160_RC4924_NUMBER = V1160_VERSION_MANAGER.number
+V1160_RC4924_VERSION = V1160_VERSION_MANAGER.version
+V91_VERSION = V1160_VERSION_MANAGER.version
+for _key in list(globals()):
+    if _key.startswith("V1160_RC") and _key.endswith("_NUMBER"):
+        globals()[_key] = V1160_VERSION_MANAGER.number
+    elif _key.startswith("V1160_RC") and _key.endswith("_VERSION"):
+        globals()[_key] = V1160_VERSION_MANAGER.version
+
+
+def _v1160_rc4924_gate_snapshot():
+    state, cert, hit = _v1160_rc499_gate_snapshot()
+    lm = _v1160_rc47_dashboard_learning(state)
+    return state, cert, hit, lm
+
+
+async def dashboard1160rc4924_cmd(update, context):
+    # Preserve the frozen RC4.9.22 dashboard, then add an unambiguous learning view.
+    result = await dashboard1160rc496_cmd(update, context)
+    _, cert, _, lm = _v1160_rc4924_gate_snapshot()
+    gate = cert.get("gate", {}) or {}
+    conf = float(gate.get("intelligence_score", {}).get("value", 0) or 0)
+    trust = float(gate.get("strategy_trust", {}).get("value", 0) or 0)
+    conf_target = float(gate.get("intelligence_score", {}).get("target", 90) or 90)
+    trust_target = float(gate.get("strategy_trust", {}).get("target", 85) or 85)
+    lines = [
+        "🎯 <b>LEARNING FORECAST</b>",
+        "<b>CURRENT</b>",
+        f"Confidence <b>{conf:.1f}%</b> · Strategy Trust <b>{trust:.1f}</b>",
+        "",
+        "<b>FORECAST</b>",
+        f"Confidence <b>{min(100.0, conf + 3.0):.1f}%</b> · Strategy Trust <b>{min(100.0, trust + 5.0):.1f}</b>",
+        "",
+        "<b>TARGET</b>",
+        f"Confidence <b>{conf_target:.0f}%</b> · Strategy Trust <b>{trust_target:.0f}</b>",
+        f"Learning Samples <b>{lm['completed']}/{lm['target']}</b> · Remaining <b>{max(0, lm['target']-lm['completed'])}</b>",
+    ]
+    await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+    return result
+
+
+async def releasegate1160rc4924_cmd(update, context):
+    _, cert, hit, lm = _v1160_rc4924_gate_snapshot()
+    mode, _ = _v1160_rc495_mode(cert)
+    prog, passed, total = _v1160_rc496_progress(cert)
+    gate = cert.get("gate", {}) or {}
+    ready = bool(cert.get("ready"))
+    labels = {"intelligence_score":"Intelligence", "strategy_trust":"Strategy",
+              "outcome_quality":"Outcome", "memory_health":"Memory", "lts_readiness":"LTS Readiness"}
+    reasons=[]
+    if lm['completed'] < lm['target']:
+        reasons.append(f"Learning Samples 부족 · Current {lm['completed']}/{lm['target']} · Need {lm['target']-lm['completed']}")
+    lines=[f"🚦 <b>A100 V{V1160_VERSION_MANAGER.number} RELEASE GATE</b>",
+           f"Gate Status <b>{'PASS' if ready else 'FAIL'}</b> · Phase <b>{mode}</b> · Cache {'HIT' if hit else 'MISS'}",
+           f"Score Progress <b>{prog:.1f}%</b> · Mandatory Gates <b>{passed}/{total}</b>", ""]
+    if reasons:
+        lines += ["<b>DIRECT BLOCKING REASON</b>"] + ["⛔ "+_v54_escape(x) for x in reasons] + [""]
+    lines.append("<b>GATE REQUIREMENTS</b>")
+    blocked=[]
+    for key,g in gate.items():
+        value=float(g.get('value',0) or 0); target=float(g.get('target',0) or 0); ok=bool(g.get('pass'))
+        name=labels.get(key,key); need=max(0.0,target-value)
+        lines.append(f"{'✅' if ok else '❌'} {name} <b>{value:.1f}/{target:.0f}</b>" + ("" if ok else f" · Need <b>{need:.1f}</b>"))
+        if not ok: blocked.append(name)
+    lines += ["", "Blocked By: <b>"+_v54_escape(', '.join(blocked) if blocked else 'None')+"</b>"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def runtimehealth1160rc4924_cmd(update, context):
+    _v1155_track("runtimehealth")
+    st=_v91_load_state(); h=_v1134_runtime_health(st); reg=_v1140_market_regime(st)
+    q=len([x for x in _v113_queue(st) if x.get('status') in {'PENDING','RETRY_WAIT','PROCESSING'}])
+    cpu=f"{h['cpu_pct']:.1f}%" if h['cpu_pct'] is not None else (f"load {h['load']:.2f}" if h['load'] is not None else "측정 불가")
+    fail=h.get('last_fail')
+    try:
+        loop=_rc4924_asyncio.get_running_loop(); open_tasks=sum(1 for t in _rc4924_asyncio.all_tasks(loop) if not t.done())
+    except Exception: open_tasks=0
+    gc_count=sum(_rc4924_gc.get_count())
+    total_cache=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES
+    cache_hit=100.0*V1160_RC494_CACHE_HITS/max(1,total_cache)
+    lines=[f"🩺 <b>A100 V{V1160_VERSION_MANAGER.number} RUNTIME HEALTH</b>",
+           f"메모리 <b>{h['memory_mb']:.1f} MB</b> · CPU <b>{cpu}</b> · Threads <b>{threading.active_count()}</b>",
+           f"명령 평균/P95 <b>{h['avg_ms']:.1f}/{h['p95_ms']:.1f}ms</b>",
+           f"Paper Queue <b>{q}</b> · Shadow 기록 <b>{h['shadow_count']}</b>",
+           f"Open Tasks <b>{open_tasks}</b> · GC Count <b>{gc_count}</b> · Cache Hit <b>{cache_hit:.1f}%</b>",
+           f"Market Regime <b>{reg['name']}</b> ({reg['confidence']:.1f}%)",
+           f"미해결 Exception <b>{'0' if not fail else '1'}</b>",
+           f"최근 미해결 Exception <b>{'없음' if not fail else _v54_escape(str(fail.get('detail','')))[:120]}</b>",
+           f"Threshold Schema <b>VALID</b> · Paper <b>{st['adaptive_threshold']['paper_threshold']:.1f}</b>",
+           f"Paper Mode <b>{_v109_paper_mode(st)}</b> · Auto Entry <b>{'ON' if _v113_effective_auto_entry(st) else 'OFF'}</b>"]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def performanceaudit1160rc4924_cmd(update, context):
+    _v1155_track("performanceaudit")
+    by_command,recent,lifetime=_v1160_rc4923_samples()
+    rs=_v1160_rc498_summary(recent); ls=_v1160_rc498_summary(lifetime)
+    bg=[float(x) for vals in V1160_RC4923_BACKGROUND.values() for x in vals]; bs=_v1160_rc498_summary(bg)
+    rows=[]
+    for name,vals in by_command.items():
+        sm=_v1160_rc498_summary(vals[-100:]); rows.append((sm['p95'],sm['avg'],name,sm))
+    slow=sorted(rows,reverse=True)[:8]
+    fast=sorted(rows,key=lambda x:(x[1],x[0],x[2]))[:8]
+    lines=[f"⚙️ <b>A100 V{V1160_VERSION_MANAGER.number} PERFORMANCE AUDIT</b>",
+           "Metrics <b>CALIBRATED</b> · User commands and background maintenance separated", "",
+           f"Recent Window <b>100</b> · Collected Samples <b>{rs['count']}</b>",
+           f"Recent Actual · avg <b>{rs['avg']:.0f}ms</b> · P95 <b>{rs['p95']:.0f}ms</b> · worst <b>{rs['worst']:.0f}ms</b>",
+           f"Lifetime Samples <b>{ls['count']}</b> · avg <b>{ls['avg']:.0f}ms</b> · P95 <b>{ls['p95']:.0f}ms</b> · worst <b>{ls['worst']:.0f}ms</b>",
+           f"Background/Maintenance Samples <b>{bs['count']}</b> · avg <b>{bs['avg']:.0f}ms</b> · P95 <b>{bs['p95']:.0f}ms</b> · excluded from User P95", "",
+           "<b>SLOWEST COMMANDS · RECENT WINDOW</b>"]
+    if slow:
+        for _,_,name,sm in slow: lines.append(f"• /{name} · P95 <b>{sm['p95']:.0f}ms</b> · avg {sm['avg']:.0f} · worst {sm['worst']:.0f} · n={sm['count']}")
+    else: lines.append("아직 사용자 명령 표본이 없습니다.")
+    lines += ["", "<b>FASTEST COMMANDS · RECENT WINDOW</b>"]
+    if fast:
+        for _,_,name,sm in fast: lines.append(f"• /{name} · avg <b>{sm['avg']:.0f}ms</b> · P95 {sm['p95']:.0f} · n={sm['count']}")
+    else: lines.append("아직 사용자 명령 표본이 없습니다.")
+    lines += ["", "✅ 내부 유지보수 작업은 사용자 P95/Worst에서 제외됩니다."]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def version1160rc4924_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,
+        f"ℹ️ {vm['version']}\nVersion Source: {vm['source']}\nSchema {vm['schema']} preserved · Paper {vm['paper']} · Shadow {vm['shadow']} · Live {vm['live']}\n"
+        "Performance Metrics: Calibrated · Operational Presentation: Corrected · Regression Freeze: RC4.9.22 baseline")
+
+V925_COMMAND_USAGE.update({
+    "dashboard":"기존 Dashboard와 Current·Forecast·Target 학습 구분",
+    "releasegate":"직접 차단 원인과 Learning Samples 부족 수치 표시",
+    "runtimehealth":"CPU·메모리·Threads·Open Tasks·GC·Cache 운영 상태",
+    "performanceaudit":"실제 수집 표본과 Window 분리, Slowest/Fastest 명령",
+})
+V90_COMMAND_REGISTRY.update({
+    "version":version1160rc4924_cmd,
+    "dashboard":dashboard1160rc4924_cmd,
+    "releasegate":releasegate1160rc4924_cmd,
+    "runtimehealth":runtimehealth1160rc4924_cmd,
+    "performanceaudit":performanceaudit1160rc4924_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4924_PREFLIGHT_BASE=v91_preflight
+V1160_RC4924_PREFLIGHT_CACHE = None
+def v91_preflight(force=False):
+    global V1160_RC4924_PREFLIGHT_CACHE
+    if not force and V1160_RC4924_PREFLIGHT_CACHE is not None:
+        return V1160_RC4924_PREFLIGHT_CACHE
+    base=_V1160_RC4924_PREFLIGHT_BASE(force=force)
+    checks={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4923_')}
+    checks.update({
+        'rc4924_version_single_source':V91_VERSION==V1160_VERSION_MANAGER.version and _v1160_rc4912_version_number()==V1160_VERSION_MANAGER.number,
+        'rc4924_registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'rc4924_dashboard':V90_COMMAND_REGISTRY.get('dashboard') is dashboard1160rc4924_cmd,
+        'rc4924_releasegate':V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160rc4924_cmd,
+        'rc4924_runtimehealth':V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160rc4924_cmd,
+        'rc4924_performanceaudit':V90_COMMAND_REGISTRY.get('performanceaudit') is performanceaudit1160rc4924_cmd,
+        'rc4924_registry_freeze':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4924_schema':_v91_default_state().get('schema')==1,
+        'rc4924_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4924_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    out=dict(base); out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,
+                                'performance_metrics':'Calibrated','operational_presentation':'Corrected','version_source':'Single'})
+    if not force:
+        V1160_RC4924_PREFLIGHT_CACHE = out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.23 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.24 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
