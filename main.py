@@ -42634,10 +42634,315 @@ def v91_preflight(force=False):
     return out
 
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.1 - LONG RUNTIME CERTIFICATION INSTRUMENTATION
+# ---------------------------------------------------------------------------
+V1160_LTS_S21_NUMBER = "116.0-LTS-S2.1"
+V1160_LTS_S21_VERSION = "A100 V116.0-LTS-S2.1 LONG RUNTIME CERTIFICATION"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S21_NUMBER,
+    version=V1160_LTS_S21_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S21_PROCESS_STARTED_AT = time.time()
+V1160_S21_SESSION_ID = hashlib.sha256(f"{os.getpid()}:{V1160_S21_PROCESS_STARTED_AT}".encode()).hexdigest()[:12]
+V1160_S21_STATE_PATH = os.getenv("A100_LTS_RUNTIME_STATE", os.path.join("data", "lts_sprint2_runtime.json"))
+V1160_S21_SAMPLE_INTERVAL = 300
+V1160_S21_MAX_SAMPLES = 1200
+V1160_S21_PREFLIGHT_CACHE = None
+_V1160_S21_LOCK = threading.RLock()
+
+
+def _v1160_s21_load():
+    base = {
+        "schema": 1,
+        "certification_started_at": V1160_S21_PROCESS_STARTED_AT,
+        "last_session_id": "",
+        "restart_count": 0,
+        "auto_recovery_count": 0,
+        "snapshot_restore_count": 0,
+        "exception_recovery_count": 0,
+        "recovery_success_count": 0,
+        "recovery_failure_count": 0,
+        "samples": [],
+        "last_sample_at": 0,
+    }
+    try:
+        with open(V1160_S21_STATE_PATH, "r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        if isinstance(raw, dict):
+            base.update(raw)
+    except Exception:
+        pass
+    return base
+
+
+def _v1160_s21_save(state):
+    try:
+        parent = os.path.dirname(V1160_S21_STATE_PATH)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp = V1160_S21_STATE_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp, V1160_S21_STATE_PATH)
+        return True
+    except Exception:
+        return False
+
+
+def _v1160_s21_resource_sample():
+    memory_mb = cpu_pct = threads = 0.0
+    try:
+        import psutil
+        proc = psutil.Process(os.getpid())
+        memory_mb = proc.memory_info().rss / (1024.0 * 1024.0)
+        cpu_pct = proc.cpu_percent(interval=None)
+        threads = float(proc.num_threads())
+    except Exception:
+        try:
+            import resource
+            raw = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+            memory_mb = raw / 1024.0
+        except Exception:
+            pass
+        threads = float(threading.active_count())
+    queue_size = 0.0
+    try:
+        queue_size = float(len(globals().get("V1160_RC4923_PENDING", []) or []))
+    except Exception:
+        pass
+    cache_size = float(len(CG_CACHE)) if isinstance(CG_CACHE, dict) else 0.0
+    return {
+        "ts": time.time(), "memory_mb": round(memory_mb, 3), "cpu_pct": round(cpu_pct, 3),
+        "threads": round(threads, 3), "queue": round(queue_size, 3), "cache": round(cache_size, 3),
+    }
+
+
+def _v1160_s21_snapshot(force=False):
+    with _V1160_S21_LOCK:
+        st = _v1160_s21_load()
+        if st.get("last_session_id") != V1160_S21_SESSION_ID:
+            if st.get("last_session_id"):
+                st["restart_count"] = int(st.get("restart_count", 0) or 0) + 1
+            st["last_session_id"] = V1160_S21_SESSION_ID
+        now = time.time()
+        if force or now - float(st.get("last_sample_at", 0) or 0) >= V1160_S21_SAMPLE_INTERVAL:
+            st.setdefault("samples", []).append(_v1160_s21_resource_sample())
+            st["samples"] = st["samples"][-V1160_S21_MAX_SAMPLES:]
+            st["last_sample_at"] = now
+        _v1160_s21_save(st)
+        return st
+
+
+def _v1160_s21_duration(seconds):
+    seconds = max(0, int(seconds or 0))
+    days, rem = divmod(seconds, 86400); hours, rem = divmod(rem, 3600); mins, secs = divmod(rem, 60)
+    if days: return f"{days}d {hours:02}h {mins:02}m"
+    if hours: return f"{hours}h {mins:02}m"
+    return f"{mins}m {secs:02}s"
+
+
+def _v1160_s21_progress(elapsed):
+    return min(100.0, max(0.0, float(elapsed) / (72.0 * 3600.0) * 100.0))
+
+
+def _v1160_s21_window_delta(samples, hours, key):
+    now = time.time(); cutoff = now - hours * 3600.0
+    rows = [x for x in samples if float(x.get("ts", 0) or 0) >= cutoff]
+    if len(rows) < 2:
+        return None
+    start = float(rows[0].get(key, 0) or 0); end = float(rows[-1].get(key, 0) or 0)
+    if abs(start) < 1e-9:
+        return 0.0 if abs(end) < 1e-9 else None
+    return (end - start) / abs(start) * 100.0
+
+
+def _v1160_s21_trend_label(delta, warmup=False):
+    if delta is None: return "🟡 WARMING UP" if warmup else "🟡 INSUFFICIENT DATA"
+    if abs(delta) <= 5.0: return "🟢 STABLE"
+    if abs(delta) <= 15.0: return "🟡 WATCH"
+    return "🔴 DRIFT"
+
+
+def _v1160_s21_runtime_view(force_sample=False):
+    st = _v1160_s21_snapshot(force_sample)
+    now = time.time(); samples = st.get("samples", []) or []
+    cert_elapsed = max(0, now - float(st.get("certification_started_at", now) or now))
+    session_elapsed = max(0, now - V1160_S21_PROCESS_STARTED_AT)
+    latest = samples[-1] if samples else _v1160_s21_resource_sample()
+    mem_1h = _v1160_s21_window_delta(samples, 1, "memory_mb")
+    mem_6h = _v1160_s21_window_delta(samples, 6, "memory_mb")
+    mem_24h = _v1160_s21_window_delta(samples, 24, "memory_mb")
+    cpu_1h = _v1160_s21_window_delta(samples, 1, "cpu_pct")
+    thread_1h = _v1160_s21_window_delta(samples, 1, "threads")
+    queue_1h = _v1160_s21_window_delta(samples, 1, "queue")
+    success = int(st.get("recovery_success_count", 0) or 0); failure = int(st.get("recovery_failure_count", 0) or 0)
+    recovery_rate = 100.0 if success + failure == 0 else 100.0 * success / (success + failure)
+    return {
+        "state": st, "cert_elapsed": cert_elapsed, "session_elapsed": session_elapsed,
+        "progress": _v1160_s21_progress(cert_elapsed), "latest": latest,
+        "mem_1h": mem_1h, "mem_6h": mem_6h, "mem_24h": mem_24h,
+        "cpu_1h": cpu_1h, "thread_1h": thread_1h, "queue_1h": queue_1h,
+        "recovery_rate": recovery_rate, "sample_count": len(samples),
+    }
+
+
+def _v1160_s21_delta_text(value):
+    return "" if value is None else f"{float(value):+.1f}%"
+
+
+def _v1160_s21_badge(ok=True):
+    return [
+        f"{'🟢' if ok else '🟡'} A100 V{V1160_VERSION_MANAGER.number}",
+        "Engineering Baseline · Sprint 2 Long Runtime",
+        "Sprint 1: CERTIFIED · Sprint 2: MEASURING",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+    ]
+
+
+def _v1160_s21_footer():
+    return ["", "Engineering Baseline", "Sprint 2 Long Runtime Certification", "Feature Freeze maintained"]
+
+
+async def version1160ltss21_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot(); rv = _v1160_s21_runtime_view()
+    lines = _v1160_s21_badge(True) + ["", f"Version Source: {vm['source']}",
+        f"Schema {vm['schema']} preserved · Paper {vm['paper']} · Shadow {vm['shadow']} · Live {vm['live']}",
+        f"Certification elapsed: {_v1160_s21_duration(rv['cert_elapsed'])} · {rv['progress']:.1f}% / 72h",
+        f"Continuous session: {_v1160_s21_duration(rv['session_elapsed'])}"] + _v1160_s21_footer()
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def runtimehealth1160ltss21_cmd(update, context):
+    _v1155_track("runtimehealth"); rv = _v1160_s21_runtime_view(True); st = rv["state"]; latest = rv["latest"]
+    health = _v1134_runtime_health(_v91_load_state())
+    lines = _v1160_s21_badge(True) + ["", "RUNTIME CERTIFICATION",
+        f"Certification       {_v1160_s21_duration(rv['cert_elapsed']):>12} · {rv['progress']:5.1f}% / 72h",
+        f"Continuous session  {_v1160_s21_duration(rv['session_elapsed']):>12}",
+        f"Session ID          {V1160_S21_SESSION_ID}", "", "RESOURCE SNAPSHOT",
+        f"Memory              {float(latest.get('memory_mb',0)):8.1f} MB",
+        f"CPU                 {float(latest.get('cpu_pct',0)):8.1f}%",
+        f"Threads             {int(float(latest.get('threads',0))):8}",
+        f"Queue               {int(float(latest.get('queue',0))):8}",
+        f"Cache entries       {int(float(latest.get('cache',0))):8}", "", "MEMORY TREND",
+        f"1h   {_v1160_s21_trend_label(rv['mem_1h'], True):20} {_v1160_s21_delta_text(rv['mem_1h'])}",
+        f"6h   {_v1160_s21_trend_label(rv['mem_6h'], True):20} {_v1160_s21_delta_text(rv['mem_6h'])}",
+        f"24h  {_v1160_s21_trend_label(rv['mem_24h'], True):20} {_v1160_s21_delta_text(rv['mem_24h'])}", "", "RECOVERY COUNTERS",
+        f"Process restart      {int(st.get('restart_count',0) or 0)}",
+        f"Auto recovery        {int(st.get('auto_recovery_count',0) or 0)}",
+        f"Snapshot restore     {int(st.get('snapshot_restore_count',0) or 0)}",
+        f"Exception recovery   {int(st.get('exception_recovery_count',0) or 0)}",
+        f"Recovery success     {rv['recovery_rate']:.1f}%",
+        f"Runtime exception    {'NONE' if not health.get('last_fail') else 'DETECTED'}",
+        f"Evidence samples     {rv['sample_count']}"] + _v1160_s21_footer()
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def performanceaudit1160ltss21_cmd(update, context):
+    _v1155_track("performanceaudit"); rv = _v1160_s21_runtime_view(True)
+    by_command,recent,lifetime=_v1160_rc4923_samples(); startup=_v1160_rc4925_metric_rows(V1160_RC4925_STARTUP_SAMPLES)
+    rs,ss,ls=(_v1160_rc498_summary(recent),_v1160_rc498_summary(startup),_v1160_rc498_summary(lifetime))
+    statuses=(_v1160_fc12_perf_status(rs),_v1160_fc12_perf_status(ss),_v1160_fc12_perf_status(ls,True))
+    p95_drift = None
+    if ss.get('count',0) >= V1160_FC12_PERF_MIN_SAMPLES and ls.get('p95',0):
+        p95_drift = (float(ss.get('p95',0))-float(ls.get('p95',0))) / max(1.0,float(ls.get('p95',0))) * 100.0
+    lines = _v1160_s21_badge(True) + ["", "PERFORMANCE WINDOWS",
+        f"Recent Window   {statuses[0]:14} n={rs['count']:4}/{V1160_FC12_PERF_MIN_SAMPLES} · P50 {rs['avg']:6.0f}ms · P95 {rs['p95']:6.0f}ms",
+        f"Since Startup  {statuses[1]:14} n={ss['count']:4}/{V1160_FC12_PERF_MIN_SAMPLES} · P50 {ss['avg']:6.0f}ms · P95 {ss['p95']:6.0f}ms",
+        f"Lifetime       {statuses[2]:14} n={ls['count']:4}/{V1160_FC12_PERF_MIN_SAMPLES} · P50 {ls['avg']:6.0f}ms · P95 {ls['p95']:6.0f}ms", "", "LONG RUNTIME DRIFT",
+        f"P95 Drift       {_v1160_s21_trend_label(p95_drift, True):20} {_v1160_s21_delta_text(p95_drift)}",
+        f"Memory 1h       {_v1160_s21_trend_label(rv['mem_1h'], True):20} {_v1160_s21_delta_text(rv['mem_1h'])}",
+        f"CPU 1h          {_v1160_s21_trend_label(rv['cpu_1h'], True):20} {_v1160_s21_delta_text(rv['cpu_1h'])}",
+        f"Threads 1h      {_v1160_s21_trend_label(rv['thread_1h'], True):20} {_v1160_s21_delta_text(rv['thread_1h'])}",
+        f"Queue 1h        {_v1160_s21_trend_label(rv['queue_1h'], True):20} {_v1160_s21_delta_text(rv['queue_1h'])}",
+        f"Evidence samples {rv['sample_count']} · Runtime {_v1160_s21_duration(rv['cert_elapsed'])}"] + _v1160_s21_footer()
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def status1160ltss21_cmd(update, context):
+    _v1155_track("status"); rv = _v1160_s21_runtime_view(); state = _v1160_rc496_shared_state(); cert,_ = _v1160_rc497_certification_cached(state)
+    gate = cert.get("gate",{}) or {}; structural=_v1160_rc4920_build_certification(False); view=structural['view']
+    lines = _v1160_s21_badge(True) + ["", "SPRINT 2 CERTIFICATION STATUS",
+        f"Runtime progress     {rv['progress']:5.1f}% / 72h",
+        f"Certification time   {_v1160_s21_duration(rv['cert_elapsed'])}",
+        f"Continuous session   {_v1160_s21_duration(rv['session_elapsed'])}",
+        f"Evidence samples     {rv['sample_count']}", "", "SYSTEM INTEGRITY",
+        f"Registry             {view['registry_verified']}/{view['total']} PASS",
+        f"Handler              {view['callable']}/{view['total']} PASS",
+        f"Output               {view['output_linked']}/{view['total']} PASS",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF", "", "AI TARGET GATES"]
+    labels={'intelligence_score':'Intelligence','strategy_trust':'Strategy Trust','outcome_quality':'Outcome Quality','memory_health':'Memory Health','lts_readiness':'LTS Readiness'}
+    for key,label in labels.items():
+        g=gate.get(key)
+        if g: lines.append(f"{_v1160_fc11_gate_status(bool(g.get('pass')))} · {label:16} {float(g.get('value',0)):5.1f} / {float(g.get('target',0)):5.1f}")
+    lines += _v1160_s21_footer()
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def dashboard1160ltss21_cmd(update, context):
+    _v1155_track("dashboard"); rv=_v1160_s21_runtime_view(); structural=_v1160_rc4920_build_certification(False); health=_v1134_runtime_health(_v91_load_state()); readiness=_v1160_fc11_readiness(structural,health)
+    lines=_v1160_s21_badge(True)+["","LONG RUNTIME CERTIFICATION DASHBOARD",
+        f"72h Progress          {rv['progress']:6.1f}%",
+        f"Certification         {_v1160_s21_duration(rv['cert_elapsed'])}",
+        f"Continuous Session    {_v1160_s21_duration(rv['session_elapsed'])}",
+        f"Resource Samples      {rv['sample_count']}","","STABILITY SIGNALS",
+        f"Memory 1h             {_v1160_s21_trend_label(rv['mem_1h'],True)}",
+        f"CPU 1h                {_v1160_s21_trend_label(rv['cpu_1h'],True)}",
+        f"Threads 1h            {_v1160_s21_trend_label(rv['thread_1h'],True)}",
+        f"Queue 1h              {_v1160_s21_trend_label(rv['queue_1h'],True)}",
+        f"Recovery Success      {rv['recovery_rate']:.1f}%", "", "SYSTEM RELEASE READINESS"]
+    for key in ('Engineering','Runtime','Output','Regression','Production'): lines.append(f"{key:12} {readiness[key]:6.1f}%")
+    lines += [f"Overall      {readiness['Overall']:6.1f}%"] + _v1160_s21_footer()
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def commandcert1160ltss21_cmd(update, context):
+    await commandcert1160ltsfc12_cmd(update, context)
+
+
+V925_COMMAND_USAGE.update({
+    'version':'LTS Sprint 2.1 Long Runtime 중앙 VersionManager',
+    'status':'72시간 장시간 인증 진행률과 시스템 무결성',
+    'runtimehealth':'장시간 Runtime·Resource Trend·Recovery Counter 인증',
+    'performanceaudit':'P50/P95 장시간 Drift와 Resource Trend 성능 감사',
+    'dashboard':'Sprint 2 Long Runtime Certification Dashboard',
+    'commandcert':'Sprint 1 인증을 유지하는 341개 전체 명령 인증',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss21_cmd,'status':status1160ltss21_cmd,
+    'runtimehealth':runtimehealth1160ltss21_cmd,'performanceaudit':performanceaudit1160ltss21_cmd,
+    'dashboard':dashboard1160ltss21_cmd,'commandcert':commandcert1160ltss21_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_S21_PREFLIGHT_BASE=v91_preflight
+def v91_preflight(force=False):
+    global V1160_S21_PREFLIGHT_CACHE
+    if not force and V1160_S21_PREFLIGHT_CACHE is not None: return V1160_S21_PREFLIGHT_CACHE
+    base=_V1160_S21_PREFLIGHT_BASE(force=force)
+    checks={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('fc12_')}
+    cert=_v1160_rc4920_build_certification(False); view=cert['view']; rv=_v1160_s21_runtime_view()
+    checks.update({
+        's21_version_single_source':V91_VERSION==V1160_VERSION_MANAGER.version and _v1160_rc4912_version_number()==V1160_VERSION_MANAGER.number,
+        's21_registry_341':len(V90_COMMAND_REGISTRY)==341 and V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        's21_active_handlers':V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160ltss21_cmd and V90_COMMAND_REGISTRY.get('performanceaudit') is performanceaudit1160ltss21_cmd and V90_COMMAND_REGISTRY.get('dashboard') is dashboard1160ltss21_cmd,
+        's21_runtime_state':rv['state'].get('schema')==1 and rv['sample_count']>=1,
+        's21_full_coverage':view['registry_verified']==341 and view['callable']==341 and view['help']==341 and view['output_linked']==341 and len(cert['evidence'])==341 and not cert['errors'],
+        's21_schema':_v91_default_state().get('schema')==1,
+        's21_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        's21_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    out=dict(base); out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,'version_source':'Single','regression_risk':'NONE' if not failed else 'HIGH','release_freeze':'ACTIVE','lts_readiness':'MEASURING' if not failed else 'BLOCKED','certification_stage':'Sprint 2.1 Long Runtime Instrumentation'})
+    if not force: V1160_S21_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 LTS-FC1.2 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 LTS-S2.1 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()

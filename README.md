@@ -1,3 +1,8 @@
+# A100 V116.0 LTS-S2.1 Long Runtime Certification
+
+현재 단계: **Sprint 2 MEASURING**  
+Feature Freeze 유지 · Schema 1 · Paper 20 · Shadow 60 · Live OFF
+
 # A100 V116.0 LTS-FC1.2 Final Product Polish
 
 Sprint 1 closeout release. AI learning targets and system release readiness are separated, low-sample performance windows use WARMING UP, and build bottlenecks include percentages and the longest stage.

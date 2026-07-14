@@ -12,7 +12,7 @@ def load_main():
 def test_fc12_preflight_and_registry():
     m=load_main(); audit=m.v91_preflight(force=True)
     assert audit['ok'], audit.get('failed')
-    assert m.V1160_VERSION_MANAGER.number=='116.0-LTS-FC1.2'
+    assert m.V1160_VERSION_MANAGER.number=='116.0-LTS-S2.1'
     assert len(m.V90_COMMAND_REGISTRY)==341
 
 

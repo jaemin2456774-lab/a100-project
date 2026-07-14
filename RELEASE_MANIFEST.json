@@ -1,15 +1,17 @@
 {
-  "release": "A100 V116.0-LTS-FC1.1 PRODUCT POLISH & CERTIFICATION",
-  "baseline": "A100 V116.0-LTS-FC1 FINAL CERTIFICATION SPRINT 1",
-  "generated_at_utc": "2026-07-14T13:23:12.597904+00:00",
+  "release": "A100 V116.0-LTS-S2.1 LONG RUNTIME CERTIFICATION INSTRUMENTATION",
+  "baseline": "A100 V116.0-LTS-FC1.2 Sprint 1 Closeout",
+  "generated_at_utc": "2026-07-14T14:08:04.389917+00:00",
   "feature_freeze": "ACTIVE",
   "regression_risk": "NONE",
   "schema": 1,
   "paper": 20,
   "shadow": 60,
   "live": "OFF",
+  "certification_stage": "Sprint 2 MEASURING",
+  "long_runtime_target_hours": 72,
   "test_result": {
-    "pytest_passed": 89,
+    "pytest_passed": 83,
     "pytest_failed": 0,
     "registry": 341
   },
@@ -20,39 +22,24 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
-      "path": ".pytest_cache/.gitignore",
-      "size": 37,
-      "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd"
-    },
-    {
-      "path": ".pytest_cache/CACHEDIR.TAG",
-      "size": 191,
-      "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4"
-    },
-    {
-      "path": ".pytest_cache/README.md",
-      "size": 302,
-      "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad"
-    },
-    {
-      "path": ".pytest_cache/v/cache/lastfailed",
-      "size": 2,
-      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-    },
-    {
-      "path": ".pytest_cache/v/cache/nodeids",
-      "size": 7080,
-      "sha256": "7c5e9f135a8f3d93be2ffa9aa7fe6b09b0d259d50bbe817dbab4a0044f0fc68e"
-    },
-    {
       "path": "CHANGE_LEDGER_LTS_FC1_1_KR.md",
       "size": 1087,
       "sha256": "7e7a97fd82c0a69f0f1f548aa63ac4b082e1d3d3355ca14a8b5ec09d698458b8"
     },
     {
+      "path": "CHANGE_LEDGER_LTS_FC1_2_KR.md",
+      "size": 670,
+      "sha256": "4f175e4e7d94e6867eda6e095937a5193d44d92731ee7f23dcf544cc3837e6e0"
+    },
+    {
       "path": "CHANGE_LEDGER_LTS_FC1_KR.md",
       "size": 829,
       "sha256": "ff618f954a3db21ed82d2c5628b806d4ef15e8c684036bbae03453ae0fab91aa"
+    },
+    {
+      "path": "CHANGE_LEDGER_LTS_S2_1_KR.md",
+      "size": 558,
+      "sha256": "0c08a7cfefac5cafe2531999abe2341085ee7e39b04303473036b5823f37b49e"
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
@@ -65,9 +52,19 @@
       "sha256": "ef0b62edcb10af393170754093d772877bd0a01b021a5c2223596875a95f548d"
     },
     {
+      "path": "LTS_FC1_2_FINAL_PRODUCT_POLISH_REPORT_KR.md",
+      "size": 844,
+      "sha256": "40a74d293f5bc662999a8cfd330c32e9afc5182f1cdf566f594b44b49b27e8d8"
+    },
+    {
       "path": "LTS_FC1_ENGINEERING_AUDIT_REPORT_KR.md",
       "size": 2220,
       "sha256": "b2dd8ad1b399661c62880f1fe4cf35534e8375fb0ffc55207017cb861f793de9"
+    },
+    {
+      "path": "LTS_S2_1_LONG_RUNTIME_CERTIFICATION_REPORT_KR.md",
+      "size": 1037,
+      "sha256": "af991834acab18b76def3c3164c5f282470d01f7e64792582631f9b2ed1568f9"
     },
     {
       "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md",
@@ -80,9 +77,19 @@
       "sha256": "a2d652eb6e2ef637826c73421740a8161f1a7d56fc3e2fa6737c5b4aa9cf88ca"
     },
     {
+      "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_LTS_FC1_2_KR.md",
+      "size": 507,
+      "sha256": "3e2081e3fd2e5216e7a67581030bd5758388f94357c7baadbd95b4512dbedac5"
+    },
+    {
       "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_LTS_FC1_KR.md",
       "size": 795,
       "sha256": "5c4a91dacff71dcfc16646e45d845dc939ad2f29420d0deb8cace3572ad25894"
+    },
+    {
+      "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_LTS_S2_1_KR.md",
+      "size": 538,
+      "sha256": "135c6fde5c2164166fc5d116f9cea20f8642dc38f8f6e3d90eeffc1f51325474"
     },
     {
       "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_RC4_9_24_KR.md",
@@ -206,8 +213,8 @@
     },
     {
       "path": "README.md",
-      "size": 373,
-      "sha256": "b38f21cca6a6ad22c7baa73099445de095131a616f09df535299c8e0e4dc2b6d"
+      "size": 786,
+      "sha256": "f5beec3c310da3d08ce017d4fbc3c453c4b1fbb518cd1a8f4fa10d4947e115d1"
     },
     {
       "path": "README_RC4_9_2.md",
@@ -233,126 +240,6 @@
       "path": "RELEASE_MANIFEST_RC4_9_4.json",
       "size": 1268,
       "sha256": "e2c8293a48d284f2ed3fcb968c4269920938a3218143267efcd288e7ea178e0a"
-    },
-    {
-      "path": "SHA256SUMS.txt",
-      "size": 27227,
-      "sha256": "35e2175f50987a73d3eec8b1c93233f56e2b807b50723268e242fb7892798193"
-    },
-    {
-      "path": "__pycache__/main.cpython-313.pyc",
-      "size": 3204301,
-      "sha256": "7b24034436be37b7a2303674e50bece099cfacadd0e882a49a2e3ce5b1034e8e"
-    },
-    {
-      "path": "__pycache__/v1000_learning_intelligence.cpython-313.pyc",
-      "size": 13579,
-      "sha256": "eb12e8a4963af6010f3314708258f581d7fca7066b90a44e809406b8a016456e"
-    },
-    {
-      "path": "__pycache__/v1010_closed_loop_learning.cpython-313.pyc",
-      "size": 16449,
-      "sha256": "23d311c4ef69361939c1494860e11d772bb099f8ccb00d5633062f46708b4740"
-    },
-    {
-      "path": "__pycache__/v1020_evolution_engine.cpython-313.pyc",
-      "size": 14589,
-      "sha256": "bab35a555ba10d2ade9209d14fda600d4ac7bcf6fb5fe6ff10d6ee34b816eb8b"
-    },
-    {
-      "path": "__pycache__/v1030_autonomous_evolution.cpython-313.pyc",
-      "size": 17664,
-      "sha256": "0ec51db22b2c3e44a201186c784790249e696728e9fdbcf0bcf0bb0092c03d28"
-    },
-    {
-      "path": "__pycache__/v1040_experience_intelligence.cpython-313.pyc",
-      "size": 20018,
-      "sha256": "7d4e03054880f7c9b60fce59ae53515af2c5f18391262a0d44100f50a89a317f"
-    },
-    {
-      "path": "__pycache__/v1050_autonomous_intelligence_core.cpython-313.pyc",
-      "size": 22182,
-      "sha256": "fe08d229c9b019f25dc4c4311b5b1d864fcd3556a4345466a40f708cbad4a649"
-    },
-    {
-      "path": "__pycache__/v1060_real_time_intelligence.cpython-313.pyc",
-      "size": 19726,
-      "sha256": "ad3fd308dcf2475cd082a8c5bf9d8173928fd541f0e44cb8d5c38643f12833f9"
-    },
-    {
-      "path": "__pycache__/v1070_autonomous_market_intelligence.cpython-313.pyc",
-      "size": 15059,
-      "sha256": "1c591912fdc9a0b33a3213662ebefc7d9fb3e4efbb6d0e19eed77fe4434f86a8"
-    },
-    {
-      "path": "__pycache__/v1080_pattern_recognition_intelligence.cpython-313.pyc",
-      "size": 18618,
-      "sha256": "a60ac28e4b5b440afedcbb95d6d203bb82356c4ad64dff98528868d974daf869"
-    },
-    {
-      "path": "__pycache__/v925_decision_intelligence.cpython-313.pyc",
-      "size": 3055,
-      "sha256": "1ba1968197697552358a96fb23175ad386d87e4b969cf34d2ca5b6ae5839c50e"
-    },
-    {
-      "path": "__pycache__/v926_learning_intelligence.cpython-313.pyc",
-      "size": 1386,
-      "sha256": "2dd90a8a18bcd912bc8c02b8c9b627f3cff29d610a8cb5cd92f7bcbc2352a060"
-    },
-    {
-      "path": "__pycache__/v927_learning_calibration.cpython-313.pyc",
-      "size": 1935,
-      "sha256": "671b85142fbb1a2d73488958c4f193a3b8b3962c8427d6249c289282abe61fd7"
-    },
-    {
-      "path": "__pycache__/v930_ai_intelligence_core.cpython-313.pyc",
-      "size": 9531,
-      "sha256": "d05df38b06a43c253bb0acb7ca294cdc10dd532fdde847cf5a7b2fe0627ff57b"
-    },
-    {
-      "path": "__pycache__/v931_self_learning_ai.cpython-313.pyc",
-      "size": 12425,
-      "sha256": "dc0c424b26faf756c4925f08c12ab3a3fa69e136518796380a8e7a95a5f06ac5"
-    },
-    {
-      "path": "__pycache__/v940_ai_visualization.cpython-313.pyc",
-      "size": 3716,
-      "sha256": "ecbca287d64d74c0798a3e8bb7b7bac49637fce2e2be7ae5f5b7fbd383e1c8f6"
-    },
-    {
-      "path": "__pycache__/v950_ai_dashboard.cpython-313.pyc",
-      "size": 3487,
-      "sha256": "266ceba2e76abceda0636b4e0f50b68d8b6e4c2584967123899ddb96439894a2"
-    },
-    {
-      "path": "__pycache__/v960_ai_quality.cpython-313.pyc",
-      "size": 10113,
-      "sha256": "db8a04087f4ac7e9a81ebd155693540c0f1d1672c998561137df2b114bbd7431"
-    },
-    {
-      "path": "__pycache__/v961_ai_intelligence2.cpython-313.pyc",
-      "size": 13264,
-      "sha256": "5e4dede271e83fb15e933e12897210e65e5922cd3a5ab681dd20bd6c59da6c3e"
-    },
-    {
-      "path": "__pycache__/v962_ai_intelligence3.cpython-313.pyc",
-      "size": 13506,
-      "sha256": "4a7833bdddf6c6c05bba5c2a437c29484d64bc4805e7486053bf0fb2a260ca9f"
-    },
-    {
-      "path": "__pycache__/v970_unified_intelligence.cpython-313.pyc",
-      "size": 9749,
-      "sha256": "a625b5ebf042980aabbfc8d922d97e9144b6534eb2a798e47e82ec768c38c330"
-    },
-    {
-      "path": "__pycache__/v980_market_intelligence.cpython-313.pyc",
-      "size": 9547,
-      "sha256": "ea41c3b1b6d8f70017a3940fe30221c9548a83e9ca16bb33247de5144def9c9f"
-    },
-    {
-      "path": "__pycache__/v990_predictive_intelligence.cpython-313.pyc",
-      "size": 8976,
-      "sha256": "cfb952e7d1081f5d3bca632056c53a0f8ddf3d76a3b467a1bc49017f43ea4ea0"
     },
     {
       "path": "docs/CHANGELOG_V101_0.md",
@@ -986,8 +873,8 @@
     },
     {
       "path": "main.py",
-      "size": 2160202,
-      "sha256": "4dfb1795da437b776a0abfa241faa6ee883064450ba61697a32fff3f749c7fd0"
+      "size": 2190850,
+      "sha256": "7683ee6de3c0d5269b01caeec0206d8bde311e4eb3f6ad516f40a982c47bb011"
     },
     {
       "path": "pytest.ini",
@@ -1003,6 +890,16 @@
       "path": "requirements.txt",
       "size": 99,
       "sha256": "1ee7cd2517fe1e995714813c4e63b9f1255dfcd8d45af1bcbe46b4224472bbdf"
+    },
+    {
+      "path": "test_v1160_lts_fc12_final_polish.py",
+      "size": 1129,
+      "sha256": "a426ad1584d5986d6b3581806cf266163e2861bf60f1479833fa0d709272f6a6"
+    },
+    {
+      "path": "test_v1160_lts_s21_long_runtime.py",
+      "size": 1642,
+      "sha256": "79ed7b6f074efd0e3619638905f1e18e79c3c3e45178be1d630a3ad5dea7827f"
     },
     {
       "path": "test_v1160_rc4915_certification_truth.py",
@@ -1043,126 +940,6 @@
       "path": "test_v1160_rc492_execution_command_certification.py",
       "size": 1417,
       "sha256": "29f3cf2df61371d1476557aea15896c92a16fba8338e0e0913693203f1e58c80"
-    },
-    {
-      "path": "tests/__pycache__/conftest.cpython-313-pytest-9.0.2.pyc",
-      "size": 703,
-      "sha256": "e5d5d0fb35ca8fa80673ee0af57d9511d1018404c96fd260d5ec10f1e44fc3fb"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc41_quality_attribution.cpython-313-pytest-9.0.2.pyc",
-      "size": 12932,
-      "sha256": "c4b7d69635a6276ed9e122c944166458fb4cbad55ab78addf78551afd77d7727"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc42_ux_attribution_cache.cpython-313-pytest-9.0.2.pyc",
-      "size": 15038,
-      "sha256": "d1fc1a7c6810c228058d574f790d61e1a1e1e52adfd4186983e8660809800f27"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc43_end_to_end_audit.cpython-313-pytest-9.0.2.pyc",
-      "size": 11044,
-      "sha256": "59a6b4966b672a854ea434b9bc346237d39e4497633409d9a139d817bf0d3cb0"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc44_learning_worker_audit2.cpython-313-pytest-9.0.2.pyc",
-      "size": 12805,
-      "sha256": "b6e5e6598e5e976d5a615db0798f5966d83987670ad21363106d25ff9e31467a"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc45_true_e2e.cpython-313-pytest-9.0.2.pyc",
-      "size": 11673,
-      "sha256": "a27d2f9b8b8032298714313dd38a4d6d070940c1df35f70235aa38bb449daab4"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc47_lts_final_integration.cpython-313-pytest-9.0.2.pyc",
-      "size": 16929,
-      "sha256": "f8a30aaf0b6d58926b4570d16d33850bc6f2fac289a5d1c638be5a5b3cfd1f14"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc48_lts_certification.cpython-313-pytest-9.0.2.pyc",
-      "size": 5681,
-      "sha256": "3f36f28651f5d1a8cf4c4c4cbd6f6c2e06eeded04b205f9af7a9e0edc1b64211"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4910_operations_clarity.cpython-313-pytest-9.0.2.pyc",
-      "size": 7954,
-      "sha256": "c9e0b2cdbacc1777edf15011e0b271a590b1157f2cd867fb0afa4f014bb3f2cb"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4914_full_regression.cpython-313-pytest-9.0.2.pyc",
-      "size": 10570,
-      "sha256": "23290c9d1a1122829c35d4a71e05e03057e22a3a71ae09546ccca121200cf2e9"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4918_final_stabilization.cpython-313-pytest-9.0.2.pyc",
-      "size": 12029,
-      "sha256": "143e148269651e33e6c7c9a1ddefa95f4381ae26a45d4422035f9ba90b83f9d4"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc491_startup_hotfix.cpython-313-pytest-9.0.2.pyc",
-      "size": 2524,
-      "sha256": "465c30fa8502edbb7b6367eeeba9517bebbfb161863f2affde13a5e3112c56ba"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4920_ai_performance_engine.cpython-313-pytest-9.0.2.pyc",
-      "size": 9322,
-      "sha256": "4fbc15bfcb9fc8b4fa8c1df906d706391156811f68d5dc19dd2c7f644798aec1"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4921_pipeline_performance.cpython-313-pytest-9.0.2.pyc",
-      "size": 11778,
-      "sha256": "0e246db0e313575de8abb6fcf504648e264906302b186cdaee57f8bfa8279716"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4923_final_consistency.cpython-313-pytest-9.0.2.pyc",
-      "size": 9326,
-      "sha256": "58ec61fbb109849f03bfecaf01d95c6263cd9b394d3a73ce5551c21bcd0de1af"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc494_command_performance.cpython-313-pytest-9.0.2.pyc",
-      "size": 16252,
-      "sha256": "200ca04111267522220664dcd0b95648f404004432e1f9028b7bd03a7742f724"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc495_status_ux_performance.cpython-313-pytest-9.0.2.pyc",
-      "size": 13558,
-      "sha256": "84ccbc0d7d766f3ab5312c435353c893ff51db5e4e3e62547f00d618c8424132"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc496_consistency.cpython-313-pytest-9.0.2.pyc",
-      "size": 13250,
-      "sha256": "e0c296016ff8540fb21bd5f99ab16be4b4627ce6ad2eed64372d6a4449f4782c"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc497_cache_performance.cpython-313-pytest-9.0.2.pyc",
-      "size": 14616,
-      "sha256": "520f3ad7bc3461430f3fe7faf6d3dfaca3c2de144c02268c93684cb48fd4712d"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc498_measurement_truth.cpython-313-pytest-9.0.2.pyc",
-      "size": 10727,
-      "sha256": "4887059365259323f050a9125cb1548eae88bf2689d4907c6c517f728796bf42"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc499_operations_insight.cpython-313-pytest-9.0.2.pyc",
-      "size": 7538,
-      "sha256": "72363565bd883c6d38828b3b9508ed3d39b723674b0f4d7c2fa2f578673aa786"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc49_final_gate.cpython-313-pytest-9.0.2.pyc",
-      "size": 7874,
-      "sha256": "e7d23da6427f99bdbe27104f2484f69075fe9403b478b2f2472fad0e911cc353"
-    },
-    {
-      "path": "tests/__pycache__/test_v1160_rc4_9_3_final_certification.cpython-313-pytest-9.0.2.pyc",
-      "size": 11214,
-      "sha256": "9ed7d4e39532415726c0c272de54cc525928b1fff38c3eff5a3440317d52aef6"
-    },
-    {
-      "path": "tests/__pycache__/test_v116_0_rc4_quality_trust.cpython-313-pytest-9.0.2.pyc",
-      "size": 13266,
-      "sha256": "a66905338c0bdc4e2dab750620caa97434e80ec7135294696885caa17a601ed8"
     },
     {
       "path": "tests/conftest.py",
@@ -1396,13 +1173,13 @@
     },
     {
       "path": "tests/test_v1160_rc4921_pipeline_performance.py",
-      "size": 1473,
-      "sha256": "7ee0daf0075d44164eea11ca2a8e64ca8f23d0110ed0d67eeed022077dcc956d"
+      "size": 1472,
+      "sha256": "68550857b1918af648f5d39f3c33982977b00dc67cab48e8239ce1b71834def5"
     },
     {
       "path": "tests/test_v1160_rc4923_final_consistency.py",
-      "size": 964,
-      "sha256": "b9a894a25dedc508c2f4cfcf18670c978bcc2cdddbc7445cdcd40d3188f29515"
+      "size": 963,
+      "sha256": "0ec6cfee352303ec3f47845e408009021dbdb63759566d1c2c2557fe38160d06"
     },
     {
       "path": "tests/test_v1160_rc494_command_performance.py",
@@ -1674,16 +1451,5 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ],
-  "version": "116.0-LTS-FC1.2",
-  "release_name": "A100 V116.0 LTS FC1.2 Final Product Polish Sprint 1 Closeout",
-  "release_freeze": "ACTIVE",
-  "live_trading": "OFF",
-  "certification_stage": "Sprint 1 Closeout",
-  "feature_additions": 0,
-  "changes": [
-    "Separate AI learning target gates from system release readiness",
-    "Use WARMING UP below 30 performance samples",
-    "Add build stage percentages and longest-stage indicator"
   ]
 }
