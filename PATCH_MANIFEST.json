@@ -1,7 +1,8 @@
 {
-  "version": "A100 V116.0-LTS-S2.11",
-  "package_type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.10",
+  "version": "A100 V116.0-LTS-S2.11.1",
+  "package_type": "hotfix_patch",
+  "baseline": "A100 V116.0-LTS-S2.11",
+  "fix": "Version manager startup NameError",
   "schema": 1,
   "paper": 20,
   "shadow": 60,
@@ -10,17 +11,13 @@
   "release_freeze": "ACTIVE",
   "changed_files": [
     "main.py",
-    "test_v1160_lts_s211_final_polish.py"
+    "test_v1160_lts_s2111_version_manager_hotfix.py"
   ],
   "verification_commands": [
     "/version",
     "/status",
     "/runtimehealth",
-    "/dashboard btc",
     "/releasegate",
-    "/performanceaudit",
-    "/commandcert",
-    "/commandcert deep",
     "/versionaudit",
     "/pipelinetrace",
     "/errors"

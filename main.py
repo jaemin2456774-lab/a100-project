@@ -44732,10 +44732,9 @@ def v91_preflight(force=False):
 # =============================================================================
 V1160_LTS_S211_NUMBER = "116.0-LTS-S2.11"
 V1160_LTS_S211_VERSION = "A100 V116.0-LTS-S2.11 FINAL POLISH INTELLIGENCE"
-V1160_VERSION_MANAGER = V1160VersionManager(
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
     number=V1160_LTS_S211_NUMBER,
     version=V1160_LTS_S211_VERSION,
-    baseline="A100 V116.0 LTS-S2.10 Runtime Trend Delta & ETA Source Analytics",
 )
 V91_VERSION = V1160_VERSION_MANAGER.version
 V1160_S211_PREFLIGHT_CACHE = None

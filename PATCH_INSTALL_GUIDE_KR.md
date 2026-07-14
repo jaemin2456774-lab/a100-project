@@ -1,10 +1,11 @@
-# S2.11 패치 설치
+# S2.11.1 긴급 패치 설치
 
-1. 현재 프로젝트와 data 디렉터리를 백업합니다.
-2. 패치의 `main.py`만 프로젝트 루트의 기존 파일 위에 덮어씁니다.
-3. 데이터/환경변수/설정 파일은 삭제하거나 교체하지 않습니다.
-4. 재시작 후 아래 명령을 순서대로 확인합니다.
+기준 버전: A100 V116.0 LTS-S2.11
 
-`/version` `/status` `/runtimehealth` `/dashboard btc` `/releasegate` `/performanceaudit` `/commandcert` `/commandcert deep` `/versionaudit` `/pipelinetrace` `/errors`
+1. 압축을 풉니다.
+2. 저장소 루트의 `main.py`를 이 패치의 `main.py`로 교체합니다.
+3. GitHub에 변경 파일만 업로드하고 Railway 재배포를 실행합니다.
+4. 배포 로그에서 `NameError: V1160VersionManager`가 재발하지 않는지 확인합니다.
+5. 배포 성공 후 `/version`, `/status`, `/runtimehealth`, `/releasegate`, `/errors`를 우선 실행합니다.
 
-정상 기준: Registry/Handler/Runtime Route/Output Link 341/341, Errors 0, Schema 1, Paper 20, Shadow 60, Live OFF.
+데이터 파일과 환경변수는 변경하지 않습니다.
