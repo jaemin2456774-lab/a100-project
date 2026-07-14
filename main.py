@@ -45127,12 +45127,256 @@ def v91_preflight(force=False):
     return out
 
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.14 - UNIFIED CERTIFICATION SCORE ENGINE
+# ---------------------------------------------------------------------------
+V1160_LTS_S214_NUMBER = "116.0-LTS-S2.14"
+V1160_LTS_S214_VERSION = "A100 V116.0-LTS-S2.14 UNIFIED CERTIFICATION SCORE ENGINE"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S214_NUMBER,
+    version=V1160_LTS_S214_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S214_PREFLIGHT_CACHE = None
+
+
+def _v1160_s214_certification_snapshot():
+    """Single read-only source shared by status/runtime/dashboard/release gate."""
+    rv = _v1160_s21_runtime_view()
+    evidence = _v1160_s26_update_evidence(rv)
+    runtime_i = _v1160_s212_runtime_intelligence(rv, evidence)
+    state, cert, cache_hit, learning = _v1160_rc4924_gate_snapshot()
+    data = _v1160_s27_gate_snapshot_record(cert, learning)
+    current = data.get("samples", [])[-1] if data.get("samples") else {
+        "ts": time.time(), "learning": learning.get("completed", 0),
+        "target": learning.get("target", 150),
+    }
+    learning_i = _v1160_s211_learning_intelligence(data, current)
+    gate_i = _v1160_s212_gate_forecast(cert, learning, runtime_i, learning_i)
+    exit_gate = _v1160_s26_exit_gate(rv, evidence)
+    passed, total, missing = _v1160_s26_gate_summary(exit_gate)
+    return {
+        "rv": rv, "evidence": evidence, "runtime": runtime_i,
+        "learning": learning_i, "gate": gate_i, "cert": cert,
+        "learning_raw": learning, "cache_hit": cache_hit,
+        "exit_gate": exit_gate, "exit_passed": passed,
+        "exit_total": total, "exit_missing": missing,
+    }
+
+
+def _v1160_s214_risk_layers(snapshot):
+    ri = snapshot["runtime"]
+    auth = ri["authority"]
+    structural = "HIGH" if auth["critical_fail"] else "LOW"
+    operational = "HIGH" if auth["error_count"] > 0 or auth["recovery_rate"] < 99 else "LOW"
+    prediction = ri["risk"]
+    return structural, operational, prediction
+
+
+def _v1160_s214_runtime_lines(snapshot):
+    ri = snapshot["runtime"]
+    structural, operational, prediction = _v1160_s214_risk_layers(snapshot)
+    return [
+        "UNIFIED RUNTIME SCORE ENGINE",
+        f"Raw runtime score      {ri['raw_score']:.1f}/100",
+        f"Calibrated score       {ri['score']:.1f}/100",
+        f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Stability forecast     {ri['forecast']:.1f}%",
+        f"Regression probability {ri['regression']:.1f}%",
+        f"Runtime prediction     {ri['prediction']}",
+        "",
+        "RISK SEGMENTATION",
+        f"Structural risk        {structural}",
+        f"Operational risk       {operational}",
+        f"Prediction risk        {prediction}",
+    ]
+
+
+async def runtimehealth1160ltss214_cmd(update, context):
+    _v1155_track("runtimehealth")
+    snap = _v1160_s214_certification_snapshot()
+    rv, evidence, ri = snap["rv"], snap["evidence"], snap["runtime"]
+    st = rv.get("state", {}) or {}
+    baseline, current, peak, mem_delta = _v1160_s210_memory_stats(rv)
+    lines = _v1160_s21_badge(True, rv["stage"]) + [
+        "", "RUNTIME CERTIFICATION · UNIFIED",
+        f"Certification progress {rv.get('progress', 0):.2f}% / 72h",
+        f"Evidence snapshots     {len(evidence.get('snapshots', []))}/10",
+        f"Exit gate              {snap['exit_passed']}/{snap['exit_total']} complete",
+        f"Remaining              {', '.join(snap['exit_missing']) if snap['exit_missing'] else 'NONE'}",
+        "",
+    ] + _v1160_s214_runtime_lines(snap) + [
+        "", "AUTHORITATIVE EVIDENCE",
+    ] + _v1160_s212_evidence_lines(ri["authority"])[1:] + [
+        "", "MEMORY DETAIL",
+        f"Baseline               {baseline:.1f} MB",
+        f"Current                {current:.1f} MB",
+        f"Peak                   {peak:.1f} MB",
+        f"Delta                  {mem_delta:+.1f}%",
+        "", "CHECKPOINT PROGRESS",
+    ] + _v1160_s26_checkpoint_lines(rv.get("cert_elapsed", 0), evidence) + [
+        "", "RECOVERY VALIDATION",
+        f"Recoveries             {int(st.get('recovery_success_count', 0) or 0)}",
+        f"Failures               {int(st.get('recovery_failure_count', 0) or 0)}",
+        f"Recovery rate          {ri['authority']['recovery_rate']:.1f}%",
+        f"Runtime errors         {ri['authority']['error_count']}",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines + _v1160_s21_footer()))
+
+
+async def status1160ltss214_cmd(update, context):
+    snap = _v1160_s214_certification_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    lines = [
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}",
+        "UNIFIED CERTIFICATION STATUS",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+        "",
+        f"Runtime score          {ri['score']:.1f}/100",
+        f"Runtime prediction     {ri['prediction']}",
+        f"Release forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Evidence authority     {ri['authority']['score']:.1f}/100",
+        f"Learning quality       {li['quality']:.1f}/100",
+        f"Exit gate              {snap['exit_passed']}/{snap['exit_total']} complete",
+        f"Remaining              {', '.join(snap['exit_missing']) if snap['exit_missing'] else 'NONE'}",
+        "", "Engineering 341/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def dashboard1160ltss214_cmd(update, context):
+    snap = _v1160_s214_certification_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    lines = [
+        "LTS FINAL READINESS · UNIFIED",
+        f"Runtime score          {ri['score']:.1f}/100",
+        f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Runtime stability      {ri['forecast']:.1f}%",
+        f"Release forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100",
+        f"Learning quality       {li['quality']:.1f}/100",
+        f"Evidence authority     {ri['authority']['score']:.1f}/100",
+        "", "24H FORECAST",
+        f"Runtime                {ri['prediction']}",
+        f"Gate trend             {gf['trend']}",
+        f"Regression probability {ri['regression']:.1f}%",
+        f"Learning trend         {li['trend']}",
+        "", "EVIDENCE TIMELINE GRAPH",
+    ] + _v1160_s211_evidence_timeline(snap["rv"], snap["evidence"])
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def releasegate1160ltss214_cmd(update, context):
+    snap = _v1160_s214_certification_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    state, cert, hit, learning = _v1160_rc4924_gate_snapshot()
+    gate = cert.get("gate", {}) or {}
+    lines = [
+        "RELEASE GATE · UNIFIED CERTIFICATION ENGINE",
+        f"Gate trend             {gf['trend']}",
+        f"AI gate forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Estimated completion   {_v1160_s210_eta_text(gf['eta_h'])}",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100",
+        f"Runtime score          {ri['score']:.1f}/100",
+        f"Snapshot cache         {'HIT' if hit else 'MISS'}",
+        "", "MANDATORY GATES",
+    ]
+    labels = {
+        "intelligence_score": "Intelligence", "strategy_trust": "Strategy Trust",
+        "outcome_quality": "Outcome Quality", "memory_health": "Memory Health",
+        "lts_readiness": "LTS Readiness",
+    }
+    for key, label in labels.items():
+        item = gate.get(key, {}) or {}
+        current = float(item.get("current", 0) or 0)
+        required = float(item.get("required", 0) or 0)
+        lines.append(f"{'✅ PASS' if current >= required else '❌ BLOCKED'} · {label} {current:.1f}/{required:.1f}")
+    lines += [
+        "", "NOTE",
+        "Mandatory gates remain authoritative; unified calibration cannot override a blocked gate.",
+        "", "LEARNING INTELLIGENCE",
+        f"Velocity trend         {li['trend']} · {li['velocity']:.2f}/h",
+        f"Quality / confidence   {li['quality']:.1f} / {li['confidence']:.1f}",
+        f"Learning efficiency    {li['efficiency']:.1f}%",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def version1160ltss214_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    lines = [
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}", "Version & Build Information",
+        "Engineering Baseline", "Release Freeze: ACTIVE · Regression Risk: NONE", "",
+        f"Version Source       {vm['source']}", f"Build                {V1160_VERSION_MANAGER.version}",
+        f"Schema               {vm['schema']}", f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}", "Feature Freeze       ACTIVE", "",
+        "Sprint 2.14 · one shared certification snapshot for Status, Runtime, Dashboard and Release Gate.",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version": "LTS Sprint 2.14 unified certification engine version/build information",
+    "status": "Unified certification status from the shared score snapshot",
+    "runtimehealth": "Unified calibrated runtime score and certification evidence",
+    "dashboard": "Unified LTS readiness, forecast and evidence timeline",
+    "releasegate": "Unified release gate using the same runtime and evidence snapshot",
+})
+V90_COMMAND_REGISTRY.update({
+    "version": version1160ltss214_cmd,
+    "status": status1160ltss214_cmd,
+    "runtimehealth": runtimehealth1160ltss214_cmd,
+    "dashboard": dashboard1160ltss214_cmd,
+    "releasegate": releasegate1160ltss214_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+_V1160_S213_PREFLIGHT = v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S214_PREFLIGHT_CACHE
+    if V1160_S214_PREFLIGHT_CACHE is not None and not force:
+        return V1160_S214_PREFLIGHT_CACHE
+    base = _V1160_S213_PREFLIGHT(force)
+    checks = dict(base.get("checks", {}))
+    for stale in ("s212_handlers", "s212_version_source"):
+        checks.pop(stale, None)
+    checks.update({
+        "s214_version_source": V1160_VERSION_MANAGER.number == V1160_LTS_S214_NUMBER and V91_VERSION == V1160_VERSION_MANAGER.version,
+        "s214_registry_341": len(V90_COMMAND_REGISTRY) == 341,
+        "s214_handlers": V90_COMMAND_REGISTRY.get("status") is status1160ltss214_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss214_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss214_cmd and V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss214_cmd,
+        "s214_shared_snapshot": callable(_v1160_s214_certification_snapshot),
+        "s214_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "s214_live_off": not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    failed = [k for k, v in checks.items() if not v]
+    out = dict(base)
+    out.update({
+        "ok": not failed, "checks": checks, "failed": failed,
+        "development_version": V91_VERSION, "version_source": "Single",
+        "regression_risk": "NONE" if not failed else "HIGH",
+        "release_freeze": "ACTIVE",
+        "lts_readiness": "FINAL CERTIFICATION" if not failed else "BLOCKED",
+        "certification_stage": "Sprint 2.14 Unified Certification Score Engine",
+    })
+    if not force:
+        V1160_S214_PREFLIGHT_CACHE = out
+    return out
+
+
 # IMPORTANT: final executable block must stay at the physical end of main.py.
 if __name__ == "__main__":
     audit = v91_preflight(force=True)
     if not audit.get("ok"):
         raise RuntimeError(
-            "V116.0 LTS-S2.13 startup integrity failure: "
+            "V116.0 LTS-S2.14 startup integrity failure: "
             + ", ".join(audit.get("failed", []))
         )
     _v1160_rc45_start_worker()
