@@ -43801,10 +43801,106 @@ def v91_preflight(force=False):
         V1160_S25_PREFLIGHT_CACHE = out
     return out
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.6 - SPRINT 2 FINAL STABILIZATION
+# ---------------------------------------------------------------------------
+V1160_LTS_S26_NUMBER = "116.0-LTS-S2.6"
+V1160_LTS_S26_VERSION = "A100 V116.0-LTS-S2.6 SPRINT 2 FINAL STABILIZATION"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S26_NUMBER, version=V1160_LTS_S26_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S26_PREFLIGHT_CACHE = None
+V1160_S26_WEIGHTS = {"Runtime Stability":30,"Resource Stability":25,"Performance Stability":20,"Recovery Stability":15,"Evidence Completeness":10}
+
+def _v1160_s26_health_components(rv, evidence=None):
+    base=_v1160_s25_health_components(rv,evidence)
+    base["Overall"]=sum(base[k]*V1160_S26_WEIGHTS[k] for k in V1160_S26_WEIGHTS)/100.0
+    return base
+
+def _v1160_s26_update_evidence(rv):
+    evidence=_v1160_s24_update_evidence(rv)
+    snapshots=[x for x in evidence.get("snapshots",[]) if isinstance(x,dict)]
+    changed=False
+    for item in snapshots:
+        if "snapshot_id" not in item:
+            raw=f"{item.get('checkpoint')}|{item.get('captured_at')}|{item.get('registry_hash')}"
+            item["snapshot_id"]=hashlib.sha256(raw.encode()).hexdigest()[:12]; changed=True
+    if len(snapshots)>10: snapshots=snapshots[-10:]; changed=True
+    evidence["snapshots"]=snapshots
+    if changed: _v1160_s24_save_evidence(evidence)
+    return evidence
+
+def _v1160_s26_checkpoint_lines(elapsed,evidence=None):
+    evidence=evidence or _v1160_s24_load_evidence()
+    saved={str(x.get("checkpoint")) for x in evidence.get("snapshots",[]) if isinstance(x,dict)}
+    out=[]
+    for cp in _v1160_s24_checkpoint_status(elapsed):
+        state=("✅ CERTIFIED" if cp["name"]=="72H" else "✅ PASS") if cp["name"] in saved else "○ Pending"
+        out.append(f"{cp['name']:4} {state}")
+    return out
+
+def _v1160_s26_evidence_history(evidence,limit=10):
+    rows=[x for x in evidence.get("snapshots",[]) if isinstance(x,dict)][-limit:]
+    if not rows: return ["No checkpoint evidence saved yet"]
+    out=[]
+    for i,item in enumerate(rows,1):
+        ts=float(item.get("captured_at",0) or 0); stamp=datetime.fromtimestamp(ts).strftime("%m-%d %H:%M") if ts else "UNKNOWN"
+        score=float(item.get("runtime_health_score",0) or 0); status="PASS" if score>=75 else "FAIL"
+        out.append(f"#{i:03} {stamp} · {item.get('checkpoint','?')} · {score:.1f} · {status} · {item.get('snapshot_id','N/A')}")
+    return out
+
+def _v1160_s26_exit_gate(rv,evidence=None):
+    evidence=evidence or _v1160_s24_load_evidence(); c=_v1160_s26_health_components(rv,evidence); st=rv.get("state",{}) or {}
+    saved={str(x.get("checkpoint")) for x in evidence.get("snapshots",[]) if isinstance(x,dict)}
+    return {"Runtime Stability":c["Runtime Stability"]>=90 and float(rv.get("cert_elapsed",0) or 0)>=1800,"Resource Stability":c["Resource Stability"]>=80,"Performance Stability":c["Performance Stability"]>=75,"Recovery Validation":int(st.get("recovery_failure_count",0) or 0)==0,"Evidence Validation":len(evidence.get("snapshots",[]))>=1,"72H Certification":"72H" in saved,"Regression Gate":len(V90_COMMAND_REGISTRY)==341}
+
+def _v1160_s26_gate_summary(g):
+    return sum(bool(v) for v in g.values()),len(g),[k for k,v in g.items() if not v]
+
+async def version1160ltss26_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot(); lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2 Final Stabilization · 24H/48H/72H evidence required."]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+async def status1160ltss26_cmd(update,context):
+    _v1155_track("status"); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); structural=_v1160_rc4920_build_certification(False); view=structural["view"]
+    state=_v1160_rc496_shared_state(); cert,_=_v1160_rc497_certification_cached(state); ai=cert.get("gate",{}) or {}; gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate); current_cp,next_cp=_v1160_s24_current_checkpoint(rv["cert_elapsed"]); comp=_v1160_s26_health_components(rv,evidence)
+    lines=_v1160_s21_badge(True,rv["stage"])+["","SPRINT 2 FINAL STATUS"]+_v1160_s23_progress_lines(rv)+[f"Current checkpoint   {current_cp}",f"Next checkpoint      {next_cp}",f"Evidence snapshots   {len(evidence.get('snapshots',[]))} / 10",f"Runtime health       {comp['Overall']:6.1f} / 100",f"Exit Gate            {passed} / {total} Complete",f"Remaining conditions {', '.join(missing) if missing else 'NONE'}","","CHECKPOINT PROGRESS"]+_v1160_s26_checkpoint_lines(rv["cert_elapsed"],evidence)+["","ENGINEERING CERTIFICATION",f"Engineering          {_v1160_s23_engineering_status(view)}",f"Registry             {view['registry_verified']}/{view['total']} PASS",f"Handler              {view['callable']}/{view['total']} PASS",f"Output               {view['output_linked']}/{view['total']} PASS","Schema 1 · Paper 20 · Shadow 60 · Live OFF","","AI LEARNING TARGETS","Operational certification is independent from AI target attainment."]
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for key,label in labels.items():
+        if ai.get(key): lines.append(_v1160_s24_gate_line(label,ai[key]))
+    return await v90_1_safe_reply(update,"\n".join(lines+_v1160_s21_footer()))
+
+async def runtimehealth1160ltss26_cmd(update,context):
+    _v1155_track("runtimehealth"); rv=_v1160_s21_runtime_view(True); evidence=_v1160_s26_update_evidence(rv); st=rv["state"]; comp=_v1160_s26_health_components(rv,evidence); gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate)
+    lines=_v1160_s21_badge(True,rv["stage"])+["","RUNTIME CERTIFICATION FINAL STABILIZATION"]+_v1160_s23_progress_lines(rv)+["","RUNTIME HEALTH SCORE WEIGHTS"]
+    for k in V1160_S26_WEIGHTS: lines.append(f"{k:22} {comp[k]:6.1f}% · weight {V1160_S26_WEIGHTS[k]}%")
+    lines += [f"Runtime Health Score   {comp['Overall']:6.1f} / 100","","CHECKPOINT PROGRESS"]+_v1160_s26_checkpoint_lines(rv["cert_elapsed"],evidence)+["","COMPLETION CRITERIA"]+_v1160_s25_completion_details(rv)+["","EVIDENCE HISTORY (LATEST 10)"]+_v1160_s26_evidence_history(evidence,10)+["","SPRINT 2 EXIT GATE",f"Progress             {passed} / {total} Complete"]
+    for name,ok in gate.items(): lines.append(f"{'✅ PASS' if ok else '⏳ WAITING'} · {name}")
+    lines += [f"Remaining            {', '.join(missing) if missing else 'NONE'}","","RECOVERY VALIDATION",f"Recoveries           {int(st.get('recovery_success_count',0) or 0)}",f"Failures             {int(st.get('recovery_failure_count',0) or 0)}",f"Recovery rate        {rv['recovery_rate']:.1f}%",f"Process restart      {int(st.get('restart_count',0) or 0)}",f"Snapshot restore     {int(st.get('snapshot_restore_count',0) or 0)}",f"Last restart cause   {st.get('last_restart_cause') or 'NONE'}"]
+    return await v90_1_safe_reply(update,"\n".join(lines+_v1160_s21_footer()))
+
+async def dashboard1160ltss26_cmd(update,context):
+    _v1155_track("dashboard"); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence); gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate); current_cp,next_cp=_v1160_s24_current_checkpoint(rv["cert_elapsed"])
+    lines=_v1160_s21_badge(True,rv["stage"])+["","LONG RUNTIME FINAL STABILIZATION DASHBOARD"]+_v1160_s23_progress_lines(rv)+[f"Current checkpoint   {current_cp}",f"Next checkpoint      {next_cp}",f"Evidence count       {len(evidence.get('snapshots',[]))} / 10",f"Runtime health       {comp['Overall']:6.1f} / 100",f"Exit Gate            {passed} / {total} Complete",f"Remaining            {', '.join(missing) if missing else 'NONE'}","","CHECKPOINT PROGRESS"]+_v1160_s26_checkpoint_lines(rv["cert_elapsed"],evidence)+["","SPRINT 2 EXIT GATE"]
+    for name,ok in gate.items(): lines.append(f"{'✅ PASS' if ok else '⏳ PENDING'} · {name}")
+    return await v90_1_safe_reply(update,"\n".join(lines+_v1160_s21_footer()))
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.6 version/build final stabilization","status":"Sprint 2.6 auto checkpoint and exit gate status","runtimehealth":"Weighted health score, evidence history and exit gate","dashboard":"Sprint 2.6 Final Stabilization Dashboard"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss26_cmd,"status":status1160ltss26_cmd,"runtimehealth":runtimehealth1160ltss26_cmd,"dashboard":dashboard1160ltss26_cmd}); V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S25_PREFLIGHT=v91_preflight
+
+def v91_preflight(force=False):
+    global V1160_S26_PREFLIGHT_CACHE
+    if V1160_S26_PREFLIGHT_CACHE is not None and not force: return V1160_S26_PREFLIGHT_CACHE
+    base=_V1160_S25_PREFLIGHT(force); rv=_v1160_s21_runtime_view(True); evidence=_v1160_s26_update_evidence(rv); checks=dict(base.get("checks",{}))
+    for stale in ("s25_handlers","s25_version_source"): checks.pop(stale,None)
+    checks.update({"s26_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S26_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,"s26_registry_341":len(V90_COMMAND_REGISTRY)==341,"s26_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss26_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss26_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss26_cmd,"s26_weights":sum(V1160_S26_WEIGHTS.values())==100,"s26_evidence_limit":len(evidence.get("snapshots",[]))<=10,"s26_exit_gate":len(_v1160_s26_exit_gate(rv,evidence))==7,"s26_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"s26_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade"))})
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"CERTIFYING" if not failed else "BLOCKED","certification_stage":"Sprint 2.6 Final Stabilization"})
+    if not force: V1160_S26_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
-    if not audit.get('ok'):
-        raise RuntimeError('V116.0 LTS-S2.5 startup integrity failure: '+', '.join(audit.get('failed',[])))
-    _v1160_rc45_start_worker()
-    main()
+    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.6 startup integrity failure: "+", ".join(audit.get("failed",[])))
+    _v1160_rc45_start_worker(); main()
