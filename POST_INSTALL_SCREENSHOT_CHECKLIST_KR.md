@@ -1,6 +1,7 @@
-# RC4.9.11 설치 후 캡처
+# RC4.9.12 설치 후 캡처
 
-순서대로 실행:
+아래 명령을 순서대로 실행하세요.
+
 /version
 /status
 /status
@@ -14,4 +15,4 @@
 /commandcert warn engine 10
 /commandcert warn output 10
 
-확인: 모든 버전 RC4.9.11, 두 번째 status HIT, AI Health 두 번째 Trend, CommandCert 요약/상세 집계 일치.
+확인: 모든 화면 RC4.9.12, 두 번째 status HIT, 두 번째 aihealth Trend, commandcert Summary/Coverage/Detail 일치.

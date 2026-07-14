@@ -39728,11 +39728,202 @@ def v91_preflight():
     checks.update({'v1160_rc4911_version_manager':V91_VERSION==V1160_RC4911_VERSION,'v1160_rc4911_handlers':all(V90_COMMAND_REGISTRY.get(k) is v for k,v in handlers.items()),'v1160_rc4911_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),'v1160_rc4911_schema':_v91_default_state().get('schema')==1,'v1160_rc4911_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1160_rc4911_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4911-consistency-truth-bottleneck-insight'}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.12 - SINGLE SOURCE TRUTH & RELEASE CONSISTENCY
+# ---------------------------------------------------------------------------
+V1160_RC4912_NUMBER = "116.0-RC4.9.12"
+V1160_RC4912_VERSION = "A100 V116.0-RC4.9.12 LTS SINGLE SOURCE TRUTH RELEASE CONSISTENCY"
+V91_VERSION = V1160_RC4912_VERSION
+V1160_RC4912_HEALTH_FILE = os.path.join(V91_DATA_DIR, "a100_v116_rc4912_ai_health_history.json")
+
+
+def _v1160_rc4912_version_number():
+    """Only active display source for RC4.9.12 Telegram views."""
+    return V1160_RC4912_NUMBER
+
+
+def _v1160_rc4912_reason_category(reason):
+    reason=str(reason or '').lower()
+    if 'output_path' in reason or reason.startswith('output_'): return 'Output'
+    if 'repository' in reason or 'repo_' in reason: return 'Repository'
+    if 'runtime' in reason: return 'Runtime'
+    return 'Engine'
+
+
+def _v1160_rc4912_certification_aggregate(cert):
+    """One row-level aggregator for summary, coverage and drill-down."""
+    rows=list((cert or {}).get('rows',[]) or [])
+    category_commands={k:set() for k in ('Engine','Output','Repository','Runtime')}
+    category_reasons={k:{} for k in category_commands}
+    grouped={}
+    verified=set(); failed=set()
+    for row in rows:
+        cmd=str(row.get('command','unknown')).lstrip('/')
+        status=str(row.get('status','PARTIAL')).upper()
+        reasons=[str(x) for x in (row.get('reasons') or [])]
+        if status=='PASS':
+            verified.add(cmd); continue
+        if status=='FAILED': failed.add(cmd)
+        if not reasons: reasons=['engine_execution_unverified']
+        cats=sorted({_v1160_rc4912_reason_category(r) for r in reasons})
+        for cat in cats:
+            category_commands[cat].add(cmd)
+            for reason in reasons:
+                if _v1160_rc4912_reason_category(reason)==cat:
+                    category_reasons[cat].setdefault(reason,set()).add(cmd)
+        key=(status,tuple(sorted(reasons)))
+        g=grouped.setdefault(key,{'status':status,'reasons':sorted(reasons),'commands':set(),'categories':set()})
+        g['commands'].add(cmd); g['categories'].update(cats)
+    groups=[]
+    for g in grouped.values():
+        groups.append({'status':g['status'],'reasons':g['reasons'],'commands':sorted(g['commands']),'categories':sorted(g['categories'])})
+    groups.sort(key=lambda x:(x['status']!='FAILED',-len(x['commands']),x['reasons']))
+    pending=set().union(*category_commands.values()) if category_commands else set()
+    return {
+        'verified':len(verified), 'pending':len(pending), 'resolved':0, 'failed':len(failed),
+        'category_commands':category_commands, 'category_reasons':category_reasons,
+        'category_groups':{k:sum(1 for g in groups if k in g['categories']) for k in category_commands},
+        'groups':groups,
+    }
+
+
+def _v1160_rc4912_health_previous(score):
+    rows=[]
+    for path in (V1160_RC4912_HEALTH_FILE, V1160_RC4911_HEALTH_FILE):
+        try:
+            if os.path.exists(path):
+                with open(path,'r',encoding='utf-8') as f: rows=json.load(f)
+                if isinstance(rows,list) and rows: break
+        except Exception: rows=[]
+    previous=float(rows[-1].get('score')) if rows else None
+    rows=(rows if isinstance(rows,list) else [])+[{'ts':time.time(),'score':float(score)}]
+    rows=rows[-96:]
+    try:
+        os.makedirs(os.path.dirname(V1160_RC4912_HEALTH_FILE),exist_ok=True)
+        tmp=V1160_RC4912_HEALTH_FILE+'.tmp'
+        with open(tmp,'w',encoding='utf-8') as f: json.dump(rows,f,ensure_ascii=False)
+        os.replace(tmp,V1160_RC4912_HEALTH_FILE)
+    except Exception: pass
+    return previous
+
+
+async def status1160rc4912_cmd(update,context):
+    global V1160_RC497_NUMBER
+    old=V1160_RC497_NUMBER; V1160_RC497_NUMBER=_v1160_rc4912_version_number()
+    try: return await status1160rc497_cmd(update,context)
+    finally: V1160_RC497_NUMBER=old
+
+
+async def dashboard1160rc4912_cmd(update,context):
+    global V1160_RC496_NUMBER
+    old=V1160_RC496_NUMBER; V1160_RC496_NUMBER=_v1160_rc4912_version_number()
+    try:
+        result=await dashboard1160rc496_cmd(update,context)
+        state,cert,_=_v1160_rc499_gate_snapshot(); gate=cert.get('gate',{})
+        conf=float(gate.get('intelligence_score',{}).get('value',0)); trust=float(gate.get('strategy_trust',{}).get('value',0))
+        completed=int(state.get('closed_count',state.get('learning_completed',0)) or 0)
+        target=max(150,int(state.get('learning_target',150) or 150)); need=max(0,target-completed)
+        daily=float(state.get('closed_per_day_7d',state.get('learning_velocity_7d',0)) or 0); eta=(need/daily) if daily>0 else None
+        lines=["🎯 <b>LEARNING FORECAST</b>",f"Confidence <b>{conf:.1f}% → {min(100,conf+3):.1f}%</b>",f"Strategy Trust <b>{trust:.1f} → {min(100,trust+5):.1f}</b>",f"최근 학습속도 <b>{daily:.1f}건/일</b>",f"남은 완료 표본 <b>{need}건</b>"]
+        lines.append(f"예상 완료 <b>{eta:.1f}일</b> · {need:.0f} ÷ {daily:.1f}" if eta is not None else "예상 완료 <b>산정 대기</b> · 최근 7일 처리 표본 필요")
+        await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+        return result
+    finally: V1160_RC496_NUMBER=old
+
+
+async def releasegate1160rc4912_cmd(update,context):
+    _,cert,hit=_v1160_rc499_gate_snapshot(); mode,_=_v1160_rc495_mode(cert); prog,passed,total=_v1160_rc496_progress(cert); gate=cert.get('gate',{})
+    labels={'intelligence_score':'Intelligence','strategy_trust':'Strategy','outcome_quality':'Outcome','memory_health':'Memory','lts_readiness':'LTS Readiness'}
+    lines=[f"🚦 <b>A100 V{_v1160_rc4912_version_number()} RELEASE GATE</b>",f"Phase <b>{mode}</b> · Status <b>{'READY' if cert.get('ready') else 'LEARNING'}</b>",f"Score Progress <b>{prog:.1f}%</b> · Gates <b>{passed}/{total}</b> · Cache {'HIT' if hit else 'MISS'}",""]
+    blocked=[]
+    for key in ('intelligence_score','strategy_trust','outcome_quality','memory_health','lts_readiness'):
+        g=gate.get(key,{})
+        value=float(g.get('value',0)); target=float(g.get('target',0)); ok=bool(g.get('pass')); need=max(0,target-value); ratio=100*value/max(1,target); name=labels[key]
+        lines.append(f"{'✅' if ok else '❌'} {name} <b>{value:.1f}/{target:.0f}</b> · <b>{ratio:.1f}%</b>"+("" if ok else f" · Need <b>{need:.1f}</b>"))
+        if not ok: blocked.append(name)
+    lines += ["", "Blocked By: <b>"+_v54_escape(', '.join(blocked) if blocked else 'None')+"</b>"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def aihealth1160rc4912_cmd(update,context):
+    _,cert,_=_v1160_rc499_gate_snapshot(); score,label=_v1160_rc499_health(cert); gate=cert.get('gate',{}); previous=_v1160_rc4912_health_previous(score)
+    trend="기준값 저장" if previous is None else f"{score-previous:+.1f}%p"
+    lines=[f"🧠 <b>A100 V{_v1160_rc4912_version_number()} AI HEALTH</b>",f"Overall <b>{score:.1f}% · {label}</b> · Trend <b>{trend}</b>",""]
+    names={'intelligence_score':'Learning','memory_health':'Memory','strategy_trust':'Strategy','outcome_quality':'Outcome','lts_readiness':'Readiness'}
+    for k,n in names.items():
+        g=gate.get(k,{}); ratio=100*float(g.get('value',0))/max(1,float(g.get('target',1))); state='GOOD' if ratio>=90 else 'MID' if ratio>=70 else 'LOW'
+        lines.append(f"{'🟢' if state=='GOOD' else '🟡' if state=='MID' else '🔴'} {n} <b>{state}</b> · {ratio:.1f}%")
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def performanceaudit1160rc4912_cmd(update,context):
+    rows=_v1160_rc4910_perf_rows()
+    def avg(key):
+        vals=[v for r in rows for v in r[key]]; return sum(vals)/len(vals) if vals else 0.0
+    processing=avg('processing'); engine=avg('engine'); queue=avg('queue'); telegram=avg('send'); transport=avg('transport')
+    other=max(0.0,processing-engine-telegram); observed=max(1.0,queue+processing+transport)
+    cache_total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,cache_total)
+    bad=[]
+    if hit<80: bad.append(f"Cache Hit {hit:.1f}% / target 80%")
+    if processing>5000: bad.append(f"Processing {processing:.0f}ms / target 5000ms")
+    if V1160_RC495_DUPLICATE_READS: bad.append(f"Duplicate Reads {V1160_RC495_DUPLICATE_READS} / target 0")
+    grade='A' if not bad and len(rows)>=3 else 'B' if len(bad)<=2 else 'C'
+    components={'Queue Wait':queue,'Engine':engine,'Telegram':telegram,'Transport':transport,'Other Processing':other}; bottleneck=max(components,key=components.get)
+    lines=[f"⚙️ <b>A100 V{_v1160_rc4912_version_number()} PERFORMANCE AUDIT</b>",f"Grade <b>{grade}</b> · Commands <b>{len(rows)}</b>","",f"Queue <b>{queue:.0f}ms</b> · {100*queue/observed:.1f}%",f"Engine <b>{engine:.0f}ms</b> · {100*engine/observed:.1f}%",f"Telegram <b>{telegram:.0f}ms</b> · {100*telegram/observed:.1f}%",f"Transport <b>{transport:.0f}ms</b> · {100*transport/observed:.1f}%",f"Other Processing <b>{other:.0f}ms</b> · {100*other/observed:.1f}%",f"Processing <b>{processing:.0f}ms</b>",f"Observed Total <b>{observed:.0f}ms</b>",f"Primary Bottleneck <b>{bottleneck}</b>","", "✅ GOOD" if not bad else "⚠️ NEEDS IMPROVEMENT"]
+    lines += ["• "+_v54_escape(x) for x in bad] if bad else ["• Targets satisfied"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def performancehistory1160rc4912_cmd(update,context):
+    global V1160_RC4910_NUMBER
+    old=V1160_RC4910_NUMBER; V1160_RC4910_NUMBER=_v1160_rc4912_version_number()
+    try: return await performancehistory1160rc4910_cmd(update,context)
+    finally: V1160_RC4910_NUMBER=old
+
+
+async def commandcert1160rc4912_cmd(update,context):
+    _v1155_track('commandcert'); state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_command_certification_cached(state); view=_v1160_rc4912_certification_aggregate(cert)
+    args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    lines=[f"🧾 <b>A100 V{_v1160_rc4912_version_number()} COMMAND CERTIFICATION</b>",f"Status <b>{cert.get('status','UNKNOWN')}</b> · Snapshot <code>{cert.get('snapshot_id','-')}</code> · Cache {'HIT' if hit else 'MISS'}",f"Verified <b>{view['verified']}</b> · Pending <b>{view['pending']}</b> · Resolved <b>{view['resolved']}</b> · Failed <b>{view['failed']}</b>","", "<b>CONSISTENT COVERAGE</b>"]
+    for cat in ('Engine','Output','Repository','Runtime'):
+        lines.append(f"• {cat} <b>{len(view['category_commands'][cat])}</b> commands / {view['category_groups'][cat]} groups")
+    if args and args[0]=='warn':
+        needle=' '.join(args[1:]).strip(); limit=10
+        if args and args[-1].isdigit(): limit=max(1,min(30,int(args[-1]))); needle=' '.join(args[1:-1]).strip()
+        selected=[g for g in view['groups'] if not needle or needle.lower() in ' '.join(g['reasons']).lower() or needle.title() in g['categories'] or any(needle in c.lower() for c in g['commands'])]
+        lines += ["",f"🔎 Filter <code>{_v54_escape(needle or 'all')}</code> · {len(selected)} groups · Top {limit}"]
+        for g in selected[:limit]:
+            lines.append(f"⚠️ <b>{_v54_escape(g['status'])}</b> ×{len(g['commands'])} · {_v54_escape(', '.join(g['reasons']))}")
+            if g['commands']: lines.append("   "+_v54_escape(', '.join('/'+x for x in g['commands'][:8])))
+    elif args and args[0]=='fail':
+        lines += ["",f"⛔ Failed commands <b>{view['failed']}</b>"]
+    else:
+        lines += ["","Summary · Coverage · Detail 모두 동일 Aggregator를 사용합니다.","조회: <code>/commandcert warn engine 10</code> · <code>/commandcert warn output 10</code>"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+def _v1160_rc4912_static_version_audit():
+    handlers=(status1160rc4912_cmd,dashboard1160rc4912_cmd,releasegate1160rc4912_cmd,performanceaudit1160rc4912_cmd,performancehistory1160rc4912_cmd,aihealth1160rc4912_cmd,commandcert1160rc4912_cmd)
+    return all(callable(x) for x in handlers) and V91_VERSION==V1160_RC4912_VERSION
+
+
+V925_COMMAND_USAGE.update({'performancehistory':'Processing과 Queue를 분리한 최근 명령 성능','aihealth':'지속 저장되는 AI Health 추세','commandcert':'단일 Aggregator 기반 명령 인증'})
+V90_COMMAND_REGISTRY.update({'status':status1160rc4912_cmd,'dashboard':dashboard1160rc4912_cmd,'releasegate':releasegate1160rc4912_cmd,'performanceaudit':performanceaudit1160rc4912_cmd,'performancehistory':performancehistory1160rc4912_cmd,'aihealth':aihealth1160rc4912_cmd,'commandcert':commandcert1160rc4912_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4912_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4912_PREFLIGHT_BASE(); checks=dict(base.get('checks',{}))
+    handlers={'status':status1160rc4912_cmd,'dashboard':dashboard1160rc4912_cmd,'releasegate':releasegate1160rc4912_cmd,'performanceaudit':performanceaudit1160rc4912_cmd,'performancehistory':performancehistory1160rc4912_cmd,'aihealth':aihealth1160rc4912_cmd,'commandcert':commandcert1160rc4912_cmd}
+    checks.update({'v1160_rc4912_version_truth':_v1160_rc4912_static_version_audit(),'v1160_rc4912_handlers':all(V90_COMMAND_REGISTRY.get(k) is v for k,v in handlers.items()),'v1160_rc4912_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),'v1160_rc4912_schema':_v91_default_state().get('schema')==1,'v1160_rc4912_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1160_rc4912_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4912-single-source-truth-release-consistency'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.11 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.12 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
