@@ -5,10 +5,14 @@
   "schema": 1,
   "paper": 20,
   "shadow": 60,
-  "live_trading": false,
+  "live_trading": "OFF",
   "release_freeze": "ACTIVE",
   "regression_risk": "NONE",
   "registry": "341/341",
   "certification_stage": "Sprint 2.3 Long Runtime Certification Enhancement",
-  "long_runtime_certification": "MEASURING"
+  "long_runtime_certification": "MEASURING",
+  "version": "A100 V116.0-LTS-S2.4 LONG RUNTIME CERTIFICATION FINAL",
+  "version_number": "116.0-LTS-S2.4",
+  "release_name": "A100_V116_0_LTS_S2_4_LONG_RUNTIME_CERTIFICATION_FINAL_DEVELOPMENT_RELEASE",
+  "release_stage": "Sprint 2.4 Long Runtime Certification Final"
 }
