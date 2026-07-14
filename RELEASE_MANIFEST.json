@@ -1,11 +1,10 @@
 {
-  "version": "A100 V116.0-RC4.9.8",
-  "release": "PERFORMANCE_MEASUREMENT_TRUTH_CERTIFICATION_CLARITY",
+  "version": "A100 V116.0-RC4.9.10",
+  "release": "VERSION_TRUTH_OPERATIONS_CLARITY_DEVELOPMENT_RELEASE",
   "schema": 1,
   "paper_limit": 20,
   "shadow_limit": 60,
   "live_trading": false,
-  "file_count": 233,
   "files": [
     {
       "path": ".gitignore",
@@ -14,8 +13,8 @@
     },
     {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
-      "size": 356,
-      "sha256": "5cc96fb817205382a773fb2a37d0e166f706c25f5a9fc6937a95c5b55de886f1"
+      "size": 351,
+      "sha256": "8af6c2ff426d1e1272f366d8dfd8790af427c9661338611ce01077b6137db7c2"
     },
     {
       "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md",
@@ -59,8 +58,8 @@
     },
     {
       "path": "README.md",
-      "size": 175,
-      "sha256": "7fd69e5e56e90da90c4aae5c1e75677b82f7eddf2d34fa2dc4fbee7d1ef0b568"
+      "size": 84,
+      "sha256": "378cf6a5a7b3914f0cb6b0e53a592b8896445239223da03119316f9e977cba42"
     },
     {
       "path": "README_RC4_9_2.md",
@@ -278,6 +277,11 @@
       "sha256": "b47c225126d3c79b6a3099ac94103fa0eb42c2cbc5e6e074d39b305fb1db7ea4"
     },
     {
+      "path": "docs/CHANGELOG_V116_0_RC4_9_10.md",
+      "size": 672,
+      "sha256": "33cd2cc964775735b22451a0a580cbc60ba71495cfca88a01370ba89471964a9"
+    },
+    {
       "path": "docs/CHANGELOG_V116_0_RC4_9_5.md",
       "size": 890,
       "sha256": "e7f01093df27e70e2e8e6ac36208955610885ba02bd281a6ff000ad201d8f4fe"
@@ -291,6 +295,11 @@
       "path": "docs/CHANGELOG_V116_0_RC4_9_7.md",
       "size": 665,
       "sha256": "ac387fc8446c17471ceeb9902693f3452e1fde40fee6ab29979d3a1345929fb8"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_9_9.md",
+      "size": 364,
+      "sha256": "f227540f222f46de388296e01599ec3ca7af5754a77698ae1074d599ae0f54c8"
     },
     {
       "path": "docs/CHANGELOG_V94_0.md",
@@ -643,6 +652,11 @@
       "sha256": "38172c9cfa193f4a1cbab4b9a5e180a634046fd9712a60bafe023b00d3e8a1c7"
     },
     {
+      "path": "docs/TEST_REPORT_V116_0_RC4_9_10.md",
+      "size": 283,
+      "sha256": "1e578b9329eba270584ffe0b23124db4ed2f27bf519a5c21b5421632bd3595cb"
+    },
+    {
       "path": "docs/TEST_REPORT_V116_0_RC4_9_5.md",
       "size": 670,
       "sha256": "a656040b6884ac242f8cb2cec140bf3e2cb9f97cda21363c4495f6a8a97d94b9"
@@ -684,8 +698,8 @@
     },
     {
       "path": "main.py",
-      "size": 1963582,
-      "sha256": "aea793299a493baa876b70ea0f4bc3df89e6d04c2f77cedf098984594e0a6705"
+      "size": 1982958,
+      "sha256": "c94f467a2a5a2a206ffec14a853db9a45eea4d4343e86b4e391c455b351dd35c"
     },
     {
       "path": "pytest.ini",
@@ -903,6 +917,11 @@
       "sha256": "b25d4cce3749d03a5c66fcf15cf01ed26365fdefbdffac1b2d543486027d3fed"
     },
     {
+      "path": "tests/test_v1160_rc4910_operations_clarity.py",
+      "size": 512,
+      "sha256": "1f6931e2713a7e8a115531e8d2c98618f78a6cfd19a12fa27aafdb6bb8312f6c"
+    },
+    {
       "path": "tests/test_v1160_rc491_startup_hotfix.py",
       "size": 507,
       "sha256": "2dae60998ea7bd03f16e6593ecc75c1ffa68ec36f43d583ad06187b88ac6cef0"
@@ -931,6 +950,11 @@
       "path": "tests/test_v1160_rc498_measurement_truth.py",
       "size": 775,
       "sha256": "95a510c6bcd343be7ed602c08569eac4ca6c65bd1813fec26af8a672724246f9"
+    },
+    {
+      "path": "tests/test_v1160_rc499_operations_insight.py",
+      "size": 532,
+      "sha256": "5291e5466744c447f45bca15b092726aecf29bb4bb81c05b65eae5ebdb0742cf"
     },
     {
       "path": "tests/test_v1160_rc49_final_gate.py",

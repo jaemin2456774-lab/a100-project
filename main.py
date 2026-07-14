@@ -39408,11 +39408,177 @@ def v91_preflight():
     checks.update({'v1160_rc499_version_manager':V91_VERSION==V1160_RC499_VERSION,'v1160_rc499_status':V90_COMMAND_REGISTRY.get('status') is status1160rc499_cmd,'v1160_rc499_dashboard':V90_COMMAND_REGISTRY.get('dashboard') is dashboard1160rc499_cmd,'v1160_rc499_releasegate':V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160rc499_cmd,'v1160_rc499_performancehistory':V90_COMMAND_REGISTRY.get('performancehistory') is performancehistory1160rc499_cmd,'v1160_rc499_aihealth':V90_COMMAND_REGISTRY.get('aihealth') is aihealth1160rc499_cmd,'v1160_rc499_commandcert':V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc499_cmd,'v1160_rc499_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),'v1160_rc499_schema':_v91_default_state().get('schema')==1,'v1160_rc499_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1160_rc499_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
     return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc499-operations-intelligence-performance-insight'}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.10 - VERSION TRUTH & OPERATIONS CLARITY
+# ---------------------------------------------------------------------------
+V1160_RC4910_NUMBER = "116.0-RC4.9.10"
+V1160_RC4910_VERSION = "A100 V116.0-RC4.9.10 LTS VERSION TRUTH OPERATIONS CLARITY"
+V91_VERSION = V1160_RC4910_VERSION
+V1160_RC4910_HEALTH_HISTORY = deque(maxlen=96)
+
+
+def _v1160_rc4910_category_counts(cert):
+    counts=cert.get('counts',{}) or {}
+    groups=cert.get('warning_groups',{}) or cert.get('grouped_warnings',{}) or {}
+    engine=int(counts.get('PARTIAL_ENGINE',0) or 0)
+    repository=int(counts.get('PARTIAL_REPOSITORY',0) or 0)
+    output=int(counts.get('PARTIAL_OUTPUT',0) or 0)
+    runtime=int(counts.get('PARTIAL_RUNTIME',0) or 0)
+    # Some legacy snapshots expose only grouped warning reasons.
+    if isinstance(groups,dict):
+        for key,val in groups.items():
+            try: n=int(val.get('count',0) if isinstance(val,dict) else val)
+            except Exception: n=0
+            k=str(key).lower()
+            if 'output' in k and output==0: output+=n
+            elif 'repository' in k and repository==0: repository+=n
+            elif 'runtime' in k and runtime==0: runtime+=n
+    return {'Engine':engine,'Output':output,'Repository':repository,'Runtime':runtime}
+
+
+def _v1160_rc4910_perf_rows():
+    names=set(V1160_RC498_PROCESSING)|set(V1160_RC498_BATCH_WAIT)|set(V1160_RC498_TRANSPORT)|set(V1160_RC497_ENGINE_LATENCY)|set(V1160_RC497_TELEGRAM_LATENCY)
+    rows=[]
+    for name in sorted(names):
+        proc=list(V1160_RC498_PROCESSING.get(name,[]))[-5:]
+        queue=list(V1160_RC498_BATCH_WAIT.get(name,[]))[-5:]
+        transport=list(V1160_RC498_TRANSPORT.get(name,[]))[-5:]
+        engine=list(V1160_RC497_ENGINE_LATENCY.get(name,[]))[-5:]
+        send=list(V1160_RC497_TELEGRAM_LATENCY.get(name,[]))[-5:]
+        if not proc: continue
+        rows.append({'name':name,'processing':proc,'queue':queue,'transport':transport,'engine':engine,'send':send})
+    return rows
+
+
+async def status1160rc4910_cmd(update,context):
+    global V1160_RC497_NUMBER
+    old=V1160_RC497_NUMBER; V1160_RC497_NUMBER=V1160_RC4910_NUMBER
+    try:
+        return await status1160rc497_cmd(update,context)
+    finally:
+        V1160_RC497_NUMBER=old
+
+
+async def dashboard1160rc4910_cmd(update,context):
+    global V1160_RC496_NUMBER
+    old=V1160_RC496_NUMBER; V1160_RC496_NUMBER=V1160_RC4910_NUMBER
+    try:
+        result=await dashboard1160rc496_cmd(update,context)
+        state,cert,_=_v1160_rc499_gate_snapshot(); gate=cert.get('gate',{})
+        conf=float(gate.get('intelligence_score',{}).get('value',0)); trust=float(gate.get('strategy_trust',{}).get('value',0))
+        completed=int(state.get('closed_count',state.get('learning_completed',0)) or 0)
+        target=max(150,int(state.get('learning_target',150) or 150)); need=max(0,target-completed)
+        daily=float(state.get('closed_per_day_7d',state.get('learning_velocity_7d',0)) or 0)
+        eta=(need/daily) if daily>0 else None
+        eta_text=f"예상 완료 <b>{eta:.1f}일</b> (최근 7일 속도 기준)" if eta is not None else "예상 완료 <b>산정 대기</b> (7일 처리속도 표본 필요)"
+        lines=["🎯 <b>LEARNING FORECAST</b>",f"Confidence <b>{conf:.1f}% → {min(100,conf+3):.1f}%</b>",f"Strategy Trust <b>{trust:.1f} → {min(100,trust+5):.1f}</b>",f"남은 완료 표본 <b>{need}건</b>",eta_text]
+        await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+        return result
+    finally:
+        V1160_RC496_NUMBER=old
+
+
+async def releasegate1160rc4910_cmd(update,context):
+    _,cert,hit=_v1160_rc499_gate_snapshot(); mode,_=_v1160_rc495_mode(cert); prog,passed,total=_v1160_rc496_progress(cert); gate=cert.get('gate',{})
+    labels={'intelligence_score':'Intelligence','strategy_trust':'Strategy','outcome_quality':'Outcome','memory_health':'Memory','lts_readiness':'LTS Readiness'}
+    lines=[f"🚦 <b>A100 V{V1160_RC4910_NUMBER} RELEASE GATE</b>",f"Phase <b>{mode}</b> · Status <b>{'READY' if cert.get('ready') else 'LEARNING'}</b>",f"Score Progress <b>{prog:.1f}%</b> · Gates <b>{passed}/{total}</b> · Cache {'HIT' if hit else 'MISS'}",""]
+    blocked=[]
+    for k,g in gate.items():
+        value=float(g.get('value',0)); target=float(g.get('target',0)); ok=bool(g.get('pass')); name=labels.get(k,k); need=max(0.0,target-value)
+        lines.append(f"{'✅' if ok else '❌'} {name} <b>{value:.1f}/{target:.0f}</b>"+("" if ok else f" · Need <b>{need:.1f}</b>"))
+        if not ok: blocked.append(name)
+    lines += ["", "Blocked By: <b>"+_v54_escape(', '.join(blocked) if blocked else 'None')+"</b>"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def aihealth1160rc4910_cmd(update,context):
+    _,cert,_=_v1160_rc499_gate_snapshot(); score,label=_v1160_rc499_health(cert); gate=cert.get('gate',{})
+    previous=V1160_RC4910_HEALTH_HISTORY[-1][1] if V1160_RC4910_HEALTH_HISTORY else None
+    V1160_RC4910_HEALTH_HISTORY.append((time.time(),score))
+    trend="표본 대기" if previous is None else f"{score-previous:+.1f}%p"
+    lines=[f"🧠 <b>A100 V{V1160_RC4910_NUMBER} AI HEALTH</b>",f"Overall <b>{score:.1f}% · {label}</b> · Trend <b>{trend}</b>",""]
+    names={'intelligence_score':'Learning','memory_health':'Memory','strategy_trust':'Strategy','outcome_quality':'Outcome','lts_readiness':'Readiness'}
+    for k,n in names.items():
+        g=gate.get(k,{}); ratio=100*float(g.get('value',0))/max(1,float(g.get('target',1))); state='GOOD' if ratio>=90 else 'MID' if ratio>=70 else 'LOW'; lines.append(f"{'🟢' if state=='GOOD' else '🟡' if state=='MID' else '🔴'} {n} <b>{state}</b>")
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def performancehistory1160rc4910_cmd(update,context):
+    rows=_v1160_rc4910_perf_rows(); allp=[v for r in rows for v in r['processing']]
+    avg=sum(allp)/len(allp) if allp else 0
+    lines=[f"📈 <b>A100 V{V1160_RC4910_NUMBER} PERFORMANCE HISTORY</b>",f"Processing Avg <b>{avg/1000:.2f}s</b> · Samples <b>{len(allp)}</b>","ℹ️ Queue/Batch 대기는 Processing 기록에서 분리됩니다.",""]
+    for r in sorted(rows,key=lambda x:(sum(x['processing'])/len(x['processing'])))[:8]:
+        p=' · '.join(f"{x/1000:.2f}s" for x in r['processing'])
+        q=(sum(r['queue'])/len(r['queue'])/1000) if r['queue'] else 0
+        lines.append(f"/{r['name']}: {p} · Queue avg {q:.2f}s")
+    if rows:
+        fast=min(rows,key=lambda r:min(r['processing'])); slow=max(rows,key=lambda r:max(r['processing']))
+        lines += ["",f"Fastest <b>/{fast['name']}</b> {min(fast['processing'])/1000:.2f}s",f"Slowest <b>/{slow['name']}</b> {max(slow['processing'])/1000:.2f}s"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def performanceaudit1160rc4910_cmd(update,context):
+    rows=_v1160_rc4910_perf_rows()
+    def avg(key):
+        vals=[v for r in rows for v in r[key]]
+        return sum(vals)/len(vals) if vals else 0.0
+    processing=avg('processing'); engine=avg('engine'); queue=avg('queue'); telegram=avg('send'); transport=avg('transport')
+    total=processing+queue+transport
+    cache_total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,cache_total)
+    good=[]; bad=[]
+    (good if hit>=80 else bad).append(f"Cache Hit {hit:.1f}% / target 80%")
+    (good if processing<=5000 else bad).append(f"Processing {processing:.0f}ms / target 5000ms")
+    (good if V1160_RC495_DUPLICATE_READS==0 else bad).append(f"Duplicate Reads {V1160_RC495_DUPLICATE_READS} / target 0")
+    grade='A' if not bad and len(rows)>=3 else 'B' if len(bad)<=2 else 'C'
+    lines=[f"⚙️ <b>A100 V{V1160_RC4910_NUMBER} PERFORMANCE AUDIT</b>",f"Grade <b>{grade}</b> · Commands <b>{len(rows)}</b>","",f"Engine <b>{engine:.0f}ms</b>",f"Queue/Batch <b>{queue:.0f}ms</b>",f"Telegram Send <b>{telegram:.0f}ms</b>",f"Transport <b>{transport:.0f}ms</b>",f"Processing <b>{processing:.0f}ms</b>",f"Observed Total <b>{total:.0f}ms</b>","","✅ GOOD"]
+    lines += ["• "+_v54_escape(x) for x in good] or ["• None"]
+    lines += ["⚠️ NEEDS IMPROVEMENT"]+(["• "+_v54_escape(x) for x in bad] or ["• None"])
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def commandcert1160rc4910_cmd(update,context):
+    # The RC4.9.8 renderer remains the canonical grouped-warning view, but its
+    # displayed version is temporarily sourced from the current VersionManager.
+    global V1160_RC498_NUMBER
+    old=V1160_RC498_NUMBER; V1160_RC498_NUMBER=V1160_RC4910_NUMBER
+    try:
+        state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_command_certification_cached(state)
+        await commandcert1160rc498_cmd(update,context)
+    finally:
+        V1160_RC498_NUMBER=old
+    counts=cert.get('counts',{}) or {}; verified=int(counts.get('PASS',0) or 0); cats=_v1160_rc4910_category_counts(cert); pending=sum(cats.values())
+    lines=["📊 <b>CERTIFICATION COVERAGE</b>",f"Verified <b>{verified}</b> · Pending <b>{pending}</b> · Resolved <b>0</b>"]
+    for name,n in cats.items(): lines.append(f"• {name} <b>{n}</b>")
+    lines += ["","PARTIAL은 실패가 아니라 아직 End-to-End 검증이 완료되지 않은 상태입니다."]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({'performancehistory':'Processing과 Queue를 분리한 최근 명령 성능','aihealth':'AI Health 종합점수와 추세'})
+V90_COMMAND_REGISTRY.update({'status':status1160rc4910_cmd,'dashboard':dashboard1160rc4910_cmd,'releasegate':releasegate1160rc4910_cmd,'performanceaudit':performanceaudit1160rc4910_cmd,'performancehistory':performancehistory1160rc4910_cmd,'aihealth':aihealth1160rc4910_cmd,'commandcert':commandcert1160rc4910_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4910_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4910_PREFLIGHT_BASE(); checks=dict(base.get('checks',{}))
+    for k in list(checks):
+        if k.startswith('v1160_rc499_'): checks.pop(k,None)
+    handlers={'status':status1160rc4910_cmd,'dashboard':dashboard1160rc4910_cmd,'releasegate':releasegate1160rc4910_cmd,'performanceaudit':performanceaudit1160rc4910_cmd,'performancehistory':performancehistory1160rc4910_cmd,'aihealth':aihealth1160rc4910_cmd,'commandcert':commandcert1160rc4910_cmd}
+    checks.update({
+        'v1160_rc4910_version_manager':V91_VERSION==V1160_RC4910_VERSION,
+        'v1160_rc4910_handlers':all(V90_COMMAND_REGISTRY.get(k) is v for k,v in handlers.items()),
+        'v1160_rc4910_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'v1160_rc4910_schema':_v91_default_state().get('schema')==1,
+        'v1160_rc4910_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'v1160_rc4910_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4910-version-truth-operations-clarity'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.9 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.10 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()

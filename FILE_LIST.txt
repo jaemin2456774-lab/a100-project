@@ -52,9 +52,11 @@ docs/CHANGELOG_V116_0_RC4_3.md
 docs/CHANGELOG_V116_0_RC4_4.md
 docs/CHANGELOG_V116_0_RC4_5.md
 docs/CHANGELOG_V116_0_RC4_8.md
+docs/CHANGELOG_V116_0_RC4_9_10.md
 docs/CHANGELOG_V116_0_RC4_9_5.md
 docs/CHANGELOG_V116_0_RC4_9_6.md
 docs/CHANGELOG_V116_0_RC4_9_7.md
+docs/CHANGELOG_V116_0_RC4_9_9.md
 docs/CHANGELOG_V94_0.md
 docs/CHANGELOG_V95_0.md
 docs/CHANGELOG_V96_0.md
@@ -125,6 +127,7 @@ docs/TEST_REPORT_V116_0_RC4_3.md
 docs/TEST_REPORT_V116_0_RC4_4.md
 docs/TEST_REPORT_V116_0_RC4_5.md
 docs/TEST_REPORT_V116_0_RC4_8.md
+docs/TEST_REPORT_V116_0_RC4_9_10.md
 docs/TEST_REPORT_V116_0_RC4_9_5.md
 docs/TEST_REPORT_V94_0.md
 docs/TEST_REPORT_V95_0.md
@@ -177,12 +180,14 @@ tests/test_v1160_rc44_learning_worker_audit2.py
 tests/test_v1160_rc45_true_e2e.py
 tests/test_v1160_rc47_lts_final_integration.py
 tests/test_v1160_rc48_lts_certification.py
+tests/test_v1160_rc4910_operations_clarity.py
 tests/test_v1160_rc491_startup_hotfix.py
 tests/test_v1160_rc494_command_performance.py
 tests/test_v1160_rc495_status_ux_performance.py
 tests/test_v1160_rc496_consistency.py
 tests/test_v1160_rc497_cache_performance.py
 tests/test_v1160_rc498_measurement_truth.py
+tests/test_v1160_rc499_operations_insight.py
 tests/test_v1160_rc49_final_gate.py
 tests/test_v1160_rc4_9_3_final_certification.py
 tests/test_v116_0_rc4_quality_trust.py
@@ -231,3 +236,5 @@ v962_ai_intelligence3.py
 v970_unified_intelligence.py
 v980_market_intelligence.py
 v990_predictive_intelligence.py
+RELEASE_MANIFEST.json
+FILE_LIST.txt
