@@ -44932,3 +44932,202 @@ if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.11 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker(); main()
+
+# =============================================================================
+# A100 V116.0 LTS-S2.12 SCORE CALIBRATION & FORECAST PATCH
+# Calibrates read-only runtime/release intelligence against authoritative
+# engineering evidence. Mandatory release gates remain authoritative.
+# =============================================================================
+V1160_LTS_S212_NUMBER = "116.0-LTS-S2.12"
+V1160_LTS_S212_VERSION = "A100 V116.0-LTS-S2.12 SCORE CALIBRATION & FORECAST"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S212_NUMBER,
+    version=V1160_LTS_S212_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S212_PREFLIGHT_CACHE = None
+
+
+def _v1160_s212_bool(value):
+    if isinstance(value, bool): return value
+    if isinstance(value, (int, float)): return value != 0
+    return str(value or "").strip().upper() in {"PASS", "READY", "OK", "TRUE", "ACTIVE", "CERTIFIED"}
+
+
+def _v1160_s212_authoritative_evidence(rv=None):
+    """Read-only evidence snapshot used only for analytics calibration."""
+    pre={}
+    try: pre=_V1160_S211_PREFLIGHT(False) or {}
+    except Exception: pre={}
+    checks=pre.get("checks",{}) or {}
+    registry_ok=len(V90_COMMAND_REGISTRY)==341
+    handler_ok=all(callable(v) for v in V90_COMMAND_REGISTRY.values()) and len(V90_COMMAND_REGISTRY)==341
+    pipeline_ok=bool(pre.get("ok",False))
+    live_off=not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade"))
+    schema_ok=(V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60)
+    failed=len(pre.get("failed",[]) or [])
+    latest=(rv or {}).get("latest",{}) if isinstance(rv,dict) else {}
+    error_count=0
+    for key in ("errors","error_count","runtime_errors","failures"):
+        try: error_count=max(error_count,int(latest.get(key,0) or 0))
+        except Exception: pass
+    recovery_rate=100.0
+    try: recovery_rate=float(latest.get("recovery_rate",100.0) or 100.0)
+    except Exception: pass
+    items={
+        "registry":registry_ok,
+        "handler":handler_ok,
+        "pipeline":pipeline_ok,
+        "schema_limits":schema_ok,
+        "live_off":live_off,
+        "preflight_clean":failed==0,
+        "runtime_errors_zero":error_count==0,
+        "recovery_ok":recovery_rate>=99.0,
+    }
+    pass_count=sum(1 for v in items.values() if v)
+    score=100.0*pass_count/max(1,len(items))
+    critical_fail=not all(items[k] for k in ("registry","handler","pipeline","schema_limits","live_off","runtime_errors_zero"))
+    return {"items":items,"score":score,"critical_fail":critical_fail,"error_count":error_count,"recovery_rate":recovery_rate,"failed_checks":failed}
+
+
+def _v1160_s212_runtime_intelligence(rv, evidence):
+    raw=_v1160_s211_runtime_intelligence(rv,evidence)
+    auth=_v1160_s212_authoritative_evidence(rv)
+    sample_factor=min(1.0,float(raw.get("sample_count",0) or 0)/24.0)
+    # Authoritative engineering evidence anchors the score, while observed
+    # runtime trend still controls the dynamic portion.
+    calibrated=_v1160_s211_clamp(auth["score"]*0.45+raw["score"]*0.35+raw["forecast"]*0.20)
+    confidence=_v1160_s211_clamp(auth["score"]*0.45+raw["confidence"]*0.35+(55.0+45.0*sample_factor)*0.20)
+    regression=float(raw["regression"])
+    if not auth["critical_fail"]:
+        regression=min(regression, max(2.0, (100.0-auth["score"])*0.35 + (1.0-sample_factor)*12.0))
+    else:
+        regression=max(regression,35.0)
+    regression=_v1160_s211_clamp(regression,0,99)
+    forecast=_v1160_s211_clamp(calibrated-regression*0.05)
+    if auth["critical_fail"] or auth["error_count"]>0:
+        risk="HIGH"
+    elif regression<12 and auth["score"]>=95:
+        risk="LOW"
+    elif regression<30:
+        risk="MEDIUM"
+    else:
+        risk="HIGH"
+    prediction="STABLE" if forecast>=80 and risk=="LOW" else ("MEASURING" if not auth["critical_fail"] and forecast>=65 else "AT RISK")
+    out=dict(raw)
+    out.update({"raw_score":raw["score"],"score":calibrated,"confidence":confidence,"regression":regression,"forecast":forecast,"risk":risk,"prediction":prediction,"authority":auth})
+    return out
+
+
+def _v1160_s212_gate_forecast(cert, learning, runtime_i, learning_i):
+    raw=_v1160_s211_gate_forecast(cert,learning,runtime_i,learning_i)
+    auth=runtime_i.get("authority") or _v1160_s212_authoritative_evidence()
+    # Mandatory gates are untouched. This is an informational probability only.
+    probability=_v1160_s211_clamp(raw["progress"]*0.32+runtime_i["forecast"]*0.25+auth["score"]*0.23+learning_i["quality"]*0.12+learning_i["confidence"]*0.08-runtime_i["regression"]*0.20)
+    confidence=_v1160_s211_clamp(auth["score"]*0.40+runtime_i["confidence"]*0.35+learning_i["confidence"]*0.25)
+    remaining=_v1160_s211_clamp(100.0-probability+runtime_i["regression"]*0.15)
+    if auth["critical_fail"]:
+        trend="DEGRADING"; forecast="BLOCKED"
+    else:
+        trend="IMPROVING" if learning_i["trend"]=="POSITIVE" and runtime_i["risk"]!="HIGH" else "MEASURING"
+        forecast="PASS FORECAST" if probability>=90 and remaining<15 else ("CONDITIONAL" if probability>=70 else "PENDING")
+    out=dict(raw)
+    out.update({"pass_probability":probability,"confidence":confidence,"remaining_risk":remaining,"trend":trend,"forecast":forecast,"authority":auth})
+    return out
+
+
+def _v1160_s212_evidence_lines(auth):
+    label=lambda ok: "PASS" if ok else "FAIL"
+    i=auth["items"]
+    return [
+        "AUTHORITATIVE EVIDENCE",
+        f"Registry / Handler     {label(i['registry'])} / {label(i['handler'])}",
+        f"Pipeline / Preflight   {label(i['pipeline'])} / {label(i['preflight_clean'])}",
+        f"Schema / Live OFF      {label(i['schema_limits'])} / {label(i['live_off'])}",
+        f"Runtime errors         {auth['error_count']}",
+        f"Recovery rate          {auth['recovery_rate']:.1f}%",
+        f"Evidence score         {auth['score']:.1f}/100",
+    ]
+
+
+async def runtimehealth1160ltss212_cmd(update,context):
+    result=await runtimehealth1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv)
+    ri=_v1160_s212_runtime_intelligence(rv,evidence); mi=_v1160_s211_memory_intelligence(rv)
+    lines=["RUNTIME INTELLIGENCE 2.1 CALIBRATED",
+        f"Prediction             {ri['prediction']}",f"Raw / calibrated      {ri['raw_score']:.1f} / {ri['score']:.1f}",
+        f"Runtime confidence     {ri['confidence']:.1f}%",f"Stability forecast     {ri['forecast']:.1f}%",
+        f"Regression probability {ri['regression']:.1f}%",f"Runtime risk           {ri['risk']}",f"Evidence samples       {ri['sample_count']}",""]
+    lines += _v1160_s212_evidence_lines(ri["authority"])
+    lines += ["","MEMORY INTELLIGENCE",f"Leak prediction        {mi['leak_probability']:.1f}% · {mi['risk']}",f"Growth prediction      {mi['growth_mb']:+.2f} MB / horizon",f"Cache / Worker trend   {mi['cache_slope']:+.3f} / {mi['worker_slope']:+.3f}",f"Queue trend            {mi['queue_slope']:+.3f}",f"Snapshot trend         {mi['snapshot_trend']}"]
+    await v90_1_safe_reply(update,"\n".join(lines)); return result
+
+
+async def releasegate1160ltss212_cmd(update,context):
+    await releasegate1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); ri=_v1160_s212_runtime_intelligence(rv,evidence)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot(); data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":learning.get("completed",0),"target":learning.get("target",150)}
+    li=_v1160_s211_learning_intelligence(data,current); gf=_v1160_s212_gate_forecast(cert,learning,ri,li)
+    lines=["RELEASE GATE INTELLIGENCE 2.1",f"Gate trend             {gf['trend']}",f"AI gate forecast       {gf['forecast']}",f"Pass probability       {gf['pass_probability']:.1f}%",f"Gate confidence        {gf['confidence']:.1f}%",f"Estimated completion   {_v1160_s210_eta_text(gf['eta_h'])}",f"Remaining risk score   {gf['remaining_risk']:.1f}/100",f"Snapshot cache         {'HIT' if hit else 'MISS'}","","NOTE", "Mandatory gates remain authoritative; calibration cannot override a blocked gate.",""]
+    lines += _v1160_s212_evidence_lines(gf["authority"])
+    lines += ["","LEARNING INTELLIGENCE",f"Velocity trend         {li['trend']} · {li['velocity']:.2f}/h",f"Positive / Negative    {li['positive']:.1f}% / {li['negative']:.1f}%",f"Quality score          {li['quality']:.1f}/100",f"Confidence score       {li['confidence']:.1f}/100",f"Learning efficiency    {li['efficiency']:.1f}%"]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def dashboard1160ltss212_cmd(update,context):
+    await dashboard1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); ri=_v1160_s212_runtime_intelligence(rv,evidence)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot(); data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":0,"target":150}
+    li=_v1160_s211_learning_intelligence(data,current); gf=_v1160_s212_gate_forecast(cert,learning,ri,li)
+    lines=["LTS FINAL READINESS · CALIBRATED",f"Gate forecast          {gf['forecast']} · {gf['pass_probability']:.1f}%",f"Gate confidence        {gf['confidence']:.1f}%",f"Runtime raw/calibrated {ri['raw_score']:.1f} / {ri['score']:.1f}",f"Runtime stability      {ri['forecast']:.1f}% · {ri['risk']}",f"Learning quality       {li['quality']:.1f}%",f"Remaining risk         {gf['remaining_risk']:.1f}/100",f"Evidence authority     {ri['authority']['score']:.1f}/100","","24H FORECAST",f"Runtime                {ri['prediction']}",f"Gate trend             {gf['trend']}",f"Regression probability {ri['regression']:.1f}%",f"Learning trend         {li['trend']}","","EVIDENCE TIMELINE GRAPH"]+_v1160_s211_evidence_timeline(rv,evidence)
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def status1160ltss212_cmd(update,context):
+    await status1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); ri=_v1160_s212_runtime_intelligence(rv,evidence)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot(); data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":0,"target":150}
+    li=_v1160_s211_learning_intelligence(data,current); gf=_v1160_s212_gate_forecast(cert,learning,ri,li)
+    return await v90_1_safe_reply(update,"\n".join(["CALIBRATED FINAL POLISH SUMMARY",f"Release forecast  {gf['forecast']}",f"Pass probability  {gf['pass_probability']:.1f}%",f"Runtime score     {ri['raw_score']:.1f} → {ri['score']:.1f}",f"Runtime risk      {ri['risk']}",f"Evidence score    {ri['authority']['score']:.1f}%",f"Learning trend    {li['trend']}",f"Remaining risk    {gf['remaining_risk']:.1f}/100"]))
+
+
+async def version1160ltss212_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.12 · authoritative evidence calibration and 24H forecast polish."]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.12 score calibration version/build information",
+    "status":"Calibrated release forecast and evidence score summary",
+    "runtimehealth":"Calibrated runtime score, risk and authoritative evidence",
+    "dashboard":"Calibrated LTS readiness and 24H forecast",
+    "releasegate":"Calibrated AI forecast; mandatory gates remain authoritative",
+})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss212_cmd,"status":status1160ltss212_cmd,"runtimehealth":runtimehealth1160ltss212_cmd,"dashboard":dashboard1160ltss212_cmd,"releasegate":releasegate1160ltss212_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S211_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S212_PREFLIGHT_CACHE
+    if V1160_S212_PREFLIGHT_CACHE is not None and not force: return V1160_S212_PREFLIGHT_CACHE
+    base=_V1160_S211_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in ("s211_handlers","s211_version_source"): checks.pop(stale,None)
+    probe_rv={"state":{"samples":[]},"latest":{},"cert_elapsed":0}; probe_ev={"snapshots":[]}
+    auth=_v1160_s212_authoritative_evidence(probe_rv)
+    checks.update({
+        "s212_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S212_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,
+        "s212_registry_341":len(V90_COMMAND_REGISTRY)==341,
+        "s212_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss212_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss212_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss212_cmd and V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss212_cmd,
+        "s212_runtime_shape":set(("raw_score","score","authority","prediction","risk")).issubset(_v1160_s212_runtime_intelligence(probe_rv,probe_ev)),
+        "s212_authority_shape":set(("items","score","critical_fail","error_count")).issubset(auth),
+        "s212_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "s212_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"FINAL CERTIFICATION" if not failed else "BLOCKED","certification_stage":"Sprint 2.12 Score Calibration & Forecast"})
+    if not force: V1160_S212_PREFLIGHT_CACHE=out
+    return out

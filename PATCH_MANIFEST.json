@@ -1,25 +1,22 @@
 {
-  "version": "A100 V116.0-LTS-S2.11.1",
-  "package_type": "hotfix_patch",
-  "baseline": "A100 V116.0-LTS-S2.11",
-  "fix": "Version manager startup NameError",
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
-  "feature_freeze": "ACTIVE",
-  "release_freeze": "ACTIVE",
+  "package": "A100_V116_0_LTS_S2_12_SCORE_CALIBRATION_FORECAST_PATCH",
+  "baseline": "A100 V116.0 LTS-S2.11.1",
+  "version": "116.0-LTS-S2.12",
+  "deployment": "PATCH_ONLY",
   "changed_files": [
     "main.py",
-    "test_v1160_lts_s2111_version_manager_hotfix.py"
+    "test_v1160_lts_s212_score_calibration.py",
+    "CHANGELOG_S2.12.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
   ],
-  "verification_commands": [
-    "/version",
-    "/status",
-    "/runtimehealth",
-    "/releasegate",
-    "/versionaudit",
-    "/pipelinetrace",
-    "/errors"
-  ]
+  "policies": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": "OFF",
+    "feature_freeze": "ACTIVE",
+    "release_freeze": "ACTIVE"
+  },
+  "mandatory_gate_override": false
 }

@@ -1,2 +1,6 @@
 main.py
-test_v1160_lts_s2111_version_manager_hotfix.py
+test_v1160_lts_s212_score_calibration.py
+CHANGELOG_S2.12.md
+PATCH_INSTALL_GUIDE_KR.md
+PATCH_MANIFEST.json
+SHA256SUMS
