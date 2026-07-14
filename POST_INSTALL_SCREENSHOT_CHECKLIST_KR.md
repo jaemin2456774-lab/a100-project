@@ -1,34 +1,27 @@
-# RC4.9.18 설치 후 필수 캡처 체크리스트
+# RC4.9.19 설치 후 캡처 체크리스트
 
-아래 순서대로 Telegram 명령을 실행하고 전체 화면을 캡처해 보내주세요.
+아래 명령은 한 메시지에 몰아서 보내지 말고 순서대로 개별 실행하십시오.
 
-```text
-/version
-/help
-/commands
-/versionaudit
-/commandcert
-/commandcert deep
-/performanceaudit
-/releasegate
-/runtimehealth
-/pipelinetrace
-/strategytrust
-/outcomequality
-/memoryhealth
-/intelligencescore
-/dashboard
-/status
-```
+1. `/version`
+2. `/versionaudit`
+3. `/commandcert`
+4. `/performanceaudit`
+5. `/runtimehealth`
+6. `/releasegate`
+7. `/pipelinetrace`
+8. `/dashboard`
+9. `/status`
 
-## 확인 기준
-- 모든 헤더가 `116.0-RC4.9.18`로 표시
-- Registry / Handler / Help가 `341/341`
-- Read-only Route Certification `341/341`, Errors `0`
-- Preflight `PASS`
-- Schema 1 / Paper 20 / Shadow 60 / Live OFF
-- `/help`, `/commands` 장문 출력이 중간에서 잘리지 않음
-- `/performanceaudit`의 Recent Samples가 시간순 최근 데이터로 표시
-- Release Gate, Dashboard, Pipeline Trace의 Snapshot/Revision 불일치가 없음
+정밀 재인증은 일반 점검이 끝난 뒤 한 번만 실행합니다.
 
-실제 Telegram Live Evidence는 명령을 실행할수록 누적되므로 `/commandcert`의 Structural Certification과 별도로 확인합니다.
+10. `/commandcert deep`
+11. `/versionaudit`
+
+확인 기준:
+- Version: 116.0-RC4.9.19
+- Registry/Handler/Help: 341/341
+- Route Certification: 341/341, errors 0
+- 일반 `/versionaudit`와 `/commandcert`는 빠르게 응답
+- `/commandcert deep` 실행 중에도 다른 Telegram 명령이 멈추지 않음
+- Deep 완료 후 Certification Cache age가 갱신됨
+- Schema 1, Paper 20, Shadow 60, Live OFF

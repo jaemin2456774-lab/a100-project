@@ -40834,10 +40834,173 @@ def v91_preflight():
     failed=[k for k,v in checks.items() if not v]
     return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4918-final-stabilization-e2e-runtime-certification'}
 
+
+# ====================================================================
+# A100 V116.0 LTS RC4.9.19 - RUNTIME PERFORMANCE ACCELERATION
+# Speed + certification integrity: fingerprint cache and deep-only refresh
+# ====================================================================
+from dataclasses import dataclass as _rc4919_dataclass
+import threading as _rc4919_threading
+
+@_rc4919_dataclass(frozen=True)
+class _V1160RC4919Release:
+    number: str = "116.0-RC4.9.19"
+    version: str = "A100 V116.0-RC4.9.19 LTS RUNTIME PERFORMANCE ACCELERATION & CERTIFICATION CACHE"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4919_RELEASE=_V1160RC4919Release()
+V1160_RC4919_NUMBER=V1160_RC4919_RELEASE.number
+V1160_RC4919_VERSION=V1160_RC4919_RELEASE.version
+V91_VERSION=V1160_RC4919_VERSION
+V1160_RC4912_NUMBER=V1160_RC4919_NUMBER
+V1160_RC4912_VERSION=V1160_RC4919_VERSION
+
+V1160_RC4919_CERT_CACHE={}
+V1160_RC4919_PREFLIGHT_CACHE={}
+V1160_RC4919_CACHE_LOCK=_rc4919_threading.RLock()
+
+
+def _v1160_rc4919_registry_fingerprint():
+    """Cheap fingerprint; changes whenever an active command handler changes."""
+    payload='|'.join(f'{name}:{id(handler)}' for name,handler in sorted(V90_COMMAND_REGISTRY.items()))
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _v1160_rc4919_build_certification(force=False):
+    fp=_v1160_rc4919_registry_fingerprint()
+    with V1160_RC4919_CACHE_LOCK:
+        cached=V1160_RC4919_CERT_CACHE.get(fp)
+        if cached is not None and not force:
+            return cached
+    started=time.perf_counter()
+    # Expensive source inspection occurs once per code fingerprint, not per command call.
+    view=_v1160_rc4916_cert_view(deep=bool(force))
+    evidence,errors=_v1160_rc4918_route_probe()
+    snapshot={
+        'fingerprint':fp,
+        'view':view,
+        'evidence':evidence,
+        'errors':errors,
+        'built_at':time.time(),
+        'build_ms':(time.perf_counter()-started)*1000.0,
+    }
+    with V1160_RC4919_CACHE_LOCK:
+        V1160_RC4919_CERT_CACHE.clear()
+        V1160_RC4919_CERT_CACHE[fp]=snapshot
+    return snapshot
+
+
+def _v1160_rc4919_certification(force=False):
+    return _v1160_rc4919_build_certification(force=force)
+
+
+async def version1160rc4919_cmd(update,context):
+    r=V1160_RC4919_RELEASE
+    return await v90_1_safe_reply(update,f"ℹ️ {r.version}\nSchema 1 preserved · Paper 20 · Shadow 60 · Live OFF\nFast audit cache enabled")
+
+
+async def versionaudit1160rc4919_cmd(update,context):
+    # Fast path only: no repeated 341-source inspection and no recursive preflight rebuild.
+    cert=_v1160_rc4919_certification(False); view=cert['view']; audit=v91_preflight(); failed=audit.get('failed',[])
+    age=max(0,int(time.time()-cert['built_at']))
+    lines=[f"🛡️ A100 V{V1160_RC4919_NUMBER} FAST VERSION AUDIT",
+           f"Version Source {V91_VERSION}",
+           f"Registry {view['registry_verified']}/{view['total']} · Callable {view['callable']} · Help {view['help']}",
+           f"Runtime Routes {view['runtime_routes']}/{view['total']} · Route Certification {len(cert['evidence'])}/{view['total']}",
+           f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(failed)}",
+           f"Certification Cache HIT · age {age}s · initial build {cert['build_ms']:.0f}ms",
+           "", "Schema 1 · Paper 20 · Shadow 60 · Live OFF"]
+    if failed: lines += ['', '⛔ FAILED CHECKS']+['• '+x for x in failed[:20]]
+    elif cert['errors']: lines += ['', '⚠️ ROUTE ERRORS']+['• /'+n+' · '+e for n,e in list(cert['errors'].items())[:20]]
+    else: lines += ['', '✅ Fast response uses the last code-fingerprint-certified snapshot', '정밀 재검사: /commandcert deep']
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+async def commandcert1160rc4919_cmd(update,context):
+    _v1155_track('commandcert'); args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    deep=bool(args and args[0]=='deep')
+    if args and args[0]=='warn':
+        cert=_v1160_rc4919_certification(False); view=cert['view']; category=args[1] if len(args)>1 else 'runtime'; limit=int(args[2]) if len(args)>2 and args[2].isdigit() else 10
+        rows=[]
+        for name,layer in sorted(view.get('layers',{}).items()):
+            ok={'engine':layer.get('engine'),'output':layer.get('output'),'repository':layer.get('repository'),'runtime':layer.get('runtime_route')}.get(category,True)
+            if not ok: rows.append(name)
+        lines=[f"🧾 A100 V{V1160_RC4919_NUMBER} COMMAND CERTIFICATION",f"Filter {category} · Missing/Stateless {len(rows)} · Top {limit}",""]+[f"PARTIAL · /{n}" for n in rows[:limit]]
+        if not rows: lines.append('PASS · No missing route')
+        return await _v1160_rc4918_send_lines(update,lines)
+    if deep:
+        # Run CPU-heavy source inspection away from the Telegram event loop.
+        try:
+            cert=await asyncio.to_thread(_v1160_rc4919_certification,True)
+        except AttributeError:
+            cert=_v1160_rc4919_certification(True)
+    else:
+        cert=_v1160_rc4919_certification(False)
+    view=cert['view']; errors=cert['errors']; structural_ok=(not errors and view['failed']==0 and view['registry_verified']==view['total'])
+    age=max(0,int(time.time()-cert['built_at']))
+    lines=[f"🧾 A100 V{V1160_RC4919_NUMBER} COMMAND CERTIFICATION",
+           f"Structural Audit {'PASS' if structural_ok else 'FAILED'} · {'Deep refresh complete' if deep else 'Fast cached audit'}",
+           f"Registry {view['registry_verified']}/{view['total']} · Handler {view['callable']}/{view['total']} · Help {view['help']}/{view['total']}","",
+           "FULL LAYER COVERAGE",
+           f"• Runtime route {view['runtime_routes']}/{view['total']}",
+           f"• Engine/data routes {view['engine_linked']} · stateless/control {view['total']-view['engine_linked']}",
+           f"• Repository/data routes {view['repository_linked']} · stateless {view['total']-view['repository_linked']}",
+           f"• Output linkage {view['output_linked']}/{view['total']}",
+           f"• Live Telegram evidence {view['runtime_probed']}/{view['total']}",
+           f"• Read-only route certification {len(cert['evidence'])}/{view['total']} · errors {len(errors)}",
+           f"• Cache age {age}s · build {cert['build_ms']:.0f}ms","",
+           "일반 감사는 캐시로 즉시 응답하고 deep만 전체 소스를 재검사합니다."]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+V925_COMMAND_USAGE.update({
+    'version':'현재 중앙 VersionManager 버전',
+    'versionaudit':'RC4.9.19 코드 지문 캐시 기반 즉시 감사',
+    'commandcert':'빠른 인증 요약 · deep에서만 전체 재검사',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160rc4919_cmd,
+    'versionaudit':versionaudit1160rc4919_cmd,
+    'commandcert':commandcert1160rc4919_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4919_PREFLIGHT_BASE=v91_preflight
+def v91_preflight(force=False):
+    fp=_v1160_rc4919_registry_fingerprint()
+    with V1160_RC4919_CACHE_LOCK:
+        cached=V1160_RC4919_PREFLIGHT_CACHE.get(fp)
+        if cached is not None and not force:
+            return cached
+    # Inherited full regression runs once per code fingerprint.
+    base=_V1160_RC4919_PREFLIGHT_BASE()
+    cert=_v1160_rc4919_certification(False); view=cert['view']; evidence=cert['evidence']; errors=cert['errors']
+    inherited={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4918_')}
+    checks=dict(inherited); checks.update({
+        'rc4919_version_single_source':V91_VERSION==V1160_RC4919_VERSION and _v1160_rc4912_version_number()==V1160_RC4919_NUMBER,
+        'rc4919_active_handlers':V90_COMMAND_REGISTRY.get('version') is version1160rc4919_cmd and V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160rc4919_cmd and V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc4919_cmd,
+        'rc4919_registry_341':len(V90_COMMAND_REGISTRY)==341 and view['registry_verified']==341,
+        'rc4919_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4919_route_certification':len(evidence)==341 and not errors,
+        'rc4919_fast_cache':_v1160_rc4919_certification(False) is cert,
+        'rc4919_schema':_v91_default_state().get('schema')==1,
+        'rc4919_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4919_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    result={'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':fp,'cache_enabled':True}
+    with V1160_RC4919_CACHE_LOCK:
+        V1160_RC4919_PREFLIGHT_CACHE.clear(); V1160_RC4919_PREFLIGHT_CACHE[fp]=result
+    return result
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.18 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.19 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()

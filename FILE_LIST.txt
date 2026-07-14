@@ -1,5 +1,9 @@
 .gitignore
-FILE_LIST.txt
+.pytest_cache/.gitignore
+.pytest_cache/CACHEDIR.TAG
+.pytest_cache/README.md
+.pytest_cache/v/cache/lastfailed
+.pytest_cache/v/cache/nodeids
 GITHUB_REPLACE_GUIDE_KR.md
 POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md
 RC4_9_11_RELEASE_REPORT_KR.md
@@ -10,6 +14,7 @@ RC4_9_15_RELEASE_REPORT_KR.md
 RC4_9_16_RELEASE_REPORT_KR.md
 RC4_9_17_RELEASE_REPORT_KR.md
 RC4_9_18_RELEASE_REPORT_KR.md
+RC4_9_19_RELEASE_REPORT_KR.md
 RC4_9_1_STARTUP_HOTFIX_REPORT_KR.md
 RC4_9_2_RELEASE_REPORT_KR.md
 RC4_9_3_RELEASE_REPORT_KR.md
@@ -21,7 +26,6 @@ README.md
 README_RC4_9_2.md
 README_RC4_9_3.md
 README_RC4_9_4.md
-RELEASE_MANIFEST.json
 RELEASE_MANIFEST_RC4_9_3.json
 RELEASE_MANIFEST_RC4_9_4.json
 docs/CHANGELOG_V101_0.md
@@ -155,6 +159,7 @@ requirements.txt
 test_v1160_rc4915_certification_truth.py
 test_v1160_rc4916_full_layer_coverage.py
 test_v1160_rc4917_output_help_probe_p95.py
+test_v1160_rc4919_runtime_performance_cache.py
 test_v1160_rc492_execution_command_certification.py
 tests/conftest.py
 tests/test_v101_0_closed_loop.py
@@ -253,4 +258,3 @@ v962_ai_intelligence3.py
 v970_unified_intelligence.py
 v980_market_intelligence.py
 v990_predictive_intelligence.py
-RELEASE_MANIFEST.json
