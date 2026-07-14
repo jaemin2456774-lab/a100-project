@@ -1,5 +1,5 @@
 {
-  "version": "A100 V116.0-RC4.9.12",
+  "version": "116.0-RC4.9.13",
   "release": "SINGLE_SOURCE_TRUTH_RELEASE_CONSISTENCY_DEVELOPMENT_RELEASE",
   "schema": 1,
   "paper_limit": 20,
@@ -1216,5 +1216,7 @@
       "size": 4016,
       "sha256": "0e6ef49c51c7be1c2296736d0f08074528263edd22f611405e22d4ea56c56c49"
     }
-  ]
+  ],
+  "release_name": "ACTIVE_RELEASE_STARTUP_INTEGRITY_HOTFIX",
+  "startup_integrity": "active_release_only"
 }

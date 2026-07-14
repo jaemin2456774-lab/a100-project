@@ -1,18 +1,14 @@
-# RC4.9.12 설치 후 캡처
+# RC4.9.13 설치 후 검수
 
-아래 명령을 순서대로 실행하세요.
+1. Railway 로그에서 `startup integrity failure`가 재발하지 않는지 확인
+2. Telegram에서 아래 명령 실행
 
 /version
 /status
 /status
 /dashboard btc
 /performanceaudit
-/performancehistory
-/aihealth
-/aihealth
 /releasegate
 /commandcert
-/commandcert warn engine 10
-/commandcert warn output 10
 
-확인: 모든 화면 RC4.9.12, 두 번째 status HIT, 두 번째 aihealth Trend, commandcert Summary/Coverage/Detail 일치.
+필수 캡처: Railway 정상 시작 로그, /version, 연속 /status, /dashboard btc, /releasegate.

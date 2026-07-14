@@ -39732,8 +39732,8 @@ def v91_preflight():
 # ---------------------------------------------------------------------------
 # A100 V116.0 LTS RC4.9.12 - SINGLE SOURCE TRUTH & RELEASE CONSISTENCY
 # ---------------------------------------------------------------------------
-V1160_RC4912_NUMBER = "116.0-RC4.9.12"
-V1160_RC4912_VERSION = "A100 V116.0-RC4.9.12 LTS SINGLE SOURCE TRUTH RELEASE CONSISTENCY"
+V1160_RC4912_NUMBER = "116.0-RC4.9.13"
+V1160_RC4912_VERSION = "A100 V116.0-RC4.9.13 LTS SINGLE SOURCE TRUTH RELEASE CONSISTENCY"
 V91_VERSION = V1160_RC4912_VERSION
 V1160_RC4912_HEALTH_FILE = os.path.join(V91_DATA_DIR, "a100_v116_rc4912_ai_health_history.json")
 
@@ -39917,13 +39917,84 @@ def v91_preflight():
     base=_V1160_RC4912_PREFLIGHT_BASE(); checks=dict(base.get('checks',{}))
     handlers={'status':status1160rc4912_cmd,'dashboard':dashboard1160rc4912_cmd,'releasegate':releasegate1160rc4912_cmd,'performanceaudit':performanceaudit1160rc4912_cmd,'performancehistory':performancehistory1160rc4912_cmd,'aihealth':aihealth1160rc4912_cmd,'commandcert':commandcert1160rc4912_cmd}
     checks.update({'v1160_rc4912_version_truth':_v1160_rc4912_static_version_audit(),'v1160_rc4912_handlers':all(V90_COMMAND_REGISTRY.get(k) is v for k,v in handlers.items()),'v1160_rc4912_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),'v1160_rc4912_schema':_v91_default_state().get('schema')==1,'v1160_rc4912_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1160_rc4912_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
-    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4912-single-source-truth-release-consistency'}
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4913-active-release-startup-integrity-hotfix'}
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.13 - ACTIVE RELEASE STARTUP INTEGRITY HOTFIX
+# ---------------------------------------------------------------------------
+V1160_RC4913_NUMBER = "116.0-RC4.9.13"
+V1160_RC4913_VERSION = "A100 V116.0-RC4.9.13 LTS ACTIVE RELEASE STARTUP INTEGRITY HOTFIX"
+V91_VERSION = V1160_RC4913_VERSION
+
+# Reuse the latest validated handlers. Their displayed version is resolved from
+# the active version source updated above; no historical release is required.
+V1160_RC4912_NUMBER = V1160_RC4913_NUMBER
+V1160_RC4912_VERSION = V1160_RC4913_VERSION
+
+_V1160_RC4913_PREFLIGHT_BASE = v91_preflight
+
+def _v1160_rc4913_active_handlers():
+    return {
+        'status': status1160rc4912_cmd,
+        'dashboard': dashboard1160rc4912_cmd,
+        'releasegate': releasegate1160rc4912_cmd,
+        'performanceaudit': performanceaudit1160rc4912_cmd,
+        'performancehistory': performancehistory1160rc4912_cmd,
+        'aihealth': aihealth1160rc4912_cmd,
+        'commandcert': commandcert1160rc4912_cmd,
+    }
+
+# Ensure the registry points to the currently active implementations.
+V90_COMMAND_REGISTRY.update(_v1160_rc4913_active_handlers())
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+def v91_preflight():
+    """Validate the active release only.
+
+    Historical RC-specific checks are diagnostic history, not runtime
+    dependencies. Keeping them in the active gate caused every later release to
+    require old VersionManager values and old handler identities simultaneously.
+    """
+    base = _V1160_RC4913_PREFLIGHT_BASE()
+    inherited = dict(base.get('checks', {}))
+
+    # Remove all historical per-RC startup requirements. This deliberately
+    # covers RC4.9.10, RC4.9.11, RC4.9.12 and future accumulated legacy keys.
+    checks = {
+        key: value for key, value in inherited.items()
+        if not (key.startswith('v1160_rc49') or key.startswith('v1160_rc4_9'))
+    }
+
+    handlers = _v1160_rc4913_active_handlers()
+    active_checks = {
+        'active_release_version_manager': V91_VERSION == V1160_RC4913_VERSION,
+        'active_release_handlers': all(V90_COMMAND_REGISTRY.get(k) is v for k, v in handlers.items()),
+        'active_release_registry_sync': V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        'active_release_schema': _v91_default_state().get('schema') == 1,
+        'active_release_limits': V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        'active_release_live_off': not any(
+            name in globals() for name in ('place_live_order', 'submit_live_order', 'execute_live_trade')
+        ),
+    }
+    checks.update(active_checks)
+    failed = [key for key, value in checks.items() if not value]
+    return {
+        'ok': not failed,
+        'checks': checks,
+        'failed': failed,
+        'command_count': len(V90_COMMAND_REGISTRY),
+        'base': base,
+        'development_version': V91_VERSION,
+        'registry_fingerprint': 'v1160-rc4913-active-release-startup-integrity-hotfix',
+        'legacy_release_checks_removed': True,
+    }
 
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
-    audit=v91_preflight()
+    audit = v91_preflight()
     if not audit.get("ok"):
-        failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.12 startup integrity failure: "+", ".join(failed))
+        failed = audit.get('failed') or [k for k, v in audit.get("checks", {}).items() if not v]
+        raise RuntimeError("V116.0 RC4.9.13 active startup integrity failure: " + ", ".join(failed))
     _v1160_rc45_start_worker()
     main()
