@@ -41181,10 +41181,213 @@ def v91_preflight(force=False):
     with V1160_RC4920_LOCK: V1160_RC4920_PREFLIGHT_CACHE.clear(); V1160_RC4920_PREFLIGHT_CACHE[fp]=result
     return result
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.21 - PIPELINE TRACE RECOVERY & PERFORMANCE OBSERVABILITY
+# ---------------------------------------------------------------------------
+V1160_RC4921_NUMBER = "116.0-RC4.9.21"
+V1160_RC4921_VERSION = "A100 V116.0-RC4.9.21 LTS PIPELINE TRACE RECOVERY & PERFORMANCE OBSERVABILITY"
+V91_VERSION = V1160_RC4921_VERSION
+
+# Keep the active registry at 341 while preserving /latency as a compatibility alias.
+# /pipelinetrace becomes the documented, certified command.
+V90_COMMAND_REGISTRY.pop("latency", None)
+
+
+def _v1160_rc4921_pipeline_snapshot(state):
+    audit = _v1160_rc47_pipeline_audit(state)
+    attrs = list((_v1160_rc45_trace(state).get("attributions") or {}).values())
+    latest = attrs[-1] if attrs else {}
+    revisions = {
+        "learning": int(state.get("learning_revision", 0) or 0),
+        "strategy": int(state.get("strategy_performance_revision", state.get("strategy_revision", 0)) or 0),
+        "trust": int(state.get("strategy_trust_revision", 0) or 0),
+        "champion": int(state.get("champion_revision", 0) or 0),
+    }
+    return {"audit": audit, "latest": latest, "revisions": revisions}
+
+
+async def pipelinetrace1160rc4921_cmd(update, context):
+    _v1155_track("pipelinetrace")
+    state = _v1160_rc496_shared_state()
+    snap = _v1160_rc4920_cached_call(
+        ("pipeline_trace", _v1160_rc496_stable_signature(state)),
+        5.0,
+        _v1160_rc4921_pipeline_snapshot,
+        state,
+    )
+    audit, latest, rev = snap["audit"], snap["latest"], snap["revisions"]
+    lines = [
+        f"🧬 <b>A100 V{V1160_RC4921_NUMBER} PIPELINE TRACE</b>",
+        f"Status <b>{audit.get('status','UNKNOWN')}</b> · Mode <b>READ ONLY</b> · Cache <b>SHARED</b>",
+        "",
+        "<b>END-TO-END LAYERS</b>",
+    ]
+    for name, ok in (audit.get("steps") or {}).items():
+        lines.append(("✅" if ok else "⛔") + " " + _v54_escape(str(name)))
+    lines += [
+        "",
+        f"Revision L<b>{rev['learning']}</b> → S<b>{rev['strategy']}</b> → T<b>{rev['trust']}</b> → C<b>{rev['champion']}</b>",
+    ]
+    if latest:
+        lines += [
+            f"Latest Attribution <code>{_v54_escape(str(latest.get('attribution_id','N/A')))}</code>",
+            f"Trace Revision L{int(latest.get('learning_revision',0) or 0)} → S{int(latest.get('strategy_revision',0) or 0)} → T{int(latest.get('trust_revision',0) or 0)} → C{int(latest.get('champion_revision',0) or 0)}",
+        ]
+    else:
+        lines.append("최근 Attribution 증거 없음 · 신규 종료 거래 학습 후 생성")
+    lines += ["", "✅ Dashboard · Release Gate · Pipeline Audit가 동일 Shared State를 사용합니다."]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def performanceaudit1160rc4921_cmd(update, context):
+    commands = set(V1160_RC498_PROCESSING) | set(V1160_RC498_BATCH_WAIT) | set(V1160_RC497_TELEGRAM_LATENCY)
+    rows = []
+    all_processing = []
+    for name in commands:
+        vals = list(V1160_RC498_PROCESSING.get(name, []))
+        if not vals:
+            continue
+        summary = _v1160_rc498_summary(vals)
+        all_processing.extend(vals)
+        rows.append((summary["p95"], summary["avg"], summary["worst"], name, summary["count"]))
+    rows.sort(reverse=True)
+    overall = _v1160_rc498_summary(all_processing)
+    total = V1160_RC494_CACHE_HITS + V1160_RC494_CACHE_MISSES
+    hit_rate = 100.0 * V1160_RC494_CACHE_HITS / max(1, total)
+    cert = _v1160_rc4920_build_certification(False)
+    source_total = cert["metrics"]["cache_hits"] + cert["metrics"]["changed"]
+    source_reuse = 100.0 * cert["metrics"]["cache_hits"] / max(1, source_total)
+    shared_entries = len(V1160_RC4920_SHARED_CACHE)
+    reasons = []
+    if overall["count"] < 3: reasons.append(f"표본 {overall['count']}건 < 최소 3건")
+    if hit_rate < 80: reasons.append(f"Runtime Cache {hit_rate:.1f}% < 80%")
+    if overall["p95"] > 10000: reasons.append(f"Processing P95 {overall['p95']:.0f}ms > 10000ms")
+    grade = "A+" if not reasons else "A" if len(reasons) == 1 else "B"
+    lines = [
+        f"⚙️ <b>A100 V{V1160_RC4921_NUMBER} PERFORMANCE OBSERVABILITY</b>",
+        f"Grade <b>{grade}</b> · Processing Samples <b>{overall['count']}</b>",
+        "",
+        f"Processing Avg <b>{overall['avg']:.0f} ms</b> · P95 <b>{overall['p95']:.0f} ms</b> · Worst <b>{overall['worst']:.0f} ms</b>",
+        f"Runtime Cache Hit <b>{hit_rate:.1f}%</b> · HIT {V1160_RC494_CACHE_HITS} / MISS {V1160_RC494_CACHE_MISSES}",
+        f"Source Reuse <b>{source_reuse:.1f}%</b> · reused {cert['metrics']['cache_hits']} / rescanned {cert['metrics']['changed']}",
+        f"Shared Snapshot Entries <b>{shared_entries}</b> · Dashboard/Forecast/Pipeline shared",
+        f"Workers <b>{cert['metrics']['workers']}</b> · Certification Build <b>{cert['build_ms']:.0f} ms</b>",
+        "",
+        "<b>HOT ROUTES · P95</b>",
+    ]
+    if rows:
+        for p95, avg, worst, name, count in rows[:8]:
+            lines.append(f"• /{name} · P95 <b>{p95:.0f}ms</b> · avg {avg:.0f} · worst {worst:.0f} · n={count}")
+    else:
+        lines.append("아직 측정된 명령이 없습니다.")
+    lines += ["", "<b>Targets</b>"]
+    lines += ["✅ 모든 운영 성능 목표 충족"] if not reasons else ["⚠️ " + _v54_escape(x) for x in reasons]
+    lines.append("Cache ≥80% · Processing P95 ≤10s · Duplicate Reads 0")
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+async def version1160rc4921_cmd(update, context):
+    return await v90_1_safe_reply(
+        update,
+        f"ℹ️ {V1160_RC4921_VERSION}\nSchema 1 preserved · Paper 20 · Shadow 60 · Live OFF\nPipeline Trace restored · shared dashboard/forecast snapshot · performance observability enabled",
+    )
+
+
+# Replace an old registry-only alias with the real pipeline trace command.
+V925_COMMAND_USAGE.pop("latency", None)
+V925_COMMAND_USAGE.update({
+    "version": "현재 중앙 VersionManager 버전",
+    "pipelinetrace": "Learning→Strategy→Trust→Champion 실제 Revision 및 E2E Layer Trace",
+    "performanceaudit": "Hot Route·P95·Runtime/Source Cache·Worker 통합 성능 관측",
+})
+V90_COMMAND_REGISTRY.update({
+    "version": version1160rc4921_cmd,
+    "pipelinetrace": pipelinetrace1160rc4921_cmd,
+    "performanceaudit": performanceaudit1160rc4921_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+# Make existing late-generation views display the active release number.
+V1160_RC498_NUMBER = V1160_RC4921_NUMBER
+V1160_RC497_NUMBER = V1160_RC4921_NUMBER
+V1160_RC496_NUMBER = V1160_RC4921_NUMBER
+
+
+# Final dispatcher: preserve /latency compatibility without counting it as a separate
+# certified route; it delegates to /commandperformance. All documented commands remain
+# Registry-backed and auditable.
+async def v90_1_dispatch(update, context):
+    global V90_1_DISPATCH_COUNT, V90_1_DISPATCH_ERRORS, V90_1_LAST_COMMAND, V90_1_LAST_COMMAND_AT, V1160_RC497_CURRENT_COMMAND, V1160_RC498_CURRENT_COMMAND
+    message = getattr(update, "effective_message", None) or getattr(update, "message", None)
+    text = getattr(message, "text", "") if message else ""
+    parsed = v90_1_parse_command_lines(text)
+    if not parsed: return
+    if len(parsed) > 15:
+        await v90_1_safe_reply(update, f"⚠️ 한 메시지에서 {len(parsed)}개 명령이 감지됐습니다.\n안정성을 위해 앞의 15개만 실행합니다.")
+        parsed = parsed[:15]
+    if len(parsed) > 1:
+        await v90_1_safe_reply(update, f"📋 {len(parsed)}개 명령을 확인했습니다. 순서대로 실행합니다.")
+    original_args = list(getattr(context, "args", []) or [])
+    batch_started = time.perf_counter(); transport_ms = 0.0
+    try:
+        dt = getattr(message, "date", None)
+        if dt is not None: transport_ms = max(0.0, min(300000.0, (time.time() - dt.timestamp()) * 1000.0))
+    except Exception: pass
+    for command, args in parsed:
+        requested = command
+        command = "commandperformance" if command == "latency" else command
+        batch_wait_ms = max(0.0, (time.perf_counter() - batch_started) * 1000.0)
+        V1160_RC498_BATCH_WAIT[requested].append(batch_wait_ms); V1160_RC498_TRANSPORT[requested].append(transport_ms)
+        V90_1_DISPATCH_COUNT += 1; V90_1_LAST_COMMAND = requested; V90_1_LAST_COMMAND_AT = time.time()
+        callback = V90_COMMAND_REGISTRY.get(command)
+        if callback is None:
+            await v90_1_safe_reply(update, f"지원하지 않는 명령입니다: /{requested}\n/commands에서 전체 명령을 확인하세요.")
+            continue
+        started = time.perf_counter(); ok = False; V1160_RC497_CURRENT_COMMAND = requested; V1160_RC498_CURRENT_COMMAND = requested
+        try:
+            context.args = list(args)
+            if command in V1160_RC494_SLOW_COMMANDS: await _v1160_rc494_progress(update, requested)
+            result = callback(update, context)
+            if inspect.isawaitable(result): await asyncio.wait_for(result, timeout=120)
+            ok = True
+        except asyncio.TimeoutError:
+            V90_1_DISPATCH_ERRORS += 1; v88_record_error(f"v1160-rc4921-timeout:/{requested}", RuntimeError("command timeout after 120 seconds")); await v90_1_safe_reply(update, f"⚠️ /{requested} 처리 시간이 120초를 초과했습니다.\n봇은 계속 작동합니다.")
+        except Exception as error:
+            V90_1_DISPATCH_ERRORS += 1; v88_record_error(f"v1160-rc4921-command:/{requested}", error); await v90_1_safe_reply(update, f"⚠️ /{requested} 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요.")
+        finally:
+            processing_ms = (time.perf_counter() - started) * 1000.0
+            V1160_RC498_PROCESSING[requested].append(processing_ms); _v1160_rc494_record_latency(requested, processing_ms, ok)
+            context.args = list(original_args); V1160_RC497_CURRENT_COMMAND = None; V1160_RC498_CURRENT_COMMAND = None
+
+
+_V1160_RC4921_PREFLIGHT_BASE = v91_preflight
+def v91_preflight(force=False):
+    base = _V1160_RC4921_PREFLIGHT_BASE(force=force)
+    checks = {k:v for k,v in dict(base.get("checks", {})).items() if not k.startswith("rc4920_")}
+    cert = _v1160_rc4920_build_certification(False); view = cert["view"]
+    checks.update({
+        "rc4921_version_single_source": V91_VERSION == V1160_RC4921_VERSION,
+        "rc4921_registry_341": len(V90_COMMAND_REGISTRY) == 341 and view["registry_verified"] == 341,
+        "rc4921_pipeline_trace_handler": V90_COMMAND_REGISTRY.get("pipelinetrace") is pipelinetrace1160rc4921_cmd,
+        "rc4921_pipeline_trace_help": "pipelinetrace" in V925_COMMAND_USAGE,
+        "rc4921_latency_compatibility": "latency" not in V90_COMMAND_REGISTRY and callable(V90_COMMAND_REGISTRY.get("commandperformance")),
+        "rc4921_performance_observability": V90_COMMAND_REGISTRY.get("performanceaudit") is performanceaudit1160rc4921_cmd,
+        "rc4921_registry_sync": V90_EXPECTED_COMMANDS == frozenset(V90_COMMAND_REGISTRY),
+        "rc4921_route_certification": len(cert["evidence"]) == 341 and not cert["errors"],
+        "rc4921_shared_cache": callable(_v1160_rc4920_cached_call),
+        "rc4921_schema": _v91_default_state().get("schema") == 1,
+        "rc4921_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "rc4921_live_off": not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    failed = [k for k,v in checks.items() if not v]
+    return {"ok": not failed, "checks": checks, "failed": failed, "command_count": len(V90_COMMAND_REGISTRY), "command_audit": view, "base": base, "development_version": V91_VERSION, "registry_fingerprint": _v1160_rc4920_registry_fingerprint(), "performance_engine": True}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.20 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.21 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
