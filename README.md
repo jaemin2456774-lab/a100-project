@@ -1,5 +1,12 @@
-# A100 V116.0 LTS-S2.4 Long Runtime Certification Final
+# A100 V116.0 LTS-S2.5
 
-24H/48H/72H Checkpoint, Evidence Snapshot, Runtime Health Score를 포함한 Sprint 2 장시간 운영 인증 Development Release입니다.
+Long Runtime Certification Evidence Closeout Development Release.
 
-Registry 341/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF · Release Freeze ACTIVE.
+## Scope
+- Runtime Health Score component breakdown
+- 24H / 48H / 72H checkpoint progress
+- Completion criteria with samples, runtime, P95 drift, memory drift, recovery rate and queue
+- Evidence history
+- Sprint 2 Exit Gate
+
+Feature Freeze remains active. Schema 1, Paper 20, Shadow 60 and Live Trading OFF are preserved.

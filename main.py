@@ -43488,10 +43488,323 @@ def v91_preflight(force=False):
         V1160_S24_PREFLIGHT_CACHE = out
     return out
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.5 - LONG RUNTIME CERTIFICATION EVIDENCE CLOSEOUT
+# ---------------------------------------------------------------------------
+V1160_LTS_S25_NUMBER = "116.0-LTS-S2.5"
+V1160_LTS_S25_VERSION = "A100 V116.0-LTS-S2.5 LONG RUNTIME CERTIFICATION EVIDENCE CLOSEOUT"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S25_NUMBER,
+    version=V1160_LTS_S25_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S25_PREFLIGHT_CACHE = None
+
+
+def _v1160_s25_pct_score(value, good_limit, hard_limit):
+    """Return a bounded stability score where lower absolute drift is better."""
+    if value is None:
+        return 70.0
+    magnitude = abs(float(value))
+    if magnitude <= good_limit:
+        return 100.0
+    if magnitude >= hard_limit:
+        return 0.0
+    return max(0.0, 100.0 * (hard_limit - magnitude) / (hard_limit - good_limit))
+
+
+def _v1160_s25_health_components(rv, evidence=None):
+    latest = rv.get("latest", {}) or {}
+    st = rv.get("state", {}) or {}
+    evidence = evidence or _v1160_s24_load_evidence()
+    elapsed = float(rv.get("cert_elapsed", 0) or 0)
+    samples = int(rv.get("sample_count", 0) or 0)
+
+    runtime = min(100.0, 35.0 + 35.0 * min(1.0, elapsed / 1800.0) + 30.0 * min(1.0, samples / 30.0))
+    resource_values = (
+        _v1160_s25_pct_score(rv.get("mem_1h"), 5.0, 20.0),
+        _v1160_s25_pct_score(rv.get("cpu_1h"), 10.0, 40.0),
+        _v1160_s25_pct_score(rv.get("thread_1h"), 5.0, 25.0),
+        _v1160_s25_pct_score(rv.get("queue_1h"), 10.0, 50.0),
+    )
+    resource = sum(resource_values) / len(resource_values)
+    if float(latest.get("queue", 0) or 0) > 100:
+        resource = min(resource, 40.0)
+
+    perf = _v1160_s25_pct_score(rv.get("p95_1h"), 10.0, 50.0)
+    if rv.get("warming"):
+        perf = min(perf, 75.0)
+
+    successes = int(st.get("recovery_success_count", 0) or 0)
+    failures = int(st.get("recovery_failure_count", 0) or 0)
+    total_recovery = successes + failures
+    recovery = 100.0 if total_recovery == 0 else max(0.0, 100.0 * successes / total_recovery)
+
+    checkpoints = len(evidence.get("snapshots", []))
+    evidence_score = min(100.0, 40.0 * min(1.0, samples / 30.0) + 20.0 * min(1.0, elapsed / 1800.0) + 40.0 * min(1.0, checkpoints / 3.0))
+
+    components = {
+        "Runtime Stability": runtime,
+        "Resource Stability": resource,
+        "Performance Stability": perf,
+        "Recovery Stability": recovery,
+        "Evidence Completeness": evidence_score,
+    }
+    components["Overall"] = sum(components.values()) / 5.0
+    return components
+
+
+def _v1160_s25_checkpoint_lines(elapsed):
+    lines = []
+    for cp in _v1160_s24_checkpoint_status(elapsed):
+        state = "✅ PASS" if cp["complete"] else "○ Pending"
+        lines.append(f"{cp['name']:4} {state}")
+    return lines
+
+
+def _v1160_s25_completion_details(rv):
+    latest = rv.get("latest", {}) or {}
+    st = rv.get("state", {}) or {}
+    samples = int(rv.get("sample_count", 0) or 0)
+    elapsed = float(rv.get("cert_elapsed", 0) or 0)
+    p95_drift = rv.get("p95_1h")
+    memory_drift = rv.get("mem_1h")
+    successes = int(st.get("recovery_success_count", 0) or 0)
+    failures = int(st.get("recovery_failure_count", 0) or 0)
+    total = successes + failures
+    recovery_rate = 100.0 if total == 0 else 100.0 * successes / total
+
+    p95_ok = p95_drift is None or abs(float(p95_drift)) <= 50.0
+    mem_ok = memory_drift is None or abs(float(memory_drift)) <= 20.0
+    return [
+        f"Samples              {samples:3}/30 {'PASS' if samples >= 30 else 'PENDING'}",
+        f"Runtime              {_v1160_s21_duration(elapsed):>8}/30m {'PASS' if elapsed >= 1800 else 'PENDING'}",
+        f"P95 drift            {_v1160_s21_delta_text(p95_drift):>8} {'PASS' if p95_ok else 'BLOCKED'}",
+        f"Memory drift         {_v1160_s21_delta_text(memory_drift):>8} {'PASS' if mem_ok else 'BLOCKED'}",
+        f"Recovery rate        {recovery_rate:7.1f}% {'PASS' if recovery_rate >= 100.0 else 'BLOCKED'}",
+        f"Queue current        {int(float(latest.get('queue', 0) or 0)):8} {'PASS' if float(latest.get('queue',0) or 0) <= 100 else 'BLOCKED'}",
+    ]
+
+
+def _v1160_s25_evidence_history(evidence, limit=3):
+    snapshots = [x for x in evidence.get("snapshots", []) if isinstance(x, dict)]
+    if not snapshots:
+        return ["No checkpoint evidence saved yet"]
+    lines = []
+    for idx, item in enumerate(snapshots[-limit:], start=max(1, len(snapshots)-limit+1)):
+        captured = float(item.get("captured_at", 0) or 0)
+        stamp = datetime.fromtimestamp(captured).strftime("%Y-%m-%d %H:%M") if captured else "UNKNOWN"
+        score = float(item.get("runtime_health_score", 0) or 0)
+        lines.append(f"Evidence #{idx:03} · {item.get('checkpoint','?')} · {score:.1f}/100 · {stamp}")
+    return lines
+
+
+def _v1160_s25_exit_gate(rv, evidence=None):
+    evidence = evidence or _v1160_s24_load_evidence()
+    components = _v1160_s25_health_components(rv, evidence)
+    st = rv.get("state", {}) or {}
+    failures = int(st.get("recovery_failure_count", 0) or 0)
+    checkpoint_count = len(evidence.get("snapshots", []))
+    return {
+        "Runtime Stability": components["Runtime Stability"] >= 90.0 and float(rv.get("cert_elapsed",0) or 0) >= 1800,
+        "Resource Stability": components["Resource Stability"] >= 80.0,
+        "Performance Stability": components["Performance Stability"] >= 75.0,
+        "Recovery Validation": failures == 0,
+        "Evidence Validation": checkpoint_count >= 1,
+        "72H Certification": float(rv.get("cert_elapsed",0) or 0) >= 72 * 3600 and checkpoint_count >= 3,
+    }
+
+
+async def version1160ltss25_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    lines = [
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}",
+        "Version & Build Information",
+        "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+        "",
+        f"Version Source       {vm['source']}",
+        f"Build                {V1160_VERSION_MANAGER.version}",
+        f"Schema               {vm['schema']}",
+        f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}",
+        "Feature Freeze       ACTIVE",
+        "",
+        "Sprint 2.5 closes instrumentation; 24H/48H/72H evidence remains required.",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def status1160ltss25_cmd(update, context):
+    _v1155_track("status")
+    rv = _v1160_s21_runtime_view()
+    evidence = _v1160_s24_update_evidence(rv)
+    structural = _v1160_rc4920_build_certification(False); view = structural["view"]
+    state = _v1160_rc496_shared_state(); cert, _ = _v1160_rc497_certification_cached(state)
+    gate = cert.get("gate", {}) or {}
+    current_cp, next_cp = _v1160_s24_current_checkpoint(rv["cert_elapsed"])
+    components = _v1160_s25_health_components(rv, evidence)
+    lines = _v1160_s21_badge(True, rv["stage"]) + ["", "SPRINT 2 CERTIFICATION STATUS"]
+    lines += _v1160_s23_progress_lines(rv)
+    lines += [
+        f"Current checkpoint   {current_cp}",
+        f"Next checkpoint      {next_cp}",
+        f"Evidence snapshots   {len(evidence.get('snapshots', []))} / 3",
+        f"Runtime health       {components['Overall']:6.1f} / 100",
+        "", "CHECKPOINT PROGRESS",
+    ] + _v1160_s25_checkpoint_lines(rv["cert_elapsed"])
+    lines += ["", "COMPLETION CRITERIA"] + _v1160_s25_completion_details(rv)
+    lines += [
+        "", "ENGINEERING CERTIFICATION",
+        f"Engineering          {_v1160_s23_engineering_status(view)}",
+        f"Registry             {view['registry_verified']}/{view['total']} PASS",
+        f"Handler              {view['callable']}/{view['total']} PASS",
+        f"Output               {view['output_linked']}/{view['total']} PASS",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "", "AI LEARNING TARGETS",
+        "Operational certification is independent from AI target attainment.",
+    ]
+    labels = {"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for key, label in labels.items():
+        g = gate.get(key)
+        if g:
+            lines.append(_v1160_s24_gate_line(label, g))
+    lines += _v1160_s21_footer()
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def runtimehealth1160ltss25_cmd(update, context):
+    _v1155_track("runtimehealth")
+    rv = _v1160_s21_runtime_view(True); st = rv["state"]; latest = rv["latest"]
+    evidence = _v1160_s24_update_evidence(rv)
+    components = _v1160_s25_health_components(rv, evidence)
+    exit_gate = _v1160_s25_exit_gate(rv, evidence)
+    current_cp, next_cp = _v1160_s24_current_checkpoint(rv["cert_elapsed"])
+    lines = _v1160_s21_badge(True, rv["stage"]) + ["", "RUNTIME CERTIFICATION EVIDENCE CLOSEOUT"]
+    lines += _v1160_s23_progress_lines(rv)
+    lines += [
+        f"Current checkpoint   {current_cp}",
+        f"Next checkpoint      {next_cp}",
+        f"Evidence snapshots   {len(evidence.get('snapshots', []))} / 3",
+        "", "RUNTIME HEALTH COMPONENTS",
+    ]
+    for key in ("Runtime Stability","Resource Stability","Performance Stability","Recovery Stability","Evidence Completeness"):
+        lines.append(f"{key:22} {components[key]:6.1f}%")
+    lines += [f"Runtime Health Score   {components['Overall']:6.1f} / 100", "", "CHECKPOINT PROGRESS"]
+    lines += _v1160_s25_checkpoint_lines(rv["cert_elapsed"])
+    lines += [
+        "", "RESOURCE SNAPSHOT",
+        f"Memory               {float(latest.get('memory_mb',0)):8.1f} MB",
+        f"CPU                  {float(latest.get('cpu_pct',0)):8.1f}%",
+        f"Threads              {int(float(latest.get('threads',0))):8}",
+        f"Queue                {int(float(latest.get('queue',0))):8}",
+        f"Cache entries        {int(float(latest.get('cache',0))):8}",
+        "", "COMPLETION CRITERIA",
+    ] + _v1160_s25_completion_details(rv)
+    lines += ["", "EVIDENCE HISTORY"] + _v1160_s25_evidence_history(evidence)
+    lines += ["", "SPRINT 2 EXIT GATE"]
+    for name, passed in exit_gate.items():
+        lines.append(f"{'✅' if passed else '⏳'} {name}")
+    lines += [
+        "", "RECOVERY VALIDATION",
+        f"Recoveries           {int(st.get('recovery_success_count',0) or 0)}",
+        f"Failures             {int(st.get('recovery_failure_count',0) or 0)}",
+        f"Recovery rate        {rv['recovery_rate']:.1f}%",
+        f"Process restart      {int(st.get('restart_count',0) or 0)}",
+        f"Snapshot restore     {int(st.get('snapshot_restore_count',0) or 0)}",
+        f"Last restart cause   {st.get('last_restart_cause') or 'NONE'}",
+    ] + _v1160_s21_footer()
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def dashboard1160ltss25_cmd(update, context):
+    _v1155_track("dashboard")
+    rv = _v1160_s21_runtime_view(); evidence = _v1160_s24_update_evidence(rv)
+    structural = _v1160_rc4920_build_certification(False); health = _v1134_runtime_health(_v91_load_state())
+    readiness = _v1160_fc11_readiness(structural, health)
+    components = _v1160_s25_health_components(rv, evidence)
+    exit_gate = _v1160_s25_exit_gate(rv, evidence)
+    current_cp, next_cp = _v1160_s24_current_checkpoint(rv["cert_elapsed"])
+    passed = sum(1 for v in exit_gate.values() if v)
+    lines = _v1160_s21_badge(True, rv["stage"]) + ["", "LONG RUNTIME CERTIFICATION DASHBOARD"]
+    lines += _v1160_s23_progress_lines(rv)
+    lines += [
+        f"Current checkpoint   {current_cp}",
+        f"Next checkpoint      {next_cp}",
+        f"Evidence count       {len(evidence.get('snapshots', []))} / 3",
+        f"Runtime health       {components['Overall']:6.1f} / 100",
+        f"Exit Gate            {passed} / {len(exit_gate)} PASS",
+        "", "CHECKPOINT PROGRESS",
+    ] + _v1160_s25_checkpoint_lines(rv["cert_elapsed"])
+    lines += ["", "SPRINT 2 EXIT GATE"]
+    for name, ok in exit_gate.items():
+        lines.append(f"{'✅ PASS' if ok else '⏳ PENDING'} · {name}")
+    lines += ["", "SYSTEM RELEASE READINESS"]
+    weights = {"Engineering":25,"Runtime":20,"Output":20,"Regression":20,"Production":15}
+    for key in ("Engineering","Runtime","Output","Regression","Production"):
+        lines.append(f"{key:12} {readiness[key]:6.1f}% · weight {weights[key]}%")
+    weighted = sum(readiness[k] * weights[k] for k in weights) / 100.0
+    lines += [f"Overall      {weighted:6.1f}% · weighted measured score"] + _v1160_s21_footer()
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.5 version/build closeout",
+    "status":"Sprint 2.5 checkpoint and completion criteria",
+    "runtimehealth":"Runtime health components, evidence history and exit gate",
+    "dashboard":"Sprint 2.5 Long Runtime Evidence Closeout Dashboard",
+})
+V90_COMMAND_REGISTRY.update({
+    "version": version1160ltss25_cmd,
+    "status": status1160ltss25_cmd,
+    "runtimehealth": runtimehealth1160ltss25_cmd,
+    "dashboard": dashboard1160ltss25_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_S24_PREFLIGHT = v91_preflight
+
+def v91_preflight(force=False):
+    global V1160_S25_PREFLIGHT_CACHE
+    if V1160_S25_PREFLIGHT_CACHE is not None and not force:
+        return V1160_S25_PREFLIGHT_CACHE
+    base = _V1160_S24_PREFLIGHT(force)
+    rv = _v1160_s21_runtime_view(True)
+    evidence = _v1160_s24_update_evidence(rv)
+    checks = dict(base.get("checks", {}))
+    for stale in ("s24_handlers", "s24_version_source"):
+        checks.pop(stale, None)
+    checks.update({
+        "s25_version_source": V1160_VERSION_MANAGER.number == V1160_LTS_S25_NUMBER and V91_VERSION == V1160_VERSION_MANAGER.version,
+        "s25_registry_341": len(V90_COMMAND_REGISTRY) == 341,
+        "s25_handlers": V90_COMMAND_REGISTRY.get("status") is status1160ltss25_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss25_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss25_cmd,
+        "s25_components": set(_v1160_s25_health_components(rv, evidence)) >= {"Runtime Stability","Resource Stability","Performance Stability","Recovery Stability","Evidence Completeness","Overall"},
+        "s25_exit_gate": len(_v1160_s25_exit_gate(rv, evidence)) == 6,
+        "s25_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "s25_live_off": not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    failed = [k for k, v in checks.items() if not v]
+    out = dict(base)
+    out.update({
+        "ok": not failed,
+        "checks": checks,
+        "failed": failed,
+        "development_version": V91_VERSION,
+        "version_source": "Single",
+        "regression_risk": "NONE" if not failed else "HIGH",
+        "release_freeze": "ACTIVE",
+        "lts_readiness": "CERTIFYING" if not failed else "BLOCKED",
+        "certification_stage": "Sprint 2.5 Long Runtime Certification Evidence Closeout",
+    })
+    if not force:
+        V1160_S25_PREFLIGHT_CACHE = out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 LTS-S2.3 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 LTS-S2.5 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()

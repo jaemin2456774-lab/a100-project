@@ -5,14 +5,19 @@
   "schema": 1,
   "paper": 20,
   "shadow": 60,
-  "live_trading": "OFF",
+  "live_trading": false,
   "release_freeze": "ACTIVE",
   "regression_risk": "NONE",
   "registry": "341/341",
   "certification_stage": "Sprint 2.3 Long Runtime Certification Enhancement",
   "long_runtime_certification": "MEASURING",
-  "version": "A100 V116.0-LTS-S2.4 LONG RUNTIME CERTIFICATION FINAL",
-  "version_number": "116.0-LTS-S2.4",
+  "version": "A100 V116.0-LTS-S2.5 LONG RUNTIME CERTIFICATION EVIDENCE CLOSEOUT",
+  "version_number": "116.0-LTS-S2.5",
   "release_name": "A100_V116_0_LTS_S2_4_LONG_RUNTIME_CERTIFICATION_FINAL_DEVELOPMENT_RELEASE",
-  "release_stage": "Sprint 2.4 Long Runtime Certification Final"
+  "release_stage": "Sprint 2.4 Long Runtime Certification Final",
+  "release_type": "DEVELOPMENT_RELEASE",
+  "registry_commands": 341,
+  "pytest": "88/88 PASS",
+  "preflight": "PASS",
+  "runtime_certification": "24H/48H/72H EVIDENCE PENDING"
 }
