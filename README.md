@@ -1,3 +1,7 @@
+# A100 V116.0 LTS-FC1.2 Final Product Polish
+
+Sprint 1 closeout release. AI learning targets and system release readiness are separated, low-sample performance windows use WARMING UP, and build bottlenecks include percentages and the longest stage.
+
 # A100 V116.0 LTS-FC1.1
 
 Product Polish & Certification development release based on the certified FC1 baseline.

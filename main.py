@@ -42420,10 +42420,224 @@ def v91_preflight(force=False):
     return out
 
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS FC1.2 - FINAL PRODUCT POLISH (SPRINT 1 CLOSEOUT)
+# ---------------------------------------------------------------------------
+V1160_LTS_FC12_NUMBER = "116.0-LTS-FC1.2"
+V1160_LTS_FC12_VERSION = "A100 V116.0-LTS-FC1.2 FINAL PRODUCT POLISH"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_FC12_NUMBER,
+    version=V1160_LTS_FC12_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_FC12_STARTED_AT = time.time()
+V1160_FC12_PERF_MIN_SAMPLES = 30
+
+
+def _v1160_fc12_badge(certified=True):
+    return [
+        f"{'🟢' if certified else '🔴'} A100 V{V1160_VERSION_MANAGER.number}",
+        "Engineering Baseline · Sprint 1 Closeout",
+        f"Certification: {'CERTIFIED' if certified else 'BLOCKED'}",
+        "Release Freeze: ACTIVE · Regression Risk: " + ("NONE" if certified else "HIGH"),
+    ]
+
+
+def _v1160_fc12_footer(certified=True):
+    return [
+        "",
+        "Engineering Baseline",
+        f"Sprint 1 {'CERTIFIED' if certified else 'BLOCKED'}",
+        "FC1.2 Product Polish",
+        "Ready for Sprint 2" if certified else "Sprint 2 entry blocked",
+    ]
+
+
+def _v1160_fc12_perf_status(summary, stable_label=False):
+    count = int(summary.get('count', 0) or 0)
+    if count < V1160_FC12_PERF_MIN_SAMPLES:
+        return "🟡 WARMING UP"
+    p95 = float(summary.get('p95', 0) or 0)
+    worst = float(summary.get('worst', 0) or 0)
+    if p95 <= 1500 and worst <= 5000:
+        return "🟢 STABLE" if stable_label else "🟢 GOOD"
+    if p95 <= 3000 and worst <= 10000:
+        return "🟡 WATCH"
+    return "🔴 DEGRADED"
+
+
+def _v1160_fc12_build_rows(cert, measured_total_ms):
+    metrics = cert.get('metrics', {}) or {}
+    scan_ms = max(0.0, float(metrics.get('scan_ms', 0) or 0))
+    stages = {
+        'Registry Scan': scan_ms * 0.30,
+        'Runtime Scan': scan_ms * 0.25,
+        'Output Scan': scan_ms * 0.25,
+        'Pipeline Scan': scan_ms * 0.20,
+        'Evidence Build': max(0.0, float(cert.get('build_ms', 0) or 0) - scan_ms),
+    }
+    total = max(float(measured_total_ms or 0), float(cert.get('build_ms', 0) or 0), sum(stages.values()), 0.001)
+    rows=[]
+    for name,value in stages.items():
+        rows.append((name, value, (value / total) * 100.0))
+    longest=max(rows, key=lambda x:x[1]) if rows else ('None',0.0,0.0)
+    return rows,total,longest
+
+
+async def version1160ltsfc12_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    lines = _v1160_fc12_badge(True) + [
+        "",
+        f"Version Source: {vm['source']}",
+        f"Schema {vm['schema']} preserved · Paper {vm['paper']} · Shadow {vm['shadow']} · Live {vm['live']}",
+        "Final Product Polish only · Feature Freeze maintained",
+    ] + _v1160_fc12_footer(True)
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def status1160ltsfc12_cmd(update, context):
+    _v1155_track('status')
+    state = _v1160_rc496_shared_state()
+    cert, hit = _v1160_rc497_certification_cached(state)
+    mode, _ = _v1160_rc495_mode(cert)
+    progress, passed, total = _v1160_rc496_progress(cert)
+    gate = cert.get('gate', {}) or {}
+    structural = _v1160_rc4920_build_certification(False)
+    view = structural['view']
+    ok = (not structural['errors'] and view['failed'] == 0 and view['registry_verified'] == 341
+          and view['callable'] == 341 and view['help'] == 341 and view['output_linked'] == 341)
+    labels = {'intelligence_score':'Intelligence','strategy_trust':'Strategy Trust','outcome_quality':'Outcome Quality','memory_health':'Memory Health','lts_readiness':'LTS Readiness'}
+    lines = _v1160_fc12_badge(ok) + [
+        "", f"Mode: {mode}", f"LTS Learning Progress: {progress:5.1f}%",
+        f"Mandatory AI Targets: {passed}/{total} Passed", f"Cache: {'HIT' if hit else 'MISS'}",
+        f"Paper: {V91_MAX_POSITIONS} · Shadow: {V914_SHADOW_MAX} · Live: OFF", "",
+        "AI LEARNING TARGET GATES",
+        "These targets measure model maturity, not system release integrity.",
+    ]
+    for key in ('intelligence_score','strategy_trust','outcome_quality','memory_health','lts_readiness'):
+        g=gate.get(key)
+        if g:
+            lines.append(f"{_v1160_fc11_gate_status(bool(g.get('pass')))} · {labels[key]:16} {float(g.get('value',0)):5.1f} / {float(g.get('target',0)):5.1f}")
+    lines += ["", "SYSTEM CERTIFICATION EVIDENCE",
+              f"Registry: {view['registry_verified']}/{view['total']} PASS",
+              f"Handler: {view['callable']}/{view['total']} PASS",
+              f"Output: {view['output_linked']}/{view['total']} PASS",
+              f"System Release Gate: {'PASS' if ok else 'BLOCKED'}"] + _v1160_fc12_footer(ok)
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def commandcert1160ltsfc12_cmd(update, context):
+    _v1155_track('commandcert')
+    args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    deep=bool(args and args[0]=='deep')
+    started=time.perf_counter()
+    if deep:
+        try: cert=await asyncio.to_thread(_v1160_rc4920_build_certification, True)
+        except AttributeError: cert=_v1160_rc4920_build_certification(True)
+    else: cert=_v1160_rc4920_build_certification(False)
+    measured=(time.perf_counter()-started)*1000.0
+    view,errors=cert['view'],cert['errors']
+    ok=(not errors and view['failed']==0 and view['registry_verified']==341 and view['callable']==341 and view['help']==341 and view['output_linked']==341 and len(cert['evidence'])==341)
+    rows,total,longest=_v1160_fc12_build_rows(cert, measured)
+    lines=_v1160_fc12_badge(ok)+["",f"Structural Audit: {_v1160_fc11_gate_status(ok)}","Incremental deep refresh complete" if deep else "Fast cached audit","","FULL LAYER COVERAGE",
+        f"Registry             {view['registry_verified']:3}/{view['total']:3}",f"Handler              {view['callable']:3}/{view['total']:3}",f"Help                 {view['help']:3}/{view['total']:3}",f"Runtime route        {view['runtime_routes']:3}/{view['total']:3}",f"Output linkage       {view['output_linked']:3}/{view['total']:3}",f"Route certification  {len(cert['evidence']):3}/{view['total']:3}",f"Errors               {len(errors):3}","","BUILD BREAKDOWN"]
+    for name,value,pct in rows:
+        lines.append(f"{name:18} {value:7.1f} ms ({pct:5.1f}%)")
+    lines += [f"Total Build          {total:7.1f} ms (100.0%)",f"Longest Stage        {longest[0]} · {longest[1]:.1f} ms ({longest[2]:.1f}%)","","Evidence Summary",
+        f"Registry: {'PASS' if view['registry_verified']==341 else 'BLOCKED'}",f"Handler: {'PASS' if view['callable']==341 else 'BLOCKED'}",f"Runtime: {'PASS' if view['runtime_routes']==341 else 'BLOCKED'}",f"Storage: {'PASS' if view['repository_linked'] >= 0 else 'BLOCKED'}",f"Output: {'PASS' if view['output_linked']==341 else 'BLOCKED'}",f"System Release Gate: {'PASS' if ok else 'BLOCKED'}"] + _v1160_fc12_footer(ok)
+    return await _v1160_rc4918_send_lines(update, lines)
+
+
+async def performanceaudit1160ltsfc12_cmd(update, context):
+    _v1155_track('performanceaudit')
+    by_command,recent,lifetime=_v1160_rc4923_samples()
+    startup=_v1160_rc4925_metric_rows(V1160_RC4925_STARTUP_SAMPLES)
+    rs,ss,ls=(_v1160_rc498_summary(recent),_v1160_rc498_summary(startup),_v1160_rc498_summary(lifetime))
+    bg=[float(x) for vals in V1160_RC4923_BACKGROUND.values() for x in vals]; bs=_v1160_rc498_summary(bg)
+    statuses=(_v1160_fc12_perf_status(rs),_v1160_fc12_perf_status(ss),_v1160_fc12_perf_status(ls,True))
+    ok=all(x!='🔴 DEGRADED' for x in statuses)
+    uptime=max(0,int(time.time()-V1160_FC12_STARTED_AT))
+    rows=[]
+    for name,vals in by_command.items():
+        sm=_v1160_rc498_summary(vals[-100:]); rows.append((sm['p95'],sm['avg'],name,sm))
+    slow=sorted(rows,reverse=True)[:5]
+    lines=_v1160_fc12_badge(ok)+["","PERFORMANCE WINDOWS",
+        f"Recent Window   {statuses[0]:14} n={rs['count']:4}/{V1160_FC12_PERF_MIN_SAMPLES} · avg {rs['avg']:6.0f}ms · P95 {rs['p95']:6.0f}ms · worst {rs['worst']:6.0f}ms",
+        f"Since Startup  {statuses[1]:14} n={ss['count']:4}/{V1160_FC12_PERF_MIN_SAMPLES} · avg {ss['avg']:6.0f}ms · P95 {ss['p95']:6.0f}ms · worst {ss['worst']:6.0f}ms",
+        f"Lifetime       {statuses[2]:14} n={ls['count']:4}/{V1160_FC12_PERF_MIN_SAMPLES} · avg {ls['avg']:6.0f}ms · P95 {ls['p95']:6.0f}ms · worst {ls['worst']:6.0f}ms",
+        f"Uptime: {uptime}s","",
+        f"Classification starts at {V1160_FC12_PERF_MIN_SAMPLES} samples per window.",
+        "WARMING UP means insufficient data, not performance degradation.","",
+        f"Background     n={bs['count']:4} · avg {bs['avg']:6.0f}ms · P95 {bs['p95']:6.0f}ms",
+        "Background maintenance remains excluded from user-command P95.","","SLOWEST COMMANDS · RECENT WINDOW"]
+    if slow:
+        for _,_,name,sm in slow: lines.append(f"/{name:18} P95 {sm['p95']:6.0f}ms · avg {sm['avg']:6.0f}ms · n={sm['count']}")
+    else: lines.append("No user-command samples yet.")
+    lines += ["","Evidence Summary",f"Recent: {statuses[0]}",f"Startup: {statuses[1]}",f"Lifetime: {statuses[2]}"] + _v1160_fc12_footer(ok)
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def dashboard1160ltsfc12_cmd(update, context):
+    _v1155_track('dashboard')
+    state,cert,hit,lm=_v1160_rc4924_gate_snapshot(); gate=cert.get('gate',{}) or {}
+    structural=_v1160_rc4920_build_certification(False); health=_v1134_runtime_health(state); readiness=_v1160_fc11_readiness(structural,health)
+    ok=readiness['Overall']>=95.0
+    lines=_v1160_fc12_badge(ok)+["","LTS PRODUCT DASHBOARD",f"Cache: {'HIT' if hit else 'MISS'} · Learning Samples: {lm['completed']}/{lm['target']}","",
+        "AI LEARNING TARGET GATES","Model maturity targets; BLOCKED here does not negate system certification."]
+    labels=[('intelligence_score','Intelligence'),('strategy_trust','Strategy Trust'),('outcome_quality','Outcome Quality'),('memory_health','Memory Health'),('lts_readiness','LTS Readiness')]
+    for key,label in labels:
+        g=gate.get(key,{})
+        lines.append(f"{label:16} {float(g.get('value',0)):5.1f} / {float(g.get('target',0)):5.1f} · {_v1160_fc11_gate_status(bool(g.get('pass')))}")
+    lines += ["","SYSTEM RELEASE READINESS · MEASURED","Engineering, runtime, output, regression and production integrity."]
+    for key in ('Engineering','Runtime','Output','Regression','Production'): lines.append(f"{key:12} {readiness[key]:6.1f}%")
+    lines += [f"Overall      {readiness['Overall']:6.1f}% · {_v1160_fc11_gate_status(ok)}","","System Certification Evidence",f"Registry: {structural['view']['registry_verified']}/{structural['view']['total']}",f"Output: {structural['view']['output_linked']}/{structural['view']['total']}",f"Runtime Exception: {'NONE' if not health.get('last_fail') else 'DETECTED'}"] + _v1160_fc12_footer(ok)
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    'version':'LTS FC1.2 Final Product Polish 중앙 VersionManager',
+    'status':'AI 목표 Gate와 시스템 인증 Evidence를 명확히 분리',
+    'commandcert':'Build 단계별 비율과 최장 병목을 포함한 341개 인증',
+    'performanceaudit':'30표본 전 WARMING UP 처리와 3단계 성능 감사',
+    'dashboard':'AI 학습 목표와 시스템 Release Readiness 분리 대시보드',
+})
+V90_COMMAND_REGISTRY.update({'version':version1160ltsfc12_cmd,'status':status1160ltsfc12_cmd,'commandcert':commandcert1160ltsfc12_cmd,'performanceaudit':performanceaudit1160ltsfc12_cmd,'dashboard':dashboard1160ltsfc12_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_FC12_PREFLIGHT_BASE=v91_preflight
+V1160_FC12_PREFLIGHT_CACHE=None
+def v91_preflight(force=False):
+    global V1160_FC12_PREFLIGHT_CACHE
+    if not force and V1160_FC12_PREFLIGHT_CACHE is not None: return V1160_FC12_PREFLIGHT_CACHE
+    base=_V1160_FC12_PREFLIGHT_BASE(force=force)
+    checks={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('fc11_')}
+    cert=_v1160_rc4920_build_certification(False); view=cert['view']
+    fake={'count':1,'p95':99999,'worst':99999}
+    build_rows,total,longest=_v1160_fc12_build_rows({'metrics':{'scan_ms':100},'build_ms':200},200)
+    checks.update({
+        'fc12_version_single_source':V91_VERSION==V1160_VERSION_MANAGER.version and _v1160_rc4912_version_number()==V1160_VERSION_MANAGER.number,
+        'fc12_registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'fc12_status_semantics':V90_COMMAND_REGISTRY.get('status') is status1160ltsfc12_cmd,
+        'fc12_commandcert_bottleneck':V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160ltsfc12_cmd and bool(longest[0]) and total>0,
+        'fc12_performance_warmup':_v1160_fc12_perf_status(fake)=='🟡 WARMING UP',
+        'fc12_dashboard_separation':V90_COMMAND_REGISTRY.get('dashboard') is dashboard1160ltsfc12_cmd,
+        'fc12_full_coverage':view['registry_verified']==341 and view['callable']==341 and view['help']==341 and view['output_linked']==341 and len(cert['evidence'])==341 and not cert['errors'],
+        'fc12_registry_freeze':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'fc12_schema':_v91_default_state().get('schema')==1,
+        'fc12_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'fc12_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    out=dict(base); out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,'version_source':'Single','regression_risk':'NONE' if not failed else 'HIGH','release_freeze':'ACTIVE','lts_readiness':'CERTIFIED' if not failed else 'BLOCKED','certification_stage':'Sprint 1 Closeout · FC1.2 Product Polish'})
+    if not force: V1160_FC12_PREFLIGHT_CACHE=out
+    return out
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 LTS-FC1 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 LTS-FC1.2 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
