@@ -1,22 +1,17 @@
-# RC4.9.7 설치 후 Telegram 검수 순서
+# RC4.9.11 설치 후 캡처
 
-아래 명령을 한 메시지에 순서대로 입력하거나 각각 실행하십시오.
-
+순서대로 실행:
 /version
 /status
 /status
 /dashboard btc
-/releasegate
 /performanceaudit
+/performancehistory
+/aihealth
+/aihealth
+/releasegate
 /commandcert
-/commandcert warn engine
-/commandcert warn adaptiveconfidence
+/commandcert warn engine 10
+/commandcert warn output 10
 
-## 필수 확인
-- 모든 화면 버전이 RC4.9.7
-- 첫 `/status`: MISS(cold_start 가능)
-- 두 번째 `/status`: HIT, Age, TTL 남음 표시
-- `/performanceaudit`: Queue Wait / Engine / Telegram Send / End-to-End 분리
-- Grade Reasons / Targets 표시
-- `/commandcert`: Top Causes 요약
-- 원인별 drill-down 결과가 1~2화면 내 출력
+확인: 모든 버전 RC4.9.11, 두 번째 status HIT, AI Health 두 번째 Trend, CommandCert 요약/상세 집계 일치.

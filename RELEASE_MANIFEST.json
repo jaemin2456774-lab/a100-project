@@ -1,9 +1,9 @@
 {
-  "version": "A100 V116.0-RC4.9.10",
-  "release": "VERSION_TRUTH_OPERATIONS_CLARITY_DEVELOPMENT_RELEASE",
+  "version": "A100 V116.0-RC4.9.11",
+  "release": "CONSISTENCY_TRUTH_BOTTLENECK_INSIGHT_DEVELOPMENT_RELEASE",
   "schema": 1,
-  "paper_limit": 20,
-  "shadow_limit": 60,
+  "paper": 20,
+  "shadow": 60,
   "live_trading": false,
   "files": [
     {
@@ -12,14 +12,24 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
+      "path": "FILE_LIST.txt",
+      "size": 7606,
+      "sha256": "6c9328dd860e2413a7e237e9a398e8a1cc23b4300ffb6653a731e8fabcd213f2"
+    },
+    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
       "size": 351,
       "sha256": "8af6c2ff426d1e1272f366d8dfd8790af427c9661338611ce01077b6137db7c2"
     },
     {
       "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md",
-      "size": 629,
-      "sha256": "50f2af816fec373dcfb0394ffb209fbb8975a6c226cff0c46dc6a82db07386f9"
+      "size": 356,
+      "sha256": "f4e23028587da460c97d8ae5fc2de5b8d8ef8e841db9879985a196a63964d550"
+    },
+    {
+      "path": "RC4_9_11_RELEASE_REPORT_KR.md",
+      "size": 205,
+      "sha256": "eb1f45cb78324aa6f7e8830cf7b37a4f0bb49fed04cab3ed3cb2cb140e835e7b"
     },
     {
       "path": "RC4_9_1_STARTUP_HOTFIX_REPORT_KR.md",
@@ -58,8 +68,8 @@
     },
     {
       "path": "README.md",
-      "size": 84,
-      "sha256": "378cf6a5a7b3914f0cb6b0e53a592b8896445239223da03119316f9e977cba42"
+      "size": 88,
+      "sha256": "9d90a3854beb5e21a204939e1da8324e443fac844335a49ed78e7fa247d21932"
     },
     {
       "path": "README_RC4_9_2.md",
@@ -280,6 +290,11 @@
       "path": "docs/CHANGELOG_V116_0_RC4_9_10.md",
       "size": 672,
       "sha256": "33cd2cc964775735b22451a0a580cbc60ba71495cfca88a01370ba89471964a9"
+    },
+    {
+      "path": "docs/CHANGELOG_V116_0_RC4_9_11.md",
+      "size": 345,
+      "sha256": "b20bb44e87386ef84e80d0fe051b9eca531f26bd5466fad500536a7eec68fe7a"
     },
     {
       "path": "docs/CHANGELOG_V116_0_RC4_9_5.md",
@@ -698,8 +713,8 @@
     },
     {
       "path": "main.py",
-      "size": 1982958,
-      "sha256": "c94f467a2a5a2a206ffec14a853db9a45eea4d4343e86b4e391c455b351dd35c"
+      "size": 1995039,
+      "sha256": "f6d1ea2edf49dade19cc8d9f51768f712c36c7a3948cbf8103c70368e6a4f7a6"
     },
     {
       "path": "pytest.ini",
