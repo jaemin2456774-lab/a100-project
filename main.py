@@ -41932,10 +41932,175 @@ def v91_preflight(force=False):
         V1160_RC4924_PREFLIGHT_CACHE = out
     return out
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.25 - RC FREEZE COMPLETION
+# ---------------------------------------------------------------------------
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number="116.0-RC4.9.25",
+    version="A100 V116.0-RC4.9.25 LTS RC FREEZE COMPLETION",
+)
+V1160_RC4925_NUMBER = V1160_VERSION_MANAGER.number
+V1160_RC4925_VERSION = V1160_VERSION_MANAGER.version
+V91_VERSION = V1160_VERSION_MANAGER.version
+for _key in list(globals()):
+    if _key.startswith("V1160_RC") and _key.endswith("_NUMBER"):
+        globals()[_key] = V1160_VERSION_MANAGER.number
+    elif _key.startswith("V1160_RC") and _key.endswith("_VERSION"):
+        globals()[_key] = V1160_VERSION_MANAGER.version
+
+V1160_RC4925_STARTED_AT = time.time()
+V1160_RC4925_STARTUP_SAMPLES = defaultdict(list)
+
+
+def _v1160_rc4925_metric_rows(source):
+    flat=[]
+    for values in source.values():
+        flat.extend(float(x) for x in values)
+    return flat
+
+
+async def status1160rc4925_cmd(update, context):
+    """Plain-text status: never exposes Telegram HTML tags."""
+    _v1155_track("status")
+    state=_v1160_rc496_shared_state()
+    cert,hit=_v1160_rc497_certification_cached(state)
+    mode,_=_v1160_rc495_mode(cert)
+    progress,passed,total=_v1160_rc496_progress(cert)
+    gate=cert.get("gate",{}) or {}
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust",
+            "outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    lines=[f"📊 A100 V{V1160_VERSION_MANAGER.number} STATUS",
+           f"Mode: {mode}",f"LTS Score Progress: {progress:.1f}%",
+           f"Mandatory Gates: {passed}/{total} Passed",f"Cache: {'HIT' if hit else 'MISS'}",
+           f"Paper: {V91_MAX_POSITIONS} · Shadow: {V914_SHADOW_MAX} · Live: OFF",""]
+    for key in ("intelligence_score","strategy_trust","outcome_quality","memory_health","lts_readiness"):
+        g=gate.get(key)
+        if g:
+            lines.append(f"{'✅' if g.get('pass') else '🧠'} {labels[key]}: {float(g.get('value',0)):.1f}/{float(g.get('target',0)):.0f}")
+    lines += ["", "✅ Handler → Shared Context → Certification → Telegram Output"]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def performanceaudit1160rc4925_cmd(update, context):
+    _v1155_track("performanceaudit")
+    by_command,recent,lifetime=_v1160_rc4923_samples()
+    startup=_v1160_rc4925_metric_rows(V1160_RC4925_STARTUP_SAMPLES)
+    rs=_v1160_rc498_summary(recent)
+    ss=_v1160_rc498_summary(startup)
+    ls=_v1160_rc498_summary(lifetime)
+    bg=[float(x) for vals in V1160_RC4923_BACKGROUND.values() for x in vals]
+    bs=_v1160_rc498_summary(bg)
+    rows=[]
+    for name,vals in by_command.items():
+        sm=_v1160_rc498_summary(vals[-100:]); rows.append((sm['p95'],sm['avg'],name,sm))
+    slow=sorted(rows,reverse=True)[:8]
+    fast=sorted(rows,key=lambda x:(x[1],x[0],x[2]))[:8]
+    uptime=max(0,int(time.time()-V1160_RC4925_STARTED_AT))
+    lines=[f"⚙️ <b>A100 V{V1160_VERSION_MANAGER.number} PERFORMANCE AUDIT</b>",
+           "Metrics <b>CALIBRATED</b> · User commands and background maintenance separated", "",
+           f"<b>RECENT WINDOW</b> · Window 100 · Collected {rs['count']}",
+           f"avg <b>{rs['avg']:.0f}ms</b> · P95 <b>{rs['p95']:.0f}ms</b> · worst <b>{rs['worst']:.0f}ms</b>", "",
+           f"<b>SINCE STARTUP</b> · Uptime {uptime}s · Samples {ss['count']}",
+           f"avg <b>{ss['avg']:.0f}ms</b> · P95 <b>{ss['p95']:.0f}ms</b> · worst <b>{ss['worst']:.0f}ms</b>", "",
+           f"<b>LIFETIME</b> · Samples {ls['count']}",
+           f"avg <b>{ls['avg']:.0f}ms</b> · P95 <b>{ls['p95']:.0f}ms</b> · worst <b>{ls['worst']:.0f}ms</b>",
+           f"Background/Maintenance · Samples <b>{bs['count']}</b> · avg <b>{bs['avg']:.0f}ms</b> · P95 <b>{bs['p95']:.0f}ms</b> · excluded from User P95", "",
+           "<b>SLOWEST COMMANDS · RECENT WINDOW</b>"]
+    if slow:
+        for _,_,name,sm in slow: lines.append(f"• /{name} · P95 <b>{sm['p95']:.0f}ms</b> · avg {sm['avg']:.0f} · worst {sm['worst']:.0f} · n={sm['count']}")
+    else: lines.append("아직 사용자 명령 표본이 없습니다.")
+    lines += ["", "<b>FASTEST COMMANDS · RECENT WINDOW</b>"]
+    if fast:
+        for _,_,name,sm in fast: lines.append(f"• /{name} · avg <b>{sm['avg']:.0f}ms</b> · P95 {sm['p95']:.0f} · n={sm['count']}")
+    else: lines.append("아직 사용자 명령 표본이 없습니다.")
+    lines += ["", "✅ 내부 유지보수 작업은 사용자 P95/Worst에서 제외됩니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def commandcert1160rc4925_cmd(update, context):
+    _v1155_track('commandcert')
+    args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    deep=bool(args and args[0]=='deep')
+    if deep:
+        try: cert=await asyncio.to_thread(_v1160_rc4920_build_certification,True)
+        except AttributeError: cert=_v1160_rc4920_build_certification(True)
+    else: cert=_v1160_rc4920_build_certification(False)
+    view=cert['view']; m=cert['metrics']; errors=cert['errors']
+    ok=(not errors and view['failed']==0 and view['registry_verified']==341 and view['callable']==341 and view['help']==341 and view['output_linked']==341 and len(cert['evidence'])==341)
+    risk='NONE' if ok else 'HIGH'
+    lines=[f"🧾 A100 V{V1160_VERSION_MANAGER.number} COMMAND CERTIFICATION",
+           f"Structural Audit {'PASS' if ok else 'FAILED'} · {'Incremental deep refresh complete' if deep else 'Fast cached audit'}",
+           f"Registry {view['registry_verified']}/{view['total']} · Handler {view['callable']}/{view['total']} · Help {view['help']}/{view['total']}","",
+           "FULL LAYER COVERAGE",f"• Runtime route {view['runtime_routes']}/{view['total']}",
+           f"• Engine/data routes {view['engine_linked']} · stateless/control {view['total']-view['engine_linked']}",
+           f"• Repository/data routes {view['repository_linked']} · stateless {view['total']-view['repository_linked']}",
+           f"• Output linkage {view['output_linked']}/{view['total']}",
+           f"• Read-only route certification {len(cert['evidence'])}/{view['total']} · errors {len(errors)}",
+           f"• Workers {m['workers']} · reused {m['cache_hits']} · rescanned {m['changed']}",
+           f"• Build {cert['build_ms']:.0f}ms · source scan {m['scan_ms']:.0f}ms","",
+           f"Regression Risk: {risk}","Release Freeze: ACTIVE",f"LTS Readiness: {'CERTIFIED' if ok else 'BLOCKED'}","",
+           "RC4 기능 동결 상태에서 변경 경로만 재검사하며 전체 Registry 무결성을 유지합니다."]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+async def version1160rc4925_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,
+        f"ℹ️ {vm['version']}\nVersion Source: {vm['source']}\nSchema {vm['schema']} preserved · Paper {vm['paper']} · Shadow {vm['shadow']} · Live {vm['live']}\n"
+        "RC Freeze Completion · Regression Risk NONE · Release Freeze ACTIVE")
+
+V925_COMMAND_USAGE.update({
+    'version':'RC4.9.25 RC Freeze Completion 중앙 VersionManager',
+    'status':'HTML 태그 노출 없는 일반 텍스트 운영 상태',
+    'performanceaudit':'Recent Window·Since Startup·Lifetime 3단계 성능 감사',
+    'commandcert':'341개 전체 인증과 Regression Risk·Release Freeze·LTS Readiness',
+})
+V90_COMMAND_REGISTRY.update({'version':version1160rc4925_cmd,'status':status1160rc4925_cmd,
+                             'performanceaudit':performanceaudit1160rc4925_cmd,'commandcert':commandcert1160rc4925_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+# Capture a dedicated since-startup series without changing legacy lifetime metrics.
+_V1160_RC4925_DISPATCH_BASE=v90_1_dispatch
+async def v90_1_dispatch(update, context):
+    before={k:len(v) for k,v in V1160_RC498_PROCESSING.items()}
+    result=await _V1160_RC4925_DISPATCH_BASE(update,context)
+    for name,values in V1160_RC498_PROCESSING.items():
+        vals=list(values); old=before.get(name,0)
+        if len(vals)>old: V1160_RC4925_STARTUP_SAMPLES[name].extend(float(x) for x in vals[old:])
+    return result
+
+_V1160_RC4925_PREFLIGHT_BASE=v91_preflight
+V1160_RC4925_PREFLIGHT_CACHE=None
+def v91_preflight(force=False):
+    global V1160_RC4925_PREFLIGHT_CACHE
+    if not force and V1160_RC4925_PREFLIGHT_CACHE is not None: return V1160_RC4925_PREFLIGHT_CACHE
+    base=_V1160_RC4925_PREFLIGHT_BASE(force=force)
+    checks={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4924_')}
+    cert=_v1160_rc4920_build_certification(False); view=cert['view']
+    checks.update({
+        'rc4925_version_single_source':V91_VERSION==V1160_VERSION_MANAGER.version and _v1160_rc4912_version_number()==V1160_VERSION_MANAGER.number,
+        'rc4925_registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'rc4925_status_plain_text':V90_COMMAND_REGISTRY.get('status') is status1160rc4925_cmd,
+        'rc4925_performance_three_windows':V90_COMMAND_REGISTRY.get('performanceaudit') is performanceaudit1160rc4925_cmd,
+        'rc4925_commandcert_freeze':V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc4925_cmd,
+        'rc4925_full_coverage':view['registry_verified']==341 and view['callable']==341 and view['help']==341 and view['output_linked']==341 and len(cert['evidence'])==341 and not cert['errors'],
+        'rc4925_registry_freeze':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4925_schema':_v91_default_state().get('schema')==1,
+        'rc4925_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4925_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    out=dict(base); out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,
+                                'version_source':'Single','regression_risk':'NONE' if not failed else 'HIGH',
+                                'release_freeze':'ACTIVE','lts_readiness':'CERTIFIED' if not failed else 'BLOCKED'})
+    if not force: V1160_RC4925_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.24 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.25 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()

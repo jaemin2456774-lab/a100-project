@@ -1,5 +1,5 @@
 {
-  "version": "V116.0-RC4.9.23",
+  "version": "V116.0-RC4.9.25",
   "schema": 1,
   "paper_limit": 20,
   "shadow_limit": 60,
@@ -1340,5 +1340,6 @@
   "registry_expected": 341,
   "version_source": "Single",
   "performance_metrics": "Calibrated",
-  "regression_baseline": "RC4.9.22"
+  "regression_baseline": "RC4.9.22",
+  "release_name": "RC Freeze Completion"
 }
