@@ -40336,10 +40336,147 @@ def v91_preflight():
             'command_audit':view,'base':base,'development_version':V91_VERSION,
             'registry_fingerprint':'v1160-rc4915-certification-truth-runtime-coverage-hotfix'}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.16 - FULL LAYER COVERAGE & SNAPSHOT CONSISTENCY
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class _V1160RC4916Release:
+    number: str = "116.0-RC4.9.16"
+    version: str = "A100 V116.0-RC4.9.16 FULL LAYER COVERAGE & SNAPSHOT CONSISTENCY"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4916_RELEASE=_V1160RC4916Release()
+V1160_RC4916_NUMBER=V1160_RC4916_RELEASE.number
+V1160_RC4916_VERSION=V1160_RC4916_RELEASE.version
+V91_VERSION=V1160_RC4916_VERSION
+V1160_RC4912_NUMBER=V1160_RC4916_NUMBER
+V1160_RC4912_VERSION=V1160_RC4916_VERSION
+
+
+def _v1160_rc4916_source_layers(handler):
+    """Classify every active route without executing mutating/external actions."""
+    try: src=inspect.getsource(handler).lower()
+    except Exception: src=''
+    output=any(x in src for x in ('safe_reply','reply_text','reply_html','send_message','edit_message'))
+    delegated=any(x in src for x in ('return await ','await dashboard','await status','await command','await v90_1_'))
+    repository=any(x in src for x in ('_v91_load_state','repository','_load_','state','snapshot','cache','history','paper','shadow'))
+    engine=any(x in src for x in ('engine','score','forecast','audit','certification','health','performance','learning','strategy','market'))
+    runtime=callable(handler) and (inspect.iscoroutinefunction(handler) or inspect.isfunction(handler))
+    return {'output':output or delegated,'direct_output':output,'delegated_output':delegated,
+            'repository':repository,'engine':engine,'runtime_route':runtime}
+
+
+def _v1160_rc4916_cert_view(state=None, deep=False):
+    base=_v1160_rc4915_cert_view(state=state,deep=deep)
+    registry=dict(V90_COMMAND_REGISTRY); layers={n:_v1160_rc4916_source_layers(h) for n,h in registry.items()}
+    base.update({
+        'engine_linked':sum(v['engine'] for v in layers.values()),
+        'output_linked':sum(v['output'] for v in layers.values()),
+        'direct_output':sum(v['direct_output'] for v in layers.values()),
+        'delegated_output':sum(v['delegated_output'] for v in layers.values()),
+        'repository_linked':sum(v['repository'] for v in layers.values()),
+        'runtime_routes':sum(v['runtime_route'] for v in layers.values()),
+        'layers':layers,
+    })
+    return base
+
+
+def _v1160_rc4916_consistent_snapshot():
+    """One immutable state/certification/forecast snapshot for all LTS views."""
+    state=_v1160_rc496_shared_state()
+    frozen=json.loads(json.dumps(state or {},ensure_ascii=False,default=str))
+    _,cert,hit=_v1160_rc499_gate_snapshot()
+    forecast=_v1160_rc4914_learning_forecast(frozen)
+    digest=hashlib.sha256(json.dumps({'state':frozen,'gate':cert.get('gate',{}),'forecast':forecast},sort_keys=True,default=str).encode()).hexdigest()[:12].upper()
+    return {'id':'LS-'+digest,'state':frozen,'cert':cert,'forecast':forecast,'cache_hit':hit,'ts':time.time()}
+
+
+async def version1160rc4916_cmd(update,context):
+    r=V1160_RC4916_RELEASE
+    return await v90_1_safe_reply(update,f"ℹ️ <b>{r.version}</b>\nSchema <b>1 preserved</b> · Paper <b>20</b> · Shadow <b>60</b> · Live <b>OFF</b>",parse_mode='HTML')
+
+
+async def versionaudit1160rc4916_cmd(update,context):
+    audit=v91_preflight(); view=_v1160_rc4916_cert_view(); failed=audit.get('failed',[])
+    lines=[f"🛡️ <b>A100 V{V1160_RC4916_NUMBER} FULL REGRESSION & LTS READINESS AUDIT</b>",
+           f"Version Source <b>{_v54_escape(V91_VERSION)}</b>",
+           f"Registry <b>{view['registry_verified']}/{view['total']}</b> · Callable <b>{view['callable']}</b> · Help <b>{view['help']}</b>",
+           f"Runtime Routes <b>{view['runtime_routes']}/{view['total']}</b> · Live Evidence <b>{view['runtime_probed']}/{view['total']}</b>",
+           f"Repository/Data Links <b>{view['repository_linked']}</b> · Stateless routes <b>{view['total']-view['repository_linked']}</b> · Output Links <b>{view['output_linked']}/{view['total']}</b>",
+           f"Preflight <b>{'PASS' if audit.get('ok') else 'FAILED'}</b> · Failed Checks <b>{len(failed)}</b>","",
+           "Schema <b>1</b> · Paper <b>20</b> · Shadow <b>60</b> · Live <b>OFF</b>"]
+    if failed: lines += ['', '⛔ <b>FAILED CHECKS</b>']+['• '+_v54_escape(x) for x in failed[:20]]
+    else: lines += ['', '✅ VersionManager → Registry → Dispatcher → Audit output synchronized']
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def commandcert1160rc4916_cmd(update,context):
+    _v1155_track('commandcert'); args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]; deep=bool(args and args[0]=='deep')
+    view=_v1160_rc4916_cert_view(deep=deep); status='PASS' if view['failed']==0 and view['registry_verified']==view['total'] else 'FAILED'
+    lines=[f"🧾 <b>A100 V{V1160_RC4916_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Structural Audit <b>{status}</b> · {'Deep evidence refreshed' if deep else 'Fast audit'}",
+           f"Registry <b>{view['registry_verified']}/{view['total']}</b> · Handler <b>{view['callable']}/{view['total']}</b> · Help <b>{view['help']}/{view['total']}</b>","",
+           "<b>FULL LAYER COVERAGE</b>",
+           f"• Runtime route <b>{view['runtime_routes']}/{view['total']}</b>",
+           f"• Engine/data processing routes <b>{view['engine_linked']}</b> · stateless/control <b>{view['total']-view['engine_linked']}</b>",
+           f"• Repository/data routes <b>{view['repository_linked']}</b> · stateless routes <b>{view['total']-view['repository_linked']}</b>",
+           f"• Output linkage <b>{view['output_linked']}/{view['total']}</b> (direct {view['direct_output']} · delegated {view['delegated_output']})",
+           f"• Live read-only evidence <b>{view['runtime_probed']}/{view['total']}</b> · clean {view['runtime_clean']}","",
+           "ℹ️ 전체 341개 경로 연결 감사와 실제 Telegram 실행 증거를 분리합니다.",
+           "정밀 증거 갱신: <code>/commandcert deep</code>"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def releasegate1160rc4916_cmd(update,context):
+    snap=_v1160_rc4916_consistent_snapshot(); cert=snap['cert']; mode,_=_v1160_rc495_mode(cert); prog,passed,total=_v1160_rc496_progress(cert); gate=cert.get('gate',{})
+    labels={'intelligence_score':'Intelligence','strategy_trust':'Strategy','outcome_quality':'Outcome','memory_health':'Memory','lts_readiness':'LTS Readiness'}
+    lines=[f"🚦 <b>A100 V{V1160_RC4916_NUMBER} RELEASE GATE</b>",f"Snapshot <code>{snap['id']}</code> · Phase <b>{mode}</b> · Status <b>{'READY' if cert.get('ready') else 'LEARNING'}</b>",f"Score Progress <b>{prog:.1f}%</b> · Mandatory Gates <b>{passed}/{total}</b> · Cache {'HIT' if snap['cache_hit'] else 'MISS'}","",'<b>GATE REQUIREMENTS</b>']
+    blocked=[]
+    for k,g in gate.items():
+        value=float(g.get('value',0)); target=float(g.get('target',0)); ok=bool(g.get('pass')); need=max(0,target-value); name=labels.get(k,k)
+        lines.append(f"{'✅' if ok else '❌'} {name} <b>{value:.1f}/{target:.0f}</b> · {'PASS' if ok else f'Need {need:.1f}'}")
+        if not ok: blocked.append(name)
+    f=snap['forecast']; lines += ['',f"Learning Remaining <b>{f.get('remaining',0)} samples</b> · ETA <b>{_v54_escape(str(f.get('eta_text','pending')))}</b>",f"Blocked By: <b>{_v54_escape(', '.join(blocked) if blocked else 'None')}</b>"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def performanceaudit1160rc4916_cmd(update,context):
+    rows=_v1160_rc4910_perf_rows()
+    def stats(key):
+        vals=[float(v) for r in rows for v in r[key]]
+        if not vals:return (0.0,0.0,0)
+        vals=sorted(vals); return (sum(vals)/len(vals),vals[min(len(vals)-1,int(.95*(len(vals)-1)))],len(vals))
+    p,pp95,n=stats('processing'); e,_,_=stats('engine'); tg,_,_=stats('send'); tr,_,_=stats('transport'); q,_,_=stats('queue'); other=max(0,p-e-tg)
+    components={'Engine':e,'Telegram Send':tg,'Transport':tr,'Other Processing':other}; bottleneck=max(components,key=components.get) if components else 'None'
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,total); bad=[]
+    if hit<80:bad.append(f"Cache Hit {hit:.1f}% / target 80%")
+    if p>5000:bad.append(f"Processing Avg {p:.0f}ms / target 5000ms")
+    if pp95>10000:bad.append(f"Processing P95 {pp95:.0f}ms / target 10000ms")
+    grade='A' if not bad and n>=3 else 'B' if len(bad)<=2 else 'C'
+    lines=[f"⚙️ <b>A100 V{V1160_RC4916_NUMBER} PERFORMANCE AUDIT</b>",f"Grade <b>{grade}</b> · Samples <b>{n}</b>","",f"Processing Avg <b>{p:.0f}ms</b> · P95 <b>{pp95:.0f}ms</b>",f"Engine <b>{e:.0f}ms</b>",f"Telegram Send <b>{tg:.0f}ms</b>",f"Transport <b>{tr:.0f}ms</b>",f"Other Processing <b>{other:.0f}ms</b>",f"Batch Backlog <b>{q:.0f}ms</b> <i>(grade excluded)</i>",f"Primary Bottleneck <b>{bottleneck}</b>","",'✅ Targets satisfied' if not bad else '⚠️ NEEDS IMPROVEMENT']
+    lines += ['• '+_v54_escape(x) for x in bad]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({'version':'현재 중앙 VersionManager 버전','versionaudit':'RC4.9.16 전체 계층 및 활성 릴리즈 감사','commandcert':'341개 Registry·Engine·Repository·Output·Runtime 경로 인증','releasegate':'동일 immutable snapshot 기반 LTS Gate','performanceaudit':'P95와 병목 구성요소를 분리한 성능 감사'})
+V90_COMMAND_REGISTRY.update({'version':version1160rc4916_cmd,'versionaudit':versionaudit1160rc4916_cmd,'commandcert':commandcert1160rc4916_cmd,'releasegate':releasegate1160rc4916_cmd,'performanceaudit':performanceaudit1160rc4916_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4916_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4916_PREFLIGHT_BASE(); inherited={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4915_')}; view=_v1160_rc4916_cert_view()
+    checks=dict(inherited); checks.update({'rc4916_version_single_source':V91_VERSION==V1160_RC4916_VERSION and _v1160_rc4912_version_number()==V1160_RC4916_NUMBER,'rc4916_active_handlers':V90_COMMAND_REGISTRY.get('version') is version1160rc4916_cmd and V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc4916_cmd and V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160rc4916_cmd,'rc4916_registry_341':len(V90_COMMAND_REGISTRY)==341 and view['registry_verified']==341,'rc4916_callable_341':view['callable']==341 and view['runtime_routes']==341,'rc4916_help_341':view['help']==341,'rc4916_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),'rc4916_schema':_v91_default_state().get('schema')==1,'rc4916_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'rc4916_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade'))})
+    failed=[k for k,v in checks.items() if not v]
+    return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4916-full-layer-coverage-snapshot-consistency'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.15 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.16 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()

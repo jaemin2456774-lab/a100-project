@@ -1,7 +1,7 @@
 import main
 
 def test_rc4915_active_version_and_handlers():
-    assert main.V91_VERSION == main.V1160_RC4915_VERSION
+    assert main.V91_VERSION == main.V1160_RC4916_VERSION
     assert main._v1160_rc4912_version_number() == main.V1160_RC4915_NUMBER
     assert main.V90_COMMAND_REGISTRY['versionaudit'] is main.versionaudit1160rc4915_cmd
     assert main.V90_COMMAND_REGISTRY['commandcert'] is main.commandcert1160rc4915_cmd

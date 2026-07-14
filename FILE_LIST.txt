@@ -7,6 +7,7 @@ RC4_9_12_RELEASE_REPORT_KR.md
 RC4_9_13_RELEASE_REPORT_KR.md
 RC4_9_14_FULL_REGRESSION_LTS_READINESS_AUDIT_REPORT_KR.md
 RC4_9_15_RELEASE_REPORT_KR.md
+RC4_9_16_RELEASE_REPORT_KR.md
 RC4_9_1_STARTUP_HOTFIX_REPORT_KR.md
 RC4_9_2_RELEASE_REPORT_KR.md
 RC4_9_3_RELEASE_REPORT_KR.md
@@ -150,6 +151,7 @@ pytest.ini
 railway.json
 requirements.txt
 test_v1160_rc4915_certification_truth.py
+test_v1160_rc4916_full_layer_coverage.py
 test_v1160_rc492_execution_command_certification.py
 tests/conftest.py
 tests/test_v101_0_closed_loop.py
