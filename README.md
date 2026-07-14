@@ -1,11 +1,12 @@
-# A100 V116.0 LTS-S2.2 Long Runtime Certification Refinement
+# A100 V116.0 LTS-S2.3 Long Runtime Certification Enhancement
 
-Sprint 2 장시간 인증 계측 품질 개선 릴리스입니다.
+Sprint 2 장시간 안정성 인증을 위한 운영 계측 및 출력 역할 분리 릴리스입니다.
 
-- 30분/30샘플 Warm-up Gate
-- Runtime 단계: MEASURING → COLLECTING → CERTIFYING → CERTIFIED
-- 72시간 Remaining/ETA 표시
-- Release Readiness 가중치 근거 표시
-- Last Recovery/Restart/Snapshot/Exception 시각 표시
-- Schema 1 / Paper 20 / Shadow 60 / Live OFF 유지
-- Release Freeze ACTIVE / Regression Risk NONE
+- 기능 추가 없음
+- Registry 341/341
+- Schema 1 / Paper 20 / Shadow 60
+- Live Trading OFF
+- Release Freeze ACTIVE
+- Regression Risk NONE
+
+설치 후 `POST_INSTALL_SCREENSHOT_CHECKLIST_LTS_S2_3_KR.md` 순서로 확인하십시오.
