@@ -44927,19 +44927,13 @@ def v91_preflight(force=False):
     if not force: V1160_S211_PREFLIGHT_CACHE=out
     return out
 
-# IMPORTANT: this must remain the final executable block in the file.
-if __name__ == "__main__":
-    audit=v91_preflight(force=True)
-    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.11 startup integrity failure: "+", ".join(audit.get("failed",[])))
-    _v1160_rc45_start_worker(); main()
-
 # =============================================================================
 # A100 V116.0 LTS-S2.12 SCORE CALIBRATION & FORECAST PATCH
 # Calibrates read-only runtime/release intelligence against authoritative
 # engineering evidence. Mandatory release gates remain authoritative.
 # =============================================================================
-V1160_LTS_S212_NUMBER = "116.0-LTS-S2.12"
-V1160_LTS_S212_VERSION = "A100 V116.0-LTS-S2.12 SCORE CALIBRATION & FORECAST"
+V1160_LTS_S212_NUMBER = "116.0-LTS-S2.13"
+V1160_LTS_S212_VERSION = "A100 V116.0-LTS-S2.13 FINAL CALIBRATION ACTIVATION"
 V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
     number=V1160_LTS_S212_NUMBER,
     version=V1160_LTS_S212_VERSION,
@@ -45096,12 +45090,12 @@ async def status1160ltss212_cmd(update,context):
 
 async def version1160ltss212_cmd(update,context):
     vm=_v1160_rc4923_version_snapshot()
-    lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.12 · authoritative evidence calibration and 24H forecast polish."]
+    lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.13 · calibrated runtime/release intelligence activation and final certification polish."]
     return await v90_1_safe_reply(update,"\n".join(lines))
 
 
 V925_COMMAND_USAGE.update({
-    "version":"LTS Sprint 2.12 score calibration version/build information",
+    "version":"LTS Sprint 2.13 final calibration activation version/build information",
     "status":"Calibrated release forecast and evidence score summary",
     "runtimehealth":"Calibrated runtime score, risk and authoritative evidence",
     "dashboard":"Calibrated LTS readiness and 24H forecast",
@@ -45128,6 +45122,18 @@ def v91_preflight(force=False):
         "s212_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
         "s212_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
     })
-    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"FINAL CERTIFICATION" if not failed else "BLOCKED","certification_stage":"Sprint 2.12 Score Calibration & Forecast"})
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"FINAL CERTIFICATION" if not failed else "BLOCKED","certification_stage":"Sprint 2.13 Final Calibration Activation"})
     if not force: V1160_S212_PREFLIGHT_CACHE=out
     return out
+
+
+# IMPORTANT: final executable block must stay at the physical end of main.py.
+if __name__ == "__main__":
+    audit = v91_preflight(force=True)
+    if not audit.get("ok"):
+        raise RuntimeError(
+            "V116.0 LTS-S2.13 startup integrity failure: "
+            + ", ".join(audit.get("failed", []))
+        )
+    _v1160_rc45_start_worker()
+    main()

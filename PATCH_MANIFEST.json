@@ -1,22 +1,20 @@
 {
-  "package": "A100_V116_0_LTS_S2_12_SCORE_CALIBRATION_FORECAST_PATCH",
-  "baseline": "A100 V116.0 LTS-S2.11.1",
-  "version": "116.0-LTS-S2.12",
-  "deployment": "PATCH_ONLY",
+  "package": "A100_V116_0_LTS_S2_13_FINAL_CALIBRATION_ACTIVATION_PATCH",
+  "baseline": "A100 V116.0 LTS-S2.12 Score Calibration & Forecast",
+  "deployment": "Patch Package",
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": false,
   "changed_files": [
-    "main.py",
-    "test_v1160_lts_s212_score_calibration.py",
-    "CHANGELOG_S2.12.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+    "main.py"
   ],
-  "policies": {
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": "OFF",
-    "feature_freeze": "ACTIVE",
-    "release_freeze": "ACTIVE"
-  },
-  "mandatory_gate_override": false
+  "support_files": [
+    "CHANGELOG_S2.13.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "test_v1160_lts_s213_activation.py",
+    "changed_files.manifest",
+    "SHA256SUMS"
+  ],
+  "purpose": "Activate S2.12 calibration routes by moving the startup block to true EOF and publish S2.13 identity."
 }

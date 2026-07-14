@@ -1,6 +1,6 @@
 main.py
-test_v1160_lts_s212_score_calibration.py
-CHANGELOG_S2.12.md
+CHANGELOG_S2.13.md
 PATCH_INSTALL_GUIDE_KR.md
+test_v1160_lts_s213_activation.py
 PATCH_MANIFEST.json
 SHA256SUMS
