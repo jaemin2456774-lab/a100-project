@@ -40624,10 +40624,220 @@ def v91_preflight():
     failed=[k for k,v in checks.items() if not v]
     return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4917-output-help-probe-p95-stabilization'}
 
+
+# ================================================================
+# A100 V116.0 LTS RC4.9.18 - FINAL STABILIZATION & E2E CERTIFICATION
+# ================================================================
+from dataclasses import dataclass as _rc4918_dataclass
+import math as _rc4918_math
+
+@_rc4918_dataclass(frozen=True)
+class _V1160RC4918Release:
+    number: str = "116.0-RC4.9.18"
+    version: str = "A100 V116.0-RC4.9.18 LTS FINAL STABILIZATION & END-TO-END RUNTIME CERTIFICATION"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4918_RELEASE=_V1160RC4918Release()
+V1160_RC4918_NUMBER=V1160_RC4918_RELEASE.number
+V1160_RC4918_VERSION=V1160_RC4918_RELEASE.version
+V91_VERSION=V1160_RC4918_VERSION
+V1160_RC4912_NUMBER=V1160_RC4918_NUMBER
+V1160_RC4912_VERSION=V1160_RC4918_VERSION
+
+
+def _v1160_rc4918_chunks(lines, limit=3600):
+    """Line-aware Telegram chunking. Never split a command/help row in the middle."""
+    chunks=[]; current=[]; size=0
+    for raw in lines:
+        line=str(raw)
+        # Defensive fallback for a single unexpectedly long line.
+        pieces=[line[i:i+limit] for i in range(0,len(line),limit)] or ['']
+        for piece in pieces:
+            extra=len(piece)+(1 if current else 0)
+            if current and size+extra>limit:
+                chunks.append('\n'.join(current)); current=[]; size=0
+            current.append(piece); size+=len(piece)+(1 if len(current)>1 else 0)
+    if current: chunks.append('\n'.join(current))
+    return chunks
+
+
+def _v1160_rc4918_percentile(values, percentile=0.95):
+    """Nearest-rank percentile with explicit empty handling."""
+    vals=sorted(float(x) for x in values)
+    if not vals: return 0.0
+    rank=max(1,int(_rc4918_math.ceil(float(percentile)*len(vals))))
+    return vals[min(len(vals)-1,rank-1)]
+
+
+def _v1160_rc4918_perf_samples():
+    """Preserve event order; recent means most recently recorded, not largest values."""
+    rows=list(_v1160_rc4910_perf_rows() or [])
+    samples=[]
+    for row_index,row in enumerate(rows):
+        processing=list(row.get('processing',[]) or [])
+        engine=list(row.get('engine',[]) or [])
+        send=list(row.get('send',[]) or [])
+        transport=list(row.get('transport',[]) or [])
+        queue=list(row.get('queue',[]) or [])
+        width=max(map(len,(processing,engine,send,transport,queue)),default=0)
+        for i in range(width):
+            samples.append({
+                'order':(row_index,i),
+                'processing':float(processing[i]) if i<len(processing) else 0.0,
+                'engine':float(engine[i]) if i<len(engine) else 0.0,
+                'send':float(send[i]) if i<len(send) else 0.0,
+                'transport':float(transport[i]) if i<len(transport) else 0.0,
+                'queue':float(queue[i]) if i<len(queue) else 0.0,
+            })
+    return samples
+
+
+V1160_RC4918_ROUTE_CACHE={}
+
+def _v1160_rc4918_route_probe(limit=None):
+    """Complete read-only structural certification without claiming Telegram execution."""
+    names=sorted(V90_COMMAND_REGISTRY)
+    if limit is not None: names=names[:max(0,int(limit))]
+    fingerprint=tuple((name,id(V90_COMMAND_REGISTRY.get(name))) for name in names)
+    cached=V1160_RC4918_ROUTE_CACHE.get(fingerprint)
+    if cached is not None:
+        return cached
+    evidence={}; errors={}
+    for name in names:
+        handler=V90_COMMAND_REGISTRY.get(name)
+        try:
+            if not callable(handler): raise TypeError('handler not callable')
+            signature=inspect.signature(handler)
+            source=inspect.getsource(handler)
+            compile(source,f'<a100:{name}>','exec')
+            evidence[name]={
+                'callable':True,
+                'coroutine':inspect.iscoroutinefunction(handler),
+                'parameters':len(signature.parameters),
+                'source_sha256':hashlib.sha256(source.encode()).hexdigest()[:12],
+            }
+        except Exception as exc:
+            errors[name]=f'{type(exc).__name__}: {exc}'
+    result=(evidence,errors)
+    V1160_RC4918_ROUTE_CACHE.clear()
+    V1160_RC4918_ROUTE_CACHE[fingerprint]=result
+    return result
+
+
+async def _v1160_rc4918_send_lines(update, lines):
+    result=None
+    for chunk in _v1160_rc4918_chunks(lines):
+        result=await v90_1_safe_reply(update,chunk)
+    return result
+
+
+async def help1160rc4918_cmd(update,context):
+    _v1155_track('help'); q=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    groups=_v1155_grouped_commands(q)
+    if q and not any(groups.values()):
+        return await v90_1_safe_reply(update,f"🔎 A100 V{V1160_RC4918_NUMBER} HELP\n\n'{q}' 관련 명령을 찾지 못했습니다.")
+    if not q:
+        counts=_v1160_rc42_category_summary(); lines=[f"🧠 A100 V{V1160_RC4918_NUMBER} DYNAMIC HELP 3.2","카테고리별 페이지형 도움말",""]
+        for i,cat in enumerate(_V1160_RC42_CATEGORY_ORDER,1):
+            if counts[cat]: lines.append(f"{i}. {_V1160_RC42_LABELS[cat]} · {counts[cat]}개 · /help {cat}")
+        lines += ["",f"활성 명령 {len(V90_COMMAND_REGISTRY)}개","검색: /commands 키워드","Live OFF · Shadow → Paper → Canary → Stable"]
+        return await _v1160_rc4918_send_lines(update,lines)
+    names=sorted({n for vals in groups.values() for n in vals})
+    lines=[f"📖 {_V1160_RC42_LABELS.get(q,q.upper())} HELP",""]+[f"/{n} · {_v1154_usage(n)}" for n in names]+["",f"결과 {len(names)}개 · 전체 /help"]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+async def commands1160rc4918_cmd(update,context):
+    _v1155_track('commands'); q=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if not q:
+        counts=_v1160_rc42_category_summary(); total=sum(counts.values()); lines=[f"📚 A100 V{V1160_RC4918_NUMBER} COMMAND INDEX",f"총 명령 {total}개",""]
+        for cat in _V1160_RC42_CATEGORY_ORDER:
+            if counts[cat]: lines.append(f"{_V1160_RC42_LABELS[cat]} · {counts[cat]}개 · /commands {cat}")
+        lines += ["","키워드 검색: /commands trust"]
+        return await _v1160_rc4918_send_lines(update,lines)
+    groups=_v1155_grouped_commands(q); names=sorted({n for vals in groups.values() for n in vals})
+    lines=([f"📚 A100 V{V1160_RC4918_NUMBER} COMMANDS · {q.upper()}",f"결과 {len(names)}개",""]+[f"/{n} · {_v1154_usage(n)}" for n in names]) if names else [f"📚 A100 V{V1160_RC4918_NUMBER} COMMANDS · {q.upper()}","검색 결과가 없습니다."]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+async def version1160rc4918_cmd(update,context):
+    r=V1160_RC4918_RELEASE
+    return await v90_1_safe_reply(update,f"ℹ️ {r.version}\nSchema 1 preserved · Paper 20 · Shadow 60 · Live OFF")
+
+
+async def versionaudit1160rc4918_cmd(update,context):
+    audit=v91_preflight(); view=_v1160_rc4916_cert_view(); evidence,errors=_v1160_rc4918_route_probe(); failed=audit.get('failed',[])
+    lines=[f"🛡️ A100 V{V1160_RC4918_NUMBER} FINAL REGRESSION & E2E RUNTIME CERTIFICATION",f"Version Source {V91_VERSION}",f"Registry {view['registry_verified']}/{view['total']} · Callable {view['callable']} · Help {view['help']}",f"Runtime Routes {view['runtime_routes']}/{view['total']} · Live Telegram Evidence {view['runtime_probed']}/{view['total']}",f"Read-only Route Certification {len(evidence)}/{view['total']} · Errors {len(errors)}",f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(failed)}","","Schema 1 · Paper 20 · Shadow 60 · Live OFF"]
+    if failed: lines += ['', '⛔ FAILED CHECKS']+['• '+x for x in failed[:20]]
+    elif errors: lines += ['', '⚠️ ROUTE CERTIFICATION ERRORS']+['• /'+n+' · '+e for n,e in list(errors.items())[:20]]
+    else: lines += ['', '✅ VersionManager → Help/Commands → Registry → Dispatcher → Route Certification synchronized']
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+async def commandcert1160rc4918_cmd(update,context):
+    _v1155_track('commandcert'); args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    evidence,errors=_v1160_rc4918_route_probe(); view=_v1160_rc4916_cert_view(deep=bool(args and args[0]=='deep'))
+    if args and args[0]=='warn':
+        category=args[1] if len(args)>1 else 'runtime'; limit=int(args[2]) if len(args)>2 and args[2].isdigit() else 10; rows=[]
+        for name,layer in sorted(view.get('layers',{}).items()):
+            ok={'engine':layer.get('engine'),'output':layer.get('output'),'repository':layer.get('repository'),'runtime':layer.get('runtime_route')}.get(category,True)
+            if not ok: rows.append(name)
+        lines=[f"🧾 A100 V{V1160_RC4918_NUMBER} COMMAND CERTIFICATION",f"Filter {category} · Missing/Stateless {len(rows)} · Top {limit}",""]+[f"PARTIAL · /{n}" for n in rows[:limit]]
+        if not rows: lines.append("PASS · No missing route")
+        lines += ["","Structural certification is not counted as live Telegram execution."]
+        return await _v1160_rc4918_send_lines(update,lines)
+    structural_ok=(not errors and view['failed']==0 and view['registry_verified']==view['total'])
+    lines=[f"🧾 A100 V{V1160_RC4918_NUMBER} COMMAND CERTIFICATION",f"Structural Audit {'PASS' if structural_ok else 'FAILED'} · {'Full refresh' if args and args[0]=='deep' else 'Fast audit'}",f"Registry {view['registry_verified']}/{view['total']} · Handler {view['callable']}/{view['total']} · Help {view['help']}/{view['total']}","","FULL LAYER COVERAGE",f"• Runtime route {view['runtime_routes']}/{view['total']}",f"• Engine/data routes {view['engine_linked']} · stateless/control {view['total']-view['engine_linked']}",f"• Repository/data routes {view['repository_linked']} · stateless {view['total']-view['repository_linked']}",f"• Output linkage {view['output_linked']}/{view['total']}",f"• Live Telegram evidence {view['runtime_probed']}/{view['total']}",f"• Read-only route certification {len(evidence)}/{view['total']} · errors {len(errors)}","","Live Telegram E2E evidence and structural certification are reported separately."]
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+async def performanceaudit1160rc4918_cmd(update,context):
+    samples=_v1160_rc4918_perf_samples(); recent=samples[-30:]
+    def series(rows,key): return [r[key] for r in rows]
+    def avg(values): return sum(values)/len(values) if values else 0.0
+    p_all=series(samples,'processing'); p_recent=series(recent,'processing')
+    p,p_recent_avg,p95_recent,p95_all=avg(p_all),avg(p_recent),_v1160_rc4918_percentile(p_recent),_v1160_rc4918_percentile(p_all)
+    e,tg,tr,q=(avg(series(recent,k)) for k in ('engine','send','transport','queue'))
+    other=max(0,p_recent_avg-e-tg); components={'Engine':e,'Telegram Send':tg,'Transport':tr,'Other Processing':other}; bottleneck=max(components,key=components.get) if components else 'None'
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,total); bad=[]
+    if total and hit<80: bad.append(f"Cache Hit {hit:.1f}% / target 80%")
+    if p_recent_avg>5000: bad.append(f"Recent Avg {p_recent_avg:.0f}ms / target 5000ms")
+    if p95_recent>10000: bad.append(f"Recent P95 {p95_recent:.0f}ms / target 10000ms")
+    grade='A' if not bad and len(recent)>=3 else ('B' if len(bad)<=2 else 'C')
+    lines=[f"⚙️ A100 V{V1160_RC4918_NUMBER} PERFORMANCE AUDIT",f"Grade {grade} · Recent Samples {len(recent)} · All Samples {len(samples)}","",f"Recent Processing Avg {p_recent_avg:.0f}ms · P95 {p95_recent:.0f}ms",f"All-time Avg {p:.0f}ms · P95 {p95_all:.0f}ms (reference)",f"Engine {e:.0f}ms · Telegram Send {tg:.0f}ms",f"Transport {tr:.0f}ms · Other Processing {other:.0f}ms",f"Batch Backlog {q:.0f}ms (grade excluded)",f"Primary Bottleneck {bottleneck}","",'✅ Recent targets satisfied' if not bad else '⚠️ NEEDS IMPROVEMENT']+['• '+x for x in bad]
+    if not samples: lines += ['• No performance samples yet; grade is provisional.']
+    return await _v1160_rc4918_send_lines(update,lines)
+
+
+V925_COMMAND_USAGE.update({'version':'현재 중앙 VersionManager 버전','versionaudit':'RC4.9.18 최종 회귀 및 읽기 전용 경로 인증','commandcert':'341개 Registry·Engine·Repository·Output·Runtime 분리 인증','performanceaudit':'시간순 최근 30개 기반 P95 성능 감사','help':'RC4.9.18 줄 단위 안전 분할 도움말','commands':'RC4.9.18 줄 단위 안전 분할 명령 인덱스'})
+V90_COMMAND_REGISTRY.update({'version':version1160rc4918_cmd,'versionaudit':versionaudit1160rc4918_cmd,'commandcert':commandcert1160rc4918_cmd,'performanceaudit':performanceaudit1160rc4918_cmd,'help':help1160rc4918_cmd,'commands':commands1160rc4918_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4918_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4918_PREFLIGHT_BASE(); inherited={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4917_')}; view=_v1160_rc4916_cert_view(); evidence,errors=_v1160_rc4918_route_probe()
+    checks=dict(inherited); checks.update({
+        'rc4918_version_single_source':V91_VERSION==V1160_RC4918_VERSION and _v1160_rc4912_version_number()==V1160_RC4918_NUMBER,
+        'rc4918_active_handlers':V90_COMMAND_REGISTRY.get('version') is version1160rc4918_cmd and V90_COMMAND_REGISTRY.get('help') is help1160rc4918_cmd and V90_COMMAND_REGISTRY.get('commands') is commands1160rc4918_cmd,
+        'rc4918_registry_341':len(V90_COMMAND_REGISTRY)==341 and view['registry_verified']==341,
+        'rc4918_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4918_route_certification':len(evidence)==341 and not errors,
+        'rc4918_chunk_limit':all(len(x)<=3600 for x in _v1160_rc4918_chunks(['x'*8000])),
+        'rc4918_percentile':_v1160_rc4918_percentile([1,2,3,4,100],.95)==100,
+        'rc4918_schema':_v91_default_state().get('schema')==1,
+        'rc4918_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4918_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4918-final-stabilization-e2e-runtime-certification'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.17 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.18 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
