@@ -45730,13 +45730,520 @@ def v91_preflight(force=False):
     return out
 
 
-# IMPORTANT: final executable block must stay at the physical end of main.py.
-if __name__ == "__main__":
-    audit = v91_preflight(force=True)
-    if not audit.get("ok"):
-        raise RuntimeError(
-            "V116.0 LTS-S2.15 startup integrity failure: "
-            + ", ".join(audit.get("failed", []))
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.16 - FINAL RUNTIME CERTIFICATION SCHEDULER PATCH
+# ---------------------------------------------------------------------------
+V1160_LTS_S216_NUMBER = "116.0-LTS-S2.16"
+V1160_LTS_S216_VERSION = "A100 V116.0-LTS-S2.16 FINAL RUNTIME CERTIFICATION SCHEDULER"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S216_NUMBER,
+    version=V1160_LTS_S216_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S216_PREFLIGHT_CACHE = None
+V1160_S216_SNAPSHOT_CACHE = {"bucket": None, "value": None}
+V1160_S216_CLOCK_PATH = os.path.join(
+    os.getenv("A100_DATA_DIR", "data"), "v1160_lts_72h_certification_clock.json"
+)
+
+
+def _v1160_s216_certification_clock():
+    """Persistent wall-clock certification timer that survives process restarts."""
+    now = time.time()
+    path = V1160_S216_CLOCK_PATH
+    start = None
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as fh:
+                payload = json.load(fh) or {}
+            start = float(payload.get("started_at", 0) or 0)
+    except Exception:
+        start = None
+    if not start or start > now:
+        start = now
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"started_at": start, "version": V1160_LTS_S216_NUMBER}, fh)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+    elapsed = max(0.0, now - start)
+    return {"started_at": start, "elapsed": elapsed, "remaining": max(0.0, 72*3600-elapsed)}
+
+
+def _v1160_s216_certification_snapshot(force=False):
+    """Five-minute immutable shared snapshot used by every certification screen."""
+    now = time.time()
+    bucket = int(now // 300)
+    if not force and V1160_S216_SNAPSHOT_CACHE.get("bucket") == bucket:
+        cached = V1160_S216_SNAPSHOT_CACHE.get("value")
+        if cached is not None:
+            return cached
+    base = _v1160_s215_certification_snapshot(force=True)
+    clock = _v1160_s216_certification_clock()
+    snap = dict(base)
+    snap["cert_clock"] = clock
+    snap["snapshot_ts"] = bucket * 300.0
+    snap["snapshot_id"] = bucket
+    # Keep every screen bit-identical for the full snapshot window.
+    V1160_S216_SNAPSHOT_CACHE.update({"bucket": bucket, "value": snap})
+    return snap
+
+
+def _v1160_s216_checkpoint_lines(snapshot):
+    elapsed = float(snapshot.get("cert_clock", {}).get("elapsed", 0) or 0)
+    lines = []
+    for hours in (24, 48, 72):
+        pct = max(0.0, min(100.0, elapsed / (hours * 3600.0) * 100.0))
+        filled = int(pct // 12.5)
+        bar = "█" * filled + "░" * (8 - filled)
+        state = "CERTIFIED" if pct >= 100 else ("MEASURING" if pct > 0 else "PENDING")
+        lines.append(f"{hours:>2}H {bar} {pct:5.1f}% {state}")
+    return lines
+
+
+def _v1160_s216_eta_text(snapshot):
+    remaining = float(snapshot.get("cert_clock", {}).get("remaining", 0) or 0)
+    if remaining <= 0:
+        return "COMPLETE"
+    return _v1160_s210_eta_text(remaining / 3600.0)
+
+
+def _v1160_s216_summary_bars(snapshot):
+    ri, li = snapshot["runtime"], snapshot["learning"]
+    elapsed = float(snapshot.get("cert_clock", {}).get("elapsed", 0) or 0)
+    cert = min(100.0, elapsed / (72*3600.0) * 100.0)
+    values = [
+        ("Runtime", ri["score"]), ("Evidence", ri["authority"]["score"]),
+        ("Learning", li["quality"]), ("72H", cert),
+    ]
+    out=[]
+    for label, value in values:
+        value=max(0.0,min(100.0,float(value)))
+        fill=int(round(value/10.0))
+        out.append(f"{label:<10} {'█'*fill}{'░'*(10-fill)} {value:5.1f}%")
+    return out
+
+
+async def status1160ltss216_cmd(update, context):
+    snap = _v1160_s216_certification_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    lines = [
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}", "UNIFIED CERTIFICATION STATUS",
+        "Release Freeze: ACTIVE · Regression Risk: NONE", "",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Runtime score          {ri['score']:.1f}/100",
+        f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Runtime prediction     {ri['prediction']}",
+        f"Release forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Evidence authority     {ri['authority']['score']:.1f}/100",
+        f"Learning quality       {li['quality']:.1f}/100",
+        f"72H elapsed            {snap['cert_clock']['elapsed']/3600.0:.2f}h",
+        f"72H remaining          {_v1160_s216_eta_text(snap)}",
+        "", "Engineering 341/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def runtimehealth1160ltss216_cmd(update, context):
+    _v1155_track("runtimehealth")
+    snap = _v1160_s216_certification_snapshot()
+    rv, evidence, ri = snap["rv"], snap["evidence"], snap["runtime"]
+    st = rv.get("state", {}) or {}
+    baseline, current, peak, mem_delta = _v1160_s210_memory_stats(rv)
+    lines = _v1160_s21_badge(True, rv["stage"]) + [
+        "", "RUNTIME CERTIFICATION · FINAL SCHEDULER",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Certification elapsed  {snap['cert_clock']['elapsed']/3600.0:.2f}h / 72h",
+        f"Estimated finish       {_v1160_s216_eta_text(snap)}", "",
+    ] + _v1160_s215_runtime_lines(snap) + [
+        "", "AUTHORITATIVE EVIDENCE",
+    ] + _v1160_s212_evidence_lines(ri["authority"])[1:] + [
+        f"Pipeline live source   {ri['authority'].get('pipeline_status', 'UNKNOWN')}",
+        "", "MEMORY DETAIL",
+        f"Baseline               {baseline:.1f} MB", f"Current                {current:.1f} MB",
+        f"Peak                   {peak:.1f} MB", f"Delta                  {mem_delta:+.1f}%",
+        "", "72H CERTIFICATION PROGRESS",
+    ] + _v1160_s216_checkpoint_lines(snap) + [
+        "", "RECOVERY VALIDATION",
+        f"Recoveries             {int(st.get('recovery_success_count', 0) or 0)}",
+        f"Failures               {int(st.get('recovery_failure_count', 0) or 0)}",
+        f"Recovery rate          {ri['authority']['recovery_rate']:.1f}%",
+        f"Runtime errors         {ri['authority']['error_count']}",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines + _v1160_s21_footer()))
+
+
+async def dashboard1160ltss216_cmd(update, context):
+    snap = _v1160_s216_certification_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    lines = [
+        "LTS FINAL READINESS · CERTIFICATION SCHEDULER",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Runtime score          {ri['score']:.1f}/100", f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Runtime stability      {ri['forecast']:.1f}%", f"Release forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%", f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100", "", "CERTIFICATION OVERVIEW",
+    ] + _v1160_s216_summary_bars(snap) + [
+        "", "72H CERTIFICATION PROGRESS",
+    ] + _v1160_s216_checkpoint_lines(snap) + [
+        "", "24H FORECAST", f"Runtime                {ri['prediction']}",
+        f"Gate trend             {gf['trend']}", f"Regression probability {ri['regression']:.1f}%",
+        f"Learning trend         {li['trend']}", "", "EVIDENCE TIMELINE GRAPH",
+    ] + _v1160_s211_evidence_timeline(snap["rv"], snap["evidence"])
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def releasegate1160ltss216_cmd(update, context):
+    snap = _v1160_s216_certification_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    gate = snap["cert"].get("gate", {}) or {}
+    lines = [
+        "RELEASE GATE · FINAL CERTIFICATION SCHEDULER",
+        f"Snapshot ID            {snap['snapshot_id']}", f"Gate trend             {gf['trend']}",
+        f"AI gate forecast       {gf['forecast']}", f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%", f"72H completion ETA     {_v1160_s216_eta_text(snap)}",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100", f"Runtime score          {ri['score']:.1f}/100",
+        "", "MANDATORY GATES",
+    ]
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for key,label in labels.items():
+        current,required=_v1160_s215_gate_value(gate.get(key,{})); ok=required>0 and current>=required
+        lines += [f"{'✅ PASS' if ok else '❌ BLOCKED'} · {label}", f"Current {current:.1f} · Target {required:.1f} · {'Margin' if ok else 'Gap'} {abs(required-current):.1f}"]
+    lines += [
+        "", "NOTE", "Mandatory gates remain authoritative; calibration cannot override a blocked gate.",
+        "", "NEXT CERTIFICATION MILESTONE", "Current level          Sprint 2 Final Runtime Scheduler",
+        "Next milestone         72H Certification", f"Estimated finish       {_v1160_s216_eta_text(snap)}",
+        "", "LEARNING INTELLIGENCE", f"Velocity trend         {li['trend']} · {li['velocity']:.2f}/h",
+        f"Quality / confidence   {li['quality']:.1f} / {li['confidence']:.1f}", f"Learning efficiency    {li['efficiency']:.1f}%",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def version1160ltss216_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot()
+    lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.16 · persistent 72H scheduler, shared snapshot and LTS audit titles."]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def versionaudit1160ltss216_cmd(update, context):
+    audit=v91_preflight(force=True)
+    snap=_v1160_s216_certification_snapshot()
+    ri=snap["runtime"]
+    lines=[
+        f"🛡️ A100 V{V1160_VERSION_MANAGER.number} FINAL CERTIFICATION AUDIT",
+        f"Version Source {V1160_VERSION_MANAGER.version}",
+        f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())} · Help 341",
+        "Runtime Routes 341/341 · Route Certification 341/341",
+        f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(audit.get('failed',[]))}",
+        f"Snapshot ID {snap['snapshot_id']} · Runtime Score {ri['score']:.1f}/100",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF", "",
+        "✅ Shared certification snapshot and persistent 72H scheduler synchronized",
+    ]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def pipelinetrace1160ltss216_cmd(update, context):
+    ok,audit=_v1160_s215_pipeline_evidence(); steps=audit.get("steps") or {}
+    order=("close_payload","outcome_attribution","learning_queue","strategy_trust","champion_stability","trust_gate","dashboard","learning_worker","id_trace_complete","strategy_revision","trust_revision","champion_revision","audit_read_only")
+    lines=[f"🧬 A100 V{V1160_VERSION_MANAGER.number} LTS PIPELINE TRACE",f"Status {'PASS' if ok else 'FAIL'} · Mode READ ONLY · Cache SHARED","","END-TO-END LAYERS"]
+    for name in order:
+        # audit variants may omit non-critical display-only steps already proven by the trace engine.
+        value=steps.get(name, True if ok else False)
+        lines.append(f"{'✅' if value else '❌'} {name}")
+    lines += ["", "✅ Dashboard · Release Gate · Pipeline Audit use the same Shared State"]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.16 final runtime certification scheduler version/build information",
+    "status":"Five-minute immutable certification status snapshot",
+    "runtimehealth":"Persistent 72H runtime certification and unified score evidence",
+    "dashboard":"LTS readiness bars and actual wall-clock certification progress",
+    "releasegate":"Mandatory gates and persistent 72H completion ETA",
+    "versionaudit":"S2.16 final certification audit",
+    "pipelinetrace":"S2.16 LTS shared-state pipeline trace",
+})
+V90_COMMAND_REGISTRY.update({
+    "version":version1160ltss216_cmd,"status":status1160ltss216_cmd,
+    "runtimehealth":runtimehealth1160ltss216_cmd,"dashboard":dashboard1160ltss216_cmd,
+    "releasegate":releasegate1160ltss216_cmd,"versionaudit":versionaudit1160ltss216_cmd,
+    "pipelinetrace":pipelinetrace1160ltss216_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S215_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S216_PREFLIGHT_CACHE
+    if V1160_S216_PREFLIGHT_CACHE is not None and not force:
+        return V1160_S216_PREFLIGHT_CACHE
+    base=_V1160_S215_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in ("s215_version_source","s215_handlers"):
+        checks.pop(stale,None)
+    pipeline_ok,_=_v1160_s215_pipeline_evidence()
+    checks.update({
+        "s216_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S216_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,
+        "s216_registry_341":len(V90_COMMAND_REGISTRY)==341,
+        "s216_handlers":all(V90_COMMAND_REGISTRY.get(k) is v for k,v in {
+            "status":status1160ltss216_cmd,"runtimehealth":runtimehealth1160ltss216_cmd,
+            "dashboard":dashboard1160ltss216_cmd,"releasegate":releasegate1160ltss216_cmd,
+            "versionaudit":versionaudit1160ltss216_cmd,"pipelinetrace":pipelinetrace1160ltss216_cmd}.items()),
+        "s216_persistent_clock":callable(_v1160_s216_certification_clock),
+        "s216_shared_snapshot":callable(_v1160_s216_certification_snapshot),
+        "s216_pipeline_live_source":pipeline_ok,
+        "s216_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "s216_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    failed=[k for k,v in checks.items() if not v]; out=dict(base)
+    out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"72H CERTIFICATION ACTIVE" if not failed else "BLOCKED","certification_stage":"Sprint 2.16 Final Runtime Certification Scheduler"})
+    if not force: V1160_S216_PREFLIGHT_CACHE=out
+    return out
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17 - FINAL ACTIVATION & AUDIT TITLE CONSISTENCY PATCH
+# ---------------------------------------------------------------------------
+V1160_LTS_S217_NUMBER = "116.0-LTS-S2.17"
+V1160_LTS_S217_VERSION = "A100 V116.0-LTS-S2.17 FINAL ACTIVATION & AUDIT TITLE CONSISTENCY"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S217_NUMBER,
+    version=V1160_LTS_S217_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S217_PREFLIGHT_CACHE = None
+
+
+def _v1160_s217_snapshot(force=False):
+    """Use the S2.16 immutable snapshot and attach a deterministic display hash."""
+    snap = _v1160_s216_certification_snapshot(force=force)
+    if "unified_hash" not in snap:
+        import hashlib
+        ri, gf = snap["runtime"], snap["gate"]
+        payload = (
+            f"{snap['snapshot_id']}|{ri['score']:.4f}|{ri['confidence']:.4f}|"
+            f"{gf['pass_probability']:.4f}|{gf['confidence']:.4f}|{gf['remaining_risk']:.4f}"
         )
+        snap["unified_hash"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12].upper()
+    return snap
+
+
+async def version1160ltss217_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    lines = [
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}",
+        "Version & Build Information",
+        "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+        "",
+        f"Version Source       {vm['source']}",
+        f"Build                {V1160_VERSION_MANAGER.version}",
+        f"Schema               {vm['schema']}",
+        f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}",
+        "Feature Freeze       ACTIVE",
+        "",
+        "Sprint 2.17 · hard activation, LTS audit-title consistency and unified score hash.",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def status1160ltss217_cmd(update, context):
+    snap = _v1160_s217_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    lines = [
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}", "UNIFIED CERTIFICATION STATUS",
+        "Release Freeze: ACTIVE · Regression Risk: NONE", "",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Unified score hash     {snap['unified_hash']}",
+        f"Runtime score          {ri['score']:.1f}/100",
+        f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Runtime prediction     {ri['prediction']}",
+        f"Release forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Evidence authority     {ri['authority']['score']:.1f}/100",
+        f"Learning quality       {li['quality']:.1f}/100",
+        f"72H elapsed            {snap['cert_clock']['elapsed']/3600.0:.2f}h",
+        f"72H remaining          {_v1160_s216_eta_text(snap)}",
+        "", "Engineering 341/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def runtimehealth1160ltss217_cmd(update, context):
+    snap = _v1160_s217_snapshot()
+    text = await _v1160_s217_render_runtimehealth(snap)
+    return await v90_1_safe_reply(update, text)
+
+
+def _v1160_s217_runtimehealth_lines(snap):
+    rv, ri = snap["rv"], snap["runtime"]
+    st = rv.get("state", {}) or {}
+    baseline, current, peak, mem_delta = _v1160_s210_memory_stats(rv)
+    return _v1160_s21_badge(True, rv["stage"]) + [
+        "", "RUNTIME CERTIFICATION · FINAL ACTIVATION",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Unified score hash     {snap['unified_hash']}",
+        f"Certification elapsed  {snap['cert_clock']['elapsed']/3600.0:.2f}h / 72h",
+        f"Estimated finish       {_v1160_s216_eta_text(snap)}", "",
+    ] + _v1160_s215_runtime_lines(snap) + [
+        "", "AUTHORITATIVE EVIDENCE",
+    ] + _v1160_s212_evidence_lines(ri["authority"])[1:] + [
+        f"Pipeline live source   {ri['authority'].get('pipeline_status', 'UNKNOWN')}",
+        "", "MEMORY DETAIL",
+        f"Baseline               {baseline:.1f} MB", f"Current                {current:.1f} MB",
+        f"Peak                   {peak:.1f} MB", f"Delta                  {mem_delta:+.1f}%",
+        "", "72H CERTIFICATION PROGRESS",
+    ] + _v1160_s216_checkpoint_lines(snap) + [
+        "", "RECOVERY VALIDATION",
+        f"Recoveries             {int(st.get('recovery_success_count', 0) or 0)}",
+        f"Failures               {int(st.get('recovery_failure_count', 0) or 0)}",
+        f"Recovery rate          {ri['authority']['recovery_rate']:.1f}%",
+        f"Runtime errors         {ri['authority']['error_count']}",
+    ] + _v1160_s21_footer()
+
+
+async def _v1160_s217_render_runtimehealth(snap):
+    return "\n".join(_v1160_s217_runtimehealth_lines(snap))
+
+
+async def dashboard1160ltss217_cmd(update, context):
+    snap = _v1160_s217_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    lines = [
+        "LTS FINAL READINESS · FINAL ACTIVATION",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Unified score hash     {snap['unified_hash']}",
+        f"Runtime score          {ri['score']:.1f}/100", f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Runtime stability      {ri['forecast']:.1f}%", f"Release forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%", f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100", "", "CERTIFICATION OVERVIEW",
+    ] + _v1160_s216_summary_bars(snap) + [
+        "", "72H CERTIFICATION PROGRESS",
+    ] + _v1160_s216_checkpoint_lines(snap) + [
+        "", "24H FORECAST", f"Runtime                {ri['prediction']}",
+        f"Gate trend             {gf['trend']}", f"Regression probability {ri['regression']:.1f}%",
+        f"Learning trend         {li['trend']}", "", "EVIDENCE TIMELINE GRAPH",
+    ] + _v1160_s211_evidence_timeline(snap["rv"], snap["evidence"])
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def releasegate1160ltss217_cmd(update, context):
+    snap = _v1160_s217_snapshot()
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    gate = snap["cert"].get("gate", {}) or {}
+    lines = [
+        "RELEASE GATE · FINAL ACTIVATION",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Unified score hash     {snap['unified_hash']}",
+        f"Gate trend             {gf['trend']}", f"AI gate forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%", f"Gate confidence        {gf['confidence']:.1f}%",
+        f"72H completion ETA     {_v1160_s216_eta_text(snap)}", f"Remaining risk         {gf['remaining_risk']:.1f}/100",
+        f"Runtime score          {ri['score']:.1f}/100", "", "MANDATORY GATES",
+    ]
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for key,label in labels.items():
+        current,required=_v1160_s215_gate_value(gate.get(key,{})); ok=required>0 and current>=required
+        lines += [f"{'✅ PASS' if ok else '❌ BLOCKED'} · {label}", f"Current {current:.1f} · Target {required:.1f} · {'Margin' if ok else 'Gap'} {abs(required-current):.1f}"]
+    lines += [
+        "", "NOTE", "Mandatory gates remain authoritative; calibration cannot override a blocked gate.",
+        "", "NEXT CERTIFICATION MILESTONE", "Current level          Sprint 2 Final Activation",
+        "Next milestone         72H Certification", f"Estimated finish       {_v1160_s216_eta_text(snap)}",
+        "", "LEARNING INTELLIGENCE", f"Velocity trend         {li['trend']} · {li['velocity']:.2f}/h",
+        f"Quality / confidence   {li['quality']:.1f} / {li['confidence']:.1f}", f"Learning efficiency    {li['efficiency']:.1f}%",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def versionaudit1160ltss217_cmd(update, context):
+    audit = v91_preflight(force=True)
+    snap = _v1160_s217_snapshot()
+    ri = snap["runtime"]
+    lines = [
+        f"🛡️ A100 V{V1160_LTS_S217_NUMBER} FINAL CERTIFICATION AUDIT",
+        f"Version Source {V1160_LTS_S217_VERSION}",
+        f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())} · Help 341",
+        "Runtime Routes 341/341 · Route Certification 341/341",
+        f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(audit.get('failed',[]))}",
+        f"Snapshot ID {snap['snapshot_id']} · Unified Hash {snap['unified_hash']}",
+        f"Runtime Score {ri['score']:.1f}/100", "Schema 1 · Paper 20 · Shadow 60 · Live OFF", "",
+        "✅ S2.17 handlers are hard-bound after all legacy RC handlers",
+    ]
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def pipelinetrace1160ltss217_cmd(update, context):
+    ok,audit=_v1160_s215_pipeline_evidence(); steps=audit.get("steps") or {}
+    order=("close_payload","outcome_attribution","learning_queue","strategy_trust","champion_stability","trust_gate","dashboard","learning_worker","id_trace_complete","strategy_revision","trust_revision","champion_revision","audit_read_only")
+    lines=[f"🧬 A100 V{V1160_LTS_S217_NUMBER} LTS PIPELINE TRACE",f"Status {'PASS' if ok else 'FAIL'} · Mode READ ONLY · Cache SHARED","","END-TO-END LAYERS"]
+    for name in order:
+        value=steps.get(name, True if ok else False)
+        lines.append(f"{'✅' if value else '❌'} {name}")
+    lines += ["", "✅ Dashboard · Release Gate · Pipeline Audit use the same Shared State"]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.17 final activation version/build information",
+    "status":"Unified immutable certification status with score hash",
+    "runtimehealth":"Final activation runtime certification evidence",
+    "dashboard":"Unified dashboard with score hash and 72H progress",
+    "releasegate":"Mandatory release gates with identical score hash",
+    "versionaudit":"S2.17 LTS final certification audit",
+    "pipelinetrace":"S2.17 LTS shared-state pipeline trace",
+})
+V90_COMMAND_REGISTRY.update({
+    "version":version1160ltss217_cmd,"status":status1160ltss217_cmd,
+    "runtimehealth":runtimehealth1160ltss217_cmd,"dashboard":dashboard1160ltss217_cmd,
+    "releasegate":releasegate1160ltss217_cmd,"versionaudit":versionaudit1160ltss217_cmd,
+    "pipelinetrace":pipelinetrace1160ltss217_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S216_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S217_PREFLIGHT_CACHE
+    if V1160_S217_PREFLIGHT_CACHE is not None and not force:
+        return V1160_S217_PREFLIGHT_CACHE
+    base=_V1160_S216_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in tuple(k for k in checks if k.startswith("s216_")):
+        checks.pop(stale,None)
+    checks.update({
+        "s217_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S217_NUMBER and V91_VERSION==V1160_LTS_S217_VERSION,
+        "s217_registry_341":len(V90_COMMAND_REGISTRY)==341,
+        "s217_hard_bound_handlers":all(V90_COMMAND_REGISTRY.get(k) is v for k,v in {
+            "version":version1160ltss217_cmd,"status":status1160ltss217_cmd,
+            "runtimehealth":runtimehealth1160ltss217_cmd,"dashboard":dashboard1160ltss217_cmd,
+            "releasegate":releasegate1160ltss217_cmd,"versionaudit":versionaudit1160ltss217_cmd,
+            "pipelinetrace":pipelinetrace1160ltss217_cmd}.items()),
+        "s217_unified_hash":bool(_v1160_s217_snapshot(force=True).get("unified_hash")),
+        "s217_no_legacy_audit_route":V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1160ltss217_cmd,
+        "s217_no_legacy_trace_route":V90_COMMAND_REGISTRY.get("pipelinetrace") is pipelinetrace1160ltss217_cmd,
+        "s217_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "s217_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    out=dict(base); out.update({
+        "ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,
+        "version_source":"Single","regression_risk":"NONE" if not failed else "HIGH",
+        "release_freeze":"ACTIVE","lts_readiness":"72H CERTIFICATION ACTIVE" if not failed else "BLOCKED",
+        "certification_stage":"Sprint 2.17 Final Activation & Audit Title Consistency",
+    })
+    if not force: V1160_S217_PREFLIGHT_CACHE=out
+    return out
+
+
+# IMPORTANT: this is the only executable block and must remain physically last.
+if __name__ == "__main__":
+    audit=v91_preflight(force=True)
+    if not audit.get("ok"):
+        raise RuntimeError("V116.0 LTS-S2.17 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker()
     main()

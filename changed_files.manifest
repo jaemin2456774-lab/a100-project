@@ -1,4 +1,6 @@
 main.py
-CHANGELOG_S2.16.md
+CHANGELOG_S2.17.md
 PATCH_INSTALL_GUIDE_KR.md
-test_v1160_lts_s216_final_scheduler.py
+test_v1160_lts_s217_activation.py
+PATCH_MANIFEST.json
+SHA256SUMS

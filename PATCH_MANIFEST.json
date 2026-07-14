@@ -1,20 +1,16 @@
 {
-  "package": "A100_V116_0_LTS_S2_15_FINAL_CONSISTENCY_CERTIFICATION_PATCH",
-  "version": "116.0-LTS-S2.15",
+  "version": "A100 V116.0-LTS-S2.17",
   "type": "PATCH",
-  "baseline": "A100 V116.0 LTS-S2.14 Unified Certification Score Engine",
+  "baseline": "A100 V116.0-LTS-S2.16",
   "schema": 1,
-  "paper_positions": 20,
-  "shadow_positions": 60,
+  "paper": 20,
+  "shadow": 60,
   "live_trading": false,
-  "changed_files": [
-    "main.py"
-  ],
-  "documentation": [
-    "CHANGELOG_S2.15.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
-  ],
-  "tests": [
-    "test_v1160_lts_s215_final_consistency.py"
+  "files": [
+    "main.py",
+    "CHANGELOG_S2.17.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "test_v1160_lts_s217_activation.py",
+    "changed_files.manifest"
   ]
 }
