@@ -1,7 +1,7 @@
 {
-  "release": "A100 V116.0 LTS-S2.3",
-  "title": "Long Runtime Certification Enhancement Development Release",
-  "baseline": "A100 V116.0 LTS-S2.2.1 Status Hotfix",
+  "release": "A100 V116.0 LTS-S2.8",
+  "title": "72H Trend History Prediction Observability Development Release",
+  "baseline": "A100 V116.0 LTS-S2.7 Release Gate Trend Final Polish",
   "schema": 1,
   "paper": 20,
   "shadow": 60,
@@ -9,15 +9,13 @@
   "release_freeze": "ACTIVE",
   "regression_risk": "NONE",
   "registry": "341/341",
-  "certification_stage": "Sprint 2.3 Long Runtime Certification Enhancement",
-  "long_runtime_certification": "MEASURING",
-  "version": "A100 V116.0-LTS-S2.7",
-  "version_number": "116.0-LTS-S2.5",
-  "release_name": "A100_V116_0_LTS_S2_7_RELEASE_GATE_TREND_FINAL_POLISH_DEVELOPMENT_RELEASE",
-  "release_stage": "Sprint 2.4 Long Runtime Certification Final",
+  "certification_stage": "Sprint 2.8 72H Trend History Prediction Observability",
+  "runtime_certification": "MEASURING - 24H/48H/72H EVIDENCE PENDING",
+  "version": "A100 V116.0-LTS-S2.8 72H TREND HISTORY PREDICTION OBSERVABILITY",
+  "version_number": "116.0-LTS-S2.8",
+  "release_name": "A100_V116_0_LTS_S2_8_72H_TREND_HISTORY_PREDICTION_OBSERVABILITY_DEVELOPMENT_RELEASE",
   "release_type": "DEVELOPMENT_RELEASE",
   "registry_commands": 341,
-  "pytest": "88/88 PASS",
-  "preflight": "PASS",
-  "runtime_certification": "24H/48H/72H EVIDENCE PENDING"
+  "pytest": "PASS",
+  "preflight": "PASS"
 }

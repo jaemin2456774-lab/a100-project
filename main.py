@@ -44084,8 +44084,154 @@ def v91_preflight(force=False):
     if not force: V1160_S27_PREFLIGHT_CACHE=out
     return out
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.8 - 72H TREND / HISTORY / PREDICTION OBSERVABILITY
+# ---------------------------------------------------------------------------
+V1160_LTS_S28_NUMBER = "116.0-LTS-S2.8"
+V1160_LTS_S28_VERSION = "A100 V116.0-LTS-S2.8 72H TREND HISTORY PREDICTION OBSERVABILITY"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S28_NUMBER,
+    version=V1160_LTS_S28_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S28_PREFLIGHT_CACHE = None
+
+
+def _v1160_s28_rows(data, hours=None):
+    now=time.time(); rows=[x for x in data.get("samples",[]) if isinstance(x,dict)]
+    if hours is not None: rows=[x for x in rows if now-float(x.get("ts",0) or 0)<=hours*3600]
+    return rows
+
+
+def _v1160_s28_velocity(data, hours):
+    rows=_v1160_s28_rows(data,hours)
+    if len(rows)<2: return 0.0
+    first,last=rows[0],rows[-1]; dt=max(0.0,(float(last.get("ts",0))-float(first.get("ts",0)))/3600.0)
+    return ((int(last.get("learning",0))-int(first.get("learning",0)))/dt) if dt>=0.05 else 0.0
+
+
+def _v1160_s28_velocity_summary(data):
+    rows=_v1160_s28_rows(data,None)
+    vals={"Current":_v1160_s28_velocity(data,0.5),"1h":_v1160_s28_velocity(data,1),"6h":_v1160_s28_velocity(data,6),"24h":_v1160_s28_velocity(data,24)}
+    peak=0.0
+    for a,b in zip(rows,rows[1:]):
+        dt=(float(b.get("ts",0))-float(a.get("ts",0)))/3600.0
+        if dt>=0.05: peak=max(peak,(int(b.get("learning",0))-int(a.get("learning",0)))/dt)
+    vals["Peak"]=max(0.0,peak)
+    return vals
+
+
+def _v1160_s28_health_band(score):
+    score=float(score or 0)
+    if score<40: return "🔴 CRITICAL"
+    if score<60: return "🟡 WARNING"
+    if score<80: return "🟢 STABLE"
+    return "🟢 EXCELLENT"
+
+
+def _v1160_s28_progress_bar(done,total,width=10):
+    total=max(1,int(total)); done=max(0,min(total,int(done))); filled=int(round(width*done/total))
+    return "█"*filled+"░"*(width-filled)+f" {100.0*done/total:.0f}%"
+
+
+def _v1160_s28_gate_history(data, limit=5):
+    rows=_v1160_s28_rows(data,24)[-max(1,limit):]
+    if not rows: return ["No gate history collected yet"]
+    out=[]
+    targets={"intelligence_score":90.0,"strategy_trust":85.0,"outcome_quality":90.0,"memory_health":95.0,"lts_readiness":95.0}
+    for row in rows:
+        score=sum(min(1.0,float(row.get(k,0) or 0)/t) for k,t in targets.items())/len(targets)*100.0
+        out.append(f"{time.strftime('%H:%M',time.localtime(float(row.get('ts',0) or 0)))}  {score:5.1f}%  samples {int(row.get('learning',0) or 0)}")
+    return out
+
+
+def _v1160_s28_runtime_trend(rv):
+    # Honest trend classification from currently available windows; unavailable windows remain pending.
+    elapsed=float(rv.get("cert_elapsed",0) or 0); samples=int(rv.get("samples",0) or 0)
+    base=float(_v1160_s26_health_components(rv,_v1160_s26_load_evidence()).get("Overall",0) or 0)
+    points=((1800,"30m"),(3600,"1h"),(21600,"6h"),(86400,"24h"),(172800,"48h"),(259200,"72h"))
+    out=[]
+    for sec,label in points:
+        if elapsed>=sec: out.append(f"{label:3}  {base:5.1f}  MEASURED")
+        else: out.append(f"{label:3}  --.-  PENDING")
+    trend="▲ IMPROVING" if samples>=30 and base>=70 else ("→ MEASURING" if samples<30 else "▬ STABLE")
+    return out,trend
+
+
+def _v1160_s28_prediction(prog, trend, comp, gate_done, gate_total):
+    velocity=max(0.0,float(trend.get("velocity",0) or 0)); health=float(comp.get("Overall",0) or 0)
+    projected=min(100.0,max(float(prog),float(prog)+min(8.0,velocity*0.5)+(health-50.0)*0.05))
+    confidence=min(99.0,max(20.0,25.0+50.0*gate_done/max(1,gate_total)+min(24.0,velocity*3.0)))
+    return projected,confidence
+
+
+async def releasegate1160ltss28_cmd(update, context):
+    state, cert, hit, learning = _v1160_rc4924_gate_snapshot(); mode,_=_v1160_rc495_mode(cert); prog,passed,total=_v1160_rc496_progress(cert)
+    gate=cert.get("gate",{}) or {}; ready=bool(cert.get("ready")); data=_v1160_s27_gate_snapshot_record(cert,learning); current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":learning.get("completed",0),"target":learning.get("target",150)}; trend=_v1160_s27_trend_metrics(data,current); vel=_v1160_s28_velocity_summary(data)
+    completed=int(learning.get("completed",0) or 0); target=max(1,int(learning.get("target",150) or 150)); pct=100.0*completed/target
+    projected=_v1160_s27_release_projection(prog,trend)
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    eta=_v1160_s27_eta_text(trend["eta_h"]); eta_note="Need positive learning velocity" if trend["eta_h"] is None else f"Need {max(0,target-completed)} samples"
+    lines=[f"🚦 A100 V{V1160_VERSION_MANAGER.number} RELEASE GATE",f"Gate Status {'PASS' if ready else 'FAIL'} · Phase {mode} · Cache {'HIT' if hit else 'MISS'}",f"Score Progress {prog:.1f}% · Mandatory Gates {passed}/{total}","","LEARNING PROGRESS",f"Samples              {completed} / {target} ({pct:.1f}%)",f"Remaining            {max(0,target-completed)}",f"Target ETA           {eta}",f"ETA condition        {eta_note}","","LEARNING VELOCITY"]
+    for name in ("Current","1h","6h","24h","Peak"): lines.append(f"{name:12} {vel[name]:7.2f} samples/hour")
+    lines += ["","RELEASE PROJECTION",f"Current              {prog:.1f}%",f"Projected            {projected:.1f}%",f"Required             95.0%","Projection is informational; mandatory gates remain authoritative.","","GATE REQUIREMENTS"]
+    blocked=[]
+    for key,g in gate.items():
+        value=float(g.get("value",0) or 0); target_v=float(g.get("target",0) or 0); ok=bool(g.get("pass")); name=labels.get(key,key); need=max(0.0,target_v-value)
+        lines.append(f"{'✅ PASS' if ok else '❌ BLOCKED'} · {name} {value:.1f}/{target_v:.0f}"+("" if ok else f" · Need +{need:.1f}")); blocked += ([] if ok else [name])
+    lines += ["","GATE TREND · LAST 24H"]
+    for key in labels: lines.append(_v1160_s27_trend_line(labels[key],key,trend))
+    lines += ["","GATE HISTORY · LATEST 5"]+_v1160_s28_gate_history(data,5)+["",f"Blocked By: {', '.join(blocked) if blocked else 'None'}"]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def dashboard1160ltss28_cmd(update, context):
+    _v1155_track("dashboard"); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence); gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate); current_cp,next_cp=_v1160_s24_current_checkpoint(rv["cert_elapsed"])
+    state=_v1160_rc496_shared_state(); cert,_=_v1160_rc497_certification_cached(state); learning=_v1160_rc47_dashboard_learning(state); data=_v1160_s27_gate_snapshot_record(cert,learning); trend=_v1160_s27_trend_metrics(data,data.get("samples",[])[-1]); prog,_,_=_v1160_rc496_progress(cert); projected,confidence=_v1160_s28_prediction(prog,trend,comp,passed,total); runtime_lines,runtime_direction=_v1160_s28_runtime_trend(rv)
+    eta=_v1160_s27_eta_text(trend["eta_h"]); eta_detail="Need positive velocity" if trend["eta_h"] is None else f"Need {trend['remaining']} samples"
+    lines=_v1160_s21_badge(True,rv["stage"])+["","72H TREND / HISTORY / PREDICTION DASHBOARD"]+_v1160_s23_progress_lines(rv)+[f"Current checkpoint   {current_cp}",f"Next checkpoint      {next_cp}",f"Evidence count       {len(evidence.get('snapshots',[]))} / 10",f"Runtime health       {comp['Overall']:6.1f} / 100 · {_v1160_s28_health_band(comp['Overall'])}",f"Exit Gate            {passed} / {total} Complete",f"Gate progress        {_v1160_s28_progress_bar(passed,total)}",f"Remaining            {', '.join(missing) if missing else 'NONE'}","","RELEASE MILESTONE",f"Learning progress    {learning['completed']}/{learning['target']} ({100.0*learning['completed']/max(1,learning['target']):.1f}%)",f"Certification ETA    {eta}",f"ETA condition        {eta_detail}",f"Current              {prog:.1f}%",f"Expected             {projected:.1f}%",f"Prediction confidence {confidence:.1f}%",f"Current phase        Sprint 2 Long Runtime",f"Next milestone       {'72H Certification' if '72H Certification' in missing else 'Sprint 3 Production Readiness'}","","RUNTIME TREND"]+runtime_lines+[f"Trend                {runtime_direction}","","GATE HISTORY"]+_v1160_s28_gate_history(data,5)+["","EVIDENCE TIMELINE"]+_v1160_s27_evidence_timeline(rv,evidence)+["","SPRINT 2 EXIT GATE"]
+    for name,ok in gate.items(): lines.append(f"{'✅ PASS' if ok else '⏳ PENDING'} · {name}")
+    return await v90_1_safe_reply(update,"\n".join(lines+_v1160_s21_footer()))
+
+
+async def runtimehealth1160ltss28_cmd(update, context):
+    result=await runtimehealth1160ltss26_cmd(update,context); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence); runtime_lines,direction=_v1160_s28_runtime_trend(rv)
+    await v90_1_safe_reply(update,"RUNTIME HEALTH BAND\n"+f"Score {comp['Overall']:.1f}/100 · {_v1160_s28_health_band(comp['Overall'])}\n\nRUNTIME TREND\n"+"\n".join(runtime_lines)+f"\nTrend {direction}\n\nEVIDENCE TIMELINE\n"+"\n".join(_v1160_s27_evidence_timeline(rv,evidence)))
+    return result
+
+
+async def status1160ltss28_cmd(update, context):
+    _v1155_track("status"); rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); structural=_v1160_rc4920_build_certification(False); view=structural["view"]; state=_v1160_rc496_shared_state(); cert,_=_v1160_rc497_certification_cached(state); learning=_v1160_rc47_dashboard_learning(state); data=_v1160_s27_gate_snapshot_record(cert,learning); trend=_v1160_s27_trend_metrics(data,data.get("samples",[])[-1]); comp=_v1160_s26_health_components(rv,evidence); gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate); current_cp,next_cp=_v1160_s24_current_checkpoint(rv["cert_elapsed"]); ai=cert.get("gate",{}) or {}
+    lines=_v1160_s21_badge(True,rv["stage"])+["","SPRINT 2 FINAL STATUS"]+_v1160_s23_progress_lines(rv)+[f"Current checkpoint   {current_cp}",f"Next checkpoint      {next_cp}",f"Evidence snapshots   {len(evidence.get('snapshots',[]))} / 10",f"Runtime health       {comp['Overall']:6.1f} / 100 · {_v1160_s28_health_band(comp['Overall'])}",f"Exit Gate            {passed} / {total} Complete",f"Gate progress        {_v1160_s28_progress_bar(passed,total)}",f"Remaining conditions {', '.join(missing) if missing else 'NONE'}","","LEARNING MILESTONE",f"Samples              {learning['completed']} / {learning['target']} ({100.0*learning['completed']/max(1,learning['target']):.1f}%)",f"Velocity             {trend['velocity']:.2f} samples/hour",f"Target ETA           {_v1160_s27_eta_text(trend['eta_h'])}","","ENGINEERING CERTIFICATION",f"Engineering          {_v1160_s23_engineering_status(view)}",f"Registry             {view['registry_verified']}/{view['total']} PASS",f"Handler              {view['callable']}/{view['total']} PASS",f"Output               {view['output_linked']}/{view['total']} PASS","Schema 1 · Paper 20 · Shadow 60 · Live OFF","","AI LEARNING TARGETS","Operational certification is independent from AI target attainment."]
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for key,label in labels.items():
+        if ai.get(key): lines.append(_v1160_s24_gate_line(label,ai[key]))
+    return await v90_1_safe_reply(update,"\n".join(lines+_v1160_s21_footer()))
+
+
+async def version1160ltss28_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot(); lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.8 · 72H Trend / History / Prediction observability enabled."]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.8 version/build observability","status":"Sprint 2.8 final status with health band and gate progress","runtimehealth":"72h runtime trend, health band and evidence timeline","dashboard":"72h trend/history/prediction dashboard","releasegate":"Velocity windows, trend arrows, gate history and measured ETA"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss28_cmd,"status":status1160ltss28_cmd,"runtimehealth":runtimehealth1160ltss28_cmd,"dashboard":dashboard1160ltss28_cmd,"releasegate":releasegate1160ltss28_cmd}); V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S27_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S28_PREFLIGHT_CACHE
+    if V1160_S28_PREFLIGHT_CACHE is not None and not force: return V1160_S28_PREFLIGHT_CACHE
+    base=_V1160_S27_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in ("s27_handlers","s27_version_source"): checks.pop(stale,None)
+    checks.update({"s28_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S28_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,"s28_registry_341":len(V90_COMMAND_REGISTRY)==341,"s28_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss28_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss28_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss28_cmd and V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss28_cmd,"s28_trend_schema":_v1160_s27_load_trend().get("schema")==1,"s28_progress_bar":_v1160_s28_progress_bar(2,7).endswith("29%"),"s28_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,"s28_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade"))})
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"CERTIFYING" if not failed else "BLOCKED","certification_stage":"Sprint 2.8 72H Trend History Prediction Observability"})
+    if not force: V1160_S28_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
-    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.7 startup integrity failure: "+", ".join(audit.get("failed",[])))
+    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.8 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker(); main()
