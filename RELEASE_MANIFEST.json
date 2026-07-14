@@ -1,11 +1,11 @@
 {
-  "version": "116.0-RC4.9.6",
-  "release": "VERSION_CACHE_E2E_LATENCY_CONSISTENCY",
+  "version": "A100 V116.0-RC4.9.8",
+  "release": "PERFORMANCE_MEASUREMENT_TRUTH_CERTIFICATION_CLARITY",
   "schema": 1,
   "paper_limit": 20,
   "shadow_limit": 60,
   "live_trading": false,
-  "file_count": 229,
+  "file_count": 233,
   "files": [
     {
       "path": ".gitignore",
@@ -13,19 +13,14 @@
       "sha256": "ccefecd71732e581b330a51c886c6473524e7572e8146ca0635e0b32176e20c2"
     },
     {
-      "path": "FILE_LIST.txt",
-      "size": 14003,
-      "sha256": "a7d59e5865d405637e06d2ba0ceb9a4a62a36f04b6fd6de15167677c1a24baf6"
-    },
-    {
       "path": "GITHUB_REPLACE_GUIDE_KR.md",
-      "size": 497,
-      "sha256": "77ff6c5dc1c94928064825ab22a481c06cf06804288292067c77755320236bf1"
+      "size": 356,
+      "sha256": "5cc96fb817205382a773fb2a37d0e166f706c25f5a9fc6937a95c5b55de886f1"
     },
     {
       "path": "POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md",
-      "size": 692,
-      "sha256": "ea97ca01dc7ab35e634a3268cbbb93632ae6e9da5e211ade7a2082663d7ae158"
+      "size": 629,
+      "sha256": "50f2af816fec373dcfb0394ffb209fbb8975a6c226cff0c46dc6a82db07386f9"
     },
     {
       "path": "RC4_9_1_STARTUP_HOTFIX_REPORT_KR.md",
@@ -53,9 +48,19 @@
       "sha256": "d3dee23e64d576fb16ca360dd427807ff791937c22c0d3b5e7897421225106ba"
     },
     {
+      "path": "RC4_9_6_RELEASE_REPORT_KR.md",
+      "size": 707,
+      "sha256": "1fa0ac7841c32ee4abb70b0153c3fbc80173d1a502fa87eb02cb67e7636ecb27"
+    },
+    {
+      "path": "RC4_9_7_RELEASE_REPORT_KR.md",
+      "size": 771,
+      "sha256": "ebad434a8c7ac5cc06e3a5ce05da3f03b023cd09f2148354554b6146fda496d8"
+    },
+    {
       "path": "README.md",
-      "size": 311,
-      "sha256": "75a413d712b06f24aa1e99c79bad7fd2c1c1ac409d3667172f28222958d059c7"
+      "size": 175,
+      "sha256": "7fd69e5e56e90da90c4aae5c1e75677b82f7eddf2d34fa2dc4fbee7d1ef0b568"
     },
     {
       "path": "README_RC4_9_2.md",
@@ -71,11 +76,6 @@
       "path": "README_RC4_9_4.md",
       "size": 494,
       "sha256": "2c96c7c935edfa6ae821d528b8b6d17a0bbb28335ce0d888bf0a750946797284"
-    },
-    {
-      "path": "RELEASE_MANIFEST.json",
-      "size": 34495,
-      "sha256": "69e4db791a3b20099d896795ddbd2dc03ace123c30b4cbd204b2dddb8ca98249"
     },
     {
       "path": "RELEASE_MANIFEST_RC4_9_3.json",
@@ -288,6 +288,11 @@
       "sha256": "54f1b786c05afa7111c3790c03b5182276ceeb5f13e508e91c3eec9f99e8f434"
     },
     {
+      "path": "docs/CHANGELOG_V116_0_RC4_9_7.md",
+      "size": 665,
+      "sha256": "ac387fc8446c17471ceeb9902693f3452e1fde40fee6ab29979d3a1345929fb8"
+    },
+    {
       "path": "docs/CHANGELOG_V94_0.md",
       "size": 301,
       "sha256": "932d82d1b7ef1d5f1885f6f7e35161ae75b2050898e07c05a57843210b49a8f1"
@@ -446,6 +451,11 @@
       "path": "docs/RELEASE_NOTES_V116_0_RC4_9.md",
       "size": 757,
       "sha256": "f1a0d396afca5155ea2885c17e9824c2b3bcd0e22c8863ce17ed0fe080556664"
+    },
+    {
+      "path": "docs/RELEASE_NOTES_V116_0_RC4_9_8.md",
+      "size": 511,
+      "sha256": "a314142c6ed4d988f00eeca465c14deb1a8893a837c4409e4546f5d11708e738"
     },
     {
       "path": "docs/TEST_REPORT_V101_0.md",
@@ -674,8 +684,8 @@
     },
     {
       "path": "main.py",
-      "size": 1934178,
-      "sha256": "5558a80de0aa54914497129ad094513ad237f12ae2f15c63839c6577bb3ac055"
+      "size": 1963582,
+      "sha256": "aea793299a493baa876b70ea0f4bc3df89e6d04c2f77cedf098984594e0a6705"
     },
     {
       "path": "pytest.ini",
@@ -911,6 +921,16 @@
       "path": "tests/test_v1160_rc496_consistency.py",
       "size": 1422,
       "sha256": "a74c84b7c9023132a0cd668131605094f69b0f67f4535f7567763e0f883161ef"
+    },
+    {
+      "path": "tests/test_v1160_rc497_cache_performance.py",
+      "size": 1752,
+      "sha256": "e5044d63ed2f8d7897c56686c395c383d60b64c267c10da429b288032dbc4217"
+    },
+    {
+      "path": "tests/test_v1160_rc498_measurement_truth.py",
+      "size": 775,
+      "sha256": "95a510c6bcd343be7ed602c08569eac4ca6c65bd1813fec26af8a672724246f9"
     },
     {
       "path": "tests/test_v1160_rc49_final_gate.py",

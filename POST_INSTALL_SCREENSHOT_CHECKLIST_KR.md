@@ -1,14 +1,22 @@
-# RC4.9.6 설치 후 캡처 체크리스트
+# RC4.9.7 설치 후 Telegram 검수 순서
 
-아래 순서로 실행하고 결과 화면을 보내주세요.
+아래 명령을 한 메시지에 순서대로 입력하거나 각각 실행하십시오.
 
-1. `/version` — RC4.9.6 표시
-2. `/status` 두 번 연속 — 첫 실행 MISS, 두 번째 HIT와 Age 표시 확인
-3. `/dashboard btc` — 상단 RC4.9.6 및 다음 학습 목표 확인
-4. `/releasegate` — LTS Score Progress와 Mandatory Gates 분리 확인
-5. `/performanceaudit` — Handler/Queue/End-to-End/Cache 지표 확인
-6. `/commandcert` — 요약 출력 확인
-7. `/commandcert detail` — 압축 상세 확인
-8. `/commandcert warn engine` — 원인 필터 확인
+/version
+/status
+/status
+/dashboard btc
+/releasegate
+/performanceaudit
+/commandcert
+/commandcert warn engine
+/commandcert warn adaptiveconfidence
 
-필수 캡처: 1~8 전체. `/status`는 두 결과가 한 화면에 보이도록 캡처합니다.
+## 필수 확인
+- 모든 화면 버전이 RC4.9.7
+- 첫 `/status`: MISS(cold_start 가능)
+- 두 번째 `/status`: HIT, Age, TTL 남음 표시
+- `/performanceaudit`: Queue Wait / Engine / Telegram Send / End-to-End 분리
+- Grade Reasons / Targets 표시
+- `/commandcert`: Top Causes 요약
+- 원인별 drill-down 결과가 1~2화면 내 출력

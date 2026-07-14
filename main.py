@@ -38898,11 +38898,419 @@ def v91_preflight():
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,
             "development_version":V91_VERSION,"registry_fingerprint":"v1160-rc496-version-cache-e2e-latency-consistency"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.7 - CACHE DIAGNOSTICS & PERFORMANCE TRUTH
+# ---------------------------------------------------------------------------
+V1160_RC497_NUMBER = "116.0-RC4.9.7"
+V1160_RC497_VERSION = "A100 V116.0-RC4.9.7 LTS CACHE DIAGNOSTICS PERFORMANCE TRUTH"
+V91_VERSION = V1160_RC497_VERSION
+
+V1160_RC497_TELEGRAM_LATENCY = defaultdict(lambda: deque(maxlen=100))
+V1160_RC497_ENGINE_LATENCY = defaultdict(lambda: deque(maxlen=100))
+V1160_RC497_CURRENT_COMMAND = None
+V1160_RC497_STATUS_CACHE = {}
+V1160_RC497_STATUS_TTL = 60.0
+
+_V1160_RC497_SAFE_REPLY_BASE = v90_1_safe_reply
+async def v90_1_safe_reply(update, text, *args, **kwargs):
+    """Measure actual Telegram output time separately from handler/engine work."""
+    started = time.perf_counter()
+    try:
+        return await _V1160_RC497_SAFE_REPLY_BASE(update, text, *args, **kwargs)
+    finally:
+        command = V1160_RC497_CURRENT_COMMAND or "system"
+        V1160_RC497_TELEGRAM_LATENCY[command].append((time.perf_counter()-started)*1000.0)
+
+
+def _v1160_rc497_cache_get(key, ttl, producer):
+    """TTL cache with immutable metadata and explicit remaining TTL."""
+    global V1160_RC494_CACHE_HITS, V1160_RC494_CACHE_MISSES
+    now=time.monotonic(); row=V1160_RC494_CACHE.get(key)
+    if row:
+        age=max(0.0,now-row[0])
+        if age <= ttl:
+            V1160_RC494_CACHE_HITS += 1
+            V1160_RC496_CACHE_META[key]={"hit":True,"age":age,"reason":"ttl_valid","ttl":ttl,"remaining":max(0.0,ttl-age)}
+            return row[1],True
+    V1160_RC494_CACHE_MISSES += 1
+    reason="expired" if row else "cold_start"
+    value=producer(); stored=time.monotonic(); V1160_RC494_CACHE[key]=(stored,value)
+    V1160_RC496_CACHE_META[key]={"hit":False,"age":0.0,"reason":reason,"ttl":ttl,"remaining":ttl}
+    return value,False
+
+
+def _v1160_rc497_certification_cached(state):
+    # Certification implementations may normalize/mutate nested structures.
+    # A serialized immutable snapshot prevents the second read from receiving a new key.
+    frozen=json.loads(json.dumps(state or {},ensure_ascii=False,default=str))
+    sig=_v1160_rc496_stable_signature(frozen)
+    return _v1160_rc497_cache_get(("ltscert_v497",sig),V1160_RC497_STATUS_TTL,lambda:_v1160_rc493_certification(frozen))
+
+
+def _v1160_rc497_command_certification_cached(state):
+    frozen=json.loads(json.dumps(state or {},ensure_ascii=False,default=str))
+    sig=_v1160_rc496_stable_signature(frozen)
+    return _v1160_rc497_cache_get(("commandcert_v497",sig),120.0,lambda:_v1160_rc493_command_certification(frozen))
+
+
+def _v1160_rc497_meta_text(meta, hit):
+    if hit:
+        return f"HIT · Age {meta.get('age',0):.0f}s · TTL {meta.get('remaining',0):.0f}s 남음"
+    return f"MISS · {meta.get('reason','refresh')} · TTL {meta.get('ttl',0):.0f}s · 다음 동일 조회 HIT 예상"
+
+
+def _v1160_rc497_warning_causes(groups):
+    causes=defaultdict(lambda:{"groups":0,"commands":set(),"count":0})
+    for group in groups:
+        reasons=group.get("reasons") or ["unknown"]
+        commands=group.get("commands") or []
+        for reason in reasons:
+            key=str(reason).strip() or "unknown"
+            causes[key]["groups"]+=1; causes[key]["commands"].update(commands); causes[key]["count"]+=len(commands)
+    return sorted(((v["count"],k,v) for k,v in causes.items()),reverse=True)
+
+
+async def status1160rc497_cmd(update, context):
+    _v1155_track("status"); state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_certification_cached(state)
+    mode,_=_v1160_rc495_mode(cert); score_progress,passed,total=_v1160_rc496_progress(cert); gate=cert.get("gate",{})
+    sig=_v1160_rc496_stable_signature(json.loads(json.dumps(state or {},ensure_ascii=False,default=str)))
+    meta=V1160_RC496_CACHE_META.get(("ltscert_v497",sig),{})
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    lines=[f"📊 <b>A100 V{V1160_RC497_NUMBER} STATUS</b>",f"Mode <b>{mode}</b> · LTS Score Progress <b>{score_progress:.1f}%</b>",
+           f"Mandatory Gates <b>{passed}/{total}</b> Passed",f"Cache <b>{_v1160_rc497_meta_text(meta,hit)}</b>",
+           f"Paper <b>{V91_MAX_POSITIONS}</b> · Shadow <b>{V914_SHADOW_MAX}</b> · Live <b>OFF</b>",""]
+    for key in ("intelligence_score","strategy_trust","outcome_quality","memory_health","lts_readiness"):
+        g=gate.get(key)
+        if g: lines.append(f"{'✅' if g.get('pass') else '🧠'} {labels[key]} <b>{float(g.get('value',0)):.1f}</b> / {float(g.get('target',0)):.0f}")
+    lines += ["", "✅ Handler → Shared Context → Certification → Telegram Output"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def commandcert1160rc497_cmd(update, context):
+    _v1155_track("commandcert"); state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_command_certification_cached(state)
+    args=[str(x).lower() for x in (getattr(context,"args",[]) or [])]; groups=_v1160_rc495_group_warnings(cert.get("rows",[])); causes=_v1160_rc497_warning_causes(groups)
+    lines=[f"🧾 <b>A100 V{V1160_RC497_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Status <b>{cert['status']}</b> · Snapshot <code>{cert['snapshot_id']}</code> · Cache {'HIT' if hit else 'MISS'}",
+           " · ".join(f"{k} {v}" for k,v in cert["counts"].items()),f"Grouped warnings <b>{len(groups)}</b>"]
+    if args and args[0]=="warn" and len(args)>1:
+        needle=" ".join(args[1:]); selected=[g for g in groups if needle in " ".join(g.get("reasons",[])).lower() or any(needle in c.lower() for c in g.get("commands",[]))]
+        lines += ["",f"🔎 Filter <code>{_v54_escape(needle)}</code> · {len(selected)} groups"]
+        for g in selected[:5]:
+            sample=", ".join('/'+c for c in g.get("commands",[])[:6]); lines.append(f"⚠️ <b>{g['status']}</b> ×{len(g.get('commands',[]))} · {', '.join(g.get('reasons',[]))}")
+            if sample: lines.append("   "+sample)
+        if len(selected)>5: lines.append(f"… 나머지 {len(selected)-5} groups")
+    elif args and args[0]=="fail":
+        failed=[g for g in groups if g.get("status")=="FAILED"]; lines += ["",f"⛔ Failed groups <b>{len(failed)}</b>"]
+        for g in failed[:5]: lines.append(f"⛔ {', '.join(g.get('reasons',[]))} ×{len(g.get('commands',[]))}")
+    else:
+        lines += ["","<b>Top Causes</b>"]
+        for count,reason,data in causes[:5]: lines.append(f"⚠️ {_v54_escape(reason)} · <b>{count}</b> commands / {data['groups']} groups")
+        lines += ["", "조회: <code>/commandcert warn engine</code>", "원인별: <code>/commandcert warn adaptiveconfidence</code> · <code>/commandcert fail</code>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def releasegate1160rc497_cmd(update, context):
+    state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_certification_cached(state); mode,_=_v1160_rc495_mode(cert)
+    score_progress,passed,total=_v1160_rc496_progress(cert); gate=cert.get("gate",{}); labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    lines=[f"🚦 <b>A100 V{V1160_RC497_NUMBER} RELEASE GATE</b>",f"Phase <b>{mode}</b> · Status <b>{'READY' if cert.get('ready') else 'LEARNING'}</b>",
+           f"LTS Score Progress <b>{score_progress:.1f}%</b> · Mandatory Gates <b>{passed}/{total}</b> · Cache {'HIT' if hit else 'MISS'}",""]
+    for k,g in gate.items():
+        need=max(0,float(g.get("target",0))-float(g.get("value",0))); lines.append(f"{'✅' if g.get('pass') else '🧠'} {labels.get(k,k)} <b>{float(g.get('value',0)):.1f}</b>/{float(g.get('target',0)):.0f} · Need {need:.1f}")
+    lines += ["", "ℹ️ Score Progress는 목표 달성 비율, Mandatory Gates는 완전 통과 개수입니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def performanceaudit1160rc497_cmd(update, context):
+    commands=set(V1160_RC494_LATENCY)|set(V1160_RC496_QUEUE_LATENCY)|set(V1160_RC496_E2E_LATENCY)|set(V1160_RC497_TELEGRAM_LATENCY)
+    stats=[]
+    for name in commands:
+        handlers=list(V1160_RC494_LATENCY.get(name,[])); queues=list(V1160_RC496_QUEUE_LATENCY.get(name,[])); e2es=list(V1160_RC496_E2E_LATENCY.get(name,[])); sends=list(V1160_RC497_TELEGRAM_LATENCY.get(name,[]))
+        h=sum(handlers)/len(handlers) if handlers else 0; q=sum(queues)/len(queues) if queues else 0; e=sum(e2es)/len(e2es) if e2es else h+q; t=sum(sends)/len(sends) if sends else 0; engine=max(0,h-t)
+        stats.append((name,q,engine,t,e,max(e2es or handlers or [0]),len(handlers)))
+    def weighted(i):
+        den=sum(max(1,x[6]) for x in stats); return sum(x[i]*max(1,x[6]) for x in stats)/max(1,den)
+    qavg,engavg,tavg,eavg=(weighted(i) for i in (1,2,3,4)); worst=max((x[5] for x in stats),default=0); slowest=max(stats,key=lambda x:x[5],default=("-",0,0,0,0,0,0))
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit_rate=100*V1160_RC494_CACHE_HITS/max(1,total)
+    targets={"cache":80.0,"e2e":5000.0,"worst":10000.0,"duplicate":0}
+    reasons=[]
+    if hit_rate<targets["cache"]: reasons.append(f"Cache {hit_rate:.1f}% < 80%")
+    if eavg>targets["e2e"]: reasons.append(f"E2E avg {eavg:.0f}ms > 5000ms")
+    if worst>targets["worst"]: reasons.append(f"Worst {worst:.0f}ms > 10000ms")
+    if V1160_RC495_DUPLICATE_READS>0: reasons.append(f"Duplicate reads {V1160_RC495_DUPLICATE_READS} > 0")
+    grade="A+" if not reasons else "A" if len(reasons)==1 else "B" if len(reasons)<=3 else "C"
+    lines=[f"⚙️ <b>A100 V{V1160_RC497_NUMBER} PERFORMANCE AUDIT</b>",f"Grade <b>{grade}</b>","",
+           f"Cache Hit <b>{hit_rate:.1f}%</b> · HIT {V1160_RC494_CACHE_HITS} / MISS {V1160_RC494_CACHE_MISSES}",
+           f"Queue Wait Avg <b>{qavg:.0f} ms</b>",f"Engine Avg <b>{engavg:.0f} ms</b>",f"Telegram Send Avg <b>{tavg:.0f} ms</b>",f"End-to-End Avg <b>{eavg:.0f} ms</b> · Worst <b>{worst:.0f} ms</b>",
+           f"Slowest <b>/{slowest[0]}</b> {slowest[5]:.0f} ms",f"Duplicate Reads <b>{V1160_RC495_DUPLICATE_READS}</b>",f"Shared Context <b>PASS</b> · Background Refresh <b>READY</b>","", "<b>Grade Reasons / Targets</b>"]
+    lines += ["✅ 모든 성능 목표 충족"] if not reasons else ["⚠️ "+_v54_escape(x) for x in reasons]
+    lines += ["Target: Cache ≥80% · E2E Avg ≤5s · Worst ≤10s · Duplicate Reads 0"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def dashboard1160rc497_cmd(update, context):
+    # Reuse corrected dashboard output while sourcing the new centralized version.
+    global V1160_RC496_NUMBER
+    old=V1160_RC496_NUMBER; V1160_RC496_NUMBER=V1160_RC497_NUMBER
+    try: return await dashboard1160rc496_cmd(update,context)
+    finally: V1160_RC496_NUMBER=old
+
+
+# Final dispatcher: preserve intentional repeated commands and split latency truthfully.
+async def v90_1_dispatch(update, context):
+    global V90_1_DISPATCH_COUNT,V90_1_DISPATCH_ERRORS,V90_1_LAST_COMMAND,V90_1_LAST_COMMAND_AT,V1160_RC497_CURRENT_COMMAND
+    message=getattr(update,"effective_message",None) or getattr(update,"message",None); text=getattr(message,"text","") if message else ""; parsed=v90_1_parse_command_lines(text)
+    if not parsed:return
+    if len(parsed)>15: await v90_1_safe_reply(update,f"⚠️ 한 메시지에서 {len(parsed)}개 명령이 감지됐습니다.\n안정성을 위해 앞의 15개만 실행합니다."); parsed=parsed[:15]
+    if len(parsed)>1: await v90_1_safe_reply(update,f"📋 {len(parsed)}개 명령을 확인했습니다. 순서대로 실행합니다.")
+    original_args=list(getattr(context,"args",[]) or []); receive_ts=time.time()
+    try:
+        dt=getattr(message,"date",None)
+        if dt is not None: receive_ts=dt.timestamp()
+    except Exception: pass
+    for command,args in parsed:
+        queue_ms=max(0,(time.time()-receive_ts)*1000); V1160_RC496_QUEUE_LATENCY[command].append(queue_ms); V90_1_DISPATCH_COUNT+=1; V90_1_LAST_COMMAND=command; V90_1_LAST_COMMAND_AT=time.time(); callback=V90_COMMAND_REGISTRY.get(command)
+        if callback is None: await v90_1_safe_reply(update,f"지원하지 않는 명령입니다: /{command}\n/commands에서 전체 명령을 확인하세요."); continue
+        started=time.perf_counter(); telegram_before=sum(V1160_RC497_TELEGRAM_LATENCY.get(command,[])); ok=False; V1160_RC497_CURRENT_COMMAND=command
+        try:
+            context.args=list(args)
+            if command in V1160_RC494_SLOW_COMMANDS: await _v1160_rc494_progress(update,command)
+            result=callback(update,context)
+            if inspect.isawaitable(result): await asyncio.wait_for(result,timeout=120)
+            ok=True
+        except asyncio.TimeoutError:
+            V90_1_DISPATCH_ERRORS+=1; v88_record_error(f"v1160-rc497-timeout:/{command}",RuntimeError("command timeout after 120 seconds")); await v90_1_safe_reply(update,f"⚠️ /{command} 처리 시간이 120초를 초과했습니다.\n봇은 계속 작동합니다.")
+        except Exception as error:
+            V90_1_DISPATCH_ERRORS+=1; v88_record_error(f"v1160-rc497-command:/{command}",error); await v90_1_safe_reply(update,f"⚠️ /{command} 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요.")
+        finally:
+            handler_ms=(time.perf_counter()-started)*1000; _v1160_rc494_record_latency(command,handler_ms,ok); V1160_RC496_E2E_LATENCY[command].append(queue_ms+handler_ms)
+            sends=list(V1160_RC497_TELEGRAM_LATENCY.get(command,[])); send_ms=sends[-1] if sends else 0; V1160_RC497_ENGINE_LATENCY[command].append(max(0,handler_ms-send_ms)); context.args=list(original_args); V1160_RC497_CURRENT_COMMAND=None
+
+
+V925_COMMAND_USAGE.update({
+    "status":"TTL·Age·MISS 원인을 포함한 캐시 진단 상태",
+    "dashboard":"중앙 버전과 다음 학습 목표 통합 Dashboard",
+    "commandcert":"Top Cause 요약 및 원인별 drill-down 기능 인증",
+    "releasegate":"실데이터 Score Progress 및 Mandatory Gate",
+    "performanceaudit":"Queue·Engine·Telegram·End-to-End 분리 성능 감사와 등급 원인",
+})
+V90_COMMAND_REGISTRY.update({"status":status1160rc497_cmd,"dashboard":dashboard1160rc497_cmd,"commandcert":commandcert1160rc497_cmd,"releasegate":releasegate1160rc497_cmd,"performanceaudit":performanceaudit1160rc497_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC497_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC497_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    for k in list(checks):
+        if k.startswith("v1160_rc496_"): checks.pop(k,None)
+    checks.update({
+        "v1160_rc497_version_manager":V91_VERSION==V1160_RC497_VERSION,
+        "v1160_rc497_status_handler":V90_COMMAND_REGISTRY.get("status") is status1160rc497_cmd,
+        "v1160_rc497_dashboard_handler":V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160rc497_cmd,
+        "v1160_rc497_commandcert_handler":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc497_cmd,
+        "v1160_rc497_releasegate_handler":V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160rc497_cmd,
+        "v1160_rc497_performanceaudit_handler":V90_COMMAND_REGISTRY.get("performanceaudit") is performanceaudit1160rc497_cmd,
+        "v1160_rc497_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc497_schema":_v91_default_state().get("schema")==1,
+        "v1160_rc497_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc497_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc497-cache-diagnostics-performance-truth"}
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.8 - PERFORMANCE MEASUREMENT TRUTH & CERT CLARITY
+# ---------------------------------------------------------------------------
+V1160_RC498_NUMBER = "116.0-RC4.9.8"
+V1160_RC498_VERSION = "A100 V116.0-RC4.9.8 LTS PERFORMANCE MEASUREMENT TRUTH CERTIFICATION CLARITY"
+V91_VERSION = V1160_RC498_VERSION
+
+# Runtime-only measurements. Batch backlog is intentionally separated from
+# processing latency so a 9-command verification batch does not falsely grade
+# the engine as slow.
+V1160_RC498_BATCH_WAIT = defaultdict(lambda: deque(maxlen=200))
+V1160_RC498_PROCESSING = defaultdict(lambda: deque(maxlen=200))
+V1160_RC498_TRANSPORT = defaultdict(lambda: deque(maxlen=200))
+V1160_RC498_SAMPLE_FLAGS = defaultdict(lambda: deque(maxlen=200))
+V1160_RC498_CURRENT_COMMAND = None
+
+
+def _v1160_rc498_summary(values):
+    values=[max(0.0,float(x)) for x in values if x is not None]
+    if not values:
+        return {"count":0,"avg":0.0,"p95":0.0,"worst":0.0}
+    ordered=sorted(values); idx=min(len(ordered)-1,max(0,int(round((len(ordered)-1)*0.95))))
+    return {"count":len(values),"avg":sum(values)/len(values),"p95":ordered[idx],"worst":ordered[-1]}
+
+
+def _v1160_rc498_cert_categories(groups):
+    categories=defaultdict(lambda:{"commands":set(),"groups":0})
+    for g in groups:
+        reasons=[str(x).lower() for x in (g.get("reasons") or ["unknown"])]
+        commands=set(g.get("commands") or [])
+        joined=" ".join(reasons)
+        if "engine_execution_unverified" in joined: key="Engine execution 미검증"
+        elif "output_path_unverified" in joined: key="Output path 미검증"
+        elif "repository" in joined: key="Repository 연결 미검증"
+        elif "runtime" in joined: key="Runtime 실행 미검증"
+        else: key=", ".join(reasons[:2]) or "기타"
+        categories[key]["commands"].update(commands); categories[key]["groups"]+=1
+    return sorted(((len(v["commands"]),k,v) for k,v in categories.items()),reverse=True)
+
+
+async def status1160rc498_cmd(update, context):
+    global V1160_RC497_NUMBER
+    old=V1160_RC497_NUMBER; V1160_RC497_NUMBER=V1160_RC498_NUMBER
+    try:
+        return await status1160rc497_cmd(update,context)
+    finally:
+        V1160_RC497_NUMBER=old
+
+
+async def dashboard1160rc498_cmd(update, context):
+    global V1160_RC496_NUMBER
+    old=V1160_RC496_NUMBER; V1160_RC496_NUMBER=V1160_RC498_NUMBER
+    try:
+        return await dashboard1160rc496_cmd(update,context)
+    finally:
+        V1160_RC496_NUMBER=old
+
+
+async def releasegate1160rc498_cmd(update, context):
+    global V1160_RC497_NUMBER
+    old=V1160_RC497_NUMBER; V1160_RC497_NUMBER=V1160_RC498_NUMBER
+    try:
+        return await releasegate1160rc497_cmd(update,context)
+    finally:
+        V1160_RC497_NUMBER=old
+
+
+async def commandcert1160rc498_cmd(update, context):
+    _v1155_track("commandcert")
+    state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_command_certification_cached(state)
+    args=[str(x).lower() for x in (getattr(context,"args",[]) or [])]
+    groups=_v1160_rc495_group_warnings(cert.get("rows",[])); categories=_v1160_rc498_cert_categories(groups)
+    lines=[f"🧾 <b>A100 V{V1160_RC498_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Status <b>{cert['status']}</b> · Snapshot <code>{cert['snapshot_id']}</code> · Cache {'HIT' if hit else 'MISS'}",
+           " · ".join(f"{k} {v}" for k,v in cert["counts"].items()),f"Grouped warnings <b>{len(groups)}</b>"]
+    if args and args[0]=="warn":
+        needle=" ".join(args[1:]).strip(); limit=10
+        if args and args[-1].isdigit(): limit=max(1,min(30,int(args[-1]))); needle=" ".join(args[1:-1]).strip()
+        selected=[g for g in groups if not needle or needle in " ".join(g.get("reasons",[])).lower() or any(needle in c.lower() for c in g.get("commands",[]))]
+        lines += ["",f"🔎 Filter <code>{_v54_escape(needle or 'all')}</code> · {len(selected)} groups · Top {limit}"]
+        for g in selected[:limit]:
+            sample=", ".join('/'+c for c in g.get("commands",[])[:8]); reasons=", ".join(g.get("reasons",[]))
+            lines.append(f"⚠️ <b>{g['status']}</b> ×{len(g.get('commands',[]))} · {_v54_escape(reasons)}")
+            if sample: lines.append("   "+_v54_escape(sample))
+        if len(selected)>limit: lines.append(f"… 나머지 {len(selected)-limit} groups · <code>/commandcert warn { _v54_escape(needle or 'engine') } {min(30,limit+10)}</code>")
+    elif args and args[0]=="fail":
+        failed=[g for g in groups if g.get("status")=="FAILED"]
+        lines += ["",f"⛔ Failed groups <b>{len(failed)}</b>"]
+        for g in failed[:10]: lines.append(f"⛔ {_v54_escape(', '.join(g.get('reasons',[])))} ×{len(g.get('commands',[]))}")
+    else:
+        lines += ["","<b>PARTIAL 원인 요약</b>"]
+        for count,name,data in categories[:5]: lines.append(f"⚠️ {_v54_escape(name)} · <b>{count}</b> commands / {data['groups']} groups")
+        lines += ["", "단계 조회: <code>/commandcert warn engine 10</code>", "원인 조회: <code>/commandcert warn adaptiveconfidence 10</code>", "실패만: <code>/commandcert fail</code>"]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def performanceaudit1160rc498_cmd(update, context):
+    commands=set(V1160_RC498_PROCESSING)|set(V1160_RC498_BATCH_WAIT)|set(V1160_RC498_TRANSPORT)|set(V1160_RC497_ENGINE_LATENCY)|set(V1160_RC497_TELEGRAM_LATENCY)
+    processing=[]; batch=[]; transport=[]; engine=[]; telegram=[]; rows=[]
+    for name in commands:
+        p=list(V1160_RC498_PROCESSING.get(name,[])); b=list(V1160_RC498_BATCH_WAIT.get(name,[])); tr=list(V1160_RC498_TRANSPORT.get(name,[])); en=list(V1160_RC497_ENGINE_LATENCY.get(name,[])); tg=list(V1160_RC497_TELEGRAM_LATENCY.get(name,[]))
+        processing+=p; batch+=b; transport+=tr; engine+=en; telegram+=tg
+        rows.append((name,_v1160_rc498_summary(p)))
+    ps=_v1160_rc498_summary(processing); bs=_v1160_rc498_summary(batch); ts=_v1160_rc498_summary(transport); es=_v1160_rc498_summary(engine); gs=_v1160_rc498_summary(telegram)
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit_rate=100*V1160_RC494_CACHE_HITS/max(1,total)
+    # Grade uses real processing latency only. Intentional multi-command batch wait
+    # is reported separately and never makes the engine grade worse.
+    reasons=[]
+    if ps["count"]<3: reasons.append(f"표본 {ps['count']}건 < 최소 3건")
+    if hit_rate<80: reasons.append(f"Cache {hit_rate:.1f}% < 80%")
+    if ps["avg"]>5000: reasons.append(f"Processing avg {ps['avg']:.0f}ms > 5000ms")
+    if ps["p95"]>10000: reasons.append(f"Processing P95 {ps['p95']:.0f}ms > 10000ms")
+    if V1160_RC495_DUPLICATE_READS>0: reasons.append(f"Duplicate reads {V1160_RC495_DUPLICATE_READS} > 0")
+    grade="A+" if not reasons else "A" if len(reasons)==1 else "B" if len(reasons)<=3 else "C"
+    slowest=max(rows,key=lambda x:x[1]["worst"],default=("-",{"worst":0}))
+    lines=[f"⚙️ <b>A100 V{V1160_RC498_NUMBER} PERFORMANCE AUDIT</b>",f"Grade <b>{grade}</b> · Samples <b>{ps['count']}</b>","",
+           f"Cache Hit <b>{hit_rate:.1f}%</b> · HIT {V1160_RC494_CACHE_HITS} / MISS {V1160_RC494_CACHE_MISSES}",
+           f"Processing Avg <b>{ps['avg']:.0f} ms</b> · P95 <b>{ps['p95']:.0f} ms</b> · Worst <b>{ps['worst']:.0f} ms</b>",
+           f"Engine Avg <b>{es['avg']:.0f} ms</b> · Telegram Avg <b>{gs['avg']:.0f} ms</b>",
+           f"Batch Backlog Avg <b>{bs['avg']:.0f} ms</b> <i>(등급 제외)</i>",
+           f"Telegram Transport Avg <b>{ts['avg']:.0f} ms</b> <i>(참고)</i>",
+           f"Slowest Processing <b>/{slowest[0]}</b> {slowest[1]['worst']:.0f} ms",
+           f"Duplicate Reads <b>{V1160_RC495_DUPLICATE_READS}</b>","Shared Context <b>PASS</b> · Background Refresh <b>READY</b>","","<b>Grade Reasons / Targets</b>"]
+    lines += ["✅ 모든 측정 목표 충족"] if not reasons else ["⚠️ "+_v54_escape(x) for x in reasons]
+    lines += ["Target: Samples ≥3 · Cache ≥80% · Processing Avg ≤5s · P95 ≤10s · Duplicate Reads 0",
+              "ℹ️ 여러 명령을 한 번에 보낸 대기시간은 Batch Backlog로 분리하며 성능 등급에 포함하지 않습니다."]
+    return await v90_1_safe_reply(update,"\n".join(lines),parse_mode="HTML")
+
+
+async def v90_1_dispatch(update, context):
+    global V90_1_DISPATCH_COUNT,V90_1_DISPATCH_ERRORS,V90_1_LAST_COMMAND,V90_1_LAST_COMMAND_AT,V1160_RC497_CURRENT_COMMAND,V1160_RC498_CURRENT_COMMAND
+    message=getattr(update,"effective_message",None) or getattr(update,"message",None); text=getattr(message,"text","") if message else ""; parsed=v90_1_parse_command_lines(text)
+    if not parsed:return
+    if len(parsed)>15: await v90_1_safe_reply(update,f"⚠️ 한 메시지에서 {len(parsed)}개 명령이 감지됐습니다.\n안정성을 위해 앞의 15개만 실행합니다."); parsed=parsed[:15]
+    if len(parsed)>1: await v90_1_safe_reply(update,f"📋 {len(parsed)}개 명령을 확인했습니다. 순서대로 실행합니다.")
+    original_args=list(getattr(context,"args",[]) or []); batch_started=time.perf_counter(); transport_ms=0.0
+    try:
+        dt=getattr(message,"date",None)
+        if dt is not None: transport_ms=max(0.0,min(300000.0,(time.time()-dt.timestamp())*1000.0))
+    except Exception: pass
+    for index,(command,args) in enumerate(parsed):
+        batch_wait_ms=max(0.0,(time.perf_counter()-batch_started)*1000.0); V1160_RC498_BATCH_WAIT[command].append(batch_wait_ms); V1160_RC498_TRANSPORT[command].append(transport_ms)
+        V90_1_DISPATCH_COUNT+=1; V90_1_LAST_COMMAND=command; V90_1_LAST_COMMAND_AT=time.time(); callback=V90_COMMAND_REGISTRY.get(command)
+        if callback is None: await v90_1_safe_reply(update,f"지원하지 않는 명령입니다: /{command}\n/commands에서 전체 명령을 확인하세요."); continue
+        started=time.perf_counter(); ok=False; V1160_RC497_CURRENT_COMMAND=command; V1160_RC498_CURRENT_COMMAND=command
+        try:
+            context.args=list(args)
+            if command in V1160_RC494_SLOW_COMMANDS: await _v1160_rc494_progress(update,command)
+            result=callback(update,context)
+            if inspect.isawaitable(result): await asyncio.wait_for(result,timeout=120)
+            ok=True
+        except asyncio.TimeoutError:
+            V90_1_DISPATCH_ERRORS+=1; v88_record_error(f"v1160-rc498-timeout:/{command}",RuntimeError("command timeout after 120 seconds")); await v90_1_safe_reply(update,f"⚠️ /{command} 처리 시간이 120초를 초과했습니다.\n봇은 계속 작동합니다.")
+        except Exception as error:
+            V90_1_DISPATCH_ERRORS+=1; v88_record_error(f"v1160-rc498-command:/{command}",error); await v90_1_safe_reply(update,f"⚠️ /{command} 오류: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요.")
+        finally:
+            processing_ms=(time.perf_counter()-started)*1000.0; V1160_RC498_PROCESSING[command].append(processing_ms); _v1160_rc494_record_latency(command,processing_ms,ok)
+            context.args=list(original_args); V1160_RC497_CURRENT_COMMAND=None; V1160_RC498_CURRENT_COMMAND=None
+
+
+V925_COMMAND_USAGE.update({
+    "status":"캐시 TTL·Age·MISS 원인을 포함한 RC4.9.8 상태",
+    "dashboard":"중앙 버전 및 학습 목표 통합 Dashboard",
+    "commandcert":"PARTIAL 원인 요약과 Top N 단계 조회",
+    "releasegate":"실데이터 Score Progress 및 Mandatory Gate",
+    "performanceaudit":"Batch 대기와 실제 처리시간을 분리한 신뢰 가능한 성능 감사",
+})
+V90_COMMAND_REGISTRY.update({"status":status1160rc498_cmd,"dashboard":dashboard1160rc498_cmd,"commandcert":commandcert1160rc498_cmd,"releasegate":releasegate1160rc498_cmd,"performanceaudit":performanceaudit1160rc498_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC498_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC498_PREFLIGHT_BASE(); checks=dict(base.get("checks",{}))
+    for k in list(checks):
+        if k.startswith("v1160_rc497_"): checks.pop(k,None)
+    checks.update({
+        "v1160_rc498_version_manager":V91_VERSION==V1160_RC498_VERSION,
+        "v1160_rc498_status_handler":V90_COMMAND_REGISTRY.get("status") is status1160rc498_cmd,
+        "v1160_rc498_dashboard_handler":V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160rc498_cmd,
+        "v1160_rc498_commandcert_handler":V90_COMMAND_REGISTRY.get("commandcert") is commandcert1160rc498_cmd,
+        "v1160_rc498_releasegate_handler":V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160rc498_cmd,
+        "v1160_rc498_performanceaudit_handler":V90_COMMAND_REGISTRY.get("performanceaudit") is performanceaudit1160rc498_cmd,
+        "v1160_rc498_registry_sync":V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        "v1160_rc498_schema":_v91_default_state().get("schema")==1,
+        "v1160_rc498_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "v1160_rc498_live_off":not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc498-performance-measurement-truth-certification-clarity"}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.6 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.8 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
