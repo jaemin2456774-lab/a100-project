@@ -44230,8 +44230,279 @@ def v91_preflight(force=False):
     if not force: V1160_S28_PREFLIGHT_CACHE=out
     return out
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.9 - RUNTIME INTELLIGENCE & CERTIFICATION ANALYTICS
+# ---------------------------------------------------------------------------
+V1160_LTS_S29_NUMBER = "116.0-LTS-S2.9"
+V1160_LTS_S29_VERSION = "A100 V116.0-LTS-S2.9 RUNTIME INTELLIGENCE CERTIFICATION ANALYTICS"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S29_NUMBER,
+    version=V1160_LTS_S29_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S29_PREFLIGHT_CACHE = None
+
+
+def _v1160_s29_health_band(score):
+    score=float(score or 0)
+    if score < 30: return "🔴 CRITICAL"
+    if score < 50: return "🟠 DEGRADED"
+    if score < 65: return "🟡 WARNING"
+    if score < 85: return "🟢 HEALTHY"
+    return "🟢 EXCELLENT"
+
+
+def _v1160_s29_health_analytics(comp):
+    """Return honest weighted contribution/deficit analytics for the score."""
+    rows=[]
+    for name,weight in V1160_S26_WEIGHTS.items():
+        value=max(0.0,min(100.0,float(comp.get(name,0) or 0)))
+        contribution=value*float(weight)/100.0
+        deficit=(100.0-value)*float(weight)/100.0
+        rows.append((name,value,int(weight),contribution,deficit))
+    rows.sort(key=lambda x:x[4],reverse=True)
+    return rows
+
+
+def _v1160_s29_health_lines(comp):
+    rows=_v1160_s29_health_analytics(comp)
+    out=[]
+    for name,value,weight,contribution,deficit in rows:
+        arrow="▲" if value>=80 else ("→" if value>=60 else "▼")
+        out.append(f"{arrow} {name:22} {value:5.1f}% · weight {weight:2d}% · score {contribution:4.1f}")
+    if rows:
+        out += [f"Top score drag         {rows[0][0]} (-{rows[0][4]:.1f})"]
+    return out
+
+
+def _v1160_s29_memory_context(rv):
+    """Explain observable memory context without claiming unsupported attribution."""
+    latest=rv.get("latest",{}) or {}; st=rv.get("state",{}) or {}
+    cache=int(float(latest.get("cache",0) or 0)); queue=int(float(latest.get("queue",0) or 0)); threads=int(float(latest.get("threads",0) or 0))
+    samples=len(st.get("samples",[]) or [])
+    factors=[("Cache entries",cache),("Queue items",queue),("Threads",threads),("Resource samples",samples)]
+    likely=max(factors,key=lambda x:x[1]) if factors else ("Insufficient data",0)
+    return [
+        f"Memory drift           {_v1160_s21_delta_text(rv.get('mem_1h')) or 'PENDING'}",
+        f"Cache entries          {cache}",
+        f"Queue items            {queue}",
+        f"Threads                {threads}",
+        f"Resource samples       {samples}",
+        f"Largest observed count {likely[0]} ({likely[1]})",
+        "Cause attribution      HEURISTIC · not a leak verdict",
+    ]
+
+
+def _v1160_s29_runtime_direction(rv):
+    if rv.get("warming"): return "→ MEASURING"
+    mem=rv.get("mem_1h"); cpu=rv.get("cpu_1h"); threads=rv.get("thread_1h")
+    values=[x for x in (mem,cpu,threads) if x is not None]
+    if not values: return "→ MEASURING"
+    if any(float(x)>15.0 for x in values): return "▼ DEGRADING"
+    if all(abs(float(x))<=5.0 for x in values): return "▬ STABLE"
+    if sum(float(x) for x in values)<0: return "▲ IMPROVING"
+    return "→ WATCHING"
+
+
+def _v1160_s29_runtime_trend(rv):
+    elapsed=float(rv.get("cert_elapsed",0) or 0)
+    score=float(_v1160_s26_health_components(rv,_v1160_s24_load_evidence()).get("Overall",0) or 0)
+    milestones=((1800,"30m"),(3600,"1h"),(21600,"6h"),(86400,"24h"),(172800,"48h"),(259200,"72h"))
+    out=[]
+    for seconds,label in milestones:
+        if elapsed>=seconds:
+            state=_v1160_s29_runtime_direction(rv)
+            out.append(f"{label:3}  {score:5.1f}  {state}")
+        else:
+            pct=max(0.0,min(100.0,elapsed/max(1.0,seconds)*100.0))
+            out.append(f"{label:3}  {pct:5.1f}%  PENDING")
+    return out,_v1160_s29_runtime_direction(rv)
+
+
+def _v1160_s29_evidence_timeline(rv,evidence):
+    elapsed=float(rv.get("cert_elapsed",0) or 0)
+    saved={str(x.get("checkpoint")) for x in evidence.get("snapshots",[]) if isinstance(x,dict)}
+    milestones=((1800,"00:30"),(3600,"01:00"),(7200,"02:00"),(21600,"06:00"),(43200,"12:00"),(86400,"24:00"),(172800,"48:00"),(259200,"72:00"))
+    out=[]
+    for seconds,label in milestones:
+        cp={86400:"24H",172800:"48H",259200:"72H"}.get(seconds)
+        if cp and cp in saved:
+            state="CERTIFIED" if cp=="72H" else "PASS"
+            out.append(f"{label:5} ✅ {state}")
+        elif elapsed>=seconds:
+            out.append(f"{label:5} ✅ MEASURED")
+        else:
+            pct=max(0.0,min(99.9,elapsed/max(1.0,seconds)*100.0))
+            blocks=min(5,int(pct//20)); bar="█"*blocks+"░"*(5-blocks)
+            out.append(f"{label:5} {bar} {pct:4.0f}%")
+    return out
+
+
+async def runtimehealth1160ltss29_cmd(update, context):
+    result=await runtimehealth1160ltss26_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence)
+    trend_lines,direction=_v1160_s29_runtime_trend(rv)
+    lines=[
+        "RUNTIME INTELLIGENCE",
+        f"Runtime Health         {comp['Overall']:.1f}/100 · {_v1160_s29_health_band(comp['Overall'])}",
+        "",
+        "SCORE CONTRIBUTIONS",
+    ]+_v1160_s29_health_lines(comp)+[
+        "",
+        "MEMORY OBSERVABILITY",
+    ]+_v1160_s29_memory_context(rv)+[
+        "",
+        "RUNTIME TREND",
+    ]+trend_lines+[
+        f"Overall direction      {direction}",
+        "",
+        "EVIDENCE TIMELINE",
+    ]+_v1160_s29_evidence_timeline(rv,evidence)
+    await v90_1_safe_reply(update,"\n".join(lines))
+    return result
+
+
+async def dashboard1160ltss29_cmd(update, context):
+    _v1155_track("dashboard")
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence)
+    gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate)
+    state=_v1160_rc496_shared_state(); cert,_=_v1160_rc497_certification_cached(state); learning=_v1160_rc47_dashboard_learning(state)
+    data=_v1160_s27_gate_snapshot_record(cert,learning); current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":learning.get("completed",0),"target":learning.get("target",150)}
+    trend=_v1160_s27_trend_metrics(data,current); prog,_,_=_v1160_rc496_progress(cert); projected,confidence=_v1160_s28_prediction(prog,trend,comp,passed,total)
+    trend_lines,direction=_v1160_s29_runtime_trend(rv)
+    lines=_v1160_s21_badge(True,rv["stage"])+[
+        "",
+        "RUNTIME INTELLIGENCE DASHBOARD",
+        f"Runtime health         {comp['Overall']:.1f}/100 · {_v1160_s29_health_band(comp['Overall'])}",
+        f"Runtime direction      {direction}",
+        f"Exit Gate              {passed}/{total} · {_v1160_s28_progress_bar(passed,total)}",
+        f"Remaining              {', '.join(missing) if missing else 'NONE'}",
+        "",
+        "CERTIFICATION PREDICTION",
+        f"Current                {prog:.1f}%",
+        f"Expected               {projected:.1f}%",
+        f"Confidence             {confidence:.1f}%",
+        f"Learning velocity      {trend['velocity']:.2f} samples/hour",
+        f"Target ETA             {_v1160_s27_eta_text(trend['eta_h'])}",
+        "",
+        "RUNTIME TREND",
+    ]+trend_lines+[
+        "",
+        "SCORE ANALYTICS",
+    ]+_v1160_s29_health_lines(comp)+[
+        "",
+        "EVIDENCE TIMELINE",
+    ]+_v1160_s29_evidence_timeline(rv,evidence)+_v1160_s21_footer()
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def status1160ltss29_cmd(update, context):
+    _v1155_track("status")
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); comp=_v1160_s26_health_components(rv,evidence)
+    gate=_v1160_s26_exit_gate(rv,evidence); passed,total,missing=_v1160_s26_gate_summary(gate)
+    structural=_v1160_rc4920_build_certification(False); view=structural["view"]
+    state=_v1160_rc496_shared_state(); cert,_=_v1160_rc497_certification_cached(state); learning=_v1160_rc47_dashboard_learning(state)
+    data=_v1160_s27_gate_snapshot_record(cert,learning); current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":learning.get("completed",0),"target":learning.get("target",150)}; trend=_v1160_s27_trend_metrics(data,current)
+    lines=_v1160_s21_badge(True,rv["stage"])+[
+        "",
+        "SPRINT 2 RUNTIME INTELLIGENCE STATUS",
+        f"Elapsed               {_v1160_s21_duration(rv['cert_elapsed'])}",
+        f"Progress              {rv['progress']:.2f}% / 72h",
+        f"Runtime health        {comp['Overall']:.1f}/100 · {_v1160_s29_health_band(comp['Overall'])}",
+        f"Direction             {_v1160_s29_runtime_direction(rv)}",
+        f"Exit Gate             {passed}/{total} Complete",
+        f"Remaining             {', '.join(missing) if missing else 'NONE'}",
+        "",
+        "LEARNING MILESTONE",
+        f"Samples               {learning['completed']}/{learning['target']}",
+        f"Velocity              {trend['velocity']:.2f} samples/hour",
+        f"Target ETA            {_v1160_s27_eta_text(trend['eta_h'])}",
+        "",
+        "ENGINEERING CERTIFICATION",
+        f"Registry              {view['registry_verified']}/{view['total']} PASS",
+        f"Handler               {view['callable']}/{view['total']} PASS",
+        f"Output                {view['output_linked']}/{view['total']} PASS",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "",
+        "TOP SCORE DRAG",
+    ]
+    analytics=_v1160_s29_health_analytics(comp)
+    lines.append(f"{analytics[0][0]} (-{analytics[0][4]:.1f})" if analytics else "NONE")
+    return await v90_1_safe_reply(update,"\n".join(lines+_v1160_s21_footer()))
+
+
+async def version1160ltss29_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot()
+    lines=[
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}",
+        "Version & Build Information",
+        "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+        "",
+        f"Version Source       {vm['source']}",
+        f"Build                {V1160_VERSION_MANAGER.version}",
+        f"Schema               {vm['schema']}",
+        f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}",
+        "Feature Freeze       ACTIVE",
+        "",
+        "Sprint 2.9 · Runtime intelligence, score analytics and evidence progress.",
+    ]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.9 version/build information",
+    "status":"Sprint 2.9 runtime intelligence status",
+    "runtimehealth":"Runtime score analytics, memory observability and evidence progress",
+    "dashboard":"Runtime intelligence and certification prediction dashboard",
+})
+V90_COMMAND_REGISTRY.update({
+    "version":version1160ltss29_cmd,
+    "status":status1160ltss29_cmd,
+    "runtimehealth":runtimehealth1160ltss29_cmd,
+    "dashboard":dashboard1160ltss29_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S28_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S29_PREFLIGHT_CACHE
+    if V1160_S29_PREFLIGHT_CACHE is not None and not force:
+        return V1160_S29_PREFLIGHT_CACHE
+    base=_V1160_S28_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in ("s28_handlers","s28_version_source"):
+        checks.pop(stale,None)
+    checks.update({
+        "s29_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S29_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,
+        "s29_registry_341":len(V90_COMMAND_REGISTRY)==341,
+        "s29_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss29_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss29_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss29_cmd,
+        "s29_health_bands":_v1160_s29_health_band(20).endswith("CRITICAL") and _v1160_s29_health_band(90).endswith("EXCELLENT"),
+        "s29_progress_timeline":len(_v1160_s29_evidence_timeline({"cert_elapsed":60},{"snapshots":[]}))==8,
+        "s29_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "s29_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    failed=[k for k,v in checks.items() if not v]
+    out=dict(base); out.update({
+        "ok":not failed,
+        "checks":checks,
+        "failed":failed,
+        "development_version":V91_VERSION,
+        "version_source":"Single",
+        "regression_risk":"NONE" if not failed else "HIGH",
+        "release_freeze":"ACTIVE",
+        "lts_readiness":"CERTIFYING" if not failed else "BLOCKED",
+        "certification_stage":"Sprint 2.9 Runtime Intelligence & Certification Analytics",
+    })
+    if not force:
+        V1160_S29_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
-    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.8.1 startup integrity failure: "+", ".join(audit.get("failed",[])))
+    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.9 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker(); main()

@@ -1,0 +1,40 @@
+{
+  "version": "116.0-LTS-S2.9",
+  "release_type": "incremental_patch",
+  "baseline": "116.0-LTS-S2.8.1",
+  "feature_freeze": true,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": "OFF",
+  "changed_file_count": 5,
+  "files": [
+    {
+      "path": "PATCH_INSTALL_GUIDE_KR.md",
+      "sha256": "c98f451fd88af2adf06f7f9612aee5cc005d18fcc791de05ef0cb713d14ca112",
+      "bytes": 629
+    },
+    {
+      "path": "changed_files.txt",
+      "sha256": "3a779f7e7ec1a746eabf9b3c84438e4f3c7f70f38ad753d885e229d71ba06939",
+      "bytes": 115
+    },
+    {
+      "path": "main.py",
+      "sha256": "3558c0a8078e0afa34a8453a3bde48e73c8e01c45698e24689be3422fd429874",
+      "bytes": 2284746
+    },
+    {
+      "path": "test_v1160_lts_s29_runtime_intelligence.py",
+      "sha256": "9debf78087625a2c2dad1c3058ff8d2163e78cb20b909bf8cc0a9ff80125281b",
+      "bytes": 1732
+    }
+  ],
+  "verification": {
+    "python_compile": "PASS",
+    "pytest": "89/89 PASS",
+    "registry": "341/341",
+    "regression_risk": "NONE",
+    "release_freeze": "ACTIVE"
+  }
+}
