@@ -41384,10 +41384,200 @@ def v91_preflight(force=False):
     failed = [k for k,v in checks.items() if not v]
     return {"ok": not failed, "checks": checks, "failed": failed, "command_count": len(V90_COMMAND_REGISTRY), "command_audit": view, "base": base, "development_version": V91_VERSION, "registry_fingerprint": _v1160_rc4920_registry_fingerprint(), "performance_engine": True}
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.22 - FINAL OUTPUT CONSISTENCY & LTS VALIDATION
+# ---------------------------------------------------------------------------
+import ast as _rc4922_ast
+
+V1160_RC4922_NUMBER = "116.0-RC4.9.22"
+V1160_RC4922_VERSION = "A100 V116.0-RC4.9.22 LTS FINAL OUTPUT CONSISTENCY & LTS RELEASE VALIDATION"
+V91_VERSION = V1160_RC4922_VERSION
+
+# Single-source version propagation for all late-generation output handlers.
+for _name in (
+    "V1160_RC4912_NUMBER", "V1160_RC4917_NUMBER",
+    "V1160_RC4920_NUMBER", "V1160_RC4921_NUMBER",
+    "V1160_RC496_NUMBER", "V1160_RC497_NUMBER", "V1160_RC498_NUMBER",
+):
+    globals()[_name] = V1160_RC4922_NUMBER
+for _name in (
+    "V1160_RC4912_VERSION", "V1160_RC4917_VERSION",
+    "V1160_RC4920_VERSION", "V1160_RC4921_VERSION",
+):
+    globals()[_name] = V1160_RC4922_VERSION
+
+
+def _v1160_rc4922_delegate_targets(handler):
+    """Return global coroutine/function names awaited or returned by a handler."""
+    try:
+        tree = _rc4922_ast.parse(inspect.getsource(handler))
+    except Exception:
+        return []
+    names = []
+    for node in _rc4922_ast.walk(tree):
+        call = None
+        if isinstance(node, _rc4922_ast.Await):
+            call = node.value
+        elif isinstance(node, _rc4922_ast.Return) and isinstance(node.value, _rc4922_ast.Await):
+            call = node.value.value
+        if isinstance(call, _rc4922_ast.Call):
+            fn = call.func
+            if isinstance(fn, _rc4922_ast.Name):
+                names.append(fn.id)
+    return names
+
+
+def _v1160_rc4922_has_output(handler, seen=None):
+    """Trace delegated handlers to avoid false negative Output Linkage results."""
+    seen = set(seen or ())
+    ident = id(handler)
+    if ident in seen:
+        return False, False
+    seen.add(ident)
+    try:
+        source = inspect.getsource(handler).lower()
+    except Exception:
+        return False, False
+    direct = any(x in source for x in (
+        "safe_reply", "reply_text", "reply_html", "send_message", "edit_message"
+    ))
+    if direct:
+        return True, False
+    delegated = False
+    for target_name in _v1160_rc4922_delegate_targets(handler):
+        target = globals().get(target_name)
+        if callable(target):
+            linked, _ = _v1160_rc4922_has_output(target, seen)
+            if linked:
+                delegated = True
+                break
+    return delegated, delegated
+
+
+_V1160_RC4922_SCAN_BASE = _v1160_rc4920_scan_one
+def _v1160_rc4920_scan_one(item):
+    name, handler = item
+    # Rebuild the row using the prior scanner, then correct delegated output evidence.
+    out_name, row, cache_hit = _V1160_RC4922_SCAN_BASE(item)
+    row = dict(row)
+    layer = dict(row.get("layer", {}))
+    linked, delegated = _v1160_rc4922_has_output(handler)
+    if linked:
+        layer["output"] = True
+        layer["delegated_output"] = bool(delegated)
+    row["layer"] = layer
+    # RC4.9.22 scanner result must replace any old cached false-negative row.
+    key = _v1160_rc4920_handler_key(name, handler)
+    with V1160_RC4920_LOCK:
+        V1160_RC4920_SOURCE_CACHE[key] = row
+    return out_name, row, cache_hit
+
+# Clear stale certification/source snapshots built by RC4.9.20/21 scanner rules.
+with V1160_RC4920_LOCK:
+    V1160_RC4920_SOURCE_CACHE.clear()
+    V1160_RC4920_CERT_CACHE.clear()
+    V1160_RC4920_PREFLIGHT_CACHE.clear()
+
+
+async def version1160rc4922_cmd(update, context):
+    return await v90_1_safe_reply(
+        update,
+        f"ℹ️ {V1160_RC4922_VERSION}\n"
+        "Schema 1 preserved · Paper 20 · Shadow 60 · Live OFF\n"
+        "Unified VersionManager · Output Linkage delegation trace · Shared Snapshot · LTS Validator enabled",
+    )
+
+
+async def ltscertification1160rc4922_cmd(update, context):
+    _v1155_track("ltscertification")
+    cert = _v1160_rc4920_build_certification(False)
+    view = cert["view"]
+    audit = v91_preflight()
+    state = _v1160_rc496_shared_state()
+    pipeline = _v1160_rc47_pipeline_audit(state)
+    version_ok = (
+        V91_VERSION == V1160_RC4922_VERSION
+        and _v1160_rc4912_version_number() == V1160_RC4922_NUMBER
+    )
+    checks = {
+        "Version single source": version_ok,
+        "Registry": len(V90_COMMAND_REGISTRY) == 341 and view["registry_verified"] == 341,
+        "Handler": view["callable"] == 341,
+        "Help": view["help"] == 341,
+        "Output linkage": view["output_linked"] == 341,
+        "Route certification": len(cert["evidence"]) == 341 and not cert["errors"],
+        "Pipeline": pipeline.get("status") == "PASS",
+        "Preflight": bool(audit.get("ok")),
+        "Schema 1": _v91_default_state().get("schema") == 1,
+        "Paper/Shadow": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "Live OFF": not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    lines = [
+        f"🏁 <b>A100 V{V1160_RC4922_NUMBER} LTS RELEASE VALIDATOR</b>",
+        f"Structural Result <b>{'PASS' if not failed else 'FAILED'}</b> · Runtime Mode <b>READ ONLY</b>",
+        f"Registry/Handler/Help <b>{view['registry_verified']}/{view['callable']}/{view['help']}</b>",
+        f"Output Linkage <b>{view['output_linked']}/{view['total']}</b> · Route Certification <b>{len(cert['evidence'])}/{view['total']}</b>",
+        "",
+    ]
+    for name, ok in checks.items():
+        lines.append(("✅" if ok else "⛔") + " " + _v54_escape(name))
+    lines += ["", "Schema 1 · Paper 20 · Shadow 60 · Live OFF"]
+    if failed:
+        lines += ["", "⚠️ LTS 차단 항목: " + _v54_escape(", ".join(failed))]
+    else:
+        lines += ["", "✅ 구조·출력·파이프라인 LTS 인증 조건을 충족했습니다."]
+    return await v90_1_safe_reply(update, "\n".join(lines), parse_mode="HTML")
+
+
+V925_COMMAND_USAGE.update({
+    "version": "현재 중앙 VersionManager 단일 버전",
+    "versionaudit": "RC4.9.22 버전·Registry·Output·Cache 즉시 감사",
+    "commandcert": "위임 출력까지 추적하는 341개 전체 Route 인증",
+    "ltscertification": "버전·출력·Registry·Pipeline·Schema·Live Safety LTS 통합 Validator",
+})
+V90_COMMAND_REGISTRY.update({
+    "version": version1160rc4922_cmd,
+    "ltscertification": ltscertification1160rc4922_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+_V1160_RC4922_PREFLIGHT_BASE = v91_preflight
+def v91_preflight(force=False):
+    base = _V1160_RC4922_PREFLIGHT_BASE(force=force)
+    cert = _v1160_rc4920_build_certification(False)
+    view = cert["view"]
+    checks = {k:v for k,v in dict(base.get("checks", {})).items() if not k.startswith("rc4921_")}
+    checks.update({
+        "rc4922_version_single_source": V91_VERSION == V1160_RC4922_VERSION and _v1160_rc4912_version_number() == V1160_RC4922_NUMBER,
+        "rc4922_registry_341": len(V90_COMMAND_REGISTRY) == 341 and view["registry_verified"] == 341,
+        "rc4922_handler_341": view["callable"] == 341,
+        "rc4922_help_341": view["help"] == 341,
+        "rc4922_output_linkage_341": view["output_linked"] == 341,
+        "rc4922_route_certification_341": len(cert["evidence"]) == 341 and not cert["errors"],
+        "rc4922_lts_validator": V90_COMMAND_REGISTRY.get("ltscertification") is ltscertification1160rc4922_cmd,
+        "rc4922_shared_snapshot": callable(_v1160_rc4920_cached_call),
+        "rc4922_schema": _v91_default_state().get("schema") == 1,
+        "rc4922_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "rc4922_live_off": not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    failed = [k for k,v in checks.items() if not v]
+    return {
+        "ok": not failed, "checks": checks, "failed": failed,
+        "command_count": len(V90_COMMAND_REGISTRY), "command_audit": view,
+        "base": base, "development_version": V91_VERSION,
+        "registry_fingerprint": _v1160_rc4920_registry_fingerprint(),
+        "performance_engine": True, "lts_validator": True,
+    }
+
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.21 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.22 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
