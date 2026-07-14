@@ -1,51 +1,28 @@
 {
+  "version": "A100 V116.0-LTS-S2.11",
+  "package_type": "incremental_patch",
+  "baseline": "A100 V116.0-LTS-S2.10",
   "schema": 1,
-  "release": "A100 V116.0 LTS-S2.10",
-  "type": "incremental_patch",
-  "baseline": "A100 V116.0 LTS-S2.9",
-  "title": "Runtime Trend Delta & ETA Source Analytics",
-  "created_at_utc": "2026-07-14T22:11:36Z",
-  "preserves": {
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": "OFF",
-    "data_and_config": true
-  },
-  "changes": [
-    "Runtime health previous/current/delta and textual 24h score graph",
-    "Memory baseline/current/peak/delta",
-    "30m/1h/6h/24h runtime score delta",
-    "Learning velocity windows with explicit ETA source",
-    "Non-positive/invalid ETA guarded as COLLECTING DATA"
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": false,
+  "feature_freeze": "ACTIVE",
+  "release_freeze": "ACTIVE",
+  "changed_files": [
+    "main.py",
+    "test_v1160_lts_s211_final_polish.py"
   ],
-  "files": [
-    {
-      "path": "main.py",
-      "size": 2296608,
-      "sha256": "2a5167fd719e53e8296231511ee479b8dd8dbe9d0fa4ba22af8a598646ac8752"
-    },
-    {
-      "path": "test_v1160_lts_s210_runtime_trend_eta.py",
-      "size": 2404,
-      "sha256": "af120fd88c607e74e4e59ea4ca418f80df52f71e1bdbfb29792db7d45e1fe452"
-    },
-    {
-      "path": "changed_files.txt",
-      "size": 113,
-      "sha256": "0b15f22fd40febb20b7a4ef3d422dd0f2fab92d4cec9deea56333b0e19267eed"
-    },
-    {
-      "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 878,
-      "sha256": "131b64a4cb6aaf5fb7b58c44ec0cd7f89dbd396d0114b4c37e8c28e5ae82cb90"
-    }
-  ],
-  "verification": {
-    "python_compile": "PASS",
-    "targeted_pytest": "4/4 PASS",
-    "registry": "341/341",
-    "release_freeze": "ACTIVE",
-    "regression_risk": "NONE"
-  }
+  "verification_commands": [
+    "/version",
+    "/status",
+    "/runtimehealth",
+    "/dashboard btc",
+    "/releasegate",
+    "/performanceaudit",
+    "/commandcert",
+    "/commandcert deep",
+    "/versionaudit",
+    "/pipelinetrace",
+    "/errors"
+  ]
 }

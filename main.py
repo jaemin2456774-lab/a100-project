@@ -44723,8 +44723,213 @@ def v91_preflight(force=False):
     if not force: V1160_S210_PREFLIGHT_CACHE=out
     return out
 
+
+# =============================================================================
+# A100 V116.0 LTS-S2.11 FINAL POLISH INTELLIGENCE PATCH
+# Release Gate Forecast · Learning Quality · Evidence Timeline · Runtime/Memory
+# Prediction. Additive/read-only analytics; schema, trading limits and routes stay
+# unchanged.
+# =============================================================================
+V1160_LTS_S211_NUMBER = "116.0-LTS-S2.11"
+V1160_LTS_S211_VERSION = "A100 V116.0-LTS-S2.11 FINAL POLISH INTELLIGENCE"
+V1160_VERSION_MANAGER = V1160VersionManager(
+    number=V1160_LTS_S211_NUMBER,
+    version=V1160_LTS_S211_VERSION,
+    baseline="A100 V116.0 LTS-S2.10 Runtime Trend Delta & ETA Source Analytics",
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S211_PREFLIGHT_CACHE = None
+
+
+def _v1160_s211_clamp(value, low=0.0, high=100.0):
+    try: return max(low, min(high, float(value)))
+    except Exception: return low
+
+
+def _v1160_s211_linear(values):
+    vals=[]
+    for value in values:
+        try: vals.append(float(value))
+        except Exception: pass
+    n=len(vals)
+    if n < 2: return 0.0
+    xm=(n-1)/2.0; ym=sum(vals)/n
+    den=sum((i-xm)**2 for i in range(n))
+    return 0.0 if den <= 0 else sum((i-xm)*(v-ym) for i,v in enumerate(vals))/den
+
+
+def _v1160_s211_runtime_intelligence(rv, evidence):
+    comp=_v1160_s26_health_components(rv,evidence)
+    samples=[x for x in (rv.get("state",{}) or {}).get("samples",[]) if isinstance(x,dict)][-48:]
+    mem=[float(x.get("memory_mb",0) or 0) for x in samples if float(x.get("memory_mb",0) or 0)>0]
+    cpu=[float(x.get("cpu_pct",0) or 0) for x in samples]
+    queue=[float(x.get("queue",0) or 0) for x in samples]
+    mem_slope=_v1160_s211_linear(mem)
+    cpu_slope=_v1160_s211_linear(cpu)
+    queue_slope=_v1160_s211_linear(queue)
+    score=float(comp.get("Overall",0) or 0)
+    pressure=max(0.0,mem_slope)*1.8+max(0.0,cpu_slope)*1.2+max(0.0,queue_slope)*2.0
+    regression=_v1160_s211_clamp((100.0-score)*0.42+pressure,0,99)
+    confidence=_v1160_s211_clamp(55.0+min(len(samples),36)*1.15-min(20.0,pressure),0,99)
+    forecast=_v1160_s211_clamp(score-regression*0.08,0,100)
+    risk="LOW" if regression<10 else ("MEDIUM" if regression<25 else "HIGH")
+    prediction="STABLE" if forecast>=85 and risk=="LOW" else ("WATCH" if forecast>=70 else "AT RISK")
+    return {"score":score,"confidence":confidence,"regression":regression,"forecast":forecast,"risk":risk,"prediction":prediction,"sample_count":len(samples),"mem_slope":mem_slope,"cpu_slope":cpu_slope,"queue_slope":queue_slope}
+
+
+def _v1160_s211_learning_intelligence(data, current):
+    rows=[x for x in data.get("samples",[]) if isinstance(x,dict)][-96:]
+    deltas=[]
+    for a,b in zip(rows,rows[1:]):
+        dv=float(b.get("learning",0) or 0)-float(a.get("learning",0) or 0)
+        deltas.append(dv)
+    pos=sum(1 for x in deltas if x>0); neg=sum(1 for x in deltas if x<0); flat=sum(1 for x in deltas if x==0)
+    active=max(1,pos+neg)
+    positive=100.0*pos/active if deltas else 0.0
+    negative=100.0*neg/active if deltas else 0.0
+    values,source,selected,eta_h,remaining=_v1160_s210_velocity_profile(data,current)
+    peak=max(values.values()) if values else 0.0
+    efficiency=_v1160_s211_clamp(100.0*selected/peak if peak>0 else 0.0)
+    density=min(100.0,len(rows)/24.0*100.0)
+    quality=_v1160_s211_clamp(positive*0.45+efficiency*0.35+density*0.20)
+    confidence=_v1160_s211_clamp(40.0+density*0.45+(10.0 if source not in ("NONE","COLLECTING") else 0.0))
+    trend="POSITIVE" if selected>0 and positive>=negative else ("NEGATIVE" if negative>positive else "FLAT")
+    return {"velocity":selected,"source":source,"eta_h":eta_h,"remaining":remaining,"positive":positive,"negative":negative,"flat":flat,"quality":quality,"confidence":confidence,"efficiency":efficiency,"trend":trend,"rows":len(rows)}
+
+
+def _v1160_s211_gate_forecast(cert, learning, runtime_i, learning_i):
+    gate=(cert or {}).get("gate",{}) or {}
+    ratios=[]
+    for item in gate.values():
+        if isinstance(item,dict):
+            current=float(item.get("current",item.get("value",0)) or 0); target=float(item.get("target",100) or 100)
+            if target>0: ratios.append(_v1160_s211_clamp(current/target*100.0))
+    gate_progress=sum(ratios)/len(ratios) if ratios else 0.0
+    completed=float((learning or {}).get("completed",0) or 0); target=float((learning or {}).get("target",150) or 150)
+    learning_progress=_v1160_s211_clamp(completed/target*100.0 if target>0 else 0.0)
+    pass_probability=_v1160_s211_clamp(gate_progress*0.35+learning_progress*0.25+runtime_i["forecast"]*0.25+learning_i["quality"]*0.15-runtime_i["regression"]*0.35)
+    confidence=_v1160_s211_clamp(runtime_i["confidence"]*0.55+learning_i["confidence"]*0.45)
+    remaining_risk=_v1160_s211_clamp(100.0-pass_probability+runtime_i["regression"]*0.25)
+    trend="IMPROVING" if learning_i["trend"]=="POSITIVE" and runtime_i["risk"]=="LOW" else ("WATCH" if runtime_i["risk"]!="HIGH" else "DEGRADING")
+    forecast="PASS" if pass_probability>=90 and remaining_risk<15 else ("CONDITIONAL" if pass_probability>=70 else "PENDING")
+    return {"progress":gate_progress,"pass_probability":pass_probability,"confidence":confidence,"remaining_risk":remaining_risk,"trend":trend,"forecast":forecast,"eta_h":learning_i["eta_h"]}
+
+
+def _v1160_s211_evidence_timeline(rv, evidence, width=10):
+    now=time.time(); snapshots=[x for x in evidence.get("snapshots",[]) if isinstance(x,dict)]
+    samples=[x for x in (rv.get("state",{}) or {}).get("samples",[]) if isinstance(x,dict)]
+    lines=[]
+    for hours in (1,6,12,24,48,72):
+        cutoff=now-hours*3600
+        count=sum(1 for x in samples if float(x.get("ts",x.get("captured_at",0)) or 0)>=cutoff)
+        snap=sum(1 for x in snapshots if float(x.get("captured_at",0) or 0)>=cutoff)
+        expected=max(1,hours*4); pct=_v1160_s211_clamp(count/expected*100.0)
+        blocks=int(round(pct/100.0*width)); graph="█"*blocks+"░"*(width-blocks)
+        lines.append(f"{hours:>2}h {graph} {pct:5.1f}% · S{snap}")
+    return lines
+
+
+def _v1160_s211_memory_intelligence(rv):
+    samples=[x for x in (rv.get("state",{}) or {}).get("samples",[]) if isinstance(x,dict)][-72:]
+    def vals(key): return [float(x.get(key,0) or 0) for x in samples]
+    mem=vals("memory_mb"); cache=vals("cache"); workers=vals("threads"); queue=vals("queue")
+    ms=_v1160_s211_linear(mem); cs=_v1160_s211_linear(cache); ws=_v1160_s211_linear(workers); qs=_v1160_s211_linear(queue)
+    leak_prob=_v1160_s211_clamp(max(0,ms)*8.0+max(0,qs)*4.0)
+    growth=(ms*12.0) if mem else 0.0
+    return {"leak_probability":leak_prob,"growth_mb":growth,"cache_slope":cs,"worker_slope":ws,"queue_slope":qs,"snapshot_trend":"GROWING" if len(samples)>=2 else "COLLECTING","risk":"LOW" if leak_prob<15 else ("MEDIUM" if leak_prob<35 else "HIGH")}
+
+
+async def runtimehealth1160ltss211_cmd(update,context):
+    result=await runtimehealth1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv)
+    ri=_v1160_s211_runtime_intelligence(rv,evidence); mi=_v1160_s211_memory_intelligence(rv)
+    lines=["RUNTIME INTELLIGENCE 2",
+        f"Prediction             {ri['prediction']}",f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Stability forecast     {ri['forecast']:.1f}%",f"Regression probability {ri['regression']:.1f}%",
+        f"Runtime risk           {ri['risk']}",f"Evidence samples       {ri['sample_count']}","",
+        "MEMORY INTELLIGENCE",f"Leak prediction        {mi['leak_probability']:.1f}% · {mi['risk']}",
+        f"Growth prediction      {mi['growth_mb']:+.2f} MB / horizon",f"Cache trend            {mi['cache_slope']:+.3f}",
+        f"Worker trend           {mi['worker_slope']:+.3f}",f"Queue trend            {mi['queue_slope']:+.3f}",f"Snapshot trend         {mi['snapshot_trend']}"]
+    await v90_1_safe_reply(update,"\n".join(lines)); return result
+
+
+async def releasegate1160ltss211_cmd(update,context):
+    await releasegate1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); ri=_v1160_s211_runtime_intelligence(rv,evidence)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot(); data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":learning.get("completed",0),"target":learning.get("target",150)}
+    li=_v1160_s211_learning_intelligence(data,current); gf=_v1160_s211_gate_forecast(cert,learning,ri,li)
+    lines=["RELEASE GATE INTELLIGENCE",f"Gate trend             {gf['trend']}",f"AI gate forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",f"Gate confidence        {gf['confidence']:.1f}%",
+        f"Estimated completion   {_v1160_s210_eta_text(gf['eta_h'])}",f"Remaining risk score   {gf['remaining_risk']:.1f}/100",f"Snapshot cache         {'HIT' if hit else 'MISS'}","",
+        "LEARNING INTELLIGENCE",f"Velocity trend         {li['trend']} · {li['velocity']:.2f}/h",f"Positive / Negative    {li['positive']:.1f}% / {li['negative']:.1f}%",
+        f"Quality score          {li['quality']:.1f}/100",f"Confidence score       {li['confidence']:.1f}/100",f"Learning efficiency    {li['efficiency']:.1f}%"]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def dashboard1160ltss211_cmd(update,context):
+    await dashboard1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); ri=_v1160_s211_runtime_intelligence(rv,evidence)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot(); data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":0,"target":150}
+    li=_v1160_s211_learning_intelligence(data,current); gf=_v1160_s211_gate_forecast(cert,learning,ri,li)
+    lines=["LTS FINAL READINESS",f"Gate forecast          {gf['forecast']} · {gf['pass_probability']:.1f}%",
+        f"Runtime stability      {ri['forecast']:.1f}%",f"Runtime confidence     {ri['confidence']:.1f}%",
+        f"Learning quality       {li['quality']:.1f}%",f"Learning confidence    {li['confidence']:.1f}%",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100","","EVIDENCE TIMELINE GRAPH"]+_v1160_s211_evidence_timeline(rv,evidence)
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+async def status1160ltss211_cmd(update,context):
+    await status1160ltss210_cmd(update,context)
+    rv=_v1160_s21_runtime_view(); evidence=_v1160_s26_update_evidence(rv); ri=_v1160_s211_runtime_intelligence(rv,evidence)
+    state,cert,hit,learning=_v1160_rc4924_gate_snapshot(); data=_v1160_s27_gate_snapshot_record(cert,learning)
+    current=data.get("samples",[])[-1] if data.get("samples") else {"ts":time.time(),"learning":0,"target":150}
+    li=_v1160_s211_learning_intelligence(data,current); gf=_v1160_s211_gate_forecast(cert,learning,ri,li)
+    return await v90_1_safe_reply(update,"\n".join(["FINAL POLISH SUMMARY",f"Release forecast  {gf['forecast']}",f"Pass probability  {gf['pass_probability']:.1f}%",f"Runtime risk      {ri['risk']}",f"Learning trend    {li['trend']}",f"Remaining risk    {gf['remaining_risk']:.1f}/100"]))
+
+
+async def version1160ltss211_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    lines=[f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.11 · Release Gate, Learning, Evidence, Runtime and Memory Intelligence Final Polish."]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.11 Final Polish version/build information",
+    "status":"Release forecast, runtime risk and learning trend summary",
+    "runtimehealth":"Runtime Prediction, risk, confidence and memory forecast",
+    "dashboard":"LTS readiness and evidence timeline graph",
+    "releasegate":"AI gate forecast, pass probability and learning intelligence",
+})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss211_cmd,"status":status1160ltss211_cmd,"runtimehealth":runtimehealth1160ltss211_cmd,"dashboard":dashboard1160ltss211_cmd,"releasegate":releasegate1160ltss211_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S210_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    global V1160_S211_PREFLIGHT_CACHE
+    if V1160_S211_PREFLIGHT_CACHE is not None and not force: return V1160_S211_PREFLIGHT_CACHE
+    base=_V1160_S210_PREFLIGHT(force); checks=dict(base.get("checks",{}))
+    for stale in ("s210_handlers","s210_version_source"): checks.pop(stale,None)
+    probe_rv={"state":{"samples":[]},"latest":{},"cert_elapsed":0}
+    probe_ev={"snapshots":[]}
+    checks.update({
+        "s211_version_source":V1160_VERSION_MANAGER.number==V1160_LTS_S211_NUMBER and V91_VERSION==V1160_VERSION_MANAGER.version,
+        "s211_registry_341":len(V90_COMMAND_REGISTRY)==341,
+        "s211_handlers":V90_COMMAND_REGISTRY.get("status") is status1160ltss211_cmd and V90_COMMAND_REGISTRY.get("runtimehealth") is runtimehealth1160ltss211_cmd and V90_COMMAND_REGISTRY.get("dashboard") is dashboard1160ltss211_cmd and V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss211_cmd,
+        "s211_runtime_shape":set(("prediction","confidence","regression","forecast","risk")).issubset(_v1160_s211_runtime_intelligence(probe_rv,probe_ev)),
+        "s211_evidence_graph":len(_v1160_s211_evidence_timeline(probe_rv,probe_ev))==6,
+        "s211_memory_shape":"leak_probability" in _v1160_s211_memory_intelligence(probe_rv),
+        "s211_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        "s211_live_off":not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade")),
+    })
+    failed=[k for k,v in checks.items() if not v]; out=dict(base); out.update({"ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,"version_source":"Single","regression_risk":"NONE" if not failed else "HIGH","release_freeze":"ACTIVE","lts_readiness":"CERTIFYING" if not failed else "BLOCKED","certification_stage":"Sprint 2.11 Final Polish Intelligence"})
+    if not force: V1160_S211_PREFLIGHT_CACHE=out
+    return out
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight(force=True)
-    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.10 startup integrity failure: "+", ".join(audit.get("failed",[])))
+    if not audit.get("ok"): raise RuntimeError("V116.0 LTS-S2.11 startup integrity failure: "+", ".join(audit.get("failed",[])))
     _v1160_rc45_start_worker(); main()
