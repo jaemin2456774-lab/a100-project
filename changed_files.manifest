@@ -1,6 +1,4 @@
 main.py
-CHANGELOG_S2.15.md
+CHANGELOG_S2.16.md
 PATCH_INSTALL_GUIDE_KR.md
-test_v1160_lts_s215_final_consistency.py
-PATCH_MANIFEST.json
-SHA256SUMS
+test_v1160_lts_s216_final_scheduler.py
