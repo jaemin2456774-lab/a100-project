@@ -1,3 +1,1 @@
-# A100 V116.0 LTS-S2.6
-
-Sprint 2 Final Stabilization development release.
+A100 V116.0 LTS-S2.7 Release Gate Trend & Final Polish Development Release
