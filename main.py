@@ -39306,11 +39306,113 @@ def v91_preflight():
     })
     return {"ok":all(checks.values()),"checks":checks,"command_count":len(V90_COMMAND_REGISTRY),"base":base,"development_version":V91_VERSION,"registry_fingerprint":"v1160-rc498-performance-measurement-truth-certification-clarity"}
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.9 - OPERATIONS INTELLIGENCE & PERFORMANCE INSIGHT
+# ---------------------------------------------------------------------------
+V1160_RC499_NUMBER="116.0-RC4.9.9"
+V1160_RC499_VERSION="A100 V116.0-RC4.9.9 LTS OPERATIONS INTELLIGENCE PERFORMANCE INSIGHT"
+V91_VERSION=V1160_RC499_VERSION
+V1160_RC499_HISTORY=defaultdict(lambda: deque(maxlen=500))
+
+def _v1160_rc499_gate_snapshot():
+    state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_certification_cached(state)
+    return state,cert,hit
+
+def _v1160_rc499_health(cert):
+    gate=cert.get('gate',{})
+    vals=[]
+    for g in gate.values():
+        try: vals.append(min(100.0,100.0*float(g.get('value',0))/max(1.0,float(g.get('target',1)))))
+        except Exception: pass
+    score=sum(vals)/len(vals) if vals else 0.0
+    label='GOOD' if score>=80 else 'MID' if score>=60 else 'LOW'
+    return score,label
+
+async def status1160rc499_cmd(update,context):
+    global V1160_RC497_NUMBER
+    old=V1160_RC497_NUMBER; V1160_RC497_NUMBER=V1160_RC499_NUMBER
+    try:return await status1160rc497_cmd(update,context)
+    finally:V1160_RC497_NUMBER=old
+
+async def dashboard1160rc499_cmd(update,context):
+    global V1160_RC496_NUMBER
+    old=V1160_RC496_NUMBER; V1160_RC496_NUMBER=V1160_RC499_NUMBER
+    try:
+        result=await dashboard1160rc496_cmd(update,context)
+        _,cert,_=_v1160_rc499_gate_snapshot(); gate=cert.get('gate',{})
+        conf=float(gate.get('intelligence_score',{}).get('value',0)); trust=float(gate.get('strategy_trust',{}).get('value',0))
+        await v90_1_safe_reply(update,f"🎯 <b>LEARNING FORECAST</b>\nConfidence 예상 <b>{conf:.1f}% → {min(100,conf+3):.1f}%</b>\nStrategy Trust 예상 <b>{trust:.1f} → {min(100,trust+5):.1f}</b>",parse_mode='HTML')
+        return result
+    finally:V1160_RC496_NUMBER=old
+
+async def releasegate1160rc499_cmd(update,context):
+    _,cert,hit=_v1160_rc499_gate_snapshot(); mode,_=_v1160_rc495_mode(cert); prog,passed,total=_v1160_rc496_progress(cert); gate=cert.get('gate',{})
+    labels={'intelligence_score':'Intelligence','strategy_trust':'Strategy','outcome_quality':'Outcome','memory_health':'Memory','lts_readiness':'LTS Readiness'}
+    lines=[f"🚦 <b>A100 V{V1160_RC499_NUMBER} RELEASE GATE</b>",f"Phase <b>{mode}</b> · Status <b>{'READY' if cert.get('ready') else 'LEARNING'}</b>",f"Score Progress <b>{prog:.1f}%</b> · Gates <b>{passed}/{total}</b> · Cache {'HIT' if hit else 'MISS'}",""]
+    blocked=[]
+    for k,g in gate.items():
+        ok=bool(g.get('pass')); name=labels.get(k,k); lines.append(f"{'✅' if ok else '❌'} {name} <b>{float(g.get('value',0)):.1f}/{float(g.get('target',0)):.0f}</b>")
+        if not ok: blocked.append(name)
+    lines += ["", "Blocked By: <b>"+_v54_escape(', '.join(blocked) if blocked else 'None')+"</b>"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def aihealth1160rc499_cmd(update,context):
+    _,cert,_=_v1160_rc499_gate_snapshot(); score,label=_v1160_rc499_health(cert); gate=cert.get('gate',{})
+    lines=[f"🧠 <b>A100 V{V1160_RC499_NUMBER} AI HEALTH</b>",f"Overall <b>{score:.1f}% · {label}</b>",""]
+    names={'intelligence_score':'Learning','memory_health':'Memory','strategy_trust':'Strategy','outcome_quality':'Outcome','lts_readiness':'Readiness'}
+    for k,n in names.items():
+        g=gate.get(k,{}); ratio=100*float(g.get('value',0))/max(1,float(g.get('target',1))); state='GOOD' if ratio>=90 else 'MID' if ratio>=70 else 'LOW'; lines.append(f"{'🟢' if state=='GOOD' else '🟡' if state=='MID' else '🔴'} {n} <b>{state}</b>")
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def performancehistory1160rc499_cmd(update,context):
+    rows=[]
+    for name,vals in V1160_RC498_PROCESSING.items():
+        recent=list(vals)[-5:]
+        if recent: rows.append((sum(recent)/len(recent),name,recent))
+    rows.sort()
+    allv=[v for _,_,rs in rows for v in rs]
+    avg=sum(allv)/len(allv) if allv else 0
+    lines=[f"📈 <b>A100 V{V1160_RC499_NUMBER} PERFORMANCE HISTORY</b>",f"Recent Avg <b>{avg/1000:.2f}s</b> · Samples <b>{len(allv)}</b>",""]
+    for _,name,rs in rows[:8]: lines.append(f"/{name}: "+' · '.join(f"{x/1000:.2f}s" for x in rs))
+    if rows:
+        slow=max(rows,key=lambda x:max(x[2])); fast=min(rows,key=lambda x:min(x[2])); lines += ["",f"Fastest <b>/{fast[1]}</b> {min(fast[2])/1000:.2f}s",f"Slowest <b>/{slow[1]}</b> {max(slow[2])/1000:.2f}s"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def performanceaudit1160rc499_cmd(update,context):
+    # retain measurement-truth report, then add explicit GOOD/BAD interpretation
+    await performanceaudit1160rc498_cmd(update,context)
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,total)
+    proc=[x for vals in V1160_RC498_PROCESSING.values() for x in vals]; avg=sum(proc)/len(proc) if proc else 0
+    good=[]; bad=[]
+    (good if hit>=80 else bad).append(f"Cache Hit {hit:.1f}% (target 80%)")
+    (good if avg<=5000 else bad).append(f"Processing Avg {avg:.0f}ms (target 5000ms)")
+    (good if V1160_RC495_DUPLICATE_READS==0 else bad).append(f"Duplicate Reads {V1160_RC495_DUPLICATE_READS} (target 0)")
+    lines=["📌 <b>GRADE INTERPRETATION</b>","✅ GOOD"]+["• "+_v54_escape(x) for x in good]+["⚠️ NEEDS IMPROVEMENT"]+["• "+_v54_escape(x) for x in bad]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+async def commandcert1160rc499_cmd(update,context):
+    state=_v1160_rc496_shared_state(); cert,hit=_v1160_rc497_command_certification_cached(state); counts=cert.get('counts',{}); partial=int(counts.get('PARTIAL_ENGINE',0)); passed=int(counts.get('PASS',0)); pending=max(0,partial-passed)
+    await commandcert1160rc498_cmd(update,context)
+    return await v90_1_safe_reply(update,f"📊 <b>CERTIFICATION COVERAGE</b>\nVerified <b>{passed}</b> · Pending <b>{pending}</b> · Resolved <b>0</b>\nPARTIAL은 실패가 아니라 아직 End-to-End 검증이 완료되지 않은 상태입니다.",parse_mode='HTML')
+
+V925_COMMAND_USAGE.update({'performancehistory':'최근 명령별 처리시간 및 fastest/slowest','aihealth':'AI Health 종합점수와 영역별 상태'})
+V90_COMMAND_REGISTRY.update({'status':status1160rc499_cmd,'dashboard':dashboard1160rc499_cmd,'releasegate':releasegate1160rc499_cmd,'performanceaudit':performanceaudit1160rc499_cmd,'performancehistory':performancehistory1160rc499_cmd,'aihealth':aihealth1160rc499_cmd,'commandcert':commandcert1160rc499_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC499_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC499_PREFLIGHT_BASE(); checks=dict(base.get('checks',{}))
+    for k in list(checks):
+        if k.startswith('v1160_rc498_'): checks.pop(k,None)
+    checks.update({'v1160_rc499_version_manager':V91_VERSION==V1160_RC499_VERSION,'v1160_rc499_status':V90_COMMAND_REGISTRY.get('status') is status1160rc499_cmd,'v1160_rc499_dashboard':V90_COMMAND_REGISTRY.get('dashboard') is dashboard1160rc499_cmd,'v1160_rc499_releasegate':V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160rc499_cmd,'v1160_rc499_performancehistory':V90_COMMAND_REGISTRY.get('performancehistory') is performancehistory1160rc499_cmd,'v1160_rc499_aihealth':V90_COMMAND_REGISTRY.get('aihealth') is aihealth1160rc499_cmd,'v1160_rc499_commandcert':V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc499_cmd,'v1160_rc499_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),'v1160_rc499_schema':_v91_default_state().get('schema')==1,'v1160_rc499_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'v1160_rc499_live_off':not any(t in globals() for t in ('place_live_order','submit_live_order','execute_live_trade'))})
+    return {'ok':all(checks.values()),'checks':checks,'command_count':len(V90_COMMAND_REGISTRY),'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc499-operations-intelligence-performance-insight'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get("ok"):
         failed=[k for k,v in audit.get("checks",{}).items() if not v]
-        raise RuntimeError("V116.0 RC4.9.8 startup integrity failure: "+", ".join(failed))
+        raise RuntimeError("V116.0 RC4.9.9 startup integrity failure: "+", ".join(failed))
     _v1160_rc45_start_worker()
     main()
