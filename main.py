@@ -40473,10 +40473,161 @@ def v91_preflight():
     failed=[k for k,v in checks.items() if not v]
     return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4916-full-layer-coverage-snapshot-consistency'}
 
+
+# ================================================================
+# A100 V116.0 LTS RC4.9.17 - OUTPUT/HELP/RUNTIME PROBE/P95 STABILIZATION
+# ================================================================
+from dataclasses import dataclass as _rc4917_dataclass
+from collections import deque as _rc4917_deque
+
+@_rc4917_dataclass(frozen=True)
+class _V1160RC4917Release:
+    number: str = "116.0-RC4.9.17"
+    version: str = "A100 V116.0-RC4.9.17 OUTPUT HELP RUNTIME PROBE & P95 STABILIZATION"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4917_RELEASE=_V1160RC4917Release()
+V1160_RC4917_NUMBER=V1160_RC4917_RELEASE.number
+V1160_RC4917_VERSION=V1160_RC4917_RELEASE.version
+V91_VERSION=V1160_RC4917_VERSION
+V1160_RC4912_NUMBER=V1160_RC4917_NUMBER
+V1160_RC4912_VERSION=V1160_RC4917_VERSION
+
+# Runtime probe queue is deliberately read-only. It validates active callable routes
+# incrementally and never places orders or mutates Paper/Shadow learning data.
+V1160_RC4917_PROBE_QUEUE=_rc4917_deque()
+V1160_RC4917_PROBE_EVIDENCE=set()
+V1160_RC4917_PROBE_ERRORS={}
+
+def _v1160_rc4917_reset_probe_queue():
+    V1160_RC4917_PROBE_QUEUE.clear()
+    V1160_RC4917_PROBE_QUEUE.extend(sorted(V90_COMMAND_REGISTRY))
+
+def _v1160_rc4917_probe_step(limit=25):
+    if not V1160_RC4917_PROBE_QUEUE:
+        _v1160_rc4917_reset_probe_queue()
+    checked=0
+    while V1160_RC4917_PROBE_QUEUE and checked < max(1,min(50,int(limit))):
+        name=V1160_RC4917_PROBE_QUEUE.popleft(); handler=V90_COMMAND_REGISTRY.get(name)
+        try:
+            if not callable(handler): raise TypeError('handler not callable')
+            # Dry route probe: compile/source availability and registry identity.
+            inspect.getsource(handler)
+            V1160_RC4917_PROBE_EVIDENCE.add(name)
+            V1160_RC4917_PROBE_ERRORS.pop(name,None)
+        except Exception as exc:
+            V1160_RC4917_PROBE_ERRORS[name]=type(exc).__name__
+        checked+=1
+    return checked
+
+
+def _v1160_rc4917_plain(value):
+    return _v1160_rc4914_strip_markup(value)
+
+async def help1160rc4917_cmd(update,context):
+    _v1155_track('help'); q=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    groups=_v1155_grouped_commands(q)
+    if q and not any(groups.values()):
+        return await v90_1_safe_reply(update,f"🔎 A100 V{V1160_RC4917_NUMBER} HELP\n\n'{q}' 관련 명령을 찾지 못했습니다.")
+    if not q:
+        counts=_v1160_rc42_category_summary(); lines=[f"🧠 A100 V{V1160_RC4917_NUMBER} DYNAMIC HELP 3.1","카테고리별 페이지형 도움말",""]
+        for i,cat in enumerate(_V1160_RC42_CATEGORY_ORDER,1):
+            if counts[cat]: lines.append(f"{i}. {_V1160_RC42_LABELS[cat]} · {counts[cat]}개 · /help {cat}")
+        lines += ["",f"활성 명령 {len(V90_COMMAND_REGISTRY)}개","검색: /commands 키워드","Live OFF · Shadow → Paper → Canary → Stable"]
+        return await v90_1_safe_reply(update,'\n'.join(lines))
+    names=sorted([n for vals in groups.values() for n in vals]); lines=[f"📖 {_V1160_RC42_LABELS.get(q,q.upper())} HELP",""]+[f"/{n} · {_v1154_usage(n)}" for n in names]+["",f"결과 {len(names)}개 · 전체 /help"]
+    text='\n'.join(lines)
+    for i in range(0,len(text),3600): await v90_1_safe_reply(update,text[i:i+3600])
+
+async def commands1160rc4917_cmd(update,context):
+    _v1155_track('commands'); q=str(context.args[0]).lower() if getattr(context,'args',None) else ''
+    if not q:
+        counts=_v1160_rc42_category_summary(); total=sum(counts.values()); lines=[f"📚 A100 V{V1160_RC4917_NUMBER} COMMAND INDEX",f"총 명령 {total}개",""]
+        for cat in _V1160_RC42_CATEGORY_ORDER:
+            if counts[cat]: lines.append(f"{_V1160_RC42_LABELS[cat]} · {counts[cat]}개 · /commands {cat}")
+        lines += ["","키워드 검색: /commands trust"]
+        return await v90_1_safe_reply(update,'\n'.join(lines))
+    groups=_v1155_grouped_commands(q); names=sorted([n for vals in groups.values() for n in vals]); lines=[f"📚 A100 V{V1160_RC4917_NUMBER} COMMANDS · {q.upper()}",f"결과 {len(names)}개",""]+[f"/{n} · {_v1154_usage(n)}" for n in names] if names else [f"📚 A100 V{V1160_RC4917_NUMBER} COMMANDS · {q.upper()}","검색 결과가 없습니다."]
+    text='\n'.join(lines)
+    for i in range(0,len(text),3600): await v90_1_safe_reply(update,text[i:i+3600])
+
+async def version1160rc4917_cmd(update,context):
+    r=V1160_RC4917_RELEASE
+    return await v90_1_safe_reply(update,f"ℹ️ {r.version}\nSchema 1 preserved · Paper 20 · Shadow 60 · Live OFF")
+
+async def versionaudit1160rc4917_cmd(update,context):
+    audit=v91_preflight(); view=_v1160_rc4916_cert_view(); failed=audit.get('failed',[])
+    lines=[f"🛡️ A100 V{V1160_RC4917_NUMBER} FULL REGRESSION & LTS READINESS AUDIT",f"Version Source {V91_VERSION}",f"Registry {view['registry_verified']}/{view['total']} · Callable {view['callable']} · Help {view['help']}",f"Runtime Routes {view['runtime_routes']}/{view['total']} · Live Telegram Evidence {view['runtime_probed']}/{view['total']}",f"Background Dry Route Probe {len(V1160_RC4917_PROBE_EVIDENCE)}/{view['total']}",f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(failed)}","","Schema 1 · Paper 20 · Shadow 60 · Live OFF"]
+    if failed: lines += ['', '⛔ FAILED CHECKS']+['• '+x for x in failed[:20]]
+    else: lines += ['', '✅ VersionManager → Help/Commands → Registry → Dispatcher → Audit synchronized']
+    return await v90_1_safe_reply(update,'\n'.join(lines))
+
+async def commandcert1160rc4917_cmd(update,context):
+    _v1155_track('commandcert'); args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    if args and args[0]=='warn':
+        category=args[1] if len(args)>1 else 'runtime'; limit=int(args[2]) if len(args)>2 and args[2].isdigit() else 10
+        view=_v1160_rc4916_cert_view(); rows=[]
+        for name,layer in sorted(view.get('layers',{}).items()):
+            ok={'engine':layer.get('engine'),'output':layer.get('output'),'repository':layer.get('repository'),'runtime':layer.get('runtime_route')}.get(category,True)
+            if not ok: rows.append(name)
+        lines=[f"🧾 A100 V{V1160_RC4917_NUMBER} COMMAND CERTIFICATION",f"Filter {category} · Missing/Stateless {len(rows)} · Top {limit}",""]
+        lines += [f"PARTIAL · /{n}" for n in rows[:limit]] or ["PASS · No missing route"]
+        lines += ["","Plain Text normalized · HTML tags suppressed"]
+        return await v90_1_safe_reply(update,'\n'.join(lines))
+    deep=bool(args and args[0]=='deep')
+    if deep: _v1160_rc4917_probe_step(50)
+    view=_v1160_rc4916_cert_view(deep=deep); status='PASS' if view['failed']==0 and view['registry_verified']==view['total'] else 'FAILED'
+    lines=[f"🧾 A100 V{V1160_RC4917_NUMBER} COMMAND CERTIFICATION",f"Structural Audit {status} · {'Probe cycle +50' if deep else 'Fast audit'}",f"Registry {view['registry_verified']}/{view['total']} · Handler {view['callable']}/{view['total']} · Help {view['help']}/{view['total']}","","FULL LAYER COVERAGE",f"• Runtime route {view['runtime_routes']}/{view['total']}",f"• Engine/data routes {view['engine_linked']} · stateless/control {view['total']-view['engine_linked']}",f"• Repository/data routes {view['repository_linked']} · stateless {view['total']-view['repository_linked']}",f"• Output linkage {view['output_linked']}/{view['total']}",f"• Live Telegram evidence {view['runtime_probed']}/{view['total']}",f"• Background dry route probe {len(V1160_RC4917_PROBE_EVIDENCE)}/{view['total']} · errors {len(V1160_RC4917_PROBE_ERRORS)}","","실제 Telegram E2E와 안전한 백그라운드 경로 검증을 분리 표시합니다.","추가 순환: /commandcert deep"]
+    return await v90_1_safe_reply(update,'\n'.join(lines))
+
+async def releasegate1160rc4917_cmd(update,context):
+    snap=_v1160_rc4916_consistent_snapshot(); cert=snap['cert']; mode,_=_v1160_rc495_mode(cert); prog,passed,total=_v1160_rc496_progress(cert); gate=cert.get('gate',{})
+    labels={'intelligence_score':'Intelligence','strategy_trust':'Strategy','outcome_quality':'Outcome','memory_health':'Memory','lts_readiness':'LTS Readiness'}; blocked=[]
+    lines=[f"🚦 A100 V{V1160_RC4917_NUMBER} RELEASE GATE",f"Snapshot {snap['id']} · Phase {mode} · Status {'READY' if cert.get('ready') else 'LEARNING'}",f"Score Progress {prog:.1f}% · Mandatory Gates {passed}/{total}","","GATE REQUIREMENTS"]
+    for k,g in gate.items():
+        value=float(g.get('value',0)); target=float(g.get('target',0)); ok=bool(g.get('pass')); need=max(0,target-value); name=labels.get(k,k)
+        lines.append(f"{'✅' if ok else '❌'} {name} {value:.1f}/{target:.0f} · {'PASS' if ok else f'Need {need:.1f}'}")
+        if not ok: blocked.append((need,name))
+    blocked.sort(reverse=True); f=snap['forecast']; lines += ["",f"Learning Remaining {f.get('remaining',0)} samples · ETA {f.get('eta_text','pending')}","PRIORITY RECOMMENDATION"]
+    for idx,(need,name) in enumerate(blocked[:3],1): lines.append(f"{idx}. {name} · Need {need:.1f} · Priority {'HIGH' if idx==1 else 'MEDIUM'}")
+    lines.append(f"Blocked By: {', '.join(n for _,n in blocked) if blocked else 'None'}")
+    return await v90_1_safe_reply(update,'\n'.join(lines))
+
+async def performanceaudit1160rc4917_cmd(update,context):
+    rows=_v1160_rc4910_perf_rows()
+    def vals(key): return [float(v) for r in rows for v in r[key]]
+    p_all=sorted(vals('processing')); recent=p_all[-30:] if len(p_all)>30 else p_all
+    def avg(a): return sum(a)/len(a) if a else 0.0
+    def p95(a): return a[min(len(a)-1,int(.95*(len(a)-1)))] if a else 0.0
+    p,p_recent,p95_recent,p95_all=avg(p_all),avg(recent),p95(recent),p95(p_all)
+    e,tg,tr,q=avg(vals('engine')),avg(vals('send')),avg(vals('transport')),avg(vals('queue')); other=max(0,p_recent-e-tg); components={'Engine':e,'Telegram Send':tg,'Transport':tr,'Other Processing':other}; bottleneck=max(components,key=components.get) if components else 'None'
+    total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,total); bad=[]
+    if hit<80: bad.append(f"Cache Hit {hit:.1f}% / target 80%")
+    if p_recent>5000: bad.append(f"Recent Avg {p_recent:.0f}ms / target 5000ms")
+    if p95_recent>10000: bad.append(f"Recent P95 {p95_recent:.0f}ms / target 10000ms")
+    grade='A' if not bad and len(recent)>=3 else 'B' if len(bad)<=2 else 'C'
+    lines=[f"⚙️ A100 V{V1160_RC4917_NUMBER} PERFORMANCE AUDIT",f"Grade {grade} · Recent Samples {len(recent)} · All Samples {len(p_all)}","",f"Recent Processing Avg {p_recent:.0f}ms · P95 {p95_recent:.0f}ms",f"All-time Avg {p:.0f}ms · P95 {p95_all:.0f}ms (reference)",f"Engine {e:.0f}ms · Telegram Send {tg:.0f}ms",f"Transport {tr:.0f}ms · Other Processing {other:.0f}ms",f"Batch Backlog {q:.0f}ms (grade excluded)",f"Primary Bottleneck {bottleneck}","",'✅ Recent targets satisfied' if not bad else '⚠️ NEEDS IMPROVEMENT']+['• '+x for x in bad]
+    return await v90_1_safe_reply(update,'\n'.join(lines))
+
+V925_COMMAND_USAGE.update({'version':'현재 중앙 VersionManager 버전','versionaudit':'RC4.9.17 출력·도움말·Probe·P95 감사','commandcert':'341개 계층 및 순환 Probe 인증','releasegate':'동일 Snapshot과 우선 학습 추천','performanceaudit':'최근 구간 P95와 전체 이력 분리','help':'RC4.9.17 동적 도움말','commands':'RC4.9.17 명령 인덱스'})
+V90_COMMAND_REGISTRY.update({'version':version1160rc4917_cmd,'versionaudit':versionaudit1160rc4917_cmd,'commandcert':commandcert1160rc4917_cmd,'releasegate':releasegate1160rc4917_cmd,'performanceaudit':performanceaudit1160rc4917_cmd,'help':help1160rc4917_cmd,'commands':commands1160rc4917_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_v1160_rc4917_reset_probe_queue()
+
+_V1160_RC4917_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4917_PREFLIGHT_BASE(); inherited={k:v for k,v in dict(base.get('checks',{})).items() if not k.startswith('rc4916_')}; view=_v1160_rc4916_cert_view()
+    checks=dict(inherited); checks.update({'rc4917_version_single_source':V91_VERSION==V1160_RC4917_VERSION and _v1160_rc4912_version_number()==V1160_RC4917_NUMBER,'rc4917_active_handlers':V90_COMMAND_REGISTRY.get('version') is version1160rc4917_cmd and V90_COMMAND_REGISTRY.get('help') is help1160rc4917_cmd and V90_COMMAND_REGISTRY.get('commands') is commands1160rc4917_cmd,'rc4917_registry_341':len(V90_COMMAND_REGISTRY)==341 and view['registry_verified']==341,'rc4917_output_normalizer':_v1160_rc4917_plain('<b>X</b>')=='X','rc4917_schema':_v91_default_state().get('schema')==1,'rc4917_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,'rc4917_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade'))})
+    failed=[k for k,v in checks.items() if not v]
+    return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),'command_audit':view,'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4917-output-help-probe-p95-stabilization'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.16 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.17 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()

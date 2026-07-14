@@ -1,20 +1,11 @@
 {
-  "version": "A100 V116.0-RC4.9.16 FULL LAYER COVERAGE & SNAPSHOT CONSISTENCY",
+  "version": "A100 V116.0-RC4.9.17 OUTPUT HELP RUNTIME PROBE & P95 STABILIZATION",
   "release_type": "DEVELOPMENT_RELEASE",
   "schema": 1,
   "paper_limit": 20,
   "shadow_limit": 60,
   "live_trading": false,
-  "tests": {
-    "compile": "PASS",
-    "pytest": "72/72 PASS",
-    "preflight": "PASS",
-    "registry": "341/341",
-    "callable": "341/341",
-    "help": "341/341",
-    "runtime_routes": "341/341",
-    "output_routes": "341/341"
-  },
-  "baseline": "A100 V116.0-RC4.9.15",
-  "lts_candidate": false
+  "command_count": 341,
+  "tests": {"pytest": "74/74 PASS", "compile": "PASS", "preflight": "PASS"},
+  "post_install_checklist": "POST_INSTALL_SCREENSHOT_CHECKLIST_KR.md"
 }

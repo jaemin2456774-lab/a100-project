@@ -3,7 +3,7 @@ import main
 def test_rc4916_invariants():
     audit=main.v91_preflight()
     assert audit['ok'], audit.get('failed')
-    assert main.V91_VERSION == main.V1160_RC4916_VERSION
+    assert main.V91_VERSION == main.V1160_RC4917_VERSION
     assert len(main.V90_COMMAND_REGISTRY)==341
     view=main._v1160_rc4916_cert_view()
     assert view['registry_verified']==341
