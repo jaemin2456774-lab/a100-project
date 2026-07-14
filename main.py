@@ -40157,10 +40157,189 @@ def v91_preflight():
             'base':base,'development_version':V91_VERSION,'registry_fingerprint':'v1160-rc4914-full-regression-lts-readiness-audit'}
 
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS RC4.9.15 - CERTIFICATION TRUTH & RUNTIME COVERAGE HOTFIX
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class _V1160RC4915Release:
+    number: str = "116.0-RC4.9.15"
+    version: str = "A100 V116.0-RC4.9.15 CERTIFICATION TRUTH & RUNTIME COVERAGE HOTFIX"
+    schema: int = 1
+    paper_limit: int = 20
+    shadow_limit: int = 60
+    live_trading: bool = False
+
+V1160_RC4915_RELEASE = _V1160RC4915Release()
+V1160_RC4915_NUMBER = V1160_RC4915_RELEASE.number
+V1160_RC4915_VERSION = V1160_RC4915_RELEASE.version
+V91_VERSION = V1160_RC4915_VERSION
+V1160_RC4912_NUMBER = V1160_RC4915_NUMBER
+V1160_RC4912_VERSION = V1160_RC4915_VERSION
+
+
+def _v1160_rc4915_cert_view(state=None, deep=False):
+    """Fast structural audit plus optional read-only deep runtime evidence."""
+    state = _v1160_rc496_shared_state() if state is None else state
+    registry = dict(V90_COMMAND_REGISTRY)
+    names = sorted(registry)
+    help_names = set(V925_COMMAND_USAGE) | {'help', 'commands'}
+    callable_names = {name for name, cb in registry.items() if callable(cb)}
+    help_covered = {name for name in names if name in help_names}
+    cert=None; hit=False
+    frozen=json.loads(json.dumps(state or {},ensure_ascii=False,default=str))
+    sig=_v1160_rc496_stable_signature(frozen)
+    key=('commandcert_v497',sig)
+    row=V1160_RC494_CACHE.get(key)
+    if deep:
+        cert,hit=_v1160_rc497_command_certification_cached(frozen)
+    elif row:
+        cert=row[1]; hit=True
+    cert=cert or {'rows':[],'counts':{},'status':'NOT_RUN','snapshot_id':'-'}
+    rows=list(cert.get('rows',[]) or [])
+    runtime_probed={str(r.get('command','')).lstrip('/') for r in rows if bool((r.get('evidence') or {}).get('executed'))}
+    runtime_clean={str(r.get('command','')).lstrip('/') for r in rows if bool(r.get('runtime')) and bool((r.get('evidence') or {}).get('executed'))}
+    repository_proven={str(r.get('command','')).lstrip('/') for r in rows if bool(r.get('repository'))}
+    direct_output={str(r.get('command','')).lstrip('/') for r in rows if bool(r.get('output'))}
+    failed={str(r.get('command','')).lstrip('/') for r in rows if str(r.get('status','')).upper()=='FAILED'}
+    pending=set(names)-runtime_probed
+    return {
+        'total':len(names),'registry_verified':len(names) if set(names)==set(_v1154_runtime_commands()) else len(set(names)&set(_v1154_runtime_commands())),
+        'callable':len(callable_names),'help':len(help_covered),'runtime_probed':len(runtime_probed),
+        'runtime_clean':len(runtime_clean),'repository_proven':len(repository_proven),'direct_output':len(direct_output),
+        'pending_runtime':len(pending),'failed':len(failed),'pending_commands':sorted(pending),'failed_commands':sorted(failed),
+        'cert':cert,'cache_hit':hit,'deep_run':deep,
+    }
+
+def _v1160_rc4915_cache_meta():
+    state = _v1160_rc496_shared_state()
+    frozen=json.loads(json.dumps(state or {},ensure_ascii=False,default=str))
+    sig=_v1160_rc496_stable_signature(frozen)
+    key=('commandcert_v497',sig)
+    return dict(V1160_RC496_CACHE_META.get(key,{}) or {})
+
+
+async def version1160rc4915_cmd(update, context):
+    r=V1160_RC4915_RELEASE
+    return await v90_1_safe_reply(update,
+        f"ℹ️ <b>{r.version}</b>\nSchema <b>{r.schema} preserved</b> · Paper <b>{r.paper_limit}</b> · Shadow <b>{r.shadow_limit}</b> · Live <b>OFF</b>",
+        parse_mode='HTML')
+
+
+async def versionaudit1160rc4915_cmd(update, context):
+    audit=v91_preflight(); view=_v1160_rc4915_cert_view()
+    checks=audit.get('checks',{}); failed=[k for k,v in checks.items() if not v]
+    lines=[f"🛡️ <b>A100 V{V1160_RC4915_NUMBER} FULL REGRESSION & LTS READINESS AUDIT</b>",
+           f"Version Source <b>{_v54_escape(V91_VERSION)}</b>",
+           f"Registry <b>{len(V90_COMMAND_REGISTRY)}/341</b> · Callable <b>{view['callable']}</b> · Help <b>{view['help']}</b>",
+           f"Runtime Probe <b>{view['runtime_probed']}/{view['total']}</b> · Pending E2E <b>{view['pending_runtime']}</b>",
+           f"Preflight <b>{'PASS' if audit.get('ok') else 'FAILED'}</b> · Failed Checks <b>{len(failed)}</b>",
+           "", "Schema <b>1</b> · Paper <b>20</b> · Shadow <b>60</b> · Live <b>OFF</b>"]
+    if failed:
+        lines += ["", "⛔ <b>FAILED CHECKS</b>"] + ["• "+_v54_escape(x) for x in failed[:20]]
+    else:
+        lines += ["", "✅ Active VersionManager → Registry → Dispatcher → Audit output synchronized"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def commandcert1160rc4915_cmd(update, context):
+    _v1155_track('commandcert')
+    args=[str(x).lower() for x in (getattr(context,'args',[]) or [])]
+    deep=bool(args and args[0]=='deep')
+    view=_v1160_rc4915_cert_view(deep=deep); meta=_v1160_rc4915_cache_meta()
+    cache_text=(f"HIT · Age {meta.get('age',0):.0f}s · TTL {meta.get('remaining',0):.0f}s" if view['cache_hit']
+                else f"MISS · {meta.get('reason','refresh')}")
+    status='PASS' if view['failed']==0 and view['registry_verified']==view['total'] else 'FAILED'
+    lines=[f"🧾 <b>A100 V{V1160_RC4915_NUMBER} COMMAND CERTIFICATION</b>",
+           f"Registry Audit <b>{status}</b> · Runtime Evidence <b>{'REFRESHED' if deep else cache_text}</b>",
+           f"Registry Verified <b>{view['registry_verified']}/{view['total']}</b> · Failed <b>{view['failed']}</b>",
+           f"Runtime Probed <b>{view['runtime_probed']}/{view['total']}</b> · E2E Pending <b>{view['pending_runtime']}</b>",
+           "", "<b>LAYER COVERAGE</b>",
+           f"• Handler callable <b>{view['callable']}/{view['total']}</b>",
+           f"• Help/Commands <b>{view['help']}/{view['total']}</b>",
+           f"• Output direct evidence <b>{view['direct_output']}/{view['total']}</b> · delegated paths are not counted as direct",
+           f"• Repository probe evidence <b>{view['repository_proven']}/{view['total']}</b>",
+           f"• Runtime clean evidence <b>{view['runtime_clean']}/{view['total']}</b>"]
+    if args and args[0]=='warn':
+        needle=' '.join(args[1:]).strip(); limit=10
+        if args[-1:].copy() and args[-1].isdigit(): limit=max(1,min(30,int(args[-1]))); needle=' '.join(args[1:-1]).strip()
+        cert=view['cert']; agg=_v1160_rc4914_certification_aggregate(cert)
+        selected=[g for g in agg['groups'] if not needle or needle in ' '.join(g['reasons']).lower() or any(needle in c.lower() for c in g['commands']) or any(needle==c.lower() for c in g['categories'])]
+        lines += ['',f"🔎 Filter <code>{_v54_escape(needle or 'all')}</code> · {len(selected)} groups · Top {limit}"]
+        for g in selected[:limit]:
+            lines.append(f"⚠️ <b>{_v1160_rc4914_public_status(g['status'])}</b> ×{len(g['commands'])} · {_v54_escape(', '.join(g['reasons']))}")
+            if g['commands']: lines.append('   '+_v54_escape(', '.join('/'+x for x in g['commands'][:8])))
+    else:
+        lines += ['',"ℹ️ Registry Verified와 Runtime Probed를 분리해 과장 없이 표시합니다.\n정밀 실행: <code>/commandcert deep</code> (시간이 걸릴 수 있음)"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+async def performanceaudit1160rc4915_cmd(update, context):
+    rows=_v1160_rc4910_perf_rows()
+    def avg(key):
+        vals=[v for r in rows for v in r[key]]; return sum(vals)/len(vals) if vals else 0.0
+    processing=avg('processing'); engine=avg('engine'); telegram=avg('send'); transport=avg('transport')
+    # Historical cumulative batch wait is explicitly excluded from responsiveness grade.
+    batch_vals=[v for r in rows for v in r['queue']]
+    batch_backlog=sum(batch_vals)/len(batch_vals) if batch_vals else 0.0
+    observed=max(1.0,processing+transport); other=max(0.0,processing-engine-telegram)
+    cache_total=V1160_RC494_CACHE_HITS+V1160_RC494_CACHE_MISSES; hit=100*V1160_RC494_CACHE_HITS/max(1,cache_total)
+    bad=[]
+    if hit<80: bad.append(f"Cache Hit {hit:.1f}% / target 80%")
+    if processing>5000: bad.append(f"Processing {processing:.0f}ms / target 5000ms")
+    grade='A' if not bad and len(rows)>=3 else 'B' if len(bad)<=2 else 'C'
+    lines=[f"⚙️ <b>A100 V{V1160_RC4915_NUMBER} PERFORMANCE AUDIT</b>",f"Grade <b>{grade}</b> · Commands <b>{len(rows)}</b>","",
+           f"Processing <b>{processing:.0f}ms</b>",f"Engine <b>{engine:.0f}ms</b>",f"Telegram Send <b>{telegram:.0f}ms</b>",f"Transport <b>{transport:.0f}ms</b>",f"Other Processing <b>{other:.0f}ms</b>",
+           f"Interactive Observed <b>{observed:.0f}ms</b>",f"Batch Backlog <b>{batch_backlog:.0f}ms</b> <i>(grade excluded)</i>","",
+           "✅ GOOD" if not bad else "⚠️ NEEDS IMPROVEMENT"]
+    lines += ["• "+_v54_escape(x) for x in bad] if bad else ["• Interactive targets satisfied"]
+    return await v90_1_safe_reply(update,'\n'.join(lines),parse_mode='HTML')
+
+
+V925_COMMAND_USAGE.update({
+    'version':'현재 중앙 VersionManager 버전 확인',
+    'versionaudit':'RC4.9.15 활성 버전·341 Registry·Runtime Evidence 통합 감사',
+    'commandcert':'Registry 검증과 Runtime Probe를 분리한 341개 명령 인증',
+    'performanceaudit':'Batch backlog를 대화형 지연과 분리한 성능 감사',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160rc4915_cmd,
+    'versionaudit':versionaudit1160rc4915_cmd,
+    'commandcert':commandcert1160rc4915_cmd,
+    'performanceaudit':performanceaudit1160rc4915_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+_V1160_RC4915_PREFLIGHT_BASE=v91_preflight
+def v91_preflight():
+    base=_V1160_RC4915_PREFLIGHT_BASE()
+    inherited={k:v for k,v in dict(base.get('checks',{})).items() if not (k.startswith('rc4914_') or k.startswith('active_release_') or k.startswith('v1160_rc'))}
+    view=_v1160_rc4915_cert_view()
+    checks=dict(inherited)
+    checks.update({
+        'rc4915_version_single_source':V91_VERSION==V1160_RC4915_VERSION and _v1160_rc4912_version_number()==V1160_RC4915_NUMBER,
+        'rc4915_version_handler':V90_COMMAND_REGISTRY.get('version') is version1160rc4915_cmd,
+        'rc4915_versionaudit_handler':V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160rc4915_cmd,
+        'rc4915_commandcert_handler':V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160rc4915_cmd,
+        'rc4915_performance_handler':V90_COMMAND_REGISTRY.get('performanceaudit') is performanceaudit1160rc4915_cmd,
+        'rc4915_registry_341':len(V90_COMMAND_REGISTRY)==341 and view['registry_verified']==341,
+        'rc4915_registry_callable':view['callable']==341,
+        'rc4915_help_coverage':view['help']==341,
+        'rc4915_registry_sync':V90_EXPECTED_COMMANDS==frozenset(V90_COMMAND_REGISTRY),
+        'rc4915_schema_preserved':_v91_default_state().get('schema')==1,
+        'rc4915_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        'rc4915_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+        'rc4915_status_normalized':_v1160_rc4914_public_status('PARTIAL_ENGINE')=='PARTIAL',
+    })
+    failed=[k for k,v in checks.items() if not v]
+    return {'ok':not failed,'checks':checks,'failed':failed,'command_count':len(V90_COMMAND_REGISTRY),
+            'command_audit':view,'base':base,'development_version':V91_VERSION,
+            'registry_fingerprint':'v1160-rc4915-certification-truth-runtime-coverage-hotfix'}
+
 # IMPORTANT: this must remain the final executable block in the file.
 if __name__ == "__main__":
     audit=v91_preflight()
     if not audit.get('ok'):
-        raise RuntimeError('V116.0 RC4.9.14 startup integrity failure: '+', '.join(audit.get('failed',[])))
+        raise RuntimeError('V116.0 RC4.9.15 startup integrity failure: '+', '.join(audit.get('failed',[])))
     _v1160_rc45_start_worker()
     main()
