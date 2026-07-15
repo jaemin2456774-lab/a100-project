@@ -1,45 +1,21 @@
 {
-  "version": "A100 V116.0-LTS-S2.18.0",
-  "baseline": "S2.17.29",
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s217281.py",
-    "test_v1160_lts_s21729.py",
-    "test_v1160_lts_s2180.py",
-    "CHANGELOG_S2.18.0.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
-  ],
-  "preserved": {
-    "commands": 341,
+  "version": "A100 V116.0-LTS-S2.18.1",
+  "baseline": "S2.18.0",
+  "type": "incremental_patch",
+  "preserve": {
     "schema": 1,
     "paper": 20,
     "shadow": 60,
-    "live": "OFF"
+    "live": "OFF",
+    "data": true,
+    "settings": true
   },
-  "files": {
-    "main.py": {
-      "sha256": "8476f05ec401ff7ac703d1933fa11c13d2004dd637308a2408de74f25509c9a5",
-      "size": 2758003
-    },
-    "test_v1160_lts_s217281.py": {
-      "sha256": "5d8a91d7e8675f7f47a4d580a5027a2740b063b6dae8f3301bd9290575685292",
-      "size": 491
-    },
-    "test_v1160_lts_s21729.py": {
-      "sha256": "5b67baa5db6fbd88151acb735ee20507452fd518346995b3bc23d8aaabce54b4",
-      "size": 1084
-    },
-    "test_v1160_lts_s2180.py": {
-      "sha256": "1e0e4d068929f986f3bb214b5b19b1fc8d49930ae0c1edd27d312841cee45f6e",
-      "size": 1507
-    },
-    "CHANGELOG_S2.18.0.md": {
-      "sha256": "1efdc6bc0a9643112101132028a076ec0b1e32ce662909109fb2007ced2bc0b4",
-      "size": 835
-    },
-    "PATCH_INSTALL_GUIDE_KR.md": {
-      "sha256": "eb5f796d1a3cd2df38eae435c00c804e1a7ed63650dc6807c2604d1f702fc14e",
-      "size": 1011
-    }
-  }
+  "changed_files": [
+    "main.py",
+    "test_v1160_lts_s2180.py",
+    "test_v1160_lts_s2181.py",
+    "CHANGELOG_S2.18.1.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
+  ]
 }

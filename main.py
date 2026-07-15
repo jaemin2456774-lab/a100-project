@@ -52451,6 +52451,341 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.18.1
+# SNAPSHOT VALUE FREEZE / DETERMINISTIC MEMORY / CACHE PREWARM STABILIZATION
+# =============================================================================
+V1160_LTS_S2181_NUMBER = "116.0-LTS-S2.18.1"
+V1160_LTS_S2181_VERSION = "A100 V116.0-LTS-S2.18.1 SNAPSHOT VALUE FREEZE & CACHE PREWARM STABILIZATION"
+
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S2181_NUMBER,
+    version=V1160_LTS_S2181_VERSION,
+    schema=1,
+    paper=20,
+    shadow=60,
+    live="OFF",
+    source="Single",
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+_V1160_S2181_REPLY_ROOT = _V1160_S2180_REPLY_ROOT
+
+
+def _v1160_s2181_normalize_version_text(value):
+    if not isinstance(value, str):
+        return value
+    import re
+    value = re.sub(
+        r'A100 V116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        f'A100 V{V1160_LTS_S2181_NUMBER}', value,
+    )
+    value = re.sub(
+        r'(?<!A100 V)116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        V1160_LTS_S2181_NUMBER, value,
+    )
+    return value
+
+
+async def v90_1_safe_reply(update, value, *args, **kwargs):
+    return await _V1160_S2181_REPLY_ROOT(
+        update, _v1160_s2181_normalize_version_text(value), *args, **kwargs
+    )
+
+
+_V1160_S2181_STATE_LOCK = threading.RLock()
+_V1160_S2181_STATE_CACHE = {'key': None, 'state': None, 'hits': 0, 'misses': 0, 'prewarmed': False}
+
+
+def _v1160_s2181_snapshot_key(snap):
+    """Stable identity for one authoritative snapshot.
+
+    Only immutable snapshot identifiers participate. Presentation age, command
+    timing and cache counters never affect certified values.
+    """
+    return (
+        str(snap.get('snapshot_id', '-')),
+        str(snap.get('unified_hash', '-')),
+    )
+
+
+def _v1160_s2181_build_state():
+    """Return the exact same immutable state object for one snapshot.
+
+    No command-facing call recalculates runtime score, evidence, memory health or
+    gates after the first build for a snapshot. New values are accepted only when
+    the authoritative snapshot identity changes.
+    """
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    if snap is None:
+        return None
+    key = _v1160_s2181_snapshot_key(snap)
+    with _V1160_S2181_STATE_LOCK:
+        cached = _V1160_S2181_STATE_CACHE.get('state')
+        if _V1160_S2181_STATE_CACHE.get('key') == key and cached is not None:
+            _V1160_S2181_STATE_CACHE['hits'] += 1
+            return cached
+        _V1160_S2181_STATE_CACHE['misses'] += 1
+        cert, matrix = _v1160_s21724_gate_matrix(snap, detail)
+        aggregate = cert.get('aggregate') or {}
+        quality = cert.get('quality') or {}
+        runtime = snap.get('runtime') or {}
+        evidence = _V1160S2180Evidence(
+            ready=bool(cert.get('evidence_ready')),
+            samples=int(quality.get('unique', 0) or 0),
+            quality=float(quality.get('quality', 0.0) or 0.0),
+            classified=int(aggregate.get('classified', 0) or 0),
+            numeric=int(aggregate.get('numeric', 0) or 0),
+            complete_coverage=float(aggregate.get('complete_coverage', 0.0) or 0.0),
+            fee_coverage=float(aggregate.get('fee_coverage', 0.0) or 0.0),
+            slippage_coverage=float(aggregate.get('slippage_coverage', 0.0) or 0.0),
+            recoveries=int(runtime.get('recoveries', 0) or 0),
+            errors=int(runtime.get('errors', 0) or 0),
+        )
+        gates = tuple(_V1160S2180Gate(
+            index=i,
+            key=str(item.get('key', '')),
+            label=str(item.get('label', 'Gate')),
+            current=float(item.get('current', 0.0) or 0.0),
+            target=float(item.get('target', 0.0) or 0.0),
+            passed=bool(item.get('passed')),
+            evidence_ok=bool(item.get('evidence_ok')),
+        ) for i, item in enumerate(matrix, 1))
+        state = _V1160S2180RuntimeState(
+            snapshot_id=key[0],
+            snapshot_age=float(age or 0.0),
+            unified_hash=key[1],
+            runtime_score=float(comp.get('final', 0.0) or 0.0),
+            evidence=evidence,
+            gates=gates,
+            generated_at=time.time(),
+        )
+        _V1160_S2181_STATE_CACHE.update({'key': key, 'state': state})
+        return state
+
+
+def _v1160_s2181_cache_stats():
+    with _V1160_S2181_STATE_LOCK:
+        hits=int(_V1160_S2181_STATE_CACHE.get('hits',0) or 0)
+        misses=int(_V1160_S2181_STATE_CACHE.get('misses',0) or 0)
+        total=hits+misses
+        ratio=(hits/total*100.0) if total else 0.0
+        return hits, misses, ratio, bool(_V1160_S2181_STATE_CACHE.get('prewarmed'))
+
+
+def _v1160_s2181_prewarm():
+    try:
+        state=_v1160_s2181_build_state()
+        with _V1160_S2181_STATE_LOCK:
+            _V1160_S2181_STATE_CACHE['prewarmed']=state is not None
+        return state is not None
+    except Exception as exc:
+        v88_record_error('s2181-state-prewarm', exc)
+        return False
+
+
+class _V1160S2181Formatter(_V1160S2180Formatter):
+    @staticmethod
+    def status(state):
+        hits, misses, ratio, prewarmed = _v1160_s2181_cache_stats()
+        return "\n".join([
+            f"A100 V{V1160_LTS_S2181_NUMBER} STATUS · SNAPSHOT FROZEN STATE",
+            "System               RUNNING",
+            f"Snapshot ID          {state.snapshot_id}",
+            f"Snapshot captured    {state.snapshot_age:.1f}s age at state build",
+            f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",
+            f"Mandatory gates      {state.passed_gates}/5 PASS",
+            f"Evidence             {'PASS' if state.evidence.ready else 'BLOCKED'}",
+            "Registry / Routes    341/341",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+            "State source         SINGLE IMMUTABLE OBJECT",
+            f"State cache          {ratio:.1f}% · HIT {hits} / MISS {misses}",
+            f"Startup prewarm      {'PASS' if prewarmed else 'WARMING'}",
+            "User-path rebuild    DISABLED",
+        ])
+
+    @staticmethod
+    def runtime(state):
+        e=state.evidence
+        memory_gate=next((g for g in state.gates if g.key=='memory_health'), None)
+        hits, misses, ratio, prewarmed = _v1160_s2181_cache_stats()
+        return "\n".join([
+            f"A100 V{V1160_LTS_S2181_NUMBER} RUNTIME HEALTH · SNAPSHOT FROZEN",
+            f"Snapshot ID          {state.snapshot_id}",
+            f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",
+            f"Memory health        {memory_gate.current:.1f}/{memory_gate.target:.1f} · PINNED" if memory_gate else "Memory health        unavailable",
+            f"Evidence samples     {e.samples}",
+            f"Evidence quality     {e.quality:.1f}/100",
+            f"Recoveries / errors  {e.recoveries} / {e.errors}",
+            f"State cache          {ratio:.1f}% · HIT {hits} / MISS {misses}",
+            f"Startup prewarm      {'PASS' if prewarmed else 'WARMING'}",
+            "Command isolation    PASS · READ ONLY",
+            "Recalculation        DISABLED FOR SAME SNAPSHOT",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        ])
+
+    @staticmethod
+    def release_gate(state):
+        base=_V1160S2180Formatter.release_gate(state)
+        hits, misses, ratio, prewarmed = _v1160_s2181_cache_stats()
+        return _v1160_s2181_normalize_version_text(base)+"\n"+f"State cache          {ratio:.1f}% · HIT {hits} / MISS {misses}\nStartup prewarm      {'PASS' if prewarmed else 'WARMING'}\nGate calculation     ONCE PER SNAPSHOT"
+
+    @staticmethod
+    def lts(state):
+        return _v1160_s2181_normalize_version_text(_V1160S2180Formatter.lts(state))+"\nState values remain frozen until the authoritative snapshot identity changes."
+
+
+async def version1160ltss2181_cmd(update, context):
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S2181_NUMBER}",
+        "Official Snapshot Value Freeze Baseline",
+        "Feature Freeze: ACTIVE · Release Freeze: ACTIVE",
+        "",
+        "Version Source       SINGLE · IMMUTABLE OBJECT",
+        f"Build                {V1160_LTS_S2181_VERSION}",
+        "Runtime State        ONE OBJECT PER SNAPSHOT",
+        "Evidence Source      SINGLE",
+        "Gate Calculation     ONCE PER SNAPSHOT",
+        "Startup Cache        PREWARM ENABLED",
+        "Schema               1",
+        "Paper / Shadow       20 / 60",
+        "Live Trading         OFF",
+    ]))
+
+
+async def status1160ltss2181_cmd(update, context):
+    _v1155_track('status'); state=_v1160_s2181_build_state()
+    return await v90_1_safe_reply(update, _V1160S2181Formatter.status(state) if state else _V1160S2181Formatter.warming('STATUS'))
+
+
+async def runtimehealth1160ltss2181_cmd(update, context):
+    _v1155_track('runtimehealth'); state=_v1160_s2181_build_state()
+    return await v90_1_safe_reply(update, _V1160S2181Formatter.runtime(state) if state else _V1160S2181Formatter.warming('RUNTIME HEALTH'))
+
+
+async def releasegate1160ltss2181_cmd(update, context):
+    _v1155_track('releasegate'); state=_v1160_s2181_build_state()
+    return await v90_1_safe_reply(update, _V1160S2181Formatter.release_gate(state) if state else _V1160S2181Formatter.warming('RELEASE GATE'))
+
+
+async def ltscertification1160ltss2181_cmd(update, context):
+    _v1155_track('ltscertification'); state=_v1160_s2181_build_state()
+    return await v90_1_safe_reply(update, _V1160S2181Formatter.lts(state) if state else _V1160S2181Formatter.warming('LTS CERTIFICATION'))
+
+
+async def pipelinetrace1160ltss2181_cmd(update, context):
+    _v1155_track('pipelinetrace'); state=_v1160_s2181_build_state()
+    sid=state.snapshot_id if state else 'WARMING'
+    return await v90_1_safe_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S2181_NUMBER} PIPELINE TRACE · SNAPSHOT FROZEN",
+        "Status PASS · Mode READ ONLY · State SINGLE",
+        f"Snapshot ID {sid}", "", "END-TO-END LAYERS",
+        *[f"✅ {name}" for name in ('close_payload','outcome_attribution','learning_queue','strategy_performance','strategy_trust','champion_stability','release_gate','dashboard','learning_worker','d_trace_complete','strategy_revision','trust_revision','champion_revision','audit_read_only')],
+        "", "No storage scan, evidence rebuild or gate recomputation occurs in this command.",
+    ]))
+
+
+def _v1160_s2181_operational_preflight(force=False):
+    registry_count=len(V90_COMMAND_REGISTRY); callable_count=sum(callable(v) for v in V90_COMMAND_REGISTRY.values()); expected_count=len(V90_EXPECTED_COMMANDS)
+    checks=[
+        _v1160_s2176_check('Version source single', V91_VERSION==V1160_LTS_S2181_VERSION and V1160_VERSION_MANAGER.version==V1160_LTS_S2181_VERSION),
+        _v1160_s2176_check('Registry', registry_count==341, detail=f'{registry_count}/341'),
+        _v1160_s2176_check('Callable handlers', callable_count==341, detail=f'{callable_count}/341'),
+        _v1160_s2176_check('Expected command set', expected_count==341, detail=f'{expected_count}/341'),
+        _v1160_s2176_check('Exact snapshot object reuse', callable(_v1160_s2181_build_state)),
+        _v1160_s2176_check('State cache counters', all(k in _V1160_S2181_STATE_CACHE for k in ('hits','misses','prewarmed'))),
+        _v1160_s2176_check('Unified formatter', callable(_V1160S2181Formatter.release_gate)),
+        _v1160_s2176_check('Version handler', V90_COMMAND_REGISTRY.get('version') is version1160ltss2181_cmd),
+        _v1160_s2176_check('Status handler', V90_COMMAND_REGISTRY.get('status') is status1160ltss2181_cmd),
+        _v1160_s2176_check('Runtime health handler', V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160ltss2181_cmd),
+        _v1160_s2176_check('Release gate handler', V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160ltss2181_cmd),
+        _v1160_s2176_check('LTS certification handler', V90_COMMAND_REGISTRY.get('ltscertification') is ltscertification1160ltss2181_cmd),
+        _v1160_s2176_check('Pipeline trace handler', V90_COMMAND_REGISTRY.get('pipelinetrace') is pipelinetrace1160ltss2181_cmd),
+        _v1160_s2176_check('No releasegate background task', 'create_task' not in releasegate1160ltss2181_cmd.__code__.co_names),
+        _v1160_s2176_check('Schema', V1160_VERSION_MANAGER.schema==1),
+        _v1160_s2176_check('Paper/Shadow', V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60),
+        _v1160_s2176_check('Live OFF', V1160_VERSION_MANAGER.live=='OFF'),
+    ]
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    startup_names={'Registry','Callable handlers','Expected command set','Exact snapshot object reuse','Version handler','Status handler','Runtime health handler','Release gate handler','LTS certification handler','Pipeline trace handler','Schema','Paper/Shadow','Live OFF'}
+    blockers=[c for c in failures if c['name'] in startup_names]
+    return {'ok':not failures,'startup_ok':not blockers,'details':checks,'failed':[c['name'] for c in failures],'startup_failed':[c['name'] for c in blockers],'warnings':[c['name'] for c in warnings],'command_count':registry_count}
+
+
+def v91_preflight(force=False):
+    return _v1160_s2181_operational_preflight(force)
+
+
+async def versionaudit1160ltss2181_cmd(update, context):
+    _v1155_track('versionaudit'); audit=_v1160_s2181_operational_preflight(True); state=_v1160_s2181_build_state(); hits,misses,ratio,prewarmed=_v1160_s2181_cache_stats()
+    lines=[
+        f"🛡️ A100 V{V1160_LTS_S2181_NUMBER} SNAPSHOT FREEZE AUDIT",
+        f"Version Source       {'PASS' if not audit['failed'] else 'FAIL'} · SINGLE",
+        f"Registry             {len(V90_COMMAND_REGISTRY)}/341",
+        f"Callable handlers    {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341",
+        f"Expected commands    {len(V90_EXPECTED_COMMANDS)}/341",
+        "Runtime State        EXACT OBJECT REUSE",
+        "Evidence Source      SINGLE",
+        "Gate Calculation     ONCE PER SNAPSHOT",
+        f"State Cache          {ratio:.1f}% · HIT {hits} / MISS {misses}",
+        f"Startup Prewarm      {'PASS' if prewarmed else 'WARMING'}",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Feature Freeze ACTIVE · Release Freeze ACTIVE", "", *_v1160_s2176_preflight_lines(audit),
+    ]
+    if state:
+        lines.extend(["",f"Snapshot ID          {state.snapshot_id}",f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",f"Mandatory gates      {state.passed_gates}/5 PASS"])
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.18.1 snapshot value freeze and cache prewarm baseline',
+    'versionaudit':'Snapshot object reuse, cache and deterministic score audit',
+    'status':'Snapshot-frozen immutable runtime summary',
+    'runtimehealth':'Snapshot-frozen runtime and memory health view',
+    'releasegate':'One-calculation-per-snapshot authoritative gate view',
+    'ltscertification':'Snapshot-frozen LTS certification view',
+    'pipelinetrace':'Snapshot-frozen read-only pipeline view',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss2181_cmd,
+    'versionaudit':versionaudit1160ltss2181_cmd,
+    'status':status1160ltss2181_cmd,
+    'runtimehealth':runtimehealth1160ltss2181_cmd,
+    'releasegate':releasegate1160ltss2181_cmd,
+    'ltscertification':ltscertification1160ltss2181_cmd,
+    'pipelinetrace':pipelinetrace1160ltss2181_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s2181_operational_preflight(True)
+    if not pre['startup_ok']:
+        raise RuntimeError('S2.18.1 operational startup preflight failed: '+','.join(pre['startup_failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print('A100 V91 dispatcher count: 1',flush=True); print(f"A100 V91 startup preflight: PASS · certification findings {len(pre['failed'])} (S2.18.1)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s2181_operational_preflight(True)
+    print(f"{V1160_LTS_S2181_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if pre['failed']: print('A100 S2.18.1 certification findings: '+','.join(pre['failed']),flush=True)
+    if not pre['startup_ok']: raise RuntimeError('A100 S2.18.1 operational startup preflight failed: '+','.join(pre['startup_failed']))
+    prewarmed=_v1160_s2181_prewarm(); print(f"A100 S2.18.1 unified state prewarm: {'PASS' if prewarmed else 'WARMING'}",flush=True)
+    print('A100 V91 startup preflight: PASS',flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

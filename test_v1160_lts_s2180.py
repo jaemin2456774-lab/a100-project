@@ -5,7 +5,9 @@ s=p.read_text()
 ast.parse(s)
 assert s.count('if __name__ == "__main__":') == 1
 assert s.rstrip().endswith('main()')
-segment=s[s.rfind('# A100 V116.0-LTS-S2.18.0'):]
+start=s.rfind('# A100 V116.0-LTS-S2.18.0')
+end=s.find('# A100 V116.0-LTS-S2.18.1', start)
+segment=s[start:end if end!=-1 else None]
 for token in [
     'V1160_LTS_S2180_NUMBER','_V1160S2180RuntimeState','_V1160S2180Evidence',
     '_V1160S2180Formatter','_v1160_s2180_build_state','_v1160_s2180_operational_preflight',
