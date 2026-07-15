@@ -51814,8 +51814,8 @@ def main():
 # REAL-TIME EVIDENCE DELTA / INCREMENTAL GATE PUBLISH / OUTPUT ROOT RECOVERY
 # Architecture baseline: S2.17.26; runtime-first continuity: S2.17.27-S2.17.28
 # =============================================================================
-V1160_LTS_S217291_NUMBER = "116.0-LTS-S2.17.30"
-V1160_LTS_S217291_VERSION = "A100 V116.0-LTS-S2.17.30 LTS FINAL PROGRESS GAUGE UI"
+V1160_LTS_S217291_NUMBER = "116.0-LTS-S2.17.31"
+V1160_LTS_S217291_VERSION = "A100 V116.0-LTS-S2.17.31 LTS FINAL UNIFIED DASHBOARD & GAUGE POLISH"
 V91_VERSION = V1160_LTS_S217291_VERSION
 # Compatibility aliases retained so S2.17.29 regression checks and legacy
 # read-only formatters can resolve the prior constant names without changing
@@ -52098,7 +52098,7 @@ async def status1160ltss21730_cmd(update, context):
         "",
         "RUNTIME SCORE",f"{runtime_bar} {runtime_pct:.1f}% · {float(st.get('runtime_score',0.0)):.1f}/100",
         "MANDATORY GATES",f"{gates_bar} {gates_pct:.1f}% · {int(st.get('gate_passed',0))}/5 PASS",
-        "",
+        "",*_v1160_s21730_gate_lines(st),"",
         f"Outcome rows         {int(st.get('classified',0))} classified · {int(st.get('numeric',0))} numeric",
         f"Evidence publish     {'UPDATED' if st.get('evidence_changed') else 'UNCHANGED'} · {int(st.get('evidence_publish_count',0))}",
         f"Recent errors        {int(st.get('recent_errors',0))}",
@@ -52134,9 +52134,57 @@ async def ltscertification1160ltss21730_cmd(update, context):
         "",
         "MANDATORY GATES",f"{gates_bar} {gates_pct:.1f}% · {int(st.get('gate_passed',0))}/5 PASS",
         "72H CERTIFICATION",f"{cov_bar} {cov_pct:.1f}% · MEASURING",
+        "", "CERTIFICATION MILESTONES", *_v1160_s21731_certification_milestones(st),
         "",*_v1160_s21730_gate_lines(st),"",
         "Only persisted runtime evidence counts toward 72H certification.",
         "No synthetic or display-only state counts as PASS.",
+    ]))
+
+
+def _v1160_s21731_certification_milestones(st):
+    """Render persisted-evidence milestones; no wall-clock or synthetic progress."""
+    coverage=max(0.0,min(100.0,float(st.get('coverage_72h',0.0) or 0.0)))
+    equivalent_hours=coverage*72.0/100.0
+    rows=[]
+    for hours in (1,6,12,24,48,72):
+        current=min(equivalent_hours,float(hours))
+        bar,pct=_v1160_s21730_bar(current,float(hours))
+        state='PASS' if equivalent_hours>=hours else 'MEASURING'
+        rows.append(f"{hours:>2}H {bar} {pct:>5.1f}% · {state}")
+    return rows
+
+
+def _v1160_s21731_evidence_state(st):
+    if not st.get('worker_fresh'):
+        return 'STALE'
+    if st.get('evidence_changed'):
+        return 'UPDATED'
+    return 'UNCHANGED'
+
+
+async def dashboard1160ltss21731_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    runtime_bar,runtime_pct=_v1160_s21730_bar(st.get('runtime_score',0.0),100.0)
+    gates_bar,gates_pct=_v1160_s21730_bar(st.get('gate_passed',0),5.0)
+    cov=float(st.get('coverage_72h',0.0) or 0.0)
+    cov_bar,cov_pct=_v1160_s21730_bar(cov,100.0)
+    return await _v1160_s21729_reply(update,"\n".join([
+        f"A100 V{V1160_LTS_S217291_NUMBER} LTS FINAL DASHBOARD · LIVE",
+        f"System               {'RUNNING' if st.get('worker_fresh') else 'DEGRADED'}",
+        f"Runtime authority    {st.get('source')}",
+        f"Worker heartbeat     {float(st.get('live_age',0.0)):.1f}s · cycle {float(st.get('cycle_ms',0.0)):.2f}ms",
+        f"Evidence state       {_v1160_s21731_evidence_state(st)} · publish {int(st.get('evidence_publish_count',0))}",
+        f"Outcome evidence     {int(st.get('classified',0))}/{int(st.get('numeric',0))}",
+        "",
+        "RUNTIME SCORE",f"{runtime_bar} {runtime_pct:.1f}% · {float(st.get('runtime_score',0.0)):.1f}/100",
+        "MANDATORY GATES",f"{gates_bar} {gates_pct:.1f}% · {int(st.get('gate_passed',0))}/5 PASS",
+        "72H CERTIFICATION",f"{cov_bar} {cov_pct:.1f}% · PERSISTED EVIDENCE",
+        "",*_v1160_s21730_gate_lines(st),"",
+        "CERTIFICATION MILESTONES",*_v1160_s21731_certification_milestones(st),"",
+        f"Recent errors        {int(st.get('recent_errors',0))}",
+        f"Registry / Routes    {int(st.get('registry_count',0))}/{int(st.get('route_count',0))}",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Telegram path        STRICT READ ONLY",
     ]))
 
 async def pipelinetrace1160ltss21730_cmd(update, context):
@@ -52159,6 +52207,8 @@ def _v1160_s21729_light_preflight(force=False):
         _v1160_s2176_check('Evidence signature',callable(_v1160_s21729_signature)),
         _v1160_s2176_check('Incremental gate publish',callable(_v1160_s21729_progress_row)),
         _v1160_s2176_check('Worker-only evidence refresh',_v1160_s21728_refresh_evidence is _v1160_s21729_refresh_evidence),
+        _v1160_s2176_check('Unified live dashboard',callable(dashboard1160ltss21731_cmd)),
+        _v1160_s2176_check('Certification milestone gauges',callable(_v1160_s21731_certification_milestones)),
     ])
     failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
     warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
@@ -52170,11 +52220,12 @@ def v91_preflight(force=False): return _v1160_s21729_light_preflight(force)
 
 V925_COMMAND_USAGE.update({
     'version':'S2.17.29 real-time evidence delta and incremental gate publish',
-    'status':'Live runtime status with worker-published evidence deltas',
+    'status':'Unified live runtime status with all mandatory gate gauges',
     'runtimehealth':'Live worker and evidence change counters',
-    'releasegate':'Strict read-only incremental gate progress with bar gauges',
-    'ltscertification':'Live runtime LTS certification gauges',
+    'releasegate':'Strict read-only incremental gate progress with unified bar gauges',
+    'ltscertification':'Live runtime LTS certification milestone gauges',
     'pipelinetrace':'Live runtime read-only pipeline trace',
+    'dashboard':'Unified live runtime, gates and 72-hour certification dashboard',
     'versionaudit':'Runtime-first, output-root and 341-command regression audit',
 })
 V90_COMMAND_REGISTRY.update({
@@ -52185,19 +52236,20 @@ V90_COMMAND_REGISTRY.update({
     'releasegate':releasegate1160ltss21730_cmd,
     'ltscertification':ltscertification1160ltss21730_cmd,
     'pipelinetrace':pipelinetrace1160ltss21730_cmd,
+    'dashboard':dashboard1160ltss21731_cmd,
 })
 V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 
 
 def build_v44_application(token):
     pre=_v1160_s21729_light_preflight(True)
-    if not pre['ok']: raise RuntimeError('S2.17.30 startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('S2.17.31 startup preflight failed: '+','.join(pre['failed']))
     app=Application.builder().token(token).build()
     app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
     app.add_error_handler(v88_error_handler)
     print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
     print('A100 V91 dispatcher count: 1',flush=True)
-    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.30)",flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.31)",flush=True)
     return app
 
 
@@ -52209,14 +52261,14 @@ def main():
     print(f"{V1160_LTS_S217291_VERSION} worker running...",flush=True)
     print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
     print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
-    if not pre['ok']: raise RuntimeError('A100 S2.17.30 bounded startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('A100 S2.17.31 bounded startup preflight failed: '+','.join(pre['failed']))
     if not acquire_v44_process_lock():
         print('A100 V91 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
     _v1160_s21728_start_live_worker_once()
-    print('A100 S2.17.30 live runtime worker: ACTIVE · interval 2.0s',flush=True)
-    print('A100 S2.17.30 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    print('A100 S2.17.31 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.31 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
     try: asyncio.run(run_bot_async())
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise

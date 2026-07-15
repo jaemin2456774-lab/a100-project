@@ -1,17 +1,26 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.30",
-  "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.29.1",
-  "changed_files": [
-    "main.py"
-  ],
-  "preserve": [
-    "/data",
-    "environment variables",
-    "configuration",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF"
+  "version": "A100 V116.0-LTS-S2.17.31",
+  "title": "LTS Final Unified Dashboard & Gauge Polish",
+  "baseline": "A100 V116.0-LTS-S2.17.30",
+  "architecture_baseline": "A100 V116.0-LTS-S2.17.26",
+  "package_type": "incremental_patch",
+  "preserves": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "data_and_configuration": true,
+    "telegram_commands": 341
+  },
+  "runtime_policy": {
+    "source_of_truth": "LIVE_RUNTIME",
+    "telegram": "STRICT_READ_ONLY",
+    "snapshot": "CERTIFICATION_AND_RECOVERY_EVIDENCE_ONLY"
+  },
+  "changes": [
+    "Unified live LTS dashboard",
+    "Five mandatory-gate gauges in status",
+    "Persisted evidence milestones 1H through 72H",
+    "UI consistency without calculation changes"
   ]
 }
