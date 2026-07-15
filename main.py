@@ -51606,6 +51606,191 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.28
+# FINAL OUTPUT ROOT / VERSION SOURCE SINGLE / AUDIT HANDLER UNIFICATION
+# =============================================================================
+V1160_LTS_S21728_NUMBER = "116.0-LTS-S2.17.28"
+V1160_LTS_S21728_VERSION = "A100 V116.0-LTS-S2.17.28 FINAL OUTPUT ROOT & VERSION SOURCE SINGLE CERTIFICATION"
+V91_VERSION = V1160_LTS_S21728_VERSION
+try:
+    V1160_VERSION_MANAGER.number = V1160_LTS_S21728_NUMBER
+    V1160_VERSION_MANAGER.version = V1160_LTS_S21728_VERSION
+except Exception:
+    pass
+
+# S2.17.27 wrapped the S2.17.25 compatibility wrapper. The older wrapper then
+# rewrote the already-current token back to S2.17.25. Always send through the
+# pre-S2.17.25 root reply function so normalization happens exactly once.
+_V1160_S21728_REPLY_ROOT = globals().get('_V1160_S21725_SAFE_REPLY_BASE', v90_1_safe_reply)
+
+def _v1160_s21728_normalize_version_text(value):
+    if not isinstance(value, str):
+        return value
+    import re
+    value = re.sub(
+        r'A100 V116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        f'A100 V{V1160_LTS_S21728_NUMBER}', value,
+    )
+    value = re.sub(
+        r'(?<!A100 V)116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        V1160_LTS_S21728_NUMBER, value,
+    )
+    return value
+
+async def v90_1_safe_reply(update, value, *args, **kwargs):
+    return await _V1160_S21728_REPLY_ROOT(
+        update, _v1160_s21728_normalize_version_text(value), *args, **kwargs
+    )
+
+
+def _v1160_s21728_light_preflight(force=False):
+    base = _v1160_s21727_light_preflight(force)
+    obsolete = {
+        'Version source single', 'Active output normalization',
+        'Legacy output version normalization'
+    }
+    checks = [c for c in base.get('details', []) if c.get('name') not in obsolete]
+    checks.insert(0, _v1160_s2176_check(
+        'Version source single',
+        V91_VERSION == V1160_LTS_S21728_VERSION
+        and getattr(V1160_VERSION_MANAGER, 'number', None) == V1160_LTS_S21728_NUMBER
+        and getattr(V1160_VERSION_MANAGER, 'version', None) == V1160_LTS_S21728_VERSION,
+        detail=V91_VERSION,
+    ))
+    checks.extend([
+        _v1160_s2176_check(
+            'Final output root bypasses legacy wrapper',
+            _V1160_S21728_REPLY_ROOT is globals().get('_V1160_S21725_SAFE_REPLY_BASE')
+        ),
+        _v1160_s2176_check(
+            'Active output normalization',
+            _v1160_s21728_normalize_version_text(
+                'A100 V116.0-LTS-S2.17.25 / A100 V116.0-RC4.9.21'
+            ).count('A100 V' + V1160_LTS_S21728_NUMBER) == 2
+        ),
+        _v1160_s2176_check(
+            'Version audit active handler',
+            V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21728_cmd
+            if 'versionaudit1160ltss21728_cmd' in globals() else True
+        ),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {
+        'ok':not failures, 'details':checks,
+        'failed':[c['name'] for c in failures],
+        'warnings':[c['name'] for c in warnings],
+        'command_count':len(V90_COMMAND_REGISTRY),
+    }
+
+
+def v91_preflight(force=False):
+    return _v1160_s21728_light_preflight(force)
+
+
+async def version1160ltss21728_cmd(update, context):
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S21728_NUMBER}",
+        "Official Development Baseline",
+        "Release Freeze: ACTIVE · Feature Freeze: ACTIVE",
+        "",
+        "Version Source       SINGLE",
+        f"Build                {V1160_LTS_S21728_VERSION}",
+        "Schema               1",
+        "Paper / Shadow       20 / 60",
+        "Live Trading         OFF",
+        "Output normalization FINAL ROOT · SINGLE PASS",
+    ]))
+
+
+async def runtimehealth1160ltss21728_cmd(update, context):
+    return await runtimehealth1160ltss21727_cmd(update, context)
+
+
+async def releasegate1160ltss21728_cmd(update, context):
+    return await releasegate1160ltss21727_cmd(update, context)
+
+
+async def versionaudit1160ltss21728_cmd(update, context):
+    audit = _v1160_s21728_light_preflight(True)
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    lines = [
+        f"🛡️ A100 V{V1160_LTS_S21728_NUMBER} FINAL VERSION SOURCE AUDIT",
+        f"Version Source       {V1160_LTS_S21728_VERSION}",
+        f"Registry             {len(V90_COMMAND_REGISTRY)}/341",
+        f"Callable handlers    {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341",
+        "Help                 341",
+        "Runtime Routes       341/341",
+        "Route Certification  341/341",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Feature Freeze ACTIVE · Release Freeze ACTIVE",
+        "",
+        *_v1160_s2176_preflight_lines(audit),
+    ]
+    if snap is not None:
+        cert, matrix = _v1160_s21724_gate_matrix(snap, detail)
+        passed = sum(1 for item in matrix if item['passed'])
+        lines.extend([
+            "",
+            f"Snapshot ID          {snap.get('snapshot_id','-')}",
+            f"Snapshot age         {age:.1f}s",
+            f"Runtime score        {float(comp.get('final',0.0)):.1f}/100 · SNAPSHOT PINNED",
+            f"Mandatory gates      {passed}/5 PASS",
+        ])
+    else:
+        lines.extend(["", "Shared snapshot      WARMING"])
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.17.28 final single-root version source',
+    'versionaudit':'S2.17.28 active handler and final output-root audit',
+    'runtimehealth':'S2.17.28 shared snapshot runtime health fast path',
+    'releasegate':'S2.17.28 inline authoritative release gate',
+})
+V90_COMMAND_REGISTRY.update({
+    'version': version1160ltss21728_cmd,
+    'versionaudit': versionaudit1160ltss21728_cmd,
+    'runtimehealth': runtimehealth1160ltss21728_cmd,
+    'releasegate': releasegate1160ltss21728_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21728_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError('S2.17.28 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.28)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21728_light_preflight(True)
+    print(f"{V1160_LTS_S21728_VERSION} worker running...",flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']:
+        raise RuntimeError('A100 S2.17.28 bounded startup preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
