@@ -1,8 +1,8 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.35",
-  "baseline": "A100 V116.0-LTS-S2.17.34",
+  "version": "A100 V116.0-LTS-S2.17.36",
+  "baseline": "A100 V116.0-LTS-S2.17.35",
   "package_type": "incremental_patch",
-  "scope": "LTS Final Candidate UI Consistency & Mobile Readability",
+  "scope": "Final UI System, Mobile Optimization & Comprehensive Production Readiness Audit",
   "preserves": {
     "schema": 1,
     "paper_positions": 20,
@@ -18,28 +18,38 @@
   "files": [
     {
       "path": "main.py",
-      "sha256": "acad5dbd314b40a8e00bc541b8783cc22dc8d61d28a85ab9ed1efadcf45807e7",
-      "size": 2779868
+      "sha256": "f56bdff381e2f3cff020a8c04e1320b7468f586d9c213c2d775c172c387b05bb",
+      "size": 2789652
     },
     {
-      "path": "test_v1160_lts_s21735.py",
-      "sha256": "4a3c0a5b6ae496ccd674ced5adaf9d3b94bc0f637a07fdb2e19cc2a10a7a4034",
-      "size": 881
+      "path": "test_v1160_lts_s21736.py",
+      "sha256": "b56e6d5467bed4a598898731832d0e8b80086506cf8e44ee66b062cfd8f7b8e2",
+      "size": 858
     },
     {
-      "path": "CHANGELOG_S2.17.35.md",
-      "sha256": "78dac8ec7da62266cdf27898fdd9b9fd044f5636b61df4137d6703645db0ec84",
-      "size": 1013
+      "path": "CHANGELOG_S2.17.36.md",
+      "sha256": "b51616b4fb881a0f06ab038e5042b60d33729707b9580c27cea8077baae3e7b4",
+      "size": 704
     },
     {
       "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "sha256": "f602d4b33072a8128b7341d67a7b9a5978c5e35b98bfa8818b152731b8685495",
-      "size": 784
+      "sha256": "29c0bce80f476bb9daf689e0c5841134ff5f5db0939721c9452d723dfa2201ee",
+      "size": 552
+    },
+    {
+      "path": "FINAL_COMPREHENSIVE_AUDIT_S2.17.36.md",
+      "sha256": "e7c09802794e6c68390004fc1512087877ea09368034c63d9ae75fae3d250c8d",
+      "size": 1724
+    },
+    {
+      "path": "AUDIT_METRICS_S2.17.36.json",
+      "sha256": "735b969da5fe7e4f713185a99f275270b8de83277ec7c74d8f93725f1992ebec",
+      "size": 442
     },
     {
       "path": "changed_files.manifest",
-      "sha256": "63fdef2d9c0bdec523b3181d3259cb47cfc8e1c02628f70919e533494867e050",
-      "size": 135
+      "sha256": "b33fe763f54b64e3ee9555b579f90af4cb4991d9f8cac11e8d9ead35add78d37",
+      "size": 147
     }
   ]
 }

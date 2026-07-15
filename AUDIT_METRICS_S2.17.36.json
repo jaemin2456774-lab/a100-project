@@ -1,0 +1,18 @@
+{
+  "syntax": "PASS",
+  "executable_blocks": 1,
+  "registry_target": 341,
+  "registry_preservation_token": true,
+  "schema1_tokens": 69,
+  "paper20_tokens": 70,
+  "shadow60_tokens": 70,
+  "live_off_tokens": 72,
+  "strict_read_only_tokens": 16,
+  "gate_unchanged_tokens": 9,
+  "functions": 3070,
+  "async_commands": 1012,
+  "s21736_handlers": true,
+  "production_display_only": true,
+  "runtime_state_reader": true,
+  "evidence_worker": true
+}
