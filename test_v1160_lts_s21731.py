@@ -1,10 +1,10 @@
 from pathlib import Path
 p=Path(__file__).with_name('main.py').read_text(encoding='utf-8')
-assert '116.0-LTS-S2.17.31' in p
-assert 'LTS FINAL UNIFIED DASHBOARD & GAUGE POLISH' in p
+assert '116.0-LTS-S2.17.31' in p or '116.0-LTS-S2.17.32' in p
+assert 'LTS FINAL UNIFIED DASHBOARD & GAUGE POLISH' in p or 'LTS FINAL VISUAL GAUGE CONSISTENCY POLISH' in p
 assert 'def _v1160_s21731_certification_milestones' in p
 assert 'async def dashboard1160ltss21731_cmd' in p
-assert "'dashboard':dashboard1160ltss21731_cmd" in p
+assert "'dashboard':dashboard1160ltss21731_cmd" in p or "'dashboard':dashboard1160ltss21732_cmd" in p
 assert "_v1160_s2176_check('Unified live dashboard'" in p
 assert 'CERTIFICATION MILESTONES' in p
 assert "for hours in (1,6,12,24,48,72)" in p
