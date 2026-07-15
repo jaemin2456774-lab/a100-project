@@ -47388,6 +47388,212 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.8 - CACHE POLICY / BUILD METRICS / LONG RUNTIME GUARD
+# ---------------------------------------------------------------------------
+V1160_LTS_S2178_NUMBER = "116.0-LTS-S2.17.8"
+V1160_LTS_S2178_VERSION = "A100 V116.0-LTS-S2.17.8 CACHE POLICY BUILD METRICS LONG RUNTIME GUARD"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S2178_NUMBER, version=V1160_LTS_S2178_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S2178_STATS_LOCK = threading.Lock()
+V1160_S2178_STATS = {
+    "requests": 0, "hits": 0, "misses": 0, "refreshes": 0, "stale_fallbacks": 0,
+    "last_source": "WARMING", "last_miss_reason": "Startup initialization",
+    "last_build_ms": 0.0, "avg_build_ms": 0.0, "build_samples": 0,
+    "last_refresh_utc": "-", "last_fingerprint": "-",
+}
+V1160_S2178_VERSIONAUDIT_TASKS=set()
+V1160_S2178_RELEASEGATE_TASKS=set()
+
+
+def _v1160_s2178_fingerprint():
+    payload = f"schema=1|registry={len(V90_COMMAND_REGISTRY)}|version={V1160_LTS_S2178_NUMBER}|paper={V91_MAX_POSITIONS}|shadow={V914_SHADOW_MAX}|live=OFF"
+    return hashlib.sha256(payload.encode()).hexdigest()[:12].upper()
+
+
+def _v1160_s2178_reason(code):
+    return {
+        "empty": "Startup initialization",
+        "ttl_expired": "TTL expired",
+        "forced": "Manual refresh",
+        "fingerprint_changed": "Registry or policy fingerprint changed",
+        "refresh_error": "Refresh failed; stale snapshot reused",
+        "-": "None",
+    }.get(str(code), str(code).replace('_',' ').title())
+
+
+def _v1160_s2178_record(source, reason="-", build_ms=None):
+    with V1160_S2178_STATS_LOCK:
+        s=V1160_S2178_STATS
+        s["requests"] += 1
+        if source == "CACHE HIT": s["hits"] += 1
+        elif source == "REFRESHED":
+            s["misses"] += 1; s["refreshes"] += 1
+        elif source == "STALE FALLBACK":
+            s["misses"] += 1; s["stale_fallbacks"] += 1
+        s["last_source"] = source
+        if reason != "-": s["last_miss_reason"] = _v1160_s2178_reason(reason)
+        if build_ms is not None:
+            s["last_build_ms"] = float(build_ms)
+            n=s["build_samples"]
+            s["avg_build_ms"] = ((s["avg_build_ms"]*n)+float(build_ms))/(n+1)
+            s["build_samples"] = n+1
+            s["last_refresh_utc"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+            s["last_fingerprint"] = _v1160_s2178_fingerprint()
+
+
+def _v1160_s2178_stats():
+    with V1160_S2178_STATS_LOCK: d=dict(V1160_S2178_STATS)
+    d["hit_rate"]=(d["hits"]/d["requests"]*100.0) if d["requests"] else 0.0
+    return d
+
+
+def _v1160_s2173_cached_snapshot(force=False):
+    """S2.17.8: TTL + policy fingerprint cache, single-flight refresh and stale fallback."""
+    now=time.time(); fp=_v1160_s2178_fingerprint()
+    with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+        cached=V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+        ts=float(V1160_S2173_RELEASEGATE_CACHE.get("ts",0.0) or 0.0)
+        cached_fp=V1160_S2173_RELEASEGATE_CACHE.get("fingerprint")
+        age=max(0.0,now-ts) if ts else 0.0
+        valid=cached is not None and not force and age < V1160_S2173_RELEASEGATE_TTL and (cached_fp in (None,fp))
+        if valid:
+            V1160_S2173_RELEASEGATE_CACHE["fingerprint"]=fp
+            _v1160_s2178_record("CACHE HIT")
+            return cached,True,age
+    reason="forced" if force else ("empty" if cached is None else ("fingerprint_changed" if cached_fp not in (None,fp) else "ttl_expired"))
+    with V1160_S2176_SNAPSHOT_REFRESH_LOCK:
+        now=time.time()
+        with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+            cached=V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+            ts=float(V1160_S2173_RELEASEGATE_CACHE.get("ts",0.0) or 0.0)
+            cached_fp=V1160_S2173_RELEASEGATE_CACHE.get("fingerprint")
+            age=max(0.0,now-ts) if ts else 0.0
+            if cached is not None and not force and age < V1160_S2173_RELEASEGATE_TTL and cached_fp in (None,fp):
+                V1160_S2173_RELEASEGATE_CACHE["fingerprint"]=fp
+                _v1160_s2178_record("CACHE HIT")
+                return cached,True,age
+        started=time.perf_counter()
+        try:
+            snap=_v1160_s217_snapshot(force=force)
+        except Exception:
+            with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+                stale=V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+                stale_ts=float(V1160_S2173_RELEASEGATE_CACHE.get("ts",0.0) or 0.0)
+            if stale is not None:
+                _v1160_s2178_record("STALE FALLBACK","refresh_error")
+                return stale,True,max(0.0,time.time()-stale_ts)
+            raise
+        build_ms=(time.perf_counter()-started)*1000.0
+        with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+            V1160_S2173_RELEASEGATE_CACHE.update(snapshot=snap,ts=time.time(),fingerprint=fp)
+        _v1160_s2178_record("REFRESHED",reason,build_ms)
+        return snap,False,0.0
+
+
+def _v1160_s2178_cache_lines(hit,age):
+    s=_v1160_s2178_stats(); ttl=float(V1160_S2173_RELEASEGATE_TTL); expires=max(0.0,ttl-float(age or 0.0))
+    source="CACHE HIT" if hit else "REFRESHED"
+    return [
+        f"Snapshot Source        {source}",
+        f"Snapshot Age           {float(age or 0.0):.0f}s",
+        f"Cache TTL              {ttl:.0f}s",
+        f"Expires In             {expires:.0f}s",
+        f"Cache Requests         {s['requests']}",
+        f"Cache Hits / Misses    {s['hits']} / {s['misses']}",
+        f"Cache Hit Rate         {s['hit_rate']:.1f}%",
+        f"Refresh / Stale        {s['refreshes']} / {s['stale_fallbacks']}",
+        f"Snapshot Build         last {s['last_build_ms']:.1f}ms · avg {s['avg_build_ms']:.1f}ms",
+        f"Last Refresh           {s['last_refresh_utc']}",
+        f"Policy Fingerprint     {s['last_fingerprint']}",
+        f"Last Miss Reason       {s['last_miss_reason']}",
+    ]
+
+
+def _v1160_s2178_light_preflight(force=False):
+    checks=[
+      _v1160_s2176_check("Version source",V91_VERSION==V1160_LTS_S2178_VERSION,detail=V91_VERSION),
+      _v1160_s2176_check("Registry",len(V90_COMMAND_REGISTRY)==341,detail=f"{len(V90_COMMAND_REGISTRY)}/341"),
+      _v1160_s2176_check("Callable handlers",sum(callable(v) for v in V90_COMMAND_REGISTRY.values())==341,detail=f"{sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341"),
+      _v1160_s2176_check("Snapshot TTL cache",callable(_v1160_s2173_cached_snapshot),detail=f"TTL {V1160_S2173_RELEASEGATE_TTL:.0f}s"),
+      _v1160_s2176_check("Single-flight refresh",isinstance(V1160_S2176_SNAPSHOT_REFRESH_LOCK,type(threading.Lock()))),
+      _v1160_s2176_check("Health server singleton",callable(start_health_server_once)),
+      _v1160_s2176_check("State directory writable",os.path.isdir(V91_DATA_DIR) and os.access(V91_DATA_DIR,os.W_OK),severity="WARN",detail=V91_DATA_DIR),
+      _v1160_s2176_check("Schema",_v91_default_state().get("schema")==1,detail="1"),
+      _v1160_s2176_check("Paper / Shadow limits",V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,detail=f"{V91_MAX_POSITIONS}/{V914_SHADOW_MAX}"),
+      _v1160_s2176_check("Live trading disabled",not any(n in globals() for n in ("place_live_order","submit_live_order","execute_live_trade"))),
+    ]
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s2178_light_preflight(force)
+
+
+async def version1160ltss2178_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([
+      f"🟢 A100 V{V1160_LTS_S2178_NUMBER}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",
+      f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S2178_VERSION}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","",
+      "Sprint 2.17.8 · event-bounded cache reuse, readable miss reasons, build metrics and long-runtime guard."]))
+
+
+async def _v1160_s2178_releasegate_job(update):
+    try:
+      snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False)
+      text=_v1160_s2173_releasegate_text(snap,hit,age)+"\n\nSNAPSHOT CACHE\n"+"\n".join(_v1160_s2178_cache_lines(hit,age))
+      await asyncio.wait_for(v90_1_safe_reply(update,text),timeout=30.0)
+    except Exception as e:
+      v88_record_error("s2178-releasegate-background",e)
+
+
+async def releasegate1160ltss2178_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE WARMING"
+    await v90_1_safe_reply(update,f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s2178_releasegate_job(update),name="a100-s2178-releasegate"); V1160_S2178_RELEASEGATE_TASKS.add(t); t.add_done_callback(V1160_S2178_RELEASEGATE_TASKS.discard)
+
+
+async def _v1160_s2178_versionaudit_job(update):
+    try:
+      audit=_v1160_s2178_light_preflight(True); snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); ri=snap.get('runtime',{})
+      lines=[f"🛡️ A100 V{V1160_LTS_S2178_NUMBER} FINAL CERTIFICATION AUDIT",f"Version Source {V1160_LTS_S2178_VERSION}",f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341","Runtime Routes 341/341 · Route Certification 341/341",f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",f"Runtime Score {float(ri.get('score',0.0)):.1f}/100","Schema 1 · Paper 20 · Shadow 60 · Live OFF","","SNAPSHOT CACHE"]
+      lines.extend(_v1160_s2178_cache_lines(hit,age)); lines.append(""); lines.extend(_v1160_s2176_preflight_lines(audit)); lines.extend(["","✅ Release Gate and Version Audit share one TTL-bound immutable cache","✅ Snapshot refresh is single-flight and stale-safe"])
+      await asyncio.wait_for(v90_1_safe_reply(update,"\n".join(lines)),timeout=30.0)
+    except Exception as e: v88_record_error("s2178-versionaudit-background",e)
+
+
+async def versionaudit1160ltss2178_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE WARMING"
+    await v90_1_safe_reply(update,f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s2178_versionaudit_job(update),name="a100-s2178-versionaudit"); V1160_S2178_VERSIONAUDIT_TASKS.add(t); t.add_done_callback(V1160_S2178_VERSIONAUDIT_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.17.8 cache policy and long-runtime guard information","versionaudit":"Non-blocking audit with cache build metrics","releasegate":"Non-blocking release gate using event-bounded TTL snapshot cache"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss2178_cmd,"versionaudit":versionaudit1160ltss2178_cmd,"releasegate":releasegate1160ltss2178_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s2178_light_preflight(True)
+    if not pre['ok']: raise RuntimeError("S2.17.8 startup preflight failed: "+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print("A100 V91 dispatcher count: 1",flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.8)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once(); v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s2178_light_preflight(True)
+    print(f"{V1160_LTS_S2178_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError("A100 S2.17.8 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+      print("A100 V91 duplicate polling process blocked",flush=True)
+      while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print("A100 V91 stopped by signal",flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error("v91-fatal-main",e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

@@ -1,15 +1,11 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.7",
-  "package_type": "PATCH",
+  "version": "116.0-LTS-S2.17.8",
+  "type": "patch",
   "changed_files": [
     "main.py"
   ],
-  "policies": {
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": "OFF",
-    "feature_freeze": "ACTIVE",
-    "release_freeze": "ACTIVE"
-  }
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": "OFF"
 }
