@@ -1,19 +1,15 @@
-# S2.17.36 패치 설치 안내
+# S2.17.37 Railway 패치 설치 안내
 
-1. 현재 운영 폴더와 데이터 폴더를 백업합니다.
-2. ZIP의 `main.py`를 기존 프로젝트의 동일 파일 위에 덮어씁니다.
-3. 데이터, 환경변수, 설정 파일은 삭제하거나 초기화하지 않습니다.
-4. 재시작 후 아래 명령을 순서대로 확인합니다.
+1. Railway에 연결된 실제 GitHub 배포 브랜치의 프로젝트 루트에서 `main.py`를 덮어씁니다.
+2. 다른 데이터·설정·환경변수 파일은 삭제하거나 초기화하지 않습니다.
+3. 변경 파일을 커밋·푸시하고 Railway Deployment가 완료될 때까지 기다립니다.
+4. Railway Deployment Logs에서 `S2.17.37`과 startup preflight PASS를 확인합니다.
+5. Telegram에서 `/version`, `/versionaudit`, `/status` 순서로 실행합니다.
 
-/version
-/status
-/dashboard
-/dashboard
-/releasegate
-/ltscertification
-/runtimehealth
-/versionaudit
-/pipelinetrace
-/errors
+성공 기준:
+- A100 V116.0-LTS-S2.17.37
+- PASS · Version source single
+- Registry / Callable / Expected 341/341/341
+- Schema 1 · Paper 20 · Shadow 60 · Live OFF
 
-`/dashboard`는 연속 두 번 실행해 최초 응답과 캐시 응답을 비교합니다.
+Render는 사용하지 않습니다.

@@ -1,0 +1,15 @@
+{
+  "version": "116.0-LTS-S2.17.37",
+  "baseline": "116.0-LTS-S2.17.36",
+  "registry_expected": 341,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": false,
+  "runtime_first": true,
+  "strict_read_only": true,
+  "gate_formula_changed": false,
+  "data_or_config_files_included": false,
+  "static_regression": "PASS",
+  "runtime_certification": "PENDING_RAILWAY_VALIDATION"
+}

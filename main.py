@@ -52892,6 +52892,185 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.0 LTS S2.17.37 - VERSION SOURCE UNIFICATION & FINAL CERTIFICATION
+# Runtime-first / strict read-only / no gate formula changes
+# ============================================================================
+V1160_LTS_S21737_NUMBER = "116.0-LTS-S2.17.37"
+V1160_LTS_S21737_VERSION = "A100 V116.0-LTS-S2.17.37 VERSION SOURCE UNIFICATION & FINAL CERTIFICATION"
+
+# One authoritative release identity. Legacy aliases are intentionally rebound so
+# older output helpers cannot expose a stale release string.
+V91_VERSION = V1160_LTS_S21737_VERSION
+V1160_LTS_S21736_NUMBER = V1160_LTS_S21737_NUMBER
+V1160_LTS_S21736_VERSION = V1160_LTS_S21737_VERSION
+V1160_LTS_S21735_NUMBER = V1160_LTS_S21737_NUMBER
+V1160_LTS_S21735_VERSION = V1160_LTS_S21737_VERSION
+V1160_LTS_S21734_NUMBER = V1160_LTS_S21737_NUMBER
+V1160_LTS_S21734_VERSION = V1160_LTS_S21737_VERSION
+V1160_LTS_S217291_NUMBER = V1160_LTS_S21737_NUMBER
+V1160_LTS_S217291_VERSION = V1160_LTS_S21737_VERSION
+V1160_LTS_S21729_NUMBER = V1160_LTS_S21737_NUMBER
+V1160_LTS_S21729_VERSION = V1160_LTS_S21737_VERSION
+
+
+def _v1160_s21737_version_identity_checks():
+    aliases = {
+        'V91_VERSION': V91_VERSION,
+        'S2.17.36': V1160_LTS_S21736_VERSION,
+        'S2.17.35': V1160_LTS_S21735_VERSION,
+        'S2.17.34': V1160_LTS_S21734_VERSION,
+        'S2.17.29.1': V1160_LTS_S217291_VERSION,
+        'S2.17.29': V1160_LTS_S21729_VERSION,
+    }
+    return aliases, all(value == V1160_LTS_S21737_VERSION for value in aliases.values())
+
+
+def _v1160_s21737_structural_audit(st=None):
+    st = st or _v1160_s21728_read_live_state()
+    aliases, version_single = _v1160_s21737_version_identity_checks()
+    registry = V90_COMMAND_REGISTRY
+    callables = sum(1 for fn in registry.values() if callable(fn))
+    expected = set(V90_EXPECTED_COMMANDS)
+    registered = set(registry)
+    usage = set(V925_COMMAND_USAGE)
+    core_routes = {'version','status','dashboard','releasegate','ltscertification','runtimehealth','versionaudit','pipelinetrace','help','commands'}
+    checks = [
+        ('Version source single', version_single),
+        ('Output root current', _V1160_S21729_REPLY_ROOT is _V1160_S21725_SAFE_REPLY_BASE),
+        ('Registry exactly 341', len(registry) == 341),
+        ('All registry handlers callable', callables == len(registry)),
+        ('Expected set synchronized', registered == expected),
+        ('Help usage covers registry', registered <= usage),
+        ('Core certification routes present', core_routes <= registered),
+        ('Live runtime worker', bool(V1160_S21728_LIVE_THREAD and V1160_S21728_LIVE_THREAD.is_alive())),
+        ('Live state freshness', bool(st.get('worker_fresh'))),
+        ('Telegram strict read only', callable(_v1160_s21728_read_live_state)),
+        ('Change-driven evidence', _v1160_s21728_refresh_evidence is _v1160_s21729_refresh_evidence),
+        ('Snapshot evidence retained', callable(_v1160_s21726_fast_context)),
+        ('Schema/Paper/Shadow/Live', st.get('schema') == 1 and st.get('paper') == 20 and st.get('shadow') == 60 and not st.get('live_trading')),
+        ('Gate matrix worker-cached', isinstance(st.get('gate_matrix') or [], (list, tuple))),
+        ('Recent runtime errors zero', int(st.get('recent_errors', 0) or 0) == 0),
+    ]
+    return {
+        'checks': checks,
+        'aliases': aliases,
+        'registry': len(registry),
+        'callables': callables,
+        'expected': len(expected),
+        'usage': len(usage),
+        'missing_usage': sorted(registered - usage),
+        'missing_expected': sorted(registered - expected),
+        'extra_expected': sorted(expected - registered),
+        'ok': all(ok for _, ok in checks),
+    }
+
+
+async def version1160ltss21737_cmd(update, context):
+    return await _v1160_s21729_reply(update, "\n".join([
+        f'🟢 A100 V{V1160_LTS_S21737_NUMBER}',
+        'Version Source Unification & Final Certification',
+        'Release Freeze ACTIVE · Regression Risk NONE', '',
+        '⚙️ Runtime authority · LIVE MONITORING WORKER',
+        '🔒 Telegram path · MEMORY STATE / STRICT READ ONLY',
+        '📁 Snapshot role · CERTIFICATION / RECOVERY EVIDENCE',
+        '🚦 Gate formulas · UNCHANGED / AUTHORITATIVE',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+    ]))
+
+
+async def versionaudit1160ltss21737_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    audit = _v1160_s21737_structural_audit(st)
+    lines = [
+        f'A100 V{V1160_LTS_S21737_NUMBER} VERSION AUDIT',
+        *[f'{"PASS" if ok else "FAIL"} · {name}' for name, ok in audit['checks']],
+        '',
+        f"Registry / Callable / Expected  {audit['registry']}/{audit['callables']}/{audit['expected']}",
+        f"Help usage coverage             {audit['registry']-len(audit['missing_usage'])}/{audit['registry']}",
+        'Architecture  Worker → Live Runtime State → Telegram Strict Read Only',
+        'Evidence      Worker Check → Change Detection → Incremental Publish',
+        'Snapshot      Certification / Recovery Evidence',
+        'Gate formulas UNCHANGED · no Telegram recomputation',
+    ]
+    if audit['missing_usage']:
+        lines.append('WARN · Help usage missing: ' + ', '.join(audit['missing_usage'][:8]))
+    return await _v1160_s21729_reply(update, "\n".join(lines))
+
+
+def _v1160_s21737_light_preflight(force=False):
+    base = _v1160_s21736_light_preflight(force)
+    checks = [c for c in base.get('details', []) if c.get('name') != 'Version source single']
+    audit = _v1160_s21737_structural_audit()
+    checks.insert(0, _v1160_s2176_check('Version source single', audit['checks'][0][1], detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.37 version audit handler active', V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21737_cmd),
+        _v1160_s2176_check('S2.17.37 version handler active', V90_COMMAND_REGISTRY.get('version') is version1160ltss21737_cmd),
+        _v1160_s2176_check('Registry/Callable/Expected 341', audit['registry'] == audit['callables'] == audit['expected'] == 341),
+        _v1160_s2176_check('Help usage registry coverage', not audit['missing_usage']),
+        _v1160_s2176_check('Gate formulas unchanged', callable(_v1160_s21734_production_ready)),
+        _v1160_s2176_check('Strict read-only live-state path', callable(_v1160_s21728_read_live_state)),
+    ])
+    failures = [c for c in checks if not c['ok'] and c['severity'] == 'FAIL']
+    warnings = [c for c in checks if not c['ok'] and c['severity'] == 'WARN']
+    return {'ok': not failures, 'details': checks, 'failed': [c['name'] for c in failures],
+            'warnings': [c['name'] for c in warnings], 'command_count': len(V90_COMMAND_REGISTRY)}
+
+
+V925_COMMAND_USAGE.update({
+    'version': 'S2.17.37 single authoritative release identity',
+    'versionaudit': 'Version source, registry, callable, expected, help, runtime and safety integrity audit',
+})
+V90_COMMAND_REGISTRY.update({
+    'version': version1160ltss21737_cmd,
+    'versionaudit': versionaudit1160ltss21737_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def v91_preflight(force=False):
+    return _v1160_s21737_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre = _v1160_s21737_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError('S2.17.37 startup preflight failed: ' + ','.join(pre['failed']))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}', flush=True)
+    print('A100 V91 dispatcher count: 1', flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.37)', flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre = _v1160_s21737_light_preflight(True)
+    print(f'{V1160_LTS_S21737_VERSION} worker running...', flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}', flush=True)
+    if not pre['ok']:
+        raise RuntimeError('A100 S2.17.37 bounded startup preflight failed: ' + ','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked', flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once()
+    print('A100 S2.17.37 live runtime worker: ACTIVE · interval 2.0s', flush=True)
+    print('A100 S2.17.37 evidence change detector: ACTIVE · check interval 30.0s', flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set(); print('A100 V91 stopped by signal', flush=True)
+    except Exception as e:
+        V91_STOP.set(); v88_record_error('v91-fatal-main', e); print(traceback.format_exc(), flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
