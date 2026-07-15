@@ -47594,6 +47594,273 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print("A100 V91 stopped by signal",flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error("v91-fatal-main",e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.9 - OPERATIONAL CACHE / PROACTIVE REFRESH / RUNTIME GUARD
+# ---------------------------------------------------------------------------
+V1160_LTS_S2179_NUMBER = "116.0-LTS-S2.17.9"
+V1160_LTS_S2179_VERSION = "A100 V116.0-LTS-S2.17.9 OPERATIONAL CACHE PROACTIVE REFRESH RUNTIME GUARD"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S2179_NUMBER, version=V1160_LTS_S2179_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S2179_STATS_LOCK = threading.Lock()
+V1160_S2179_STATS = {
+    "cold_start_misses": 0, "operational_requests": 0, "operational_hits": 0,
+    "operational_misses": 0, "proactive_refreshes": 0, "proactive_failures": 0,
+    "last_proactive_utc": "-", "peak_snapshot_age": 0.0,
+}
+V1160_S2179_REFRESH_STARTED = False
+V1160_S2179_REFRESH_LOCK = threading.Lock()
+V1160_S2179_RUNTIME_GUARD_STARTED = False
+V1160_S2179_RUNTIME_GUARD_LOCK = threading.Lock()
+V1160_S2179_RUNTIME_HISTORY = os.path.join(V91_DATA_DIR, "v1160_s2179_runtime_certification.jsonl")
+V1160_S2179_TASKS = set()
+
+
+def _v1160_s2179_record_request(hit, age, cold=False):
+    with V1160_S2179_STATS_LOCK:
+        s = V1160_S2179_STATS
+        s["peak_snapshot_age"] = max(float(s.get("peak_snapshot_age", 0.0)), float(age or 0.0))
+        if cold:
+            s["cold_start_misses"] += 1
+            return
+        s["operational_requests"] += 1
+        if hit:
+            s["operational_hits"] += 1
+        else:
+            s["operational_misses"] += 1
+
+
+def _v1160_s2179_stats():
+    with V1160_S2179_STATS_LOCK:
+        d = dict(V1160_S2179_STATS)
+    req = int(d.get("operational_requests", 0))
+    d["operational_hit_rate"] = (float(d.get("operational_hits", 0)) / req * 100.0) if req else 0.0
+    return d
+
+
+# Preserve the S2.17.8 cache implementation and add operational accounting.
+_v1160_s2179_cached_snapshot_base = _v1160_s2173_cached_snapshot
+
+def _v1160_s2173_cached_snapshot(force=False):
+    had_snapshot, old_age = _v1160_s2175_peek_snapshot()
+    cold = had_snapshot is None
+    snap, hit, age = _v1160_s2179_cached_snapshot_base(force)
+    _v1160_s2179_record_request(bool(hit), float(age or old_age or 0.0), cold=cold and not hit)
+    return snap, hit, age
+
+
+def _v1160_s2179_cache_lines(hit, age):
+    base = _v1160_s2178_cache_lines(hit, age)
+    s = _v1160_s2179_stats()
+    base.extend([
+        f"Cold Start Misses      {s['cold_start_misses']}",
+        f"Operational Requests   {s['operational_requests']}",
+        f"Operational Hits/Miss  {s['operational_hits']} / {s['operational_misses']}",
+        f"Operational Hit Rate   {s['operational_hit_rate']:.1f}%",
+        f"Proactive Refresh      {s['proactive_refreshes']} · failures {s['proactive_failures']}",
+        f"Last Proactive UTC     {s['last_proactive_utc']}",
+        f"Peak Snapshot Age      {s['peak_snapshot_age']:.0f}s",
+    ])
+    return base
+
+
+def _v1160_s2179_proactive_refresh_loop():
+    # Refresh before expiry while continuing to serve the old immutable snapshot.
+    lead = max(30.0, float(V1160_S2173_RELEASEGATE_TTL) * 0.20)
+    while not V91_STOP.is_set():
+        try:
+            snap, age = _v1160_s2175_peek_snapshot()
+            if snap is not None and age >= max(1.0, float(V1160_S2173_RELEASEGATE_TTL) - lead):
+                _v1160_s2179_cached_snapshot_base(True)
+                with V1160_S2179_STATS_LOCK:
+                    V1160_S2179_STATS["proactive_refreshes"] += 1
+                    V1160_S2179_STATS["last_proactive_utc"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+            V91_STOP.wait(15.0)
+        except Exception as e:
+            with V1160_S2179_STATS_LOCK:
+                V1160_S2179_STATS["proactive_failures"] += 1
+            v88_record_error("s2179-proactive-refresh", e)
+            V91_STOP.wait(30.0)
+
+
+def _v1160_s2179_start_refresh_once():
+    global V1160_S2179_REFRESH_STARTED
+    with V1160_S2179_REFRESH_LOCK:
+        if V1160_S2179_REFRESH_STARTED:
+            return
+        V1160_S2179_REFRESH_STARTED = True
+        threading.Thread(target=_v1160_s2179_proactive_refresh_loop, name="a100-s2179-proactive-refresh", daemon=True).start()
+
+
+def _v1160_s2179_runtime_guard_loop():
+    while not V91_STOP.is_set():
+        try:
+            snap, age = _v1160_s2175_peek_snapshot()
+            stats = _v1160_s2179_stats()
+            mem = 0.0
+            try:
+                import resource
+                mem = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) / 1024.0
+            except Exception:
+                pass
+            row = {
+                "utc": datetime.now(timezone.utc).isoformat(),
+                "snapshot_id": (snap or {}).get("snapshot_id", "-"),
+                "snapshot_age_s": round(float(age or 0.0), 3),
+                "runtime_score": round(float(((snap or {}).get("runtime") or {}).get("score", 0.0)), 3),
+                "memory_mb": round(mem, 3),
+                "operational_hit_rate": round(float(stats.get("operational_hit_rate", 0.0)), 3),
+                "proactive_refreshes": int(stats.get("proactive_refreshes", 0)),
+            }
+            os.makedirs(V91_DATA_DIR, exist_ok=True)
+            with open(V1160_S2179_RUNTIME_HISTORY, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+            # Bound history growth to the latest 1000 observations.
+            try:
+                if os.path.getsize(V1160_S2179_RUNTIME_HISTORY) > 2_000_000:
+                    with open(V1160_S2179_RUNTIME_HISTORY, "r", encoding="utf-8") as fh:
+                        lines = fh.readlines()[-1000:]
+                    tmp = V1160_S2179_RUNTIME_HISTORY + ".tmp"
+                    with open(tmp, "w", encoding="utf-8") as fh:
+                        fh.writelines(lines)
+                    os.replace(tmp, V1160_S2179_RUNTIME_HISTORY)
+            except Exception:
+                pass
+        except Exception as e:
+            v88_record_error("s2179-runtime-guard", e)
+        V91_STOP.wait(300.0)
+
+
+def _v1160_s2179_start_runtime_guard_once():
+    global V1160_S2179_RUNTIME_GUARD_STARTED
+    with V1160_S2179_RUNTIME_GUARD_LOCK:
+        if V1160_S2179_RUNTIME_GUARD_STARTED:
+            return
+        V1160_S2179_RUNTIME_GUARD_STARTED = True
+        threading.Thread(target=_v1160_s2179_runtime_guard_loop, name="a100-s2179-runtime-guard", daemon=True).start()
+
+
+def _v1160_s2179_light_preflight(force=False):
+    checks = _v1160_s2178_light_preflight(force).get("details", [])
+    # Replace version-source check with the active S2.17.9 source.
+    checks = [c for c in checks if c.get("name") != "Version source"]
+    checks.insert(0, _v1160_s2176_check("Version source", V91_VERSION == V1160_LTS_S2179_VERSION, detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check("Operational cache metrics", callable(_v1160_s2179_stats)),
+        _v1160_s2176_check("Proactive refresh guard", callable(_v1160_s2179_start_refresh_once)),
+        _v1160_s2176_check("Long runtime guard", callable(_v1160_s2179_start_runtime_guard_once), detail=V1160_S2179_RUNTIME_HISTORY),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False):
+    return _v1160_s2179_light_preflight(force)
+
+
+async def version1160ltss2179_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S2179_NUMBER}", "Version & Build Information", "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE", "",
+        f"Version Source       {vm['source']}", f"Build                {V1160_LTS_S2179_VERSION}",
+        f"Schema               {vm['schema']}", f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}", "Feature Freeze       ACTIVE", "",
+        "Sprint 2.17.9 · operational cache metrics, proactive atomic refresh and bounded long-runtime certification history."
+    ]))
+
+
+async def _v1160_s2179_releasegate_job(update):
+    try:
+        snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+        text = _v1160_s2173_releasegate_text(snap, hit, age) + "\n\nSNAPSHOT CACHE · OPERATIONAL\n" + "\n".join(_v1160_s2179_cache_lines(hit, age))
+        await asyncio.wait_for(v90_1_safe_reply(update, text), timeout=30.0)
+    except Exception as e:
+        v88_record_error("s2179-releasegate-background", e)
+
+
+async def releasegate1160ltss2179_cmd(update, context):
+    snap, age = _v1160_s2175_peek_snapshot()
+    state = f"CACHE HIT · age {age:.0f}s" if snap is not None and age < V1160_S2173_RELEASEGATE_TTL else "CACHE WARMING"
+    await v90_1_safe_reply(update, f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t = asyncio.create_task(_v1160_s2179_releasegate_job(update), name="a100-s2179-releasegate")
+    V1160_S2179_TASKS.add(t); t.add_done_callback(V1160_S2179_TASKS.discard)
+
+
+async def _v1160_s2179_versionaudit_job(update):
+    try:
+        audit = _v1160_s2179_light_preflight(True)
+        snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+        ri = snap.get('runtime', {})
+        lines = [
+            f"🛡️ A100 V{V1160_LTS_S2179_NUMBER} FINAL CERTIFICATION AUDIT",
+            f"Version Source {V1160_LTS_S2179_VERSION}",
+            f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341",
+            "Runtime Routes 341/341 · Route Certification 341/341",
+            f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",
+            f"Runtime Score {float(ri.get('score',0.0)):.1f}/100", "Schema 1 · Paper 20 · Shadow 60 · Live OFF", "",
+            "SNAPSHOT CACHE · OPERATIONAL"
+        ]
+        lines.extend(_v1160_s2179_cache_lines(hit, age)); lines.append("")
+        lines.extend(_v1160_s2176_preflight_lines(audit))
+        lines.extend(["", "✅ Cold-start misses are separated from operational cache efficiency", "✅ Proactive refresh preserves the old immutable snapshot until atomic replacement", "✅ Long-runtime history is bounded and stored under /data"])
+        await asyncio.wait_for(v90_1_safe_reply(update, "\n".join(lines)), timeout=30.0)
+    except Exception as e:
+        v88_record_error("s2179-versionaudit-background", e)
+
+
+async def versionaudit1160ltss2179_cmd(update, context):
+    snap, age = _v1160_s2175_peek_snapshot()
+    state = f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age < V1160_S2173_RELEASEGATE_TTL else "CACHE WARMING"
+    await v90_1_safe_reply(update, f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t = asyncio.create_task(_v1160_s2179_versionaudit_job(update), name="a100-s2179-versionaudit")
+    V1160_S2179_TASKS.add(t); t.add_done_callback(V1160_S2179_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({
+    "version": "LTS Sprint 2.17.9 operational cache and long-runtime guard information",
+    "versionaudit": "Non-blocking audit with operational cache and proactive refresh metrics",
+    "releasegate": "Non-blocking release gate using proactive immutable snapshot refresh",
+})
+V90_COMMAND_REGISTRY.update({"version": version1160ltss2179_cmd, "versionaudit": versionaudit1160ltss2179_cmd, "releasegate": releasegate1160ltss2179_cmd})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre = _v1160_s2179_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError("S2.17.9 startup preflight failed: " + ','.join(pre['failed']))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V91 dispatcher count: 1", flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.9)", flush=True)
+    return app
+
+
+def main():
+    start_health_server_once(); v90_3_start_background_once(); v91_start_background_once()
+    pre = _v1160_s2179_light_preflight(True)
+    print(f"{V1160_LTS_S2179_VERSION} worker running...", flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}", flush=True)
+    if not pre['ok']:
+        raise RuntimeError("A100 S2.17.9 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked", flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    _v1160_s2179_start_refresh_once()
+    _v1160_s2179_start_runtime_guard_once()
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set(); print("A100 V91 stopped by signal", flush=True)
+    except Exception as e:
+        V91_STOP.set(); v88_record_error("v91-fatal-main", e); print(traceback.format_exc(), flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

@@ -1,11 +1,13 @@
 {
-  "version": "116.0-LTS-S2.17.8",
-  "type": "patch",
+  "version": "116.0-LTS-S2.17.9",
+  "package_type": "PATCH",
   "changed_files": [
     "main.py"
   ],
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": "OFF"
+  "policy": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live": false
+  }
 }
