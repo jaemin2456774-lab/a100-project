@@ -1,9 +1,16 @@
-# S2.17.3 패치 설치 안내
+# S2.17.4 패치 설치 안내
 
-1. 기존 Railway/GitHub 프로젝트를 백업합니다.
-2. 패치의 `main.py`만 저장소 루트의 기존 `main.py`에 덮어씁니다.
-3. 데이터 폴더와 Railway Volume은 삭제하거나 초기화하지 않습니다.
-4. GitHub에 커밋한 뒤 Railway 재배포를 확인합니다.
-5. `/version`, `/releasegate`, `/versionaudit`, `/errors` 순서로 검증합니다.
+1. ZIP을 압축 해제합니다.
+2. GitHub 저장소 루트의 기존 `main.py`를 패치의 `main.py`로 교체합니다.
+3. `data/` 및 Railway 영구 볼륨은 삭제하지 않습니다.
+4. GitHub 커밋 후 Railway 재배포를 진행합니다.
 
-정상 동작 시 `/releasegate`는 즉시 접수 메시지를 보내고 최종 결과를 별도 메시지로 전송합니다. 기존의 120초 Dispatcher Timeout 오류가 새로 기록되면 안 됩니다.
+정상 시작 로그:
+- `Health server listening on port 8080`
+- `A100 V116.0-LTS-S2.17.4 ... worker running...`
+- `A100 V91 startup preflight: OK (bounded)`
+- `Telegram single polling started`
+- `certification snapshot warmup: OK`
+
+배포 후 확인:
+`/version`, `/releasegate`, `/versionaudit`, `/errors`
