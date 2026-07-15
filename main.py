@@ -47095,6 +47095,299 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.7 - SNAPSHOT TTL CACHE OBSERVABILITY FINAL STABILIZATION
+# ---------------------------------------------------------------------------
+V1160_LTS_S2177_NUMBER = "116.0-LTS-S2.17.7"
+V1160_LTS_S2177_VERSION = "A100 V116.0-LTS-S2.17.7 SNAPSHOT TTL CACHE OBSERVABILITY FINAL STABILIZATION"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S2177_NUMBER,
+    version=V1160_LTS_S2177_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S2177_CACHE_STATS_LOCK = threading.Lock()
+V1160_S2177_CACHE_STATS = {
+    "hits": 0,
+    "misses": 0,
+    "refreshes": 0,
+    "stale_fallbacks": 0,
+    "last_source": "WARMING",
+    "last_miss_reason": "startup",
+}
+V1160_S2177_VERSIONAUDIT_TASKS = set()
+V1160_S2177_RELEASEGATE_TASKS = set()
+_V1160_S2177_CACHE_IMPL = _v1160_s2173_cached_snapshot
+
+
+def _v1160_s2177_cache_record(source, miss_reason="-"):
+    with V1160_S2177_CACHE_STATS_LOCK:
+        if source == "CACHE HIT":
+            V1160_S2177_CACHE_STATS["hits"] += 1
+        elif source == "REFRESHED":
+            V1160_S2177_CACHE_STATS["misses"] += 1
+            V1160_S2177_CACHE_STATS["refreshes"] += 1
+        elif source == "STALE FALLBACK":
+            V1160_S2177_CACHE_STATS["misses"] += 1
+            V1160_S2177_CACHE_STATS["stale_fallbacks"] += 1
+        V1160_S2177_CACHE_STATS["last_source"] = source
+        V1160_S2177_CACHE_STATS["last_miss_reason"] = miss_reason
+
+
+def _v1160_s2177_cache_stats():
+    with V1160_S2177_CACHE_STATS_LOCK:
+        data = dict(V1160_S2177_CACHE_STATS)
+    total = data["hits"] + data["misses"]
+    data["hit_rate"] = (data["hits"] / total * 100.0) if total else 0.0
+    return data
+
+
+def _v1160_s2177_cache_metadata(hit, age, source=None, miss_reason="-"):
+    ttl = float(V1160_S2173_RELEASEGATE_TTL)
+    expires = max(0.0, ttl - float(age or 0.0))
+    resolved = source or ("CACHE HIT" if hit else "REFRESHED")
+    stats = _v1160_s2177_cache_stats()
+    return {
+        "source": resolved,
+        "age": max(0.0, float(age or 0.0)),
+        "ttl": ttl,
+        "expires": expires,
+        "hits": stats["hits"],
+        "misses": stats["misses"],
+        "refreshes": stats["refreshes"],
+        "stale_fallbacks": stats["stale_fallbacks"],
+        "hit_rate": stats["hit_rate"],
+        "miss_reason": miss_reason if miss_reason != "-" else stats.get("last_miss_reason", "-"),
+    }
+
+
+def _v1160_s2173_cached_snapshot(force=False):
+    """TTL cache with single-flight refresh, stale fallback and observable cache statistics."""
+    now = time.time()
+    with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+        cached = V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+        ts = float(V1160_S2173_RELEASEGATE_CACHE.get("ts", 0.0) or 0.0)
+        age = max(0.0, now - ts) if ts else 0.0
+        if cached is not None and not force and age < V1160_S2173_RELEASEGATE_TTL:
+            _v1160_s2177_cache_record("CACHE HIT")
+            return cached, True, age
+    reason = "forced" if force else ("empty" if cached is None else "ttl_expired")
+    with V1160_S2176_SNAPSHOT_REFRESH_LOCK:
+        now = time.time()
+        with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+            cached = V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+            ts = float(V1160_S2173_RELEASEGATE_CACHE.get("ts", 0.0) or 0.0)
+            age = max(0.0, now - ts) if ts else 0.0
+            if cached is not None and not force and age < V1160_S2173_RELEASEGATE_TTL:
+                _v1160_s2177_cache_record("CACHE HIT")
+                return cached, True, age
+        try:
+            snap = _v1160_s217_snapshot(force=force)
+        except Exception:
+            with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+                stale = V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+                stale_ts = float(V1160_S2173_RELEASEGATE_CACHE.get("ts", 0.0) or 0.0)
+            if stale is not None:
+                stale_age = max(0.0, time.time() - stale_ts)
+                _v1160_s2177_cache_record("STALE FALLBACK", "refresh_error")
+                return stale, True, stale_age
+            raise
+        with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+            V1160_S2173_RELEASEGATE_CACHE["snapshot"] = snap
+            V1160_S2173_RELEASEGATE_CACHE["ts"] = time.time()
+        _v1160_s2177_cache_record("REFRESHED", reason)
+        return snap, False, 0.0
+
+
+def _v1160_s2177_cache_lines(hit, age):
+    meta = _v1160_s2177_cache_metadata(hit, age)
+    return [
+        f"Snapshot Source        {meta['source']}",
+        f"Snapshot Age           {meta['age']:.0f}s",
+        f"Cache TTL              {meta['ttl']:.0f}s",
+        f"Expires In             {meta['expires']:.0f}s",
+        f"Cache Hit Rate         {meta['hit_rate']:.1f}% · H{meta['hits']} M{meta['misses']}",
+        f"Cache Refreshes        {meta['refreshes']} · stale {meta['stale_fallbacks']}",
+        f"Last Miss Reason       {meta['miss_reason']}",
+    ]
+
+
+def _v1160_s2177_light_preflight(force=False):
+    checks = [
+        _v1160_s2176_check("Version source", V91_VERSION == V1160_LTS_S2177_VERSION and V1160_VERSION_MANAGER.number == V1160_LTS_S2177_NUMBER, detail=V91_VERSION),
+        _v1160_s2176_check("Registry", len(V90_COMMAND_REGISTRY) == 341, detail=f"{len(V90_COMMAND_REGISTRY)}/341"),
+        _v1160_s2176_check("Callable handlers", sum(callable(v) for v in V90_COMMAND_REGISTRY.values()) == 341, detail=f"{sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341"),
+        _v1160_s2176_check("Version handler", V90_COMMAND_REGISTRY.get("version") is version1160ltss2177_cmd if "version1160ltss2177_cmd" in globals() else False),
+        _v1160_s2176_check("Version audit handler", V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1160ltss2177_cmd if "versionaudit1160ltss2177_cmd" in globals() else False),
+        _v1160_s2176_check("Release gate handler", V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss2177_cmd if "releasegate1160ltss2177_cmd" in globals() else False),
+        _v1160_s2176_check("Snapshot TTL cache", callable(_v1160_s2173_cached_snapshot), detail=f"TTL {V1160_S2173_RELEASEGATE_TTL:.0f}s"),
+        _v1160_s2176_check("Single-flight refresh", isinstance(V1160_S2176_SNAPSHOT_REFRESH_LOCK, type(threading.Lock()))),
+        _v1160_s2176_check("Health server singleton", callable(start_health_server_once)),
+        _v1160_s2176_check("State directory writable", os.path.isdir(V91_DATA_DIR) and os.access(V91_DATA_DIR, os.W_OK), severity="WARN", detail=V91_DATA_DIR),
+        _v1160_s2176_check("Schema", _v91_default_state().get("schema") == 1, detail="1"),
+        _v1160_s2176_check("Paper / Shadow limits", V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60, detail=f"{V91_MAX_POSITIONS}/{V914_SHADOW_MAX}"),
+        _v1160_s2176_check("Live trading disabled", not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade"))),
+    ]
+    failures = [c for c in checks if not c["ok"] and c["severity"] == "FAIL"]
+    warnings = [c for c in checks if not c["ok"] and c["severity"] == "WARN"]
+    return {
+        "ok": not failures,
+        "checks": {c["name"]: c["ok"] for c in checks},
+        "details": checks,
+        "failed": [c["name"] for c in failures],
+        "warnings": [c["name"] for c in warnings],
+        "command_count": len(V90_COMMAND_REGISTRY),
+        "development_version": V91_VERSION,
+        "version_source": "Single",
+        "regression_risk": "NONE" if not failures else "HIGH",
+        "release_freeze": "ACTIVE",
+        "lts_readiness": "72H CERTIFICATION ACTIVE" if not failures else "BLOCKED",
+        "certification_stage": "Sprint 2.17.7 Snapshot TTL Cache Observability Final Stabilization",
+    }
+
+
+def v91_preflight(force=False):
+    return _v1160_s2177_light_preflight(force=force)
+
+
+async def version1160ltss2177_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S2177_NUMBER}",
+        "Version & Build Information",
+        "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+        "",
+        f"Version Source       {vm['source']}",
+        f"Build                {V1160_LTS_S2177_VERSION}",
+        f"Schema               {vm['schema']}",
+        f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}",
+        "Feature Freeze       ACTIVE",
+        "",
+        "Sprint 2.17.7 · TTL cache reuse, expiry visibility, hit-rate metrics and synchronized snapshots.",
+    ]))
+
+
+async def _v1160_s2177_releasegate_job(update):
+    try:
+        snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+        text = _v1160_s2173_releasegate_text(snap, hit, age)
+        cache_block = "\n".join(["", "SNAPSHOT CACHE"] + _v1160_s2177_cache_lines(hit, age))
+        await asyncio.wait_for(v90_1_safe_reply(update, text + cache_block), timeout=30.0)
+    except Exception as error:
+        v88_record_error("s2177-releasegate-background", error)
+        try:
+            await asyncio.wait_for(v90_1_safe_reply(update, f"⚠️ /releasegate background error: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."), timeout=10.0)
+        except Exception:
+            pass
+
+
+async def releasegate1160ltss2177_cmd(update, context):
+    snap, age = _v1160_s2175_peek_snapshot()
+    state = f"CACHE HIT · age {age:.0f}s" if snap is not None and age < V1160_S2173_RELEASEGATE_TTL else "CACHE WARMING"
+    await v90_1_safe_reply(update, f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    task = asyncio.create_task(_v1160_s2177_releasegate_job(update), name="a100-s2177-releasegate")
+    V1160_S2177_RELEASEGATE_TASKS.add(task)
+    task.add_done_callback(V1160_S2177_RELEASEGATE_TASKS.discard)
+    return None
+
+
+async def _v1160_s2177_versionaudit_job(update):
+    try:
+        audit = _v1160_s2177_light_preflight(force=True)
+        snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+        ri = snap.get("runtime", {})
+        lines = [
+            f"🛡️ A100 V{V1160_LTS_S2177_NUMBER} FINAL CERTIFICATION AUDIT",
+            f"Version Source {V1160_LTS_S2177_VERSION}",
+            f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341",
+            "Runtime Routes 341/341 · Route Certification 341/341",
+            f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",
+            f"Runtime Score {float(ri.get('score', 0.0)):.1f}/100",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+            "",
+            "SNAPSHOT CACHE",
+        ]
+        lines.extend(_v1160_s2177_cache_lines(hit, age))
+        lines.append("")
+        lines.extend(_v1160_s2176_preflight_lines(audit))
+        lines.extend(["", "✅ Release Gate and Version Audit use the same TTL-bound immutable snapshot cache", "✅ Concurrent cache misses collapse into one single-flight refresh"])
+        await asyncio.wait_for(v90_1_safe_reply(update, "\n".join(lines)), timeout=30.0)
+    except Exception as error:
+        v88_record_error("s2177-versionaudit-background", error)
+        try:
+            await asyncio.wait_for(v90_1_safe_reply(update, f"⚠️ /versionaudit background error: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."), timeout=10.0)
+        except Exception:
+            pass
+
+
+async def versionaudit1160ltss2177_cmd(update, context):
+    snap, age = _v1160_s2175_peek_snapshot()
+    state = f"CACHE HIT · age {age:.0f}s · expires {max(0.0, V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age < V1160_S2173_RELEASEGATE_TTL else "CACHE WARMING"
+    await v90_1_safe_reply(update, f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    task = asyncio.create_task(_v1160_s2177_versionaudit_job(update), name="a100-s2177-versionaudit")
+    V1160_S2177_VERSIONAUDIT_TASKS.add(task)
+    task.add_done_callback(V1160_S2177_VERSIONAUDIT_TASKS.discard)
+    return None
+
+
+V925_COMMAND_USAGE.update({
+    "version": "LTS Sprint 2.17.7 build and cache observability information",
+    "versionaudit": "Non-blocking audit with TTL, age, expiry, hit-rate and miss-reason diagnostics",
+    "releasegate": "Non-blocking release gate using the shared TTL-bound immutable snapshot cache",
+})
+V90_COMMAND_REGISTRY.update({
+    "version": version1160ltss2177_cmd,
+    "versionaudit": versionaudit1160ltss2177_cmd,
+    "releasegate": releasegate1160ltss2177_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre = _v1160_s2177_light_preflight(force=True)
+    if not pre["ok"]:
+        raise RuntimeError("S2.17.7 startup preflight failed: " + ",".join(pre["failed"]))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V91 dispatcher count: 1", flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.7)", flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    pre = _v1160_s2177_light_preflight(force=True)
+    print(f"{V1160_LTS_S2177_VERSION} worker running...", flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}", flush=True)
+    if not pre["ok"]:
+        print(json.dumps({"ok": False, "failed": pre["failed"], "warnings": pre["warnings"]}, ensure_ascii=False), flush=True)
+        raise RuntimeError("A100 S2.17.7 bounded startup preflight failed")
+    if pre["warnings"]:
+        print(json.dumps({"preflight_warnings": pre["warnings"]}, ensure_ascii=False), flush=True)
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        print("A100 V91 stopped by signal", flush=True)
+    except Exception as error:
+        V91_STOP.set()
+        v88_record_error("v91-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

@@ -1,10 +1,15 @@
 {
-  "version": "A100 V116.0 LTS-S2.17.6",
-  "type": "patch",
-  "baseline": "S2.17.5",
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
-  "changed_files": ["main.py", "CHANGELOG_S2.17.6.md", "PATCH_INSTALL_GUIDE_KR.md", "test_v1160_lts_s2176.py"]
+  "version": "A100 V116.0-LTS-S2.17.7",
+  "package_type": "PATCH",
+  "changed_files": [
+    "main.py"
+  ],
+  "policies": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": "OFF",
+    "feature_freeze": "ACTIVE",
+    "release_freeze": "ACTIVE"
+  }
 }
