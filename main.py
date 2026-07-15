@@ -50459,12 +50459,40 @@ def _v1160_s21721_outcome_aggregate():
     return {"rows":len(rows),"resolved":n,"win_rate":100.0*wins/n,"expectancy":sum(resolved)/n,"mdd":max_dd,"fee_coverage":100.0*fee_known/n,"slippage_coverage":100.0*slip_known/n,"regime_coverage":len(regimes)}
 
 
+def _v1160_s217221_path(value):
+    """Return a filesystem path from legacy string/path or snapshot metadata dict."""
+    seen=set()
+    while isinstance(value,dict) and id(value) not in seen:
+        seen.add(id(value))
+        next_value=None
+        for key in ("path","filepath","file_path","filename","file","location","content_location"):
+            candidate=value.get(key)
+            if isinstance(candidate,(str,bytes,os.PathLike)):
+                next_value=candidate; break
+            if isinstance(candidate,dict):
+                next_value=candidate; break
+        value=next_value
+        if value is None: return None
+    if isinstance(value,(str,bytes,os.PathLike)):
+        try: return os.fspath(value)
+        except TypeError: return None
+    return None
+
+
+def _v1160_s217221_existing_path(value):
+    path=_v1160_s217221_path(value)
+    if not path: return None
+    try: return path if os.path.exists(path) else None
+    except (TypeError,ValueError,OSError): return None
+
+
 def _v1160_s21721_merged_evidence(detail):
     rows=[]
     for window in ("72h","24h","6h","1h"):
         rows.extend(_v1160_s21720_rows(detail,window))
-    for path in (globals().get("V1160_S2179_RUNTIME_HISTORY"),globals().get("V1160_S21712_EVIDENCE_FILE")):
-        if not path or not os.path.exists(path): continue
+    for raw_path in (globals().get("V1160_S2179_RUNTIME_HISTORY"),globals().get("V1160_S21712_EVIDENCE_FILE")):
+        path=_v1160_s217221_existing_path(raw_path)
+        if not path: continue
         try:
             with open(path,"r",encoding="utf-8") as f:
                 for line in f:
@@ -50625,8 +50653,8 @@ def main():
 # A100 V116.0-LTS-S2.17.22
 # OUTCOME STATISTICS / HISTORY MERGE / GATE UI FINALIZATION
 # =============================================================================
-V1160_LTS_S21722_NUMBER = "116.0-LTS-S2.17.22"
-V1160_LTS_S21722_VERSION = "A100 V116.0-LTS-S2.17.22 OUTCOME STATISTICS HISTORY MERGE GATE UI FINALIZATION"
+V1160_LTS_S21722_NUMBER = "116.0-LTS-S2.17.22.1"
+V1160_LTS_S21722_VERSION = "A100 V116.0-LTS-S2.17.22.1 RELEASEGATE PATH TYPE SAFETY HOTFIX"
 V91_VERSION = V1160_LTS_S21722_VERSION
 try:
     V1160_VERSION_MANAGER.number = V1160_LTS_S21722_NUMBER
@@ -50726,11 +50754,13 @@ def _v1160_s21722_outcome_aggregate():
 def _v1160_s21722_merged_evidence(detail):
     rows=list(_v1160_s21721_merged_evidence(detail)); paths=[]
     for name in ("V1160_S2179_RUNTIME_HISTORY","V1160_S21712_EVIDENCE_FILE","V1160_S21714_ETA_STATE","V1160_S21715_METRICS_FILE"):
-        path=globals().get(name)
+        raw_path=globals().get(name)
+        path=_v1160_s217221_path(raw_path)
         if path: paths.append(path)
     paths.extend([os.path.join(V91_DATA_DIR,n) for n in ("v1160_lts_certification_snapshot.json","v1160_lts_certification_snapshot.bin","v1160_s2179_runtime_certification.jsonl","v1160_s21712_runtime_evidence.jsonl")])
-    for path in paths:
-        if not path or not os.path.exists(path) or str(path).endswith('.bin'): continue
+    for raw_path in paths:
+        path=_v1160_s217221_existing_path(raw_path)
+        if not path or str(path).endswith('.bin'): continue
         try:
             if str(path).endswith('.jsonl'):
                 with open(path,'r',encoding='utf-8') as f:
@@ -50819,7 +50849,7 @@ def _v1160_s21722_summary(snap,detail,comp):
 def _v1160_s21722_light_preflight(force=False):
     base=_v1160_s21721_light_preflight(force); checks=[c for c in base.get('details',[]) if c.get('name')!='Version source']
     checks.insert(0,_v1160_s2176_check('Version source',V91_VERSION==V1160_LTS_S21722_VERSION,detail=V91_VERSION))
-    checks.extend([_v1160_s2176_check('Outcome statistics engine V1',callable(_v1160_s21722_outcome_aggregate)),_v1160_s2176_check('Runtime history merge V2',callable(_v1160_s21722_merged_evidence)),_v1160_s2176_check('Gate UI semantics V2',_v1160_s21722_gate_label(80,90)=='IN PROGRESS' and _v1160_s21722_gate_label(90,90)=='PASSED'),_v1160_s2176_check('Production readiness V7',callable(_v1160_s21722_readiness_lines))])
+    checks.extend([_v1160_s2176_check('Releasegate path type safety',_v1160_s217221_path({'path':'/tmp/test'})=='/tmp/test' and _v1160_s217221_path({'path':{'filepath':'/tmp/test2'}})=='/tmp/test2' and _v1160_s217221_path({'bad':1}) is None),_v1160_s2176_check('Outcome statistics engine V1',callable(_v1160_s21722_outcome_aggregate)),_v1160_s2176_check('Runtime history merge V2',callable(_v1160_s21722_merged_evidence)),_v1160_s2176_check('Gate UI semantics V2',_v1160_s21722_gate_label(80,90)=='IN PROGRESS' and _v1160_s21722_gate_label(90,90)=='PASSED'),_v1160_s2176_check('Production readiness V7',callable(_v1160_s21722_readiness_lines))])
     failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
     return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],'warnings':[c['name'] for c in warnings],'command_count':len(V90_COMMAND_REGISTRY)}
 
@@ -50829,7 +50859,7 @@ def v91_preflight(force=False): return _v1160_s21722_light_preflight(force)
 
 async def version1160ltss21722_cmd(update,context):
     vm=_v1160_rc4923_version_snapshot()
-    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21722_NUMBER}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S21722_VERSION}","Schema               1","Paper / Shadow       20 / 60","Live Trading         OFF","Feature Freeze       ACTIVE","","Sprint 2.17.22 · authoritative outcome statistics, merged runtime history and unambiguous gate states."]))
+    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21722_NUMBER}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S21722_VERSION}","Schema               1","Paper / Shadow       20 / 60","Live Trading         OFF","Feature Freeze       ACTIVE","","Sprint 2.17.22.1 · release-gate path normalization, dict metadata safety and background error recovery."]))
 
 
 async def _v1160_s21722_releasegate_job(update):
@@ -50869,9 +50899,9 @@ V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 
 def build_v44_application(token):
     pre=_v1160_s21722_light_preflight(True)
-    if not pre['ok']: raise RuntimeError('S2.17.22 startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('S2.17.22.1 startup preflight failed: '+','.join(pre['failed']))
     app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
-    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print('A100 V91 dispatcher count: 1',flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.22)",flush=True); return app
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print('A100 V91 dispatcher count: 1',flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.22.1)",flush=True); return app
 
 
 def main():
@@ -50879,7 +50909,7 @@ def main():
     if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
     v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21722_light_preflight(True)
     print(f"{V1160_LTS_S21722_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
-    if not pre['ok']: raise RuntimeError('A100 S2.17.22 bounded startup preflight failed')
+    if not pre['ok']: raise RuntimeError('A100 S2.17.22.1 bounded startup preflight failed')
     if not acquire_v44_process_lock():
         print('A100 V91 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)

@@ -1,27 +1,24 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.22",
-  "package_type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.21",
-  "title": "Outcome Statistics History Merge Gate UI Finalization",
-  "preserves": {
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": false,
-    "data_dir": "/data"
-  },
+  "version": "A100 V116.0-LTS-S2.17.22.1 RELEASEGATE PATH TYPE SAFETY HOTFIX",
+  "type": "incremental_patch",
+  "baseline": "A100 V116.0-LTS-S2.17.22",
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": false,
   "changed_files": [
     "main.py",
-    "test_v1160_lts_s21722.py",
-    "CHANGELOG_S2.17.22.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest",
+    "test_v1160_lts_s217221.py",
     "PATCH_MANIFEST.json",
-    "SHA256SUMS"
+    "changed_files.manifest",
+    "SHA256SUMS",
+    "CHANGELOG_S2.17.22.1.md",
+    "PATCH_INSTALL_GUIDE_KR.md"
   ],
-  "verification": {
-    "python_compile": "PASS",
-    "static_tests": "4/4 PASS",
-    "executable_blocks": 1
-  }
+  "fixes": [
+    "releasegate dict-to-path normalization",
+    "merged evidence path type validation",
+    "background release-gate safe skip for invalid metadata"
+  ],
+  "data_preservation": "Existing /data, learning data, certification evidence and configuration preserved."
 }

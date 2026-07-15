@@ -1,22 +1,12 @@
-# 설치 안내
+# S2.17.22.1 설치 안내
 
-1. 기존 프로젝트와 `/data` 볼륨을 보존합니다.
-2. 패치 ZIP의 `main.py`만 기존 프로젝트에 덮어씁니다.
-3. Railway/GitHub에 반영하고 재배포합니다.
-4. 시작 로그에서 `S2.17.22`와 startup preflight PASS를 확인합니다.
-5. Telegram에서 아래 명령을 순서대로 실행합니다.
-
-```text
-/version
-/releasegate
-/versionaudit
-/errors
-```
+1. 기존 프로젝트의 `main.py`를 이 패치의 `main.py`로 덮어씁니다.
+2. `/data` 볼륨과 환경변수는 삭제하거나 초기화하지 않습니다.
+3. Railway에서 재배포합니다.
+4. 배포 후 `/version`, `/releasegate`, `/versionaudit`, `/errors` 순서로 확인합니다.
 
 정상 기준:
-- 버전 `V116.0-LTS-S2.17.22`
-- `OUTCOME STATISTICS ENGINE V1 · SCHEMA 1`
-- `PRODUCTION READINESS DASHBOARD V7 · VERIFIED DATA`
-- Registry/Callable/Routes 341/341
-- 신규 runtime error 없음
-- `/releasegate`와 `/versionaudit`의 Snapshot ID 및 Unified Hash 일치
+- 버전 `V116.0-LTS-S2.17.22.1`
+- `/releasegate` Summary와 Detail 모두 출력
+- `/versionaudit` PASS
+- `/errors`에 배포 이후 `s21722-releasegate-background`의 dict/stat TypeError가 새로 기록되지 않음
