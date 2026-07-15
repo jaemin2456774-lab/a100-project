@@ -1,7 +1,15 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.14",
-  "package_type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.13",
-  "changed_project_files": ["main.py"],
-  "preserves": ["Schema 1", "Paper 20", "Shadow 60", "Live Trading OFF", "Registry 341", "/data"]
+  "version": "A100 V116.0-LTS-S2.17.15",
+  "package_type": "PATCH",
+  "baseline": "A100 V116.0-LTS-S2.17.14",
+  "changed_files": [
+    "main.py"
+  ],
+  "preserves": [
+    "Schema 1",
+    "Paper 20",
+    "Shadow 60",
+    "Live Trading OFF",
+    "/data"
+  ]
 }
