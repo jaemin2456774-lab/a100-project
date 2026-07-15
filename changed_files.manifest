@@ -1,2 +1,6 @@
 main.py
-test_v1160_lts_s21721.py
+test_v1160_lts_s21722.py
+PATCH_MANIFEST.json
+SHA256SUMS
+CHANGELOG_S2.17.22.md
+PATCH_INSTALL_GUIDE_KR.md
