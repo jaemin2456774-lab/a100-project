@@ -1,22 +1,14 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.29",
-  "baseline": "S2.17.26 architecture / S2.17.28 runtime path",
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s21726.py",
-    "test_v1160_lts_s21727.py",
-    "test_v1160_lts_s21728.py",
-    "test_v1160_lts_s21729.py",
-    "CHANGELOG_S2.17.29.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
-  ],
-  "preserve": [
-    "/data",
-    "environment variables",
-    "configuration",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF"
-  ]
+  "version": "A100 V116.0-LTS-S2.17.29.1",
+  "type": "incremental-hotfix",
+  "baseline": "A100 V116.0-LTS-S2.17.29",
+  "purpose": "live-state builder recursion hotfix",
+  "preserves": {
+    "telegram_commands": 341,
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "data_and_configuration": true
+  }
 }

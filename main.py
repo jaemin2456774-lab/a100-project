@@ -51814,9 +51814,14 @@ def main():
 # REAL-TIME EVIDENCE DELTA / INCREMENTAL GATE PUBLISH / OUTPUT ROOT RECOVERY
 # Architecture baseline: S2.17.26; runtime-first continuity: S2.17.27-S2.17.28
 # =============================================================================
-V1160_LTS_S21729_NUMBER = "116.0-LTS-S2.17.29"
-V1160_LTS_S21729_VERSION = "A100 V116.0-LTS-S2.17.29 REAL-TIME EVIDENCE DELTA & INCREMENTAL GATE PUBLISH"
-V91_VERSION = V1160_LTS_S21729_VERSION
+V1160_LTS_S217291_NUMBER = "116.0-LTS-S2.17.29.1"
+V1160_LTS_S217291_VERSION = "A100 V116.0-LTS-S2.17.29.1 LIVE STATE BUILDER RECURSION HOTFIX"
+V91_VERSION = V1160_LTS_S217291_VERSION
+# Compatibility aliases retained so S2.17.29 regression checks and legacy
+# read-only formatters can resolve the prior constant names without changing
+# the active version source.
+V1160_LTS_S21729_NUMBER = V1160_LTS_S217291_NUMBER
+V1160_LTS_S21729_VERSION = V1160_LTS_S217291_VERSION
 
 # Use the reply root captured before the S2.17.25 legacy version-normalization
 # wrapper. This prevents active S2.17.29 views from being rewritten to S2.17.25.
@@ -51924,11 +51929,15 @@ def _v1160_s21729_refresh_evidence(force=False):
 _v1160_s21728_refresh_evidence = _v1160_s21729_refresh_evidence
 
 
+# Freeze the S2.17.28 builder before rebinding the public compatibility name.
+# Without this alias the S2.17.29 wrapper calls itself recursively after assignment.
+_v1160_s21728_build_live_state_base = _v1160_s21728_build_live_state
+
 def _v1160_s21729_build_live_state(evidence=None):
-    state = _v1160_s21728_build_live_state(evidence)
+    state = _v1160_s21728_build_live_state_base(evidence)
     evidence = evidence or {}
     state.update({
-        'version': V1160_LTS_S21729_VERSION,
+        'version': V1160_LTS_S217291_VERSION,
         'classified': int(evidence.get('classified',0)),
         'numeric': int(evidence.get('numeric',0)),
         'evidence_changed': bool(evidence.get('changed',False)),
@@ -51944,7 +51953,7 @@ _v1160_s21728_build_live_state = _v1160_s21729_build_live_state
 
 async def version1160ltss21729_cmd(update, context):
     return await _v1160_s21729_reply(update, "\n".join([
-        f"🟢 A100 V{V1160_LTS_S21729_NUMBER}",
+        f"🟢 A100 V{V1160_LTS_S217291_NUMBER}",
         "Real-Time Evidence Delta & Incremental Gate Publish",
         "Release Freeze: ACTIVE · Feature Freeze: ACTIVE",
         "",
@@ -51962,7 +51971,7 @@ async def status1160ltss21729_cmd(update, context):
     st = _v1160_s21728_read_live_state()
     evidence_age = '-' if st.get('evidence_age') is None else f"{float(st['evidence_age']):.1f}s"
     return await _v1160_s21729_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21729_NUMBER} STATUS · LIVE READ ONLY",
+        f"A100 V{V1160_LTS_S217291_NUMBER} STATUS · LIVE READ ONLY",
         f"System               {'RUNNING' if st.get('worker_fresh') else 'DEGRADED'}",
         f"Runtime source       {st.get('source')}",
         f"Live state age       {float(st.get('live_age',0.0)):.1f}s · tick {int(st.get('tick',0))}",
@@ -51983,7 +51992,7 @@ async def status1160ltss21729_cmd(update, context):
 async def runtimehealth1160ltss21729_cmd(update, context):
     st = _v1160_s21728_read_live_state()
     return await _v1160_s21729_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21729_NUMBER} RUNTIME HEALTH · LIVE",
+        f"A100 V{V1160_LTS_S217291_NUMBER} RUNTIME HEALTH · LIVE",
         f"Worker heartbeat     {float(st.get('live_age',0.0)):.1f}s ago",
         f"Worker freshness     {'PASS' if st.get('worker_fresh') else 'WARN'}",
         f"State authority      {st.get('source')}",
@@ -52015,7 +52024,7 @@ async def releasegate1160ltss21729_cmd(update, context):
     if not lines:
         lines.append('Gate evidence WARMING · worker has not published certification evidence')
     return await _v1160_s21729_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21729_NUMBER} RELEASE GATE · LIVE VIEW",
+        f"A100 V{V1160_LTS_S217291_NUMBER} RELEASE GATE · LIVE VIEW",
         f"Runtime state        {'FRESH' if st.get('worker_fresh') else 'STALE'} · age {float(st.get('live_age',0.0)):.1f}s",
         f"Certification source WORKER-CACHED · CHANGE-DRIVEN",
         f"Runtime score        {float(st.get('runtime_score',0.0)):.1f}/100",
@@ -52035,7 +52044,7 @@ async def versionaudit1160ltss21729_cmd(update, context):
         active.update(fn.__code__.co_names)
     forbidden={'_v1160_s21726_fast_context','_v1160_s21724_gate_matrix'}
     checks=[
-        ('Version source single',V91_VERSION==V1160_LTS_S21729_VERSION),
+        ('Version source single',V91_VERSION==V1160_LTS_S217291_VERSION),
         ('Output root current',_V1160_S21729_REPLY_ROOT is _V1160_S21725_SAFE_REPLY_BASE),
         ('Live runtime worker',bool(V1160_S21728_LIVE_THREAD and V1160_S21728_LIVE_THREAD.is_alive())),
         ('Live state freshness',bool(st.get('worker_fresh'))),
@@ -52046,7 +52055,7 @@ async def versionaudit1160ltss21729_cmd(update, context):
         ('Schema/Paper/Shadow/Live',st.get('schema')==1 and st.get('paper')==20 and st.get('shadow')==60 and not st.get('live_trading')),
     ]
     return await _v1160_s21729_reply(update,"\n".join([
-        f"A100 V{V1160_LTS_S21729_NUMBER} VERSION AUDIT",
+        f"A100 V{V1160_LTS_S217291_NUMBER} VERSION AUDIT",
         *[f"{'PASS' if ok else 'FAIL'} · {name}" for name,ok in checks],
         "",
         f"Registry / Callable / Expected  {len(V90_COMMAND_REGISTRY)}/341",
@@ -52059,7 +52068,7 @@ async def versionaudit1160ltss21729_cmd(update, context):
 def _v1160_s21729_light_preflight(force=False):
     base=_v1160_s21728_light_preflight(force)
     checks=[c for c in base.get('details',[]) if c.get('name')!='Version source single']
-    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21729_VERSION,detail=V91_VERSION))
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S217291_VERSION,detail=V91_VERSION))
     checks.extend([
         _v1160_s2176_check('Output root recovery',callable(_v1160_s21729_reply)),
         _v1160_s2176_check('Evidence signature',callable(_v1160_s21729_signature)),
@@ -52093,13 +52102,13 @@ V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 
 def build_v44_application(token):
     pre=_v1160_s21729_light_preflight(True)
-    if not pre['ok']: raise RuntimeError('S2.17.29 startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('S2.17.29.1 startup preflight failed: '+','.join(pre['failed']))
     app=Application.builder().token(token).build()
     app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
     app.add_error_handler(v88_error_handler)
     print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
     print('A100 V91 dispatcher count: 1',flush=True)
-    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.29)",flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.29.1)",flush=True)
     return app
 
 
@@ -52108,17 +52117,17 @@ def main():
     if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
     v90_3_start_background_once(); v91_start_background_once()
     pre=_v1160_s21729_light_preflight(True)
-    print(f"{V1160_LTS_S21729_VERSION} worker running...",flush=True)
+    print(f"{V1160_LTS_S217291_VERSION} worker running...",flush=True)
     print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
     print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
-    if not pre['ok']: raise RuntimeError('A100 S2.17.29 bounded startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('A100 S2.17.29.1 bounded startup preflight failed: '+','.join(pre['failed']))
     if not acquire_v44_process_lock():
         print('A100 V91 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
     _v1160_s21728_start_live_worker_once()
-    print('A100 S2.17.29 live runtime worker: ACTIVE · interval 2.0s',flush=True)
-    print('A100 S2.17.29 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    print('A100 S2.17.29.1 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.29.1 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
     try: asyncio.run(run_bot_async())
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
