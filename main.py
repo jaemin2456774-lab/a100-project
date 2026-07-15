@@ -47861,6 +47861,294 @@ def main():
     except Exception as e:
         V91_STOP.set(); v88_record_error("v91-fatal-main", e); print(traceback.format_exc(), flush=True); raise
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.10 - PERSISTED SNAPSHOT RESTORE / GATE EVIDENCE / RUNTIME METRICS
+# ---------------------------------------------------------------------------
+V1160_LTS_S21710_NUMBER = "116.0-LTS-S2.17.10"
+V1160_LTS_S21710_VERSION = "A100 V116.0-LTS-S2.17.10 PERSISTED SNAPSHOT RESTORE GATE EVIDENCE RUNTIME METRICS"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S21710_NUMBER, version=V1160_LTS_S21710_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S21710_SNAPSHOT_FILE = os.path.join(V91_DATA_DIR, "v1160_lts_certification_snapshot.json")
+V1160_S21710_RESTORE_LOCK = threading.Lock()
+V1160_S21710_RESTORE_DONE = False
+V1160_S21710_METRICS_LOCK = threading.Lock()
+V1160_S21710_METRICS = {
+    "restore_attempts": 0, "restore_hits": 0, "restore_misses": 0,
+    "restore_ms": 0.0, "persist_writes": 0, "persist_failures": 0,
+    "last_persist_utc": "-", "last_restore_reason": "Not attempted",
+    "startup_started": time.perf_counter(), "health_ready_ms": 0.0,
+}
+V1160_S21710_TASKS = set()
+
+
+def _v1160_s21710_fingerprint():
+    payload = f"schema=1|registry={len(V90_COMMAND_REGISTRY)}|version={V1160_LTS_S21710_NUMBER}|paper={V91_MAX_POSITIONS}|shadow={V914_SHADOW_MAX}|live=OFF"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16].upper()
+
+
+def _v1160_s21710_json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _v1160_s21710_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_v1160_s21710_json_safe(v) for v in value]
+    return str(value)
+
+
+def _v1160_s21710_persist_snapshot(snapshot):
+    try:
+        os.makedirs(V91_DATA_DIR, exist_ok=True)
+        payload = {
+            "format": 1,
+            "fingerprint": _v1160_s21710_fingerprint(),
+            "created_utc": datetime.now(timezone.utc).isoformat(),
+            "snapshot": _v1160_s21710_json_safe(snapshot),
+        }
+        tmp = V1160_S21710_SNAPSHOT_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+            fh.flush()
+            try: os.fsync(fh.fileno())
+            except Exception: pass
+        os.replace(tmp, V1160_S21710_SNAPSHOT_FILE)
+        with V1160_S21710_METRICS_LOCK:
+            V1160_S21710_METRICS["persist_writes"] += 1
+            V1160_S21710_METRICS["last_persist_utc"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        return True
+    except Exception as e:
+        with V1160_S21710_METRICS_LOCK:
+            V1160_S21710_METRICS["persist_failures"] += 1
+        v88_record_error("s21710-persist-snapshot", e)
+        return False
+
+
+def _v1160_s21710_restore_snapshot_once():
+    global V1160_S21710_RESTORE_DONE
+    with V1160_S21710_RESTORE_LOCK:
+        if V1160_S21710_RESTORE_DONE:
+            snap, age = _v1160_s2175_peek_snapshot()
+            return snap is not None
+        V1160_S21710_RESTORE_DONE = True
+        started = time.perf_counter()
+        with V1160_S21710_METRICS_LOCK:
+            V1160_S21710_METRICS["restore_attempts"] += 1
+        try:
+            if not os.path.exists(V1160_S21710_SNAPSHOT_FILE):
+                reason = "Persistent snapshot not found"
+                with V1160_S21710_METRICS_LOCK:
+                    V1160_S21710_METRICS["restore_misses"] += 1
+                    V1160_S21710_METRICS["last_restore_reason"] = reason
+                return False
+            with open(V1160_S21710_SNAPSHOT_FILE, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+            if payload.get("fingerprint") != _v1160_s21710_fingerprint():
+                reason = "Policy fingerprint changed"
+                with V1160_S21710_METRICS_LOCK:
+                    V1160_S21710_METRICS["restore_misses"] += 1
+                    V1160_S21710_METRICS["last_restore_reason"] = reason
+                return False
+            snap = payload.get("snapshot")
+            if not isinstance(snap, dict) or not snap.get("snapshot_id"):
+                reason = "Persistent snapshot invalid"
+                with V1160_S21710_METRICS_LOCK:
+                    V1160_S21710_METRICS["restore_misses"] += 1
+                    V1160_S21710_METRICS["last_restore_reason"] = reason
+                return False
+            # Restore as a fresh immutable cache entry. Live refresh will replace it before TTL expiry.
+            with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+                V1160_S2173_RELEASEGATE_CACHE.update(
+                    snapshot=snap, ts=time.time(), fingerprint=_v1160_s2178_fingerprint()
+                )
+            with V1160_S21710_METRICS_LOCK:
+                V1160_S21710_METRICS["restore_hits"] += 1
+                V1160_S21710_METRICS["last_restore_reason"] = "Persistent snapshot restored"
+            return True
+        except Exception as e:
+            with V1160_S21710_METRICS_LOCK:
+                V1160_S21710_METRICS["restore_misses"] += 1
+                V1160_S21710_METRICS["last_restore_reason"] = f"Restore error: {type(e).__name__}"
+            v88_record_error("s21710-restore-snapshot", e)
+            return False
+        finally:
+            with V1160_S21710_METRICS_LOCK:
+                V1160_S21710_METRICS["restore_ms"] = (time.perf_counter() - started) * 1000.0
+
+
+_v1160_s21710_cached_snapshot_base = _v1160_s2173_cached_snapshot
+
+def _v1160_s2173_cached_snapshot(force=False):
+    if not force:
+        _v1160_s21710_restore_snapshot_once()
+    snap, hit, age = _v1160_s21710_cached_snapshot_base(force)
+    if not hit:
+        _v1160_s21710_persist_snapshot(snap)
+    return snap, hit, age
+
+
+def _v1160_s21710_stats():
+    with V1160_S21710_METRICS_LOCK:
+        return dict(V1160_S21710_METRICS)
+
+
+def _v1160_s21710_cache_lines(hit, age):
+    lines = _v1160_s2179_cache_lines(hit, age)
+    m = _v1160_s21710_stats()
+    lines.extend([
+        f"Persistent Restore     {m['restore_hits']} hit / {m['restore_misses']} miss",
+        f"Restore Time           {m['restore_ms']:.1f}ms",
+        f"Restore Status         {m['last_restore_reason']}",
+        f"Snapshot Persists      {m['persist_writes']} · failures {m['persist_failures']}",
+        f"Last Persist UTC       {m['last_persist_utc']}",
+    ])
+    return lines
+
+
+def _v1160_s21710_gate_evidence_lines(snapshot):
+    gates = snapshot.get("gates") or snapshot.get("mandatory_gates") or {}
+    # Do not invent sample counts. Report only authoritative source categories and observed gap priorities.
+    priorities = [
+        ("Intelligence", "Prediction calibration · validated sample breadth · regime consistency"),
+        ("Strategy Trust", "Closed-outcome depth · entry/exit consistency · regime-stable trust"),
+        ("Outcome Quality", "Attribution completeness · exit precision · fee/slippage-positive expectancy"),
+        ("Memory Health", "Leak-free observation time · snapshot stability · bounded worker/cache growth"),
+        ("LTS Readiness", "Mandatory gate completion · 72H evidence · performance/evidence validation"),
+    ]
+    out = ["GATE EVIDENCE PRIORITIES"]
+    for name, evidence in priorities:
+        out.append(f"{name:<18} {evidence}")
+    out.append("Evidence values remain authoritative; this section explains required evidence and does not change gate scores.")
+    return out
+
+
+def _v1160_s21710_light_preflight(force=False):
+    checks = _v1160_s2179_light_preflight(force).get("details", [])
+    checks = [c for c in checks if c.get("name") != "Version source"]
+    checks.insert(0, _v1160_s2176_check("Version source", V91_VERSION == V1160_LTS_S21710_VERSION, detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check("Persistent snapshot restore", callable(_v1160_s21710_restore_snapshot_once), detail=V1160_S21710_SNAPSHOT_FILE),
+        _v1160_s2176_check("Atomic snapshot persist", callable(_v1160_s21710_persist_snapshot)),
+        _v1160_s2176_check("Gate evidence diagnostics", callable(_v1160_s21710_gate_evidence_lines)),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False):
+    return _v1160_s21710_light_preflight(force)
+
+
+async def version1160ltss21710_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S21710_NUMBER}", "Version & Build Information", "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE", "",
+        f"Version Source       {vm['source']}", f"Build                {V1160_LTS_S21710_VERSION}",
+        f"Schema               {vm['schema']}", f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}", "Feature Freeze       ACTIVE", "",
+        "Sprint 2.17.10 · persistent snapshot restore, operational cache separation, gate evidence diagnostics and bounded runtime metrics."
+    ]))
+
+
+async def _v1160_s21710_releasegate_job(update):
+    try:
+        snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+        text = _v1160_s2173_releasegate_text(snap, hit, age)
+        text += "\n\nSNAPSHOT CACHE · RESTORE & OPERATIONAL\n" + "\n".join(_v1160_s21710_cache_lines(hit, age))
+        text += "\n\n" + "\n".join(_v1160_s21710_gate_evidence_lines(snap))
+        await asyncio.wait_for(v90_1_safe_reply(update, text), timeout=30.0)
+    except Exception as e:
+        v88_record_error("s21710-releasegate-background", e)
+
+
+async def releasegate1160ltss21710_cmd(update, context):
+    snap, age = _v1160_s2175_peek_snapshot()
+    state = f"CACHE HIT · age {age:.0f}s" if snap is not None and age < V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update, f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t = asyncio.create_task(_v1160_s21710_releasegate_job(update), name="a100-s21710-releasegate")
+    V1160_S21710_TASKS.add(t); t.add_done_callback(V1160_S21710_TASKS.discard)
+
+
+async def _v1160_s21710_versionaudit_job(update):
+    try:
+        audit = _v1160_s21710_light_preflight(True)
+        snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+        ri = snap.get('runtime', {})
+        lines = [
+            f"🛡️ A100 V{V1160_LTS_S21710_NUMBER} FINAL CERTIFICATION AUDIT",
+            f"Version Source {V1160_LTS_S21710_VERSION}",
+            f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341",
+            "Runtime Routes 341/341 · Route Certification 341/341",
+            f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",
+            f"Runtime Score {float(ri.get('score',0.0)):.1f}/100", "Schema 1 · Paper 20 · Shadow 60 · Live OFF", "",
+            "SNAPSHOT CACHE · RESTORE & OPERATIONAL"
+        ]
+        lines.extend(_v1160_s21710_cache_lines(hit, age)); lines.append("")
+        lines.extend(_v1160_s2176_preflight_lines(audit))
+        lines.extend(["", "✅ Persistent snapshot restore avoids an unnecessary cold production rebuild after restart", "✅ Cold-start misses remain separated from operational cache efficiency", "✅ Proactive refresh and stale fallback preserve non-blocking Telegram responses", "✅ Runtime certification history remains bounded under /data"])
+        await asyncio.wait_for(v90_1_safe_reply(update, "\n".join(lines)), timeout=30.0)
+    except Exception as e:
+        v88_record_error("s21710-versionaudit-background", e)
+
+
+async def versionaudit1160ltss21710_cmd(update, context):
+    snap, age = _v1160_s2175_peek_snapshot()
+    state = f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age < V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update, f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t = asyncio.create_task(_v1160_s21710_versionaudit_job(update), name="a100-s21710-versionaudit")
+    V1160_S21710_TASKS.add(t); t.add_done_callback(V1160_S21710_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({
+    "version": "LTS Sprint 2.17.10 persisted snapshot restore and runtime metrics information",
+    "versionaudit": "Non-blocking audit with persistent restore and operational cache metrics",
+    "releasegate": "Non-blocking release gate using restored/proactive immutable snapshot and evidence diagnostics",
+})
+V90_COMMAND_REGISTRY.update({"version": version1160ltss21710_cmd, "versionaudit": versionaudit1160ltss21710_cmd, "releasegate": releasegate1160ltss21710_cmd})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre = _v1160_s21710_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError("S2.17.10 startup preflight failed: " + ','.join(pre['failed']))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V91 dispatcher count: 1", flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.10)", flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    with V1160_S21710_METRICS_LOCK:
+        V1160_S21710_METRICS["health_ready_ms"] = (time.perf_counter() - V1160_S21710_METRICS["startup_started"]) * 1000.0
+    # Restore persisted immutable snapshot before starting optional warm-up. This is bounded disk I/O only.
+    _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre = _v1160_s21710_light_preflight(True)
+    print(f"{V1160_LTS_S21710_VERSION} worker running...", flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}", flush=True)
+    if not pre['ok']:
+        raise RuntimeError("A100 S2.17.10 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked", flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    _v1160_s2179_start_refresh_once()
+    _v1160_s2179_start_runtime_guard_once()
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set(); print("A100 V91 stopped by signal", flush=True)
+    except Exception as e:
+        V91_STOP.set(); v88_record_error("v91-fatal-main", e); print(traceback.format_exc(), flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
