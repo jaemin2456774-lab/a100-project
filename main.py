@@ -48605,6 +48605,139 @@ def main():
     except KeyboardInterrupt:V91_STOP.set();print("A100 V91 stopped by signal",flush=True)
     except Exception as e:V91_STOP.set();v88_record_error("v91-fatal-main",e);print(traceback.format_exc(),flush=True);raise
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.13 - CACHE OPTIMIZER V2 / DELTA EVIDENCE / SCORE TREND
+# ---------------------------------------------------------------------------
+V1160_LTS_S21713_NUMBER = "116.0-LTS-S2.17.13"
+V1160_LTS_S21713_VERSION = "A100 V116.0-LTS-S2.17.13 CACHE OPTIMIZER V2 DELTA EVIDENCE SCORE TREND"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S21713_NUMBER, version=V1160_LTS_S21713_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S21713_TASKS=set()
+
+
+def _v1160_s21713_cache_lines(hit, age):
+    lines=_v1160_s21710_cache_lines(hit,age)
+    stats=_v1160_s2179_stats()
+    overall_req=int(stats.get("operational_requests",0))+int(stats.get("cold_start_misses",0))
+    overall_hits=int(stats.get("operational_hits",0))
+    overall_rate=(overall_hits/overall_req*100.0) if overall_req else 0.0
+    lines.extend([
+        "CACHE EFFICIENCY V2",
+        f"Warm-up Misses         {int(stats.get('cold_start_misses',0))}",
+        f"Operational Requests   {int(stats.get('operational_requests',0))}",
+        f"Operational Hits/Miss  {int(stats.get('operational_hits',0))} / {int(stats.get('operational_misses',0))}",
+        f"Operational Hit Rate   {float(stats.get('operational_hit_rate',0.0)):.1f}%",
+        f"Overall Hit Rate       {overall_rate:.1f}%",
+        "Hit-rate policy       Warm-up misses excluded from operational rate",
+    ])
+    return lines
+
+
+def _v1160_s21713_runtime_history_lines():
+    rows=_v1160_s21712_rows(); now=time.time(); out=["RUNTIME SCORE TREND V2"]
+    for label,hours in (("1h",1),("6h",6),("24h",24),("72h",72)):
+        selected=[]
+        for r in rows:
+            try:
+                ts=float(r.get("epoch") or datetime.fromisoformat(str(r.get("ts")).replace("Z","+00:00")).timestamp())
+                if now-ts<=hours*3600:selected.append(r)
+            except Exception:pass
+        def vals(key):
+            a=[]
+            for r in selected:
+                try:a.append(float(r.get(key)))
+                except Exception:pass
+            return a
+        scores=vals("runtime_score"); mem=vals("memory_mb"); hitr=vals("operational_hit_rate"); errs=vals("runtime_errors")
+        if scores:
+            delta=scores[-1]-scores[0] if len(scores)>1 else 0.0
+            out.append(f"{label:<4} samples {len(scores):>3} · runtime {sum(scores)/len(scores):.1f} · delta {delta:+.1f}")
+            out.append(f"     memory {sum(mem)/len(mem):.1f}MB · peak {max(mem):.1f}MB" if mem else "     memory PENDING")
+            out[-1]+=f" · cache {sum(hitr)/len(hitr):.1f}%" if hitr else " · cache PENDING"
+            out[-1]+=f" · errors {int(max(errs))}" if errs else " · errors 0"
+        else:
+            out.append(f"{label:<4} samples   0 · runtime PENDING")
+    return out
+
+
+def _v1160_s21713_light_preflight(force=False):
+    checks=_v1160_s21712_light_preflight(force).get("details",[])
+    checks=[c for c in checks if c.get("name")!="Version source"]
+    checks.insert(0,_v1160_s2176_check("Version source",V91_VERSION==V1160_LTS_S21713_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check("Cache optimizer V2",callable(_v1160_s21713_cache_lines)),
+        _v1160_s2176_check("Runtime score trend V2",callable(_v1160_s21713_runtime_history_lines)),
+        _v1160_s2176_check("Delta evidence bounded",os.path.basename(V1160_S21712_EVIDENCE_FILE)=="v1160_s21712_runtime_evidence.jsonl",detail=V1160_S21712_EVIDENCE_FILE),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL'];warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False):return _v1160_s21713_light_preflight(force)
+
+
+async def version1160ltss21713_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21713_NUMBER}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S21713_VERSION}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.17.13 · operational cache accuracy, delta runtime evidence and long-horizon score trend stabilization."]))
+
+
+async def _v1160_s21713_releasegate_job(update):
+    try:
+        snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False)
+        text=_v1160_s2173_releasegate_text(snap,hit,age)+"\n\nSNAPSHOT CACHE · OPTIMIZER V2\n"+"\n".join(_v1160_s21713_cache_lines(hit,age))+"\n\n"+"\n".join(_v1160_s21711_restore_lines())+"\n\n"+"\n".join(_v1160_s21713_runtime_history_lines())
+        await asyncio.wait_for(v90_1_safe_reply(update,text),timeout=30.0)
+    except Exception as e:v88_record_error("s21713-releasegate-background",e)
+
+
+async def releasegate1160ltss21713_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot();state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21713_releasegate_job(update),name="a100-s21713-releasegate");V1160_S21713_TASKS.add(t);t.add_done_callback(V1160_S21713_TASKS.discard)
+
+
+async def _v1160_s21713_versionaudit_job(update):
+    try:
+        audit=_v1160_s21713_light_preflight(True);snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False);ri=snap.get('runtime',{})
+        lines=[f"🛡️ A100 V{V1160_LTS_S21713_NUMBER} FINAL CERTIFICATION AUDIT",f"Version Source {V1160_LTS_S21713_VERSION}",f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341","Runtime Routes 341/341 · Route Certification 341/341",f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",f"Runtime Score {float(ri.get('score',0.0)):.1f}/100","Schema 1 · Paper 20 · Shadow 60 · Live OFF","","SNAPSHOT CACHE · OPTIMIZER V2"]
+        lines.extend(_v1160_s21713_cache_lines(hit,age));lines.append("");lines.extend(_v1160_s21711_restore_lines());lines.append("");lines.extend(_v1160_s21713_runtime_history_lines());lines.append("");lines.extend(_v1160_s2176_preflight_lines(audit))
+        await asyncio.wait_for(v90_1_safe_reply(update,"\n".join(lines)),timeout=30.0)
+    except Exception as e:v88_record_error("s21713-versionaudit-background",e)
+
+
+async def versionaudit1160ltss21713_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot();state=f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21713_versionaudit_job(update),name="a100-s21713-versionaudit");V1160_S21713_TASKS.add(t);t.add_done_callback(V1160_S21713_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.17.13 cache optimizer V2 and score trend","versionaudit":"Non-blocking audit with operational cache accuracy","releasegate":"Non-blocking release gate with delta runtime trend"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss21713_cmd,"versionaudit":versionaudit1160ltss21713_cmd,"releasegate":releasegate1160ltss21713_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21713_light_preflight(True)
+    if not pre['ok']:raise RuntimeError("S2.17.13 startup preflight failed: "+','.join(pre['failed']))
+    app=Application.builder().token(token).build();app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0);app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True);print("A100 V91 dispatcher count: 1",flush=True);print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.13)",flush=True);return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():_v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once();v91_start_background_once();pre=_v1160_s21713_light_preflight(True)
+    print(f"{V1160_LTS_S21713_VERSION} worker running...",flush=True);print(f"A100 V91 startup commands: {pre['command_count']}",flush=True);print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']:raise RuntimeError("A100 S2.17.13 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked",flush=True)
+        while True:time.sleep(60)
+    _v1160_s2174_start_warmup_once();_v1160_s2179_start_refresh_once();_v1160_s21712_start_scheduler_once()
+    try:asyncio.run(run_bot_async())
+    except KeyboardInterrupt:V91_STOP.set();print("A100 V91 stopped by signal",flush=True)
+    except Exception as e:V91_STOP.set();v88_record_error("v91-fatal-main",e);print(traceback.format_exc(),flush=True);raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

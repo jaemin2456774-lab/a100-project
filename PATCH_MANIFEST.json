@@ -1,9 +1,13 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.12",
-  "package_type": "incremental_patch",
-  "changed_files": ["main.py"],
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false
+  "version": "A100 V116.0-LTS-S2.17.13",
+  "package_type": "PATCH",
+  "changed_files": [
+    "main.py"
+  ],
+  "files": [
+    "main.py",
+    "CHANGELOG_S2.17.13.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
+  ]
 }
