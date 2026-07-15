@@ -1,27 +1,26 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.32",
+  "version": "A100 V116.0-LTS-S2.17.33",
   "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.31",
-  "architecture_baseline": "A100 V116.0-LTS-S2.17.26",
-  "preserve": {
+  "baseline": "A100 V116.0-LTS-S2.17.32",
+  "title": "LTS Final Operations Console Polish",
+  "architecture_baseline": "S2.17.26 Runtime First",
+  "preserves": {
     "schema": 1,
     "paper": 20,
     "shadow": 60,
-    "live_trading": false,
-    "telegram_commands": 341
+    "live_trading": "OFF",
+    "telegram_commands": 341,
+    "data_and_settings": true
   },
   "changed_files": [
     "main.py",
     "test_v1160_lts_s21731.py",
     "test_v1160_lts_s21732.py",
-    "CHANGELOG_S2.17.32.md",
+    "test_v1160_lts_s21733.py",
+    "CHANGELOG_S2.17.33.md",
     "PATCH_INSTALL_GUIDE_KR.md",
     "changed_files.manifest"
   ],
-  "scope": [
-    "visual gauge consistency",
-    "unified dashboard readability",
-    "gate remaining/delta display"
-  ],
-  "engine_changes": false
+  "engine_changes": false,
+  "ui_only": true
 }
