@@ -1,18 +1,14 @@
-# S2.17.26 패치 설치 안내
+# S2.17.27 패치 설치 안내
 
-1. 기존 프로젝트와 `/data`를 유지합니다.
-2. ZIP 안의 `main.py`만 기존 프로젝트의 동일 파일에 덮어씁니다.
-3. 데이터 파일, 환경변수, 설정 파일은 삭제하거나 초기화하지 않습니다.
-4. Railway를 재배포합니다.
+1. Railway의 기존 프로젝트 파일 중 `main.py`만 이 패치의 파일로 덮어씁니다.
+2. `/data`, 환경변수, 설정 및 학습 데이터는 삭제하거나 초기화하지 않습니다.
+3. 재배포 후 시작 로그에서 S2.17.27, 명령 341개, preflight PASS를 확인합니다.
 
-## 기대 시작 로그
+## 설치 후 실행 순서
+`/version` → `/runtimehealth` → `/runtimehealth` → `/releasegate` → `/releasegate` → `/commandperformance` → `/versionaudit` → `/errors`
 
-- `A100 V116.0-LTS-S2.17.26 ... worker running...`
-- `A100 V91 startup commands: 341`
-- `A100 V91 startup preflight: PASS`
-
-## 설치 후 확인 명령
-
-`/version`, `/status` 2회, `/pipelinetrace` 2회, `/ltscertification` 2회, `/commandperformance`, `/releasegate`, `/versionaudit`, `/runtimehealth`, `/errors`
-
-첫 호출에서 Shared snapshot이 WARMING이면 오류가 아닙니다. 백그라운드 갱신 후 다시 실행합니다.
+## 기대 결과
+- `/runtimehealth`가 120초 제한에 걸리지 않아야 합니다.
+- `/releasegate` 실행 뒤 `s21725-releasegate-background TimeoutError`가 새로 기록되지 않아야 합니다.
+- 모든 현재 출력 헤더는 `A100 V116.0-LTS-S2.17.27`이어야 합니다.
+- 실제 점수가 기준 미달이면 Gate BLOCKED는 정상입니다.
