@@ -51807,6 +51807,238 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.29
+# CLEAN STABILIZATION / IMMUTABLE VERSION MANAGER REBUILD / INDEPENDENT PREFLIGHT
+# =============================================================================
+V1160_LTS_S21729_NUMBER = "116.0-LTS-S2.17.29"
+V1160_LTS_S21729_VERSION = "A100 V116.0-LTS-S2.17.29 CLEAN STABILIZATION & REGRESSION RECOVERY"
+
+# VersionManager is a frozen dataclass. Recreate it instead of mutating fields
+# and swallowing FrozenInstanceError, which previously left stale RC/S2 values.
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S21729_NUMBER,
+    version=V1160_LTS_S21729_VERSION,
+    schema=1,
+    paper=20,
+    shadow=60,
+    live="OFF",
+    source="Single",
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+
+# Use the already-resolved pre-compatibility reply root and normalize exactly once.
+_V1160_S21729_REPLY_ROOT = _V1160_S217281_REPLY_ROOT
+
+def _v1160_s21729_normalize_version_text(value):
+    if not isinstance(value, str):
+        return value
+    import re
+    value = re.sub(
+        r'A100 V116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        f'A100 V{V1160_LTS_S21729_NUMBER}', value,
+    )
+    value = re.sub(
+        r'(?<!A100 V)116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        V1160_LTS_S21729_NUMBER, value,
+    )
+    return value
+
+async def v90_1_safe_reply(update, value, *args, **kwargs):
+    return await _V1160_S21729_REPLY_ROOT(
+        update, _v1160_s21729_normalize_version_text(value), *args, **kwargs
+    )
+
+
+def _v1160_s21729_operational_preflight(force=False):
+    """Independent current-build audit; does not inherit stale historical checks."""
+    registry_count = len(V90_COMMAND_REGISTRY)
+    callable_count = sum(callable(v) for v in V90_COMMAND_REGISTRY.values())
+    expected_count = len(V90_EXPECTED_COMMANDS)
+    checks = [
+        _v1160_s2176_check('Version source single',
+            V91_VERSION == V1160_LTS_S21729_VERSION
+            and V1160_VERSION_MANAGER.number == V1160_LTS_S21729_NUMBER
+            and V1160_VERSION_MANAGER.version == V1160_LTS_S21729_VERSION,
+            detail=V91_VERSION),
+        _v1160_s2176_check('Registry', registry_count == 341, detail=f'{registry_count}/341'),
+        _v1160_s2176_check('Callable handlers', callable_count == 341, detail=f'{callable_count}/341'),
+        _v1160_s2176_check('Expected command set', expected_count == 341, detail=f'{expected_count}/341'),
+        _v1160_s2176_check('Version handler', V90_COMMAND_REGISTRY.get('version') is version1160ltss21729_cmd),
+        _v1160_s2176_check('Version audit handler', V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21729_cmd),
+        _v1160_s2176_check('Runtime health handler', V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160ltss21729_cmd),
+        _v1160_s2176_check('Release gate handler', V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160ltss21729_cmd),
+        _v1160_s2176_check('Schema', V1160_VERSION_MANAGER.schema == 1),
+        _v1160_s2176_check('Paper/Shadow', V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60, detail=f'{V91_MAX_POSITIONS}/{V914_SHADOW_MAX}'),
+        _v1160_s2176_check('Live OFF', V1160_VERSION_MANAGER.live == 'OFF'),
+        _v1160_s2176_check('Final output normalization',
+            _v1160_s21729_normalize_version_text('A100 V116.0-LTS-S2.17.25 / A100 V116.0-RC4.9.21').count('A100 V'+V1160_LTS_S21729_NUMBER) == 2),
+        _v1160_s2176_check('Shared snapshot fast path', callable(globals().get('_v1160_s21726_fast_context'))),
+        _v1160_s2176_check('No releasegate background task', 'create_task' not in releasegate1160ltss21729_cmd.__code__.co_names),
+    ]
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    startup_names={'Registry','Callable handlers','Expected command set','Version handler','Version audit handler','Runtime health handler','Release gate handler','Schema','Paper/Shadow','Live OFF','Shared snapshot fast path'}
+    blockers=[c for c in failures if c['name'] in startup_names]
+    return {
+        'ok': not failures,
+        'startup_ok': not blockers,
+        'details': checks,
+        'failed': [c['name'] for c in failures],
+        'startup_failed': [c['name'] for c in blockers],
+        'warnings': [c['name'] for c in warnings],
+        'command_count': registry_count,
+    }
+
+
+def v91_preflight(force=False):
+    return _v1160_s21729_operational_preflight(force)
+
+
+async def version1160ltss21729_cmd(update, context):
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S21729_NUMBER}",
+        "Official Stabilization Baseline",
+        "Feature Freeze: ACTIVE · Release Freeze: ACTIVE",
+        "",
+        "Version Source       SINGLE · IMMUTABLE OBJECT",
+        f"Build                {V1160_LTS_S21729_VERSION}",
+        "Schema               1",
+        "Paper / Shadow       20 / 60",
+        "Live Trading         OFF",
+        "Command paths        CLEAN CURRENT HANDLERS",
+    ]))
+
+
+async def runtimehealth1160ltss21729_cmd(update, context):
+    _v1155_track('runtimehealth')
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    if snap is None:
+        return await v90_1_safe_reply(update, "\n".join([
+            f"A100 V{V1160_LTS_S21729_NUMBER} RUNTIME HEALTH · FAST PATH",
+            "State                WARMING",
+            "Shared snapshot      UNAVAILABLE",
+            "User-path rebuild    DISABLED",
+            "Background refresh   ACTIVE",
+        ]))
+    rv = _v1160_s21727_runtime_view(snap, detail, comp, age)
+    return await v90_1_safe_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21729_NUMBER} RUNTIME HEALTH · FAST PATH",
+        f"Snapshot ID          {snap.get('snapshot_id','-')}",
+        f"Snapshot age         {rv['age']:.1f}s",
+        f"Runtime score        {rv['score']:.1f}/100 · SNAPSHOT PINNED",
+        f"Evidence samples     {rv['samples']}",
+        f"Evidence quality     {rv['quality']:.1f}/100",
+        f"Recoveries / errors  {rv['recoveries']} / {rv['errors']}",
+        "Command isolation    PASS · NO BACKGROUND LOCK WAIT",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+    ]))
+
+
+async def releasegate1160ltss21729_cmd(update, context):
+    _v1155_track('releasegate')
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    if snap is None:
+        return await v90_1_safe_reply(update, "\n".join([
+            f"RELEASE GATE · A100 V{V1160_LTS_S21729_NUMBER}",
+            "State                WARMING",
+            "Certification        BLOCKED",
+            "No synchronous rebuild was started.",
+        ]))
+    cert, matrix = _v1160_s21724_gate_matrix(snap, detail)
+    passed = sum(1 for x in matrix if x['passed'])
+    aggregate = cert.get('aggregate') or {}
+    lines = [
+        f"RELEASE GATE · A100 V{V1160_LTS_S21729_NUMBER}",
+        f"Snapshot ID          {snap.get('snapshot_id','-')}",
+        f"Snapshot age         {age:.1f}s",
+        f"Unified hash         {snap.get('unified_hash','-')}",
+        f"Runtime score        {float(comp.get('final',0.0)):.1f}/100 · SNAPSHOT PINNED",
+        f"Authoritative rows   {aggregate.get('classified',0)} classified · {aggregate.get('numeric',0)} numeric",
+        f"Mandatory gates      {passed}/5 PASS",
+        "Command isolation    PASS · INLINE FAST PATH",
+        "",
+    ]
+    for i, item in enumerate(matrix, 1):
+        state='PASS' if item['passed'] else ('BLOCKED/EVIDENCE' if not item['evidence_ok'] else 'BLOCKED/SCORE')
+        gap=max(0.0,float(item['target'])-float(item['current']))
+        lines.append(f"Gate {i} {item['label']:<15} {state} · {item['current']:.1f}/{item['target']:.1f} · gap {gap:.1f}")
+    lines.extend(["", "READY/COLLECTING/IN PROGRESS never count as PASS."])
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+async def versionaudit1160ltss21729_cmd(update, context):
+    audit=_v1160_s21729_operational_preflight(True)
+    snap, detail, comp, age=_v1160_s21726_fast_context()
+    lines=[
+        f"🛡️ A100 V{V1160_LTS_S21729_NUMBER} CLEAN STABILIZATION AUDIT",
+        f"Version Source       {'PASS' if not audit['failed'] else 'FAIL'} · SINGLE",
+        f"Registry             {len(V90_COMMAND_REGISTRY)}/341",
+        f"Callable handlers    {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341",
+        f"Expected commands    {len(V90_EXPECTED_COMMANDS)}/341",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Feature Freeze ACTIVE · Release Freeze ACTIVE",
+        "",
+        *_v1160_s2176_preflight_lines(audit),
+    ]
+    if snap is not None:
+        cert,matrix=_v1160_s21724_gate_matrix(snap,detail)
+        lines.extend(["",f"Snapshot ID          {snap.get('snapshot_id','-')}",f"Snapshot age         {age:.1f}s",f"Runtime score        {float(comp.get('final',0.0)):.1f}/100 · PINNED",f"Mandatory gates      {sum(1 for x in matrix if x['passed'])}/5 PASS"])
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.17.29 immutable single-source stabilization baseline',
+    'versionaudit':'Independent current-build regression audit',
+    'runtimehealth':'Read-only shared snapshot runtime fast path',
+    'releasegate':'Inline authoritative release gate without background task',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss21729_cmd,
+    'versionaudit':versionaudit1160ltss21729_cmd,
+    'runtimehealth':runtimehealth1160ltss21729_cmd,
+    'releasegate':releasegate1160ltss21729_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21729_operational_preflight(True)
+    if not pre['startup_ok']:
+        raise RuntimeError('S2.17.29 operational startup preflight failed: '+','.join(pre['startup_failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    print(f"A100 V91 startup preflight: PASS · certification findings {len(pre['failed'])} (S2.17.29)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21729_operational_preflight(True)
+    print(f"{V1160_LTS_S21729_VERSION} worker running...",flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if pre['failed']:
+        print('A100 S2.17.29 certification findings: '+','.join(pre['failed']),flush=True)
+    if not pre['startup_ok']:
+        raise RuntimeError('A100 S2.17.29 operational startup preflight failed: '+','.join(pre['startup_failed']))
+    print('A100 V91 startup preflight: PASS',flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

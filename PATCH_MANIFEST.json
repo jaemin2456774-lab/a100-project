@@ -1,18 +1,15 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.28.1",
-  "type": "incremental_hotfix",
-  "baseline": "S2.17.28",
-  "preserves": {
-    "commands": 341,
+  "version": "116.0-LTS-S2.17.29",
+  "type": "incremental_patch",
+  "baseline": "116.0-LTS-S2.17.28.1",
+  "changed_files": [
+    "main.py"
+  ],
+  "preserved": {
     "schema": 1,
     "paper": 20,
     "shadow": 60,
-    "live": false
-  },
-  "files": [
-    "main.py",
-    "test_v1160_lts_s217281.py",
-    "CHANGELOG_S2.17.28.1.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
-  ]
+    "live": "OFF",
+    "commands": 341
+  }
 }
