@@ -1,12 +1,19 @@
-# S2.17.22.1 설치 안내
+# S2.17.25 패치 설치 안내
 
-1. 기존 프로젝트의 `main.py`를 이 패치의 `main.py`로 덮어씁니다.
-2. `/data` 볼륨과 환경변수는 삭제하거나 초기화하지 않습니다.
-3. Railway에서 재배포합니다.
-4. 배포 후 `/version`, `/releasegate`, `/versionaudit`, `/errors` 순서로 확인합니다.
+1. 기존 프로젝트와 `/data`, 환경변수, 설정 파일을 유지합니다.
+2. ZIP의 `main.py`를 기존 프로젝트에 덮어씁니다.
+3. 테스트 파일과 문서는 운영에 필수는 아니지만 GitHub 검증용으로 함께 업로드할 수 있습니다.
+4. Railway를 재배포합니다.
 
-정상 기준:
-- 버전 `V116.0-LTS-S2.17.22.1`
-- `/releasegate` Summary와 Detail 모두 출력
-- `/versionaudit` PASS
-- `/errors`에 배포 이후 `s21722-releasegate-background`의 dict/stat TypeError가 새로 기록되지 않음
+## 시작 로그
+- `A100 V116.0-LTS-S2.17.25 ... worker running...`
+- `A100 V91 startup commands: 341`
+- `A100 V91 startup preflight: PASS`
+
+## 설치 후 확인 명령
+`/version`, `/status`, `/dashboard` 2회, `/strategytrust`, `/outcomequality`, `/releasegate`, `/versionaudit`, `/commandcert`, `/pipelinetrace`, `/ltscertification`, `/runtimehealth`, `/commandperformance`, `/latency`, `/errors`
+
+## 필수 캡처
+Railway 시작 로그, `/version`, `/versionaudit`, `/strategytrust`, `/outcomequality`, `/releasegate` 전체, `/dashboard` 연속 2회, `/runtimehealth`, `/errors`.
+
+점수가 기준 미달이면 BLOCKED가 정상이며 패치가 점수를 임의로 높이지 않습니다.

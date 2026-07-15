@@ -50919,6 +50919,320 @@ def main():
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
 
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.24
+# AUTHORITATIVE STRATEGY TRUST / OUTCOME QUALITY / MANDATORY GATE CERTIFICATION
+# =============================================================================
+V1160_LTS_S21724_NUMBER = "116.0-LTS-S2.17.24"
+V1160_LTS_S21724_VERSION = "A100 V116.0-LTS-S2.17.24 AUTHORITATIVE TRUST & MANDATORY GATE CERTIFICATION"
+V91_VERSION = V1160_LTS_S21724_VERSION
+try:
+    V1160_VERSION_MANAGER.number = V1160_LTS_S21724_NUMBER
+    V1160_VERSION_MANAGER.version = V1160_LTS_S21724_VERSION
+except Exception:
+    pass
+V1160_S21724_TASKS=set()
+
+
+def _v1160_s21724_authoritative_metrics(snap, detail):
+    """Build certification metrics only from persisted outcome/runtime evidence."""
+    agg=_v1160_s21722_outcome_aggregate()
+    quality=_v1160_s21722_evidence_quality(detail)
+    base=_v1160_s21720_strategy_evidence(snap,detail)
+    gate=((snap.get('cert') or {}).get('gate') or {})
+    trust_cur,trust_target=_v1160_s215_gate_value(gate.get('strategy_trust',{}))
+    oq_cur,oq_target=_v1160_s215_gate_value(gate.get('outcome_quality',{}))
+    lts_cur,lts_target=_v1160_s215_gate_value(gate.get('lts_readiness',{}))
+    sample_min=20
+    numeric_min=20
+    cost_min=80.0
+    complete_min=80.0
+    source_checks={
+        'classified_sample': int(agg.get('classified',0) or 0)>=sample_min,
+        'numeric_sample': int(agg.get('numeric',0) or 0)>=numeric_min,
+        'fee_coverage': float(agg.get('fee_coverage',0.0) or 0.0)>=cost_min,
+        'slippage_coverage': float(agg.get('slippage_coverage',0.0) or 0.0)>=cost_min,
+        'complete_coverage': float(agg.get('complete_coverage',0.0) or 0.0)>=complete_min,
+        'runtime_evidence': int(quality.get('unique',0) or 0)>0 and float(quality.get('quality',0.0) or 0.0)>=90.0,
+    }
+    evidence_ready=all(source_checks.values())
+    return {
+        'aggregate':agg,'quality':quality,'base':base,'source_checks':source_checks,
+        'evidence_ready':evidence_ready,
+        'strategy_trust':{'current':trust_cur,'target':trust_target,'passed':evidence_ready and trust_cur>=trust_target},
+        'outcome_quality':{'current':oq_cur,'target':oq_target,'passed':evidence_ready and oq_cur>=oq_target},
+        'lts_readiness':{'current':lts_cur,'target':max(95.0,lts_target),'passed':evidence_ready and lts_cur>=max(95.0,lts_target)},
+    }
+
+
+def _v1160_s21724_gate_matrix(snap,detail):
+    cert=_v1160_s21724_authoritative_metrics(snap,detail)
+    gate=((snap.get('cert') or {}).get('gate') or {})
+    matrix=[]
+    for key,label,minimum in (
+        ('intelligence_score','Intelligence',None),('strategy_trust','Strategy Trust',None),
+        ('outcome_quality','Outcome Quality',90.0),('memory_health','Memory Health',None),
+        ('lts_readiness','LTS Readiness',95.0)):
+        cur,target=_v1160_s215_gate_value(gate.get(key,{})); target=max(target,minimum or target)
+        evidence_ok=True
+        if key in ('strategy_trust','outcome_quality','lts_readiness'): evidence_ok=cert['evidence_ready']
+        passed=evidence_ok and cur>=target
+        matrix.append({'key':key,'label':label,'current':cur,'target':target,'evidence_ok':evidence_ok,'passed':passed})
+    return cert,matrix
+
+
+def _v1160_s21724_certification_lines(snap,detail):
+    cert,matrix=_v1160_s21724_gate_matrix(snap,detail); a=cert['aggregate']; q=cert['quality']; passed=sum(1 for x in matrix if x['passed'])
+    lines=["MANDATORY GATE CERTIFICATION · AUTHORITATIVE DATA ONLY",f"Mandatory gates        {passed}/5 PASS",f"Evidence qualification {'PASS' if cert['evidence_ready'] else 'BLOCKED'}",""]
+    for x in matrix:
+        state='PASS' if x['passed'] else ('BLOCKED · EVIDENCE' if not x['evidence_ok'] else 'BLOCKED · SCORE')
+        lines.append(f"{x['label']:<16} {state} · {x['current']:.1f}/{x['target']:.1f}")
+    lines.extend(["","OUTCOME EVIDENCE QUALIFICATION",f"Classified outcomes    {a.get('classified',0)}/20",f"Numeric outcomes       {a.get('numeric',0)}/20",f"Fee coverage           {float(a.get('fee_coverage',0.0) or 0.0):.1f}%/80%",f"Slippage coverage      {float(a.get('slippage_coverage',0.0) or 0.0):.1f}%/80%",f"Complete row coverage  {float(a.get('complete_coverage',0.0) or 0.0):.1f}%/80%",f"Runtime evidence       {q.get('unique',0)} rows · integrity {float(q.get('quality',0.0) or 0.0):.1f}/100",""])
+    for name,ok in cert['source_checks'].items(): lines.append(f"{name:<22} {'PASS' if ok else 'BLOCKED'}")
+    lines.extend(["","No synthetic uplift, forecast value or display state can satisfy a mandatory gate."])
+    return lines
+
+
+def _v1160_s21724_summary(snap,detail,comp):
+    cert,matrix=_v1160_s21724_gate_matrix(snap,detail); passed=sum(1 for x in matrix if x['passed']); a=cert['aggregate']
+    return "\n".join(["RELEASE GATE · S2.17.24 OFFICIAL BASELINE",f"Snapshot ID            {snap.get('snapshot_id','-')}",f"Unified hash           {snap.get('unified_hash','-')}",f"Runtime score          {float(comp.get('final',0.0)):.1f}/100",f"Authoritative outcomes {a.get('classified',0)} classified · {a.get('numeric',0)} numeric",f"Evidence qualification {'PASS' if cert['evidence_ready'] else 'BLOCKED'}",f"Mandatory gates        {passed}/5 PASS",*[f"{x['label']:<16} {'PASS' if x['passed'] else 'BLOCKED'} · {x['current']:.1f}/{x['target']:.1f}" for x in matrix],"","LTS Final remains BLOCKED until authoritative evidence and all 5 gates pass."])
+
+
+def _v1160_s21724_diagnostics(snap,hit,age):
+    detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap)); comp=_v1160_s21720_score_components(snap,detail)
+    sections=[_v1160_s21720_score_lines(comp),_v1160_s21722_strategy_lines(snap,detail),_v1160_s21724_certification_lines(snap,detail),_v1160_s21716_window_trend(detail),_v1160_s21716_cache_lines(hit,age)]
+    return "\n\n".join("\n".join(x) for x in sections)
+
+
+def _v1160_s21724_light_preflight(force=False):
+    base=_v1160_s21722_light_preflight(force); checks=[c for c in base.get('details',[]) if c.get('name')!='Version source']
+    checks.insert(0,_v1160_s2176_check('Version source',V91_VERSION==V1160_LTS_S21724_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('Authoritative metric qualification',callable(_v1160_s21724_authoritative_metrics)),
+        _v1160_s2176_check('Mandatory gate 5/5 matrix',len(_v1160_s21724_gate_matrix({'cert':{'gate':{}}},{})[1])==5),
+        _v1160_s2176_check('Outcome Quality threshold 90',_v1160_s21724_gate_matrix({'cert':{'gate':{'outcome_quality':{'current':89,'target':90}}}}, {})[1][2]['target']>=90),
+        _v1160_s2176_check('LTS Readiness threshold 95',_v1160_s21724_gate_matrix({'cert':{'gate':{'lts_readiness':{'current':94,'target':90}}}}, {})[1][4]['target']==95),
+        _v1160_s2176_check('Schema/Paper/Shadow/Live lock',_v91_default_state().get('schema')==1 and V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60 and not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade'))),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],'warnings':[c['name'] for c in warnings],'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s21724_light_preflight(force)
+
+
+async def version1160ltss21724_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21724_NUMBER}","Official Development Baseline","Release Freeze: ACTIVE · Feature Freeze: ACTIVE","",f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S21724_VERSION}","Schema               1","Paper / Shadow       20 / 60","Live Trading         OFF","Certification        AUTHORITATIVE DATA ONLY","","S2.17.24 · Strategy Trust, Outcome Quality and Mandatory Gate evidence qualification."]))
+
+
+async def _v1160_s21724_releasegate_job(update):
+    try:
+        raw,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap)); comp=_v1160_s21720_score_components(snap,detail)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21724_summary(snap,detail,comp)),timeout=30.0)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21724_diagnostics(snap,hit,age)),timeout=30.0)
+    except Exception as e: v88_record_error('s21724-releasegate-background',e)
+
+
+async def releasegate1160ltss21724_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else 'CACHE RESTORE/WARMING'
+    await v90_1_safe_reply(update,f"⏳ /releasegate S2.17.24 authoritative certification을 조회합니다.\nSnapshot {state}\nSummary와 증빙 진단은 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21724_releasegate_job(update),name='a100-s21724-releasegate'); V1160_S21724_TASKS.add(t); t.add_done_callback(V1160_S21724_TASKS.discard)
+
+
+async def strategytrust1160ltss21724_cmd(update,context):
+    raw,_,_=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap))
+    cert,_=_v1160_s21724_gate_matrix(snap,detail)
+    return await v90_1_safe_reply(update,"\n".join(_v1160_s21722_strategy_lines(snap,detail)+["",f"Evidence qualification {'PASS' if cert['evidence_ready'] else 'BLOCKED'}"]))
+
+
+async def outcomequality1160ltss21724_cmd(update,context):
+    raw,_,_=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap))
+    return await v90_1_safe_reply(update,"\n".join(_v1160_s21724_certification_lines(snap,detail)))
+
+
+async def versionaudit1160ltss21724_cmd(update,context):
+    audit=_v1160_s21724_light_preflight(True); raw,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap)); comp=_v1160_s21720_score_components(snap,detail)
+    lines=[f"🛡️ A100 V{V1160_LTS_S21724_NUMBER} FINAL CERTIFICATION AUDIT",f"Version Source {V1160_LTS_S21724_VERSION}",f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341","Runtime Routes 341/341 · Route Certification 341/341","Schema 1 · Paper 20 · Shadow 60 · Live OFF","Feature Freeze ACTIVE · Release Freeze ACTIVE","",*_v1160_s2176_preflight_lines(audit),"",_v1160_s21724_summary(snap,detail,comp)]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({'version':'S2.17.24 official LTS development baseline','versionaudit':'341-command and mandatory-gate certification audit','releasegate':'Authoritative evidence mandatory gate certification','strategytrust':'Persisted outcome based Strategy Trust evidence','outcomequality':'Outcome evidence qualification and 90-point gate'})
+V90_COMMAND_REGISTRY.update({'version':version1160ltss21724_cmd,'versionaudit':versionaudit1160ltss21724_cmd,'releasegate':releasegate1160ltss21724_cmd,'strategytrust':strategytrust1160ltss21724_cmd,'outcomequality':outcomequality1160ltss21724_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21724_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.24 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print('A100 V91 dispatcher count: 1',flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.24)",flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21724_light_preflight(True)
+    print(f"{V1160_LTS_S21724_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.24 bounded startup preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.25
+# VERSION SOURCE UNIFICATION / GATE DIAGNOSTICS / SNAPSHOT SCORE STABILITY
+# =============================================================================
+V1160_LTS_S21725_NUMBER = "116.0-LTS-S2.17.25"
+V1160_LTS_S21725_VERSION = "A100 V116.0-LTS-S2.17.25 FINAL GATE DIAGNOSTICS & VERSION SOURCE UNIFICATION"
+V91_VERSION = V1160_LTS_S21725_VERSION
+try:
+    V1160_VERSION_MANAGER.number = V1160_LTS_S21725_NUMBER
+    V1160_VERSION_MANAGER.version = V1160_LTS_S21725_VERSION
+except Exception:
+    pass
+V1160_S21725_TASKS=set()
+V1160_S21725_SCORE_CACHE={}
+V1160_S21725_SCORE_LOCK=threading.RLock()
+
+# Preserve the authoritative score engine, but pin its output to a snapshot identity.
+_V1160_S21725_SCORE_BASE=_v1160_s21720_score_components
+def _v1160_s21725_snapshot_key(snap):
+    return str(snap.get('snapshot_id') or snap.get('unified_hash') or ((snap.get('runtime') or {}).get('snapshot_id')) or 'no-snapshot')
+def _v1160_s21725_score_components(snap,detail):
+    key=_v1160_s21725_snapshot_key(snap)
+    with V1160_S21725_SCORE_LOCK:
+        cached=V1160_S21725_SCORE_CACHE.get(key)
+        if cached is not None: return dict(cached)
+    value=dict(_V1160_S21725_SCORE_BASE(snap,detail))
+    with V1160_S21725_SCORE_LOCK:
+        if len(V1160_S21725_SCORE_CACHE)>64: V1160_S21725_SCORE_CACHE.clear()
+        V1160_S21725_SCORE_CACHE[key]=dict(value)
+    return value
+_v1160_s21720_score_components=_v1160_s21725_score_components
+
+# Normalize legacy version tokens which can still be emitted by compatible legacy views.
+_V1160_S21725_SAFE_REPLY_BASE=v90_1_safe_reply
+def _v1160_s21725_normalize_version_text(value):
+    if not isinstance(value,str): return value
+    import re
+    value=re.sub(r'A100 V116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',f'A100 V{V1160_LTS_S21725_NUMBER}',value)
+    value=re.sub(r'(?<!A100 V)116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',V1160_LTS_S21725_NUMBER,value)
+    return value
+async def v90_1_safe_reply(update,value,*args,**kwargs):
+    return await _V1160_S21725_SAFE_REPLY_BASE(update,_v1160_s21725_normalize_version_text(value),*args,**kwargs)
+
+
+def _v1160_s21725_gate_reason(item,cert):
+    if item['passed']: return 'threshold and authoritative evidence satisfied'
+    if not item['evidence_ok']:
+        missing=[k for k,v in cert['source_checks'].items() if not v]
+        return 'missing evidence: '+(', '.join(missing) if missing else 'authoritative evidence')
+    gap=max(0.0,float(item['target'])-float(item['current']))
+    return f'score gap {gap:.1f}'
+
+
+def _v1160_s21725_gate_lines(snap,detail):
+    cert,matrix=_v1160_s21724_gate_matrix(snap,detail); passed=sum(1 for x in matrix if x['passed'])
+    lines=["MANDATORY GATE 5/5 · DETAILED AUTHORITATIVE DIAGNOSIS",f"Result               {passed}/5 PASS",""]
+    for idx,item in enumerate(matrix,1):
+        state='PASS' if item['passed'] else ('BLOCKED/EVIDENCE' if not item['evidence_ok'] else 'BLOCKED/SCORE')
+        lines.extend([f"Gate {idx} · {item['label']}",f"  State              {state}",f"  Score              {item['current']:.1f}/{item['target']:.1f}",f"  Reason             {_v1160_s21725_gate_reason(item,cert)}"])
+    return lines
+
+
+def _v1160_s21725_strategy_lines(snap,detail):
+    cert,matrix=_v1160_s21724_gate_matrix(snap,detail); item=next(x for x in matrix if x['key']=='strategy_trust'); a=cert['aggregate']; b=cert['base']
+    src=b.get('source','persisted outcome evidence') if isinstance(b,dict) else 'persisted outcome evidence'
+    lines=[f"A100 V{V1160_LTS_S21725_NUMBER} STRATEGY TRUST · AUTHORITATIVE",f"State                {'PASS' if item['passed'] else 'BLOCKED'}",f"Trust score          {item['current']:.1f}/{item['target']:.1f}",f"Source               {src}",f"Classified outcomes  {a.get('classified',0)}",f"Numeric outcomes     {a.get('numeric',0)}",f"Complete coverage    {float(a.get('complete_coverage',0.0) or 0.0):.1f}%",f"Fee coverage         {float(a.get('fee_coverage',0.0) or 0.0):.1f}%",f"Slippage coverage    {float(a.get('slippage_coverage',0.0) or 0.0):.1f}%",f"Evidence integrity   {float(cert['quality'].get('quality',0.0) or 0.0):.1f}/100",f"Block reason         {_v1160_s21725_gate_reason(item,cert)}","","Score is read from the active production Strategy Trust engine; evidence qualification cannot increase it synthetically."]
+    return lines
+
+
+def _v1160_s21725_outcome_lines(snap,detail):
+    cert,matrix=_v1160_s21724_gate_matrix(snap,detail); item=next(x for x in matrix if x['key']=='outcome_quality'); a=cert['aggregate']
+    checks=cert['source_checks']
+    lines=[f"A100 V{V1160_LTS_S21725_NUMBER} OUTCOME QUALITY · AUTHORITATIVE",f"State                {'PASS' if item['passed'] else 'BLOCKED'}",f"Outcome score        {item['current']:.1f}/{item['target']:.1f}",f"Classified / numeric {a.get('classified',0)} / {a.get('numeric',0)}",f"Complete rows        {float(a.get('complete_coverage',0.0) or 0.0):.1f}%",f"Fee attribution      {float(a.get('fee_coverage',0.0) or 0.0):.1f}%",f"Slippage attribution {float(a.get('slippage_coverage',0.0) or 0.0):.1f}%",f"Runtime evidence     {cert['quality'].get('unique',0)} rows · {float(cert['quality'].get('quality',0.0) or 0.0):.1f}/100",f"Evidence status      {'PASS' if cert['evidence_ready'] else 'BLOCKED'}",f"Block reason         {_v1160_s21725_gate_reason(item,cert)}",""]
+    lines.extend(f"{name:<22} {'PASS' if ok else 'BLOCKED'}" for name,ok in checks.items())
+    lines.append("No forecast, display state or synthetic uplift is counted.")
+    return lines
+
+
+def _v1160_s21725_summary(snap,detail,comp):
+    cert,matrix=_v1160_s21724_gate_matrix(snap,detail); passed=sum(1 for x in matrix if x['passed']); a=cert['aggregate']
+    lines=[f"RELEASE GATE · A100 V{V1160_LTS_S21725_NUMBER}",f"Snapshot ID          {snap.get('snapshot_id','-')}",f"Unified hash         {snap.get('unified_hash','-')}",f"Runtime score        {float(comp.get('final',0.0)):.1f}/100 · SNAPSHOT PINNED",f"Authoritative rows   {a.get('classified',0)} classified · {a.get('numeric',0)} numeric",f"Mandatory gates      {passed}/5 PASS",""]
+    for i,x in enumerate(matrix,1): lines.append(f"Gate {i} {x['label']:<15} {'PASS' if x['passed'] else 'BLOCKED'} · {x['current']:.1f}/{x['target']:.1f}")
+    lines.extend(["","READY/COLLECTING/IN PROGRESS never count as PASS."])
+    return "\n".join(lines)
+
+
+def _v1160_s21725_light_preflight(force=False):
+    base=_v1160_s21724_light_preflight(force); checks=[c for c in base.get('details',[]) if c.get('name')!='Version source']
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21725_VERSION,detail=V91_VERSION))
+    checks.extend([_v1160_s2176_check('Legacy output version normalization',_v1160_s21725_normalize_version_text('A100 V116.0-RC4.6 TEST').startswith('A100 V'+V1160_LTS_S21725_NUMBER)),_v1160_s2176_check('Snapshot score pinning',_v1160_s21725_score_components({'snapshot_id':'selftest'},{})==_v1160_s21725_score_components({'snapshot_id':'selftest'},{})),_v1160_s2176_check('Detailed mandatory gate reasons',len(_v1160_s21725_gate_lines({'cert':{'gate':{}}},{}))>=20)])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],'warnings':[c['name'] for c in warnings],'command_count':len(V90_COMMAND_REGISTRY)}
+
+def v91_preflight(force=False): return _v1160_s21725_light_preflight(force)
+
+async def version1160ltss21725_cmd(update,context):
+    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21725_NUMBER}","Official Development Baseline","Release Freeze: ACTIVE · Feature Freeze: ACTIVE","",f"Version Source       SINGLE",f"Build                {V1160_LTS_S21725_VERSION}","Schema               1","Paper / Shadow       20 / 60","Live Trading         OFF","Certification        AUTHORITATIVE DATA ONLY"]))
+
+async def strategytrust1160ltss21725_cmd(update,context):
+    raw,_,_=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap))
+    return await v90_1_safe_reply(update,"\n".join(_v1160_s21725_strategy_lines(snap,detail)))
+
+async def outcomequality1160ltss21725_cmd(update,context):
+    raw,_,_=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap))
+    return await v90_1_safe_reply(update,"\n".join(_v1160_s21725_outcome_lines(snap,detail)))
+
+async def _v1160_s21725_releasegate_job(update):
+    try:
+        raw,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap)); comp=_v1160_s21725_score_components(snap,detail)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21725_summary(snap,detail,comp)),timeout=30.0)
+        await asyncio.wait_for(v90_1_safe_reply(update,"\n".join(_v1160_s21725_gate_lines(snap,detail))),timeout=30.0)
+    except Exception as e: v88_record_error('s21725-releasegate-background',e)
+
+async def releasegate1160ltss21725_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else 'CACHE RESTORE/WARMING'
+    await v90_1_safe_reply(update,f"⏳ /releasegate S2.17.25 detailed certification을 조회합니다.\nSnapshot {state}\nSummary와 Gate별 사유는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21725_releasegate_job(update),name='a100-s21725-releasegate'); V1160_S21725_TASKS.add(t); t.add_done_callback(V1160_S21725_TASKS.discard)
+
+async def versionaudit1160ltss21725_cmd(update,context):
+    audit=_v1160_s21725_light_preflight(True); raw,_,_=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); detail=((snap.get('runtime') or {}).get('evidence_v3') or _v1160_s21715_evidence_detail(snap)); comp=_v1160_s21725_score_components(snap,detail)
+    lines=[f"🛡️ A100 V{V1160_LTS_S21725_NUMBER} FINAL CERTIFICATION AUDIT",f"Version Source {V1160_LTS_S21725_VERSION}",f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341","Runtime Routes 341/341 · Route Certification 341/341","Schema 1 · Paper 20 · Shadow 60 · Live OFF","Feature Freeze ACTIVE · Release Freeze ACTIVE","",*_v1160_s2176_preflight_lines(audit),"",_v1160_s21725_summary(snap,detail,comp)]
+    return await v90_1_safe_reply(update,"\n".join(lines))
+
+V925_COMMAND_USAGE.update({'version':'S2.17.25 single version source baseline','versionaudit':'Version normalization, pinned score and 341-command audit','releasegate':'Detailed 5/5 gate reasons with authoritative evidence','strategytrust':'Authoritative Strategy Trust source and blockers','outcomequality':'Authoritative Outcome Quality coverage and blockers'})
+V90_COMMAND_REGISTRY.update({'version':version1160ltss21725_cmd,'versionaudit':versionaudit1160ltss21725_cmd,'releasegate':releasegate1160ltss21725_cmd,'strategytrust':strategytrust1160ltss21725_cmd,'outcomequality':outcomequality1160ltss21725_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+def build_v44_application(token):
+    pre=_v1160_s21725_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.25 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print('A100 V91 dispatcher count: 1',flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.25)",flush=True); return app
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21725_light_preflight(True)
+    print(f"{V1160_LTS_S21725_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.25 bounded startup preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

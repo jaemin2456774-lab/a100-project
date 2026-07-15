@@ -1,24 +1,29 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.22.1 RELEASEGATE PATH TYPE SAFETY HOTFIX",
+  "version": "A100 V116.0-LTS-S2.17.25 FINAL GATE DIAGNOSTICS & VERSION SOURCE UNIFICATION",
   "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.22",
+  "baseline": "A100 V116.0-LTS-S2.17.24",
   "schema": 1,
   "paper": 20,
   "shadow": 60,
   "live_trading": false,
+  "feature_freeze": true,
+  "release_freeze": true,
+  "registry_commands": 341,
   "changed_files": [
     "main.py",
-    "test_v1160_lts_s217221.py",
+    "test_v1160_lts_s21724.py",
+    "test_v1160_lts_s21725.py",
     "PATCH_MANIFEST.json",
     "changed_files.manifest",
     "SHA256SUMS",
-    "CHANGELOG_S2.17.22.1.md",
+    "CHANGELOG_S2.17.25.md",
     "PATCH_INSTALL_GUIDE_KR.md"
   ],
   "fixes": [
-    "releasegate dict-to-path normalization",
-    "merged evidence path type validation",
-    "background release-gate safe skip for invalid metadata"
+    "single active version token at output boundary",
+    "detailed mandatory gate reasons",
+    "authoritative Strategy Trust and Outcome Quality diagnostics",
+    "same-snapshot runtime score pinning"
   ],
-  "data_preservation": "Existing /data, learning data, certification evidence and configuration preserved."
+  "data_preservation": "Existing /data, learning history, runtime evidence and configuration are preserved."
 }
