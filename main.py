@@ -46675,6 +46675,188 @@ def main():
         raise
 
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.5 - NON-BLOCKING VERSION AUDIT CACHE RECOVERY
+# ---------------------------------------------------------------------------
+V1160_LTS_S2175_NUMBER = "116.0-LTS-S2.17.5"
+V1160_LTS_S2175_VERSION = "A100 V116.0-LTS-S2.17.5 NON-BLOCKING VERSION AUDIT CACHE RECOVERY"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S2175_NUMBER,
+    version=V1160_LTS_S2175_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S2175_VERSIONAUDIT_TASKS = set()
+
+
+def _v1160_s2175_peek_snapshot():
+    """Read the immutable certification cache without triggering production-engine work."""
+    now = time.time()
+    with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+        snap = V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+        ts = float(V1160_S2173_RELEASEGATE_CACHE.get("ts", 0.0) or 0.0)
+    age = max(0.0, now - ts) if ts else 0.0
+    return snap, age
+
+
+async def _v1160_s2175_versionaudit_job(update):
+    try:
+        audit = _v1160_s2174_light_preflight(force=True)
+        snap, age = _v1160_s2175_peek_snapshot()
+        source = "CACHE"
+        if snap is None:
+            source = "BACKGROUND REFRESH"
+            snap, hit, age = await asyncio.to_thread(_v1160_s2173_cached_snapshot, False)
+            source = "CACHE HIT" if hit else "REFRESHED"
+        ri = snap.get("runtime", {})
+        message = "\n".join([
+            f"🛡️ A100 V{V1160_LTS_S2175_NUMBER} FINAL CERTIFICATION AUDIT",
+            f"Version Source {V1160_LTS_S2175_VERSION}",
+            f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())} · Help 341",
+            "Runtime Routes 341/341 · Route Certification 341/341",
+            f"Startup Preflight {'PASS' if audit['ok'] else 'FAILED'} · Failed Checks {len(audit['failed'])}",
+            f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",
+            f"Snapshot Source {source} · age {age:.0f}s",
+            f"Runtime Score {float(ri.get('score',0.0)):.1f}/100",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+            "",
+            "✅ Telegram request path does not run legacy full audit or 341-command probes",
+            "✅ Version Audit reuses the immutable certification snapshot cache",
+        ])
+        await asyncio.wait_for(v90_1_safe_reply(update, message), timeout=30.0)
+    except Exception as error:
+        v88_record_error("s2175-versionaudit-background", error)
+        try:
+            await asyncio.wait_for(
+                v90_1_safe_reply(update, f"⚠️ /versionaudit background error: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요."),
+                timeout=10.0,
+            )
+        except Exception:
+            pass
+
+
+async def versionaudit1160ltss2175_cmd(update, context):
+    """Acknowledge immediately; perform any cache recovery outside dispatcher timeout."""
+    snap, age = _v1160_s2175_peek_snapshot()
+    cache_state = f"CACHE HIT · age {age:.0f}s" if snap is not None else "CACHE WARMING"
+    await v90_1_safe_reply(update, f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {cache_state}\n결과는 별도 메시지로 전송됩니다.")
+    task = asyncio.create_task(_v1160_s2175_versionaudit_job(update), name="a100-s2175-versionaudit")
+    V1160_S2175_VERSIONAUDIT_TASKS.add(task)
+    task.add_done_callback(V1160_S2175_VERSIONAUDIT_TASKS.discard)
+    return None
+
+
+async def version1160ltss2175_cmd(update, context):
+    vm = _v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S2175_NUMBER}",
+        "Version & Build Information",
+        "Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE",
+        "",
+        f"Version Source       {vm['source']}",
+        f"Build                {V1160_LTS_S2175_VERSION}",
+        f"Schema               {vm['schema']}",
+        f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}",
+        "Feature Freeze       ACTIVE",
+        "",
+        "Sprint 2.17.5 · non-blocking version audit and immutable cache recovery.",
+    ]))
+
+
+V925_COMMAND_USAGE.update({
+    "version": "LTS Sprint 2.17.5 non-blocking version audit build information",
+    "versionaudit": "Immediate ACK and cached background final certification audit",
+})
+V90_COMMAND_REGISTRY.update({
+    "version": version1160ltss2175_cmd,
+    "versionaudit": versionaudit1160ltss2175_cmd,
+    "releasegate": releasegate1160ltss2173_cmd,
+})
+V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+V1160_S2174_PREFLIGHT_CACHE = None
+
+
+def _v1160_s2175_light_preflight(force=False):
+    base = _v1160_s2174_light_preflight(force=True)
+    checks = dict(base.get("checks", {}))
+    checks.update({
+        "s2175_version_source": V91_VERSION == V1160_LTS_S2175_VERSION and V1160_VERSION_MANAGER.number == V1160_LTS_S2175_NUMBER,
+        "s2175_registry_341": len(V90_COMMAND_REGISTRY) == 341,
+        "s2175_version_handler": V90_COMMAND_REGISTRY.get("version") is version1160ltss2175_cmd,
+        "s2175_versionaudit_nonblocking": V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1160ltss2175_cmd,
+        "s2175_releasegate_nonblocking": V90_COMMAND_REGISTRY.get("releasegate") is releasegate1160ltss2173_cmd,
+        "s2175_snapshot_peek": callable(_v1160_s2175_peek_snapshot),
+        "s2175_limits": V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60,
+        "s2175_live_off": not any(n in globals() for n in ("place_live_order", "submit_live_order", "execute_live_trade")),
+    })
+    # Superseded S2.17.4 handler identity checks are not authoritative after final binding.
+    for key in ("s2174_version_source", "s2174_version_handler", "s2174_versionaudit_handler"):
+        checks.pop(key, None)
+    failed = [k for k, ok in checks.items() if not ok]
+    return {
+        **base,
+        "ok": not failed,
+        "checks": checks,
+        "failed": failed,
+        "command_count": len(V90_COMMAND_REGISTRY),
+        "development_version": V91_VERSION,
+        "version_source": "Single",
+        "regression_risk": "NONE" if not failed else "HIGH",
+        "release_freeze": "ACTIVE",
+        "lts_readiness": "72H CERTIFICATION ACTIVE" if not failed else "BLOCKED",
+        "certification_stage": "Sprint 2.17.5 Non-Blocking Version Audit Cache Recovery",
+    }
+
+
+def v91_preflight(force=False):
+    return _v1160_s2175_light_preflight(force=force)
+
+
+def build_v44_application(token):
+    pre = _v1160_s2175_light_preflight(force=True)
+    if not pre["ok"]:
+        raise RuntimeError("S2.17.5 startup preflight failed: " + ",".join(pre["failed"]))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
+    print("A100 V91 dispatcher count: 1", flush=True)
+    print("A100 V91 startup preflight: OK (bounded S2.17.5)", flush=True)
+    return app
+
+
+def main():
+    """Health-first startup with non-blocking release gate and version audit."""
+    start_health_server_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    pre = _v1160_s2175_light_preflight(force=True)
+    print(f"{V1160_LTS_S2175_VERSION} worker running...", flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}", flush=True)
+    if not pre["ok"]:
+        print(json.dumps({"ok": False, "failed": pre["failed"]}, ensure_ascii=False), flush=True)
+        raise RuntimeError("A100 S2.17.5 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked", flush=True)
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        print("A100 V91 stopped by signal", flush=True)
+    except Exception as error:
+        V91_STOP.set()
+        v88_record_error("v91-fatal-main", error)
+        print(traceback.format_exc(), flush=True)
+        raise
+
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

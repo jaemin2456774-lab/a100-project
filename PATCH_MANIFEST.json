@@ -1,9 +1,14 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.4",
-  "type": "Patch Package",
-  "title": "Startup Preflight & Release Gate Recovery",
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false
+  "version": "A100 V116.0-LTS-S2.17.5",
+  "type": "PATCH",
+  "baseline": "S2.17.4",
+  "changed_files": [
+    "main.py"
+  ],
+  "preserve": [
+    "Schema 1",
+    "Paper 20",
+    "Shadow 60",
+    "Live Trading OFF"
+  ]
 }
