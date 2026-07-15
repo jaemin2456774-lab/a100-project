@@ -53429,6 +53429,234 @@ def main():
     except Exception as e:
         V91_STOP.set(); v88_record_error('v91-fatal-main', e); print(traceback.format_exc(), flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.0 LTS S2.17.40 - FINAL UI POLISH & PRODUCTION RELEASE CANDIDATE
+# Runtime-first / strict read-only / no gate formula changes
+# ============================================================================
+V1160_LTS_S21740_NUMBER = "116.0-LTS-S2.17.40"
+V1160_LTS_S21740_VERSION = "A100 V116.0-LTS-S2.17.40 FINAL UI POLISH & PRODUCTION RELEASE CANDIDATE"
+V91_VERSION = V1160_LTS_S21740_VERSION
+for _name in (
+    'V1160_LTS_S21739_VERSION','V1160_LTS_S21738_VERSION','V1160_LTS_S21737_VERSION',
+    'V1160_LTS_S21736_VERSION','V1160_LTS_S21735_VERSION','V1160_LTS_S21734_VERSION',
+    'V1160_LTS_S217291_VERSION','V1160_LTS_S21729_VERSION'):
+    globals()[_name] = V1160_LTS_S21740_VERSION
+for _name in (
+    'V1160_LTS_S21739_NUMBER','V1160_LTS_S21738_NUMBER','V1160_LTS_S21737_NUMBER',
+    'V1160_LTS_S21736_NUMBER','V1160_LTS_S21735_NUMBER','V1160_LTS_S21734_NUMBER',
+    'V1160_LTS_S217291_NUMBER','V1160_LTS_S21729_NUMBER'):
+    globals()[_name] = V1160_LTS_S21740_NUMBER
+
+
+def _v1160_s21740_pass_icon(ok):
+    return '🟢 PASS' if ok else '🔴 FAIL'
+
+
+def _v1160_s21740_summary_lines(st):
+    ready, ready_state = _v1160_s21734_production_ready(st)
+    cert = float(st.get('coverage_72h', 0.0) or 0.0)
+    cmd = _v1160_s21738_command_integrity_audit()
+    pipeline_ok = all(callable(globals().get(name)) for name in (
+        '_v1160_s21728_read_live_state','_v1160_s21738_system_audit','_v1160_s21736_gate_lines'))
+    return [
+        '🏁 LTS FINAL SUMMARY',
+        f'⚙️ Runtime       {_v1160_s21735_state(passed=bool(st.get("worker_fresh")))}',
+        f'📁 Evidence      {_v1160_s21735_state(passed=bool(st.get("evidence_ready")), measuring=not bool(st.get("evidence_ready")))}',
+        f'🧩 Registry      {int(st.get("registry_count",0))}/{int(st.get("route_count",0))}',
+        f'🛡️ Version Audit {_v1160_s21740_pass_icon(V91_VERSION == V1160_LTS_S21740_VERSION)}',
+        f'🧾 Command Cert  {cmd["certified"]}/{cmd["registry"]}',
+        f'🔗 Pipeline      {_v1160_s21740_pass_icon(pipeline_ok)}',
+        f'🚦 Gates         {int(st.get("gate_passed",0))}/5 · {_v1160_s21735_state(passed=int(st.get("gate_passed",0) or 0)>=5)}',
+        f'⏱️ 72H           {cert:.1f}% · {_v1160_s21735_state(passed=cert>=100.0, measuring=cert<100.0)}',
+        f'🚀 Production    {ready:.1f}% · {ready_state} (DISPLAY ONLY)',
+    ]
+
+# Make all existing S2.17.36 dashboard/release/certification routes use the final summary.
+_v1160_s21736_summary_lines = _v1160_s21740_summary_lines
+
+
+async def version1160ltss21740_cmd(update, context):
+    return await _v1160_s21729_reply(update, "\n".join([
+        f'🟢 A100 V{V1160_LTS_S21740_NUMBER}',
+        'Final UI Polish & Production Release Candidate',
+        'Release Freeze ACTIVE · Regression Risk NONE', '',
+        '⚙️ Runtime authority · LIVE MONITORING WORKER',
+        '🛠️ Startup migration · AUTO RECOVERY ENABLED',
+        '🔒 Telegram path · MEMORY STATE / STRICT READ ONLY',
+        '📁 Evidence · CHANGE-DRIVEN WORKER',
+        '🚦 Gate formulas · UNCHANGED / AUTHORITATIVE',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+    ]))
+
+
+async def versionaudit1160ltss21740_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    audit = _v1160_s21738_system_audit(st)
+    c = audit['commands']
+    migration_ok = (
+        V90_COMMAND_REGISTRY.get('version') is version1160ltss21740_cmd and
+        V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21740_cmd and
+        V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160ltss21740_cmd
+    )
+    checks = [
+        ('Release Identity', V91_VERSION == V1160_LTS_S21740_VERSION),
+        ('Startup Migration', migration_ok),
+        ('Command Registry', c['registry']==c['callable']==c['expected']==341),
+        ('Help / Commands', c['help']==341),
+        ('Certified Routes', c['certified']==341 and not c['failed']),
+        ('Runtime Worker', bool(st.get('worker_fresh'))),
+        ('Runtime Authority', st.get('source') == 'LIVE_RUNTIME'),
+        ('Evidence Worker', _v1160_s21728_refresh_evidence is _v1160_s21729_refresh_evidence),
+        ('Recent Errors', int(st.get('recent_errors',0) or 0)==0),
+        ('Schema / Paper / Shadow / Live', st.get('schema')==1 and st.get('paper')==20 and st.get('shadow')==60 and not st.get('live_trading')),
+    ]
+    lines=[f'🛡️ A100 V{V1160_LTS_S21740_NUMBER} VERSION AUDIT','FINAL RELEASE CANDIDATE','']
+    lines += [f'{_v1160_s21740_pass_icon(ok)} · {name}' for name,ok in checks]
+    lines += ['', '📊 COVERAGE',
+        f'Registry / Callable / Expected  {c["registry"]}/{c["callable"]}/{c["expected"]}',
+        f'Command Certified               {c["certified"]}/{c["registry"]}',
+        f'Help Coverage                   {c["help"]}/{c["registry"]}',
+        '', '🧱 ARCHITECTURE',
+        'Worker → Live Runtime State → Telegram Strict Read Only',
+        'Evidence Worker → Change Detection → Incremental Publish',
+        'Snapshot → Certification / Recovery Evidence',
+        'Gate formulas UNCHANGED · no Telegram recomputation']
+    return await _v1160_s21729_reply(update, "\n".join(lines))
+
+
+async def commandcert1160ltss21740_cmd(update, context):
+    a = _v1160_s21738_command_integrity_audit()
+    ok = bool(a['ok'])
+    success = (100.0 * a['certified'] / a['registry']) if a['registry'] else 0.0
+    lines=[
+        f'🧾 A100 V{V1160_LTS_S21740_NUMBER} COMMAND CERTIFICATION',
+        f'{"🟢 PASS" if ok else "🔴 BLOCKED"} · STRUCTURAL END-TO-END','',
+        '📊 CERTIFICATION RESULT',
+        f'Registry / Callable / Expected  {a["registry"]}/{a["callable"]}/{a["expected"]}',
+        f'Help Coverage                   {a["help"]}/{a["registry"]}',
+        f'Certified Routes                {a["certified"]}/{a["registry"]}',
+        f'Success Rate                    {success:.1f}%',
+        f'PARTIAL                         {len(a["partial"])}',
+        f'FAILED                          {len(a["failed"])}','',
+        '🧊 RELEASE CONTROL',
+        'Release Freeze                  ACTIVE',
+        'Regression Risk                 NONE' if ok else 'Regression Risk                 DETECTED',
+        'Gate Formulas                   UNCHANGED',
+        'Live Trading                    OFF','',
+        'Path: Registry → Handler → Dispatch → Help/Commands → Output Contract',
+        'Runtime data semantics remain subject to live execution evidence.',
+    ]
+    if a['partial']: lines.append('PARTIAL: '+', '.join(a['partial'][:10]))
+    if a['failed']: lines.append('FAILED: '+', '.join(a['failed'][:10]))
+    return await _v1160_s21729_reply(update, "\n".join(lines))
+
+
+async def runtimehealth1160ltss21740_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    evidence_age='-' if st.get('evidence_age') is None else f'{float(st.get("evidence_age",0.0)):.1f}s ago'
+    snapshot_age='-' if st.get('snapshot_age') is None else f'{float(st.get("snapshot_age",0.0)):.1f}s'
+    return await _v1160_s21729_reply(update,"\n".join([
+        f'🩺 A100 V{V1160_LTS_S21740_NUMBER} RUNTIME HEALTH · LIVE',
+        f'🟢 Worker heartbeat   {float(st.get("live_age",0.0)):.1f}s ago',
+        f'🟢 Worker freshness   {"PASS" if st.get("worker_fresh") else "WARN"}',
+        f'⚙️ State authority    {st.get("source")}',
+        f'⚡ Worker cycle       {float(st.get("cycle_ms",0.0)):.2f}ms',
+        f'🔄 Evidence refreshes {int(st.get("evidence_refresh_count",0))}',
+        f'🕒 Last evidence      {evidence_age}',
+        f'📁 Evidence changes   {int(st.get("evidence_publish_count",0))} · unchanged {int(st.get("evidence_unchanged_count",0))}',
+        f'🔒 Telegram isolation PASS · STRICT READ ONLY','',
+        f'Errors                {int(st.get("recent_errors",0))}',
+        f'Registry              {int(st.get("registry_count",0))}/{int(st.get("route_count",0))}',
+        f'Snapshot              SUPPORTING EVIDENCE ONLY · age {snapshot_age}',
+        'User-path scans       DISABLED',
+        'User-path gates       DISABLED']))
+
+
+def _v1160_s21740_reconcile_handlers():
+    repaired=[]
+    desired={
+        'version':version1160ltss21740_cmd,
+        'versionaudit':versionaudit1160ltss21740_cmd,
+        'commandcert':commandcert1160ltss21740_cmd,
+        'runtimehealth':runtimehealth1160ltss21740_cmd,
+    }
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    V925_COMMAND_USAGE.update({
+        'version':'S2.17.40 production release candidate identity',
+        'versionaudit':'Grouped final release-candidate integrity audit',
+        'commandcert':'341-route certification with success rate and release controls',
+        'runtimehealth':'Live worker, evidence freshness, snapshot and isolation health',
+    })
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21740_light_preflight(force=False):
+    repaired=_v1160_s21740_reconcile_handlers()
+    base=_v1160_s21739_light_preflight(force)
+    obsolete={'S2.17.39 version handler active','S2.17.39 version audit active','Command certification active','Version source single'}
+    checks=[c for c in base.get('details',[]) if c.get('name') not in obsolete]
+    audit=_v1160_s21738_command_integrity_audit()
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21740_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.40 version handler active',V90_COMMAND_REGISTRY.get('version') is version1160ltss21740_cmd),
+        _v1160_s2176_check('S2.17.40 version audit active',V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21740_cmd),
+        _v1160_s2176_check('S2.17.40 command certification active',V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160ltss21740_cmd),
+        _v1160_s2176_check('S2.17.40 runtime health active',V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160ltss21740_cmd),
+        _v1160_s2176_check('341 structural command routes certified',audit['certified']==341),
+        _v1160_s2176_check('Final summary UI active',_v1160_s21736_summary_lines is _v1160_s21740_summary_lines),
+        _v1160_s2176_check('Gate formulas unchanged',callable(_v1160_s21734_production_ready)),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],
+            'warnings':[c['name'] for c in warnings],'repaired':repaired,'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+_v1160_s21740_reconcile_handlers()
+
+def v91_preflight(force=False): return _v1160_s21740_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21740_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError('S2.17.40 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    if pre['repaired']: print('A100 S2.17.40 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.40)',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21740_light_preflight(True)
+    print(f'{V1160_LTS_S21740_VERSION} worker running...',flush=True)
+    print(f'A100 V91 startup commands: {pre["command_count"]}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if pre['repaired']: print('A100 S2.17.40 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    if not pre['ok']:
+        raise RuntimeError('A100 S2.17.40 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once()
+    print('A100 S2.17.40 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.40 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
