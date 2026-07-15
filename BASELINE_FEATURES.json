@@ -1,24 +1,23 @@
 {
-  "version": "116.0-LTS-S2.18.2",
-  "parent": "116.0-LTS-S2.18.1",
-  "recovery_reference": "116.0-LTS-S2.17.29",
+  "baseline": "A100 V116.0-LTS-S2.17.22.2 GOLDEN BASELINE LOCK & PATH TYPE SAFETY",
   "telegram_commands": 341,
   "schema": 1,
   "paper": 20,
   "shadow": 60,
-  "live": "OFF",
-  "feature_freeze": true,
-  "release_freeze": true,
-  "protected": [
-    "single_runtime_state",
-    "single_evidence_source",
-    "single_version_source",
-    "unified_formatter",
-    "snapshot_value_freeze",
-    "gate_calculation_once_per_snapshot",
-    "startup_cache_prewarm",
-    "command_isolation",
-    "formula_fingerprint",
-    "341_command_e2e_linkage"
+  "live_trading": false,
+  "required_runtime_markers": [
+    "def _v1160_s217221_path(value):",
+    "def _v1160_s217221_existing_path(value):",
+    "def _v1160_s21722_outcome_aggregate",
+    "def _v1160_s21722_merged_evidence",
+    "def _v1160_s21722_light_preflight",
+    "V90_COMMAND_REGISTRY.update({'version':version1160ltss21722_cmd,'versionaudit':versionaudit1160ltss21722_cmd,'releasegate':releasegate1160ltss21722_cmd})"
+  ],
+  "forbidden_runtime_markers": [
+    "Formula Fingerprint",
+    "SINGLE IMMUTABLE OBJECT",
+    "SNAPSHOT VALUE FREEZE",
+    "BASELINE CONTRACT REGRESSION RECOVERY",
+    "bounded startup preflight severity"
   ]
 }

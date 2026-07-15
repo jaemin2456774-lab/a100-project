@@ -1,36 +1,21 @@
-# A100 V116.0 LTS Permanent Baseline Contract
+# A100 V116.0 LTS Golden Baseline
 
-## Official baseline
-- Version: A100 V116.0-LTS-S2.18.2
-- Parent baseline: S2.18.1
-- Recovery reference: S2.17.29
-- Release mode: Feature Freeze / Release Freeze
+Official recovery baseline: `S2.17.22.2 GOLDEN BASELINE LOCK`.
 
-## Non-negotiable invariants
-- Telegram commands: 341
-- Schema: 1
-- Paper positions: 20
-- Shadow positions: 60
-- Live trading: OFF
-- Existing data and environment configuration must remain untouched.
-- READY, COLLECTING and IN PROGRESS never count as PASS.
-- Scores must come from authoritative persisted evidence only.
+## Permanently preserved
 
-## Protected implementation
-- Single immutable runtime state per Snapshot ID + Unified Hash.
-- Single evidence source.
-- Single active version source.
-- Unified formatter for status/runtime/release/LTS views.
-- One gate calculation per authoritative snapshot.
-- Read-only command fast paths with no storage scan or evidence rebuild.
-- Startup prewarm and cache reuse.
-- RuntimeHealth and ReleaseGate command isolation.
-- 341-command registry/callable/help/route linkage.
+- Telegram Registry / Callable / Help / Route Certification: 341/341
+- Schema 1
+- Paper 20
+- Shadow 60
+- Live Trading OFF
+- Feature Freeze / Release Freeze ACTIVE
+- Existing `/data`, learning data, certification evidence and environment configuration
+- S2.17.22.1 release-gate path type normalization
+- Authoritative Outcome statistics and merged runtime evidence
+- READY / COLLECTING / IN PROGRESS never count as PASS
+- One executable `__main__` block physically last
 
-## Formula freeze
-S2.18.2 does not change the S2.18.1 gate matrix, thresholds or fast-context score inputs.
-A formula fingerprint regression test blocks accidental edits to those paths.
+## Development rule
 
-## Release rule
-A later release must fail its build if any protected invariant, command linkage,
-formula fingerprint or executable-entrypoint rule regresses.
+Future patches must start from this ZIP or a runtime-verified successor. They may not replace the score formula, cache key, release-gate path, startup policy or command handlers without an explicit baseline-diff report and full 341-command E2E certification.
