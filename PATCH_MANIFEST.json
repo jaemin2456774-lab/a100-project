@@ -1,8 +1,8 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.33",
+  "version": "A100 V116.0-LTS-S2.17.34",
   "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.32",
-  "title": "LTS Final Operations Console Polish",
+  "baseline": "A100 V116.0-LTS-S2.17.33",
+  "title": "Final Polish & Production Readiness",
   "architecture_baseline": "S2.17.26 Runtime First",
   "preserves": {
     "schema": 1,
@@ -10,15 +10,18 @@
     "shadow": 60,
     "live_trading": "OFF",
     "telegram_commands": 341,
+    "strict_read_only": true,
+    "evidence_worker": true,
+    "release_gate_formula_unchanged": true,
     "data_and_settings": true
   },
   "changed_files": [
     "main.py",
-    "test_v1160_lts_s21731.py",
-    "test_v1160_lts_s21732.py",
-    "test_v1160_lts_s21733.py",
-    "CHANGELOG_S2.17.33.md",
+    "test_v1160_lts_s21734.py",
+    "CHANGELOG_S2.17.34.md",
     "PATCH_INSTALL_GUIDE_KR.md",
+    "PATCH_MANIFEST.json",
+    "SHA256SUMS",
     "changed_files.manifest"
   ],
   "engine_changes": false,
