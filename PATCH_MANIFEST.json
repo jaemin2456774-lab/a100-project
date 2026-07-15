@@ -1,13 +1,10 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.19",
+  "version": "A100 V116.0-LTS-S2.17.20",
   "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.18",
+  "baseline": "A100 V116.0-LTS-S2.17.19",
   "schema": 1,
   "paper": 20,
   "shadow": 60,
   "live_trading": false,
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s21719.py"
-  ]
+  "changed_files": ["main.py", "test_v1160_lts_s21720.py"]
 }
