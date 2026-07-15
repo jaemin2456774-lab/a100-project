@@ -1,25 +1,18 @@
-# S2.17.34 패치 설치 안내
+# S2.17.35 패치 설치 안내
 
-기준 버전: **A100 V116.0 LTS S2.17.33**
+1. 실행 중인 A100 서비스를 중지합니다.
+2. 기존 프로젝트와 데이터 디렉터리를 백업합니다.
+3. ZIP의 `main.py`를 기존 프로젝트의 `main.py`에 덮어씁니다.
+4. 데이터, 환경변수, 설정 파일은 변경하거나 삭제하지 않습니다.
+5. 서비스를 다시 시작합니다.
 
-1. Railway 또는 GitHub의 현재 `main.py`를 백업합니다.
-2. 패치 ZIP의 `main.py`를 프로젝트 루트에 덮어씁니다.
-3. 데이터 폴더, 환경변수, 설정 파일은 변경하거나 삭제하지 않습니다.
-4. 재배포 후 시작 로그에서 아래 항목을 확인합니다.
+## 시작 로그 확인
+- `A100 V116.0-LTS-S2.17.35 ... worker running...`
+- `A100 V91 startup commands: 341`
+- `startup preflight: PASS`
+- `live runtime worker: ACTIVE`
 
-```text
-A100 V116.0-LTS-S2.17.34 FINAL POLISH & PRODUCTION READINESS worker running...
-A100 V91 startup commands: 341
-A100 V91 startup preflight: PASS
-A100 S2.17.34 live runtime worker: ACTIVE
-A100 S2.17.34 evidence change detector: ACTIVE
-```
-
-## 설치 후 캡처 명령
-
-아래 순서대로 실행해 주세요.
-
-```text
+## 설치 후 확인 명령
 /version
 /status
 /dashboard
@@ -30,6 +23,5 @@ A100 S2.17.34 evidence change detector: ACTIVE
 /versionaudit
 /pipelinetrace
 /errors
-```
 
-특히 `/dashboard`는 두 번 연속 실행하여 첫 응답과 캐시 응답 속도를 비교합니다.
+`/dashboard`는 연속 두 번 실행해 첫 응답과 두 번째 응답의 속도를 비교합니다.

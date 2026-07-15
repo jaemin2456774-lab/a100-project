@@ -1,29 +1,45 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.34",
-  "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.33",
-  "title": "Final Polish & Production Readiness",
-  "architecture_baseline": "S2.17.26 Runtime First",
+  "version": "A100 V116.0-LTS-S2.17.35",
+  "baseline": "A100 V116.0-LTS-S2.17.34",
+  "package_type": "incremental_patch",
+  "scope": "LTS Final Candidate UI Consistency & Mobile Readability",
   "preserves": {
     "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": "OFF",
-    "telegram_commands": 341,
+    "paper_positions": 20,
+    "shadow_positions": 60,
+    "live_trading": false,
+    "runtime_first": true,
     "strict_read_only": true,
     "evidence_worker": true,
     "release_gate_formula_unchanged": true,
-    "data_and_settings": true
+    "registry_commands": 341,
+    "data_and_settings_preserved": true
   },
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s21734.py",
-    "CHANGELOG_S2.17.34.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "PATCH_MANIFEST.json",
-    "SHA256SUMS",
-    "changed_files.manifest"
-  ],
-  "engine_changes": false,
-  "ui_only": true
+  "files": [
+    {
+      "path": "main.py",
+      "sha256": "acad5dbd314b40a8e00bc541b8783cc22dc8d61d28a85ab9ed1efadcf45807e7",
+      "size": 2779868
+    },
+    {
+      "path": "test_v1160_lts_s21735.py",
+      "sha256": "4a3c0a5b6ae496ccd674ced5adaf9d3b94bc0f637a07fdb2e19cc2a10a7a4034",
+      "size": 881
+    },
+    {
+      "path": "CHANGELOG_S2.17.35.md",
+      "sha256": "78dac8ec7da62266cdf27898fdd9b9fd044f5636b61df4137d6703645db0ec84",
+      "size": 1013
+    },
+    {
+      "path": "PATCH_INSTALL_GUIDE_KR.md",
+      "sha256": "f602d4b33072a8128b7341d67a7b9a5978c5e35b98bfa8818b152731b8685495",
+      "size": 784
+    },
+    {
+      "path": "changed_files.manifest",
+      "sha256": "63fdef2d9c0bdec523b3181d3259cb47cfc8e1c02628f70919e533494867e050",
+      "size": 135
+    }
+  ]
 }

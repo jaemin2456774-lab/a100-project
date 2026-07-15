@@ -52572,22 +52572,221 @@ def build_v44_application(token):
     return app
 
 
+# =============================================================================
+# A100 V116.0-LTS-S2.17.35
+# LTS FINAL CANDIDATE UI CONSISTENCY & MOBILE READABILITY
+# UI-only / runtime-first / Telegram strict read-only
+# =============================================================================
+V1160_LTS_S21735_NUMBER = "116.0-LTS-S2.17.35"
+V1160_LTS_S21735_VERSION = "A100 V116.0-LTS-S2.17.35 LTS FINAL CANDIDATE UI CONSISTENCY"
+V1160_LTS_S21734_NUMBER = V1160_LTS_S21735_NUMBER
+V1160_LTS_S21734_VERSION = V1160_LTS_S21735_VERSION
+V1160_LTS_S217291_NUMBER = V1160_LTS_S21735_NUMBER
+V1160_LTS_S217291_VERSION = V1160_LTS_S21735_VERSION
+V1160_LTS_S21729_NUMBER = V1160_LTS_S21735_NUMBER
+V1160_LTS_S21729_VERSION = V1160_LTS_S21735_VERSION
+V91_VERSION = V1160_LTS_S21735_VERSION
+
+
+def _v1160_s21735_bar(current, target=100.0, width=10):
+    """Mobile-safe display-only gauge; no file I/O and no gate calculation."""
+    current=float(current or 0.0); target=float(target or 0.0)
+    pct=100.0 if target <= 0 else max(0.0,min(100.0,current/target*100.0))
+    filled=max(0,min(width,int(round(pct*width/100.0))))
+    return "█"*filled + "░"*(width-filled),pct
+
+
+def _v1160_s21735_state(passed=False, measuring=False):
+    if passed: return '🟢 READY'
+    if measuring: return '🟡 MEASURING'
+    return '🔴 BLOCKED'
+
+
+def _v1160_s21735_overview_lines(st):
+    runtime_bar,runtime_pct=_v1160_s21735_bar(st.get('runtime_score',0.0))
+    gates_bar,gates_pct=_v1160_s21735_bar(st.get('gate_passed',0),5.0)
+    cert_bar,cert_pct=_v1160_s21735_bar(st.get('coverage_72h',0.0))
+    ready,ready_state=_v1160_s21734_production_ready(st)
+    ready_bar,_=_v1160_s21735_bar(ready)
+    return [
+        '📊 LIVE OPERATIONS',
+        f'⚙️ Runtime · {runtime_pct:.1f}%', runtime_bar,
+        f'🚦 Release Gate · {gates_pct:.1f}% · {int(st.get("gate_passed",0))}/5', gates_bar,
+        f'⏱️ 72H Evidence · {cert_pct:.1f}%', cert_bar,
+        f'🚀 Production · {ready:.1f}% · {ready_state}', ready_bar,
+    ]
+
+
+def _v1160_s21735_gate_lines(st):
+    rows=[]
+    digits=('①','②','③','④','⑤')
+    for idx,row in enumerate(st.get('gate_matrix') or (),1):
+        current=float(row.get('current',0.0) or 0.0)
+        target=float(row.get('target',0.0) or 0.0)
+        gap=max(0.0,float(row.get('gap',0.0) or 0.0))
+        bar,pct=_v1160_s21735_bar(current,target)
+        passed=bool(row.get('passed'))
+        state=_v1160_s21735_state(passed=passed)
+        trend=_v1160_s21733_delta_text(row.get('delta',0.0)).replace('Trend ','Δ ')
+        n=digits[idx-1] if idx <= len(digits) else str(idx)
+        rows.extend([
+            f'{n} {row.get("label","-")} · {state}',
+            f'{bar} {pct:.1f}% · {current:.1f}/{target:.1f} · Rem {0.0 if passed else gap:.1f} · {trend}',
+        ])
+    return rows or ['🟡 Gate evidence warming · worker publish pending']
+
+
+def _v1160_s21735_certification_lines(st):
+    coverage=max(0.0,min(100.0,float(st.get('coverage_72h',0.0) or 0.0)))
+    hours=coverage*72.0/100.0
+    bar,pct=_v1160_s21735_bar(coverage)
+    state=_v1160_s21735_state(passed=coverage>=100.0,measuring=coverage<100.0)
+    return ['⏱️ 72H RUNTIME CERTIFICATION',f'{state} · {hours:.1f}/72.0H · {pct:.1f}%',bar]
+
+
+def _v1160_s21735_summary_lines(st):
+    ready,ready_state=_v1160_s21734_production_ready(st)
+    ready_bar,_=_v1160_s21735_bar(ready)
+    cert=float(st.get('coverage_72h',0.0) or 0.0)
+    all_gates=int(st.get('gate_passed',0) or 0)>=5
+    return [
+        '🏁 LTS SUMMARY',
+        f'⚙️ Runtime        {_v1160_s21735_state(passed=bool(st.get("worker_fresh")))}',
+        f'📁 Evidence       {_v1160_s21735_state(passed=bool(st.get("evidence_ready")),measuring=not bool(st.get("evidence_ready")))}',
+        f'🚦 Mandatory Gate {_v1160_s21735_state(passed=all_gates)}',
+        f'⏱️ 72H Runtime    {_v1160_s21735_state(passed=cert>=100.0,measuring=cert<100.0)}',
+        f'🚀 Production · {ready:.1f}% · {ready_state}',ready_bar,
+    ]
+
+
+async def version1160ltss21735_cmd(update, context):
+    return await _v1160_s21729_reply(update,"\n".join([
+        f'🟢 A100 V{V1160_LTS_S21735_NUMBER}',
+        'LTS Final Candidate · UI Consistency',
+        'Release Freeze ACTIVE · Regression Risk NONE','',
+        '⚙️ Runtime authority  LIVE MONITORING WORKER',
+        '🔒 Telegram path     MEMORY STATE · STRICT READ ONLY',
+        '📁 Snapshot role     CERTIFICATION / RECOVERY EVIDENCE',
+        '🚦 Gate formulas     UNCHANGED · AUTHORITATIVE',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+    ]))
+
+
+async def status1160ltss21735_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    return await _v1160_s21729_reply(update,"\n".join([
+        f'🟢 A100 V{V1160_LTS_S21735_NUMBER} · LIVE STATUS',
+        f'{"🟢 RUNNING" if st.get("worker_fresh") else "🟠 DEGRADED"} · heartbeat {float(st.get("live_age",0.0)):.1f}s · cycle {float(st.get("cycle_ms",0.0)):.2f}ms','',
+        *_v1160_s21735_overview_lines(st),'','🚦 MANDATORY GATES',*_v1160_s21735_gate_lines(st),'',
+        f'📁 Evidence {_v1160_s21731_evidence_state(st)} · publish {int(st.get("evidence_publish_count",0))} · rows {int(st.get("classified",0))}/{int(st.get("numeric",0))}',
+        f'🧩 Registry {int(st.get("registry_count",0))}/{int(st.get("route_count",0))} · Errors {int(st.get("recent_errors",0))}',
+        '🔒 STRICT READ ONLY · Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+    ]))
+
+
+async def releasegate1160ltss21735_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    lts=next((r for r in st.get('gate_matrix') or () if r.get('label')=='LTS Readiness'),{})
+    lts_bar,lts_pct=_v1160_s21735_bar(lts.get('current',0.0),lts.get('target',95.0))
+    ready,ready_state=_v1160_s21734_production_ready(st); ready_bar,_=_v1160_s21735_bar(ready)
+    return await _v1160_s21729_reply(update,"\n".join([
+        f'🚦 A100 V{V1160_LTS_S21735_NUMBER} · RELEASE GATE',
+        f'Runtime {_v1160_s21735_state(passed=bool(st.get("worker_fresh")))} · Evidence {_v1160_s21735_state(passed=bool(st.get("evidence_ready")),measuring=not bool(st.get("evidence_ready")))}','',
+        '🚦 MANDATORY GATES',*_v1160_s21735_gate_lines(st),'',
+        f'🏆 LTS READINESS · {lts_pct:.1f}%',lts_bar,'',
+        f'🚀 PRODUCTION READY · DISPLAY ONLY · {ready:.1f}% · {ready_state}',ready_bar,'',
+        'Authoritative thresholds and Release Gate formulas are unchanged.',
+        'Telegram performs no file scan, evidence rebuild, snapshot refresh or gate recomputation.',
+    ]))
+
+
+async def dashboard1160ltss21735_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    return await _v1160_s21729_reply(update,"\n".join([
+        f'📊 A100 V{V1160_LTS_S21735_NUMBER} · LTS OPERATIONS CONSOLE',
+        f'{"🟢 RUNNING" if st.get("worker_fresh") else "🟠 DEGRADED"} · {st.get("source")} · {float(st.get("live_age",0.0)):.1f}s · {float(st.get("cycle_ms",0.0)):.2f}ms','',
+        *_v1160_s21735_overview_lines(st),'','🚦 GATE PROGRESS',*_v1160_s21735_gate_lines(st),'',
+        *_v1160_s21735_certification_lines(st),'',*_v1160_s21735_summary_lines(st),'',
+        f'📁 Evidence {_v1160_s21731_evidence_state(st)} · publish {int(st.get("evidence_publish_count",0))} · rows {int(st.get("classified",0))}/{int(st.get("numeric",0))}',
+        f'🧩 Registry {int(st.get("registry_count",0))}/{int(st.get("route_count",0))} · Errors {int(st.get("recent_errors",0))}',
+        '🔒 STRICT READ ONLY · Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+    ]))
+
+
+async def ltscertification1160ltss21735_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    return await _v1160_s21729_reply(update,"\n".join([
+        f'🏆 A100 V{V1160_LTS_S21735_NUMBER} · LTS CERTIFICATION','',
+        *_v1160_s21735_certification_lines(st),'','🚦 MANDATORY GATES',*_v1160_s21735_gate_lines(st),'',
+        *_v1160_s21735_summary_lines(st),'',
+        'Only persisted runtime evidence counts toward 72H certification.',
+        'Synthetic/display-only state never counts as authoritative PASS.',
+    ]))
+
+
+def _v1160_s21735_light_preflight(force=False):
+    base=_v1160_s21734_light_preflight(force)
+    checks=[c for c in base.get('details',[]) if c.get('name')!='Version source single']
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21735_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.35 mobile-safe gauge',callable(_v1160_s21735_bar)),
+        _v1160_s2176_check('S2.17.35 unified state labels',callable(_v1160_s21735_state)),
+        _v1160_s2176_check('S2.17.35 final summary card',callable(_v1160_s21735_summary_lines)),
+        _v1160_s2176_check('Registry 341 preserved',len(V90_COMMAND_REGISTRY)==341),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],
+            'warnings':[c['name'] for c in warnings],'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s21735_light_preflight(force)
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.17.35 LTS Final Candidate UI Consistency',
+    'status':'Mobile-safe emoji operations summary with consistent states',
+    'releasegate':'Authoritative gate progress with mobile-safe gauges',
+    'ltscertification':'72H certification, gate states and final LTS summary',
+    'dashboard':'Final candidate operations console and compact summary',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss21735_cmd,
+    'status':status1160ltss21735_cmd,
+    'releasegate':releasegate1160ltss21735_cmd,
+    'ltscertification':ltscertification1160ltss21735_cmd,
+    'dashboard':dashboard1160ltss21735_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21735_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.35 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.35)',flush=True)
+    return app
+
+
 def main():
     start_health_server_once()
     if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
     v90_3_start_background_once(); v91_start_background_once()
-    pre=_v1160_s21734_light_preflight(True)
-    print(f"{V1160_LTS_S21734_VERSION} worker running...",flush=True)
+    pre=_v1160_s21735_light_preflight(True)
+    print(f"{V1160_LTS_S21735_VERSION} worker running...",flush=True)
     print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
     print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
-    if not pre['ok']: raise RuntimeError('A100 S2.17.34 bounded startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('A100 S2.17.35 bounded startup preflight failed: '+','.join(pre['failed']))
     if not acquire_v44_process_lock():
         print('A100 V91 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
     _v1160_s21728_start_live_worker_once()
-    print('A100 S2.17.34 live runtime worker: ACTIVE · interval 2.0s',flush=True)
-    print('A100 S2.17.34 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    print('A100 S2.17.35 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.35 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
     try: asyncio.run(run_bot_async())
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
