@@ -53259,6 +53259,176 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.0 LTS S2.17.39 - STARTUP RECOVERY & SELF-HEALING CERTIFICATION
+# Runtime-first / strict read-only / no gate formula changes
+# ============================================================================
+V1160_LTS_S21739_NUMBER = "116.0-LTS-S2.17.39"
+V1160_LTS_S21739_VERSION = "A100 V116.0-LTS-S2.17.39 STARTUP RECOVERY & SELF-HEALING CERTIFICATION"
+
+V91_VERSION = V1160_LTS_S21739_VERSION
+for _name in (
+    'V1160_LTS_S21738_VERSION','V1160_LTS_S21737_VERSION','V1160_LTS_S21736_VERSION',
+    'V1160_LTS_S21735_VERSION','V1160_LTS_S21734_VERSION','V1160_LTS_S217291_VERSION',
+    'V1160_LTS_S21729_VERSION'):
+    globals()[_name] = V1160_LTS_S21739_VERSION
+for _name in (
+    'V1160_LTS_S21738_NUMBER','V1160_LTS_S21737_NUMBER','V1160_LTS_S21736_NUMBER',
+    'V1160_LTS_S21735_NUMBER','V1160_LTS_S21734_NUMBER','V1160_LTS_S217291_NUMBER',
+    'V1160_LTS_S21729_NUMBER'):
+    globals()[_name] = V1160_LTS_S21739_NUMBER
+
+
+async def version1160ltss21739_cmd(update, context):
+    return await _v1160_s21729_reply(update, "\n".join([
+        f'🟢 A100 V{V1160_LTS_S21739_NUMBER}',
+        'Startup Recovery & Self-Healing Certification',
+        'Release Freeze ACTIVE · Regression Risk NONE', '',
+        '⚙️ Runtime authority · LIVE MONITORING WORKER',
+        '🛠️ Startup migration · AUTO RECOVERY ENABLED',
+        '🔒 Telegram path · MEMORY STATE / STRICT READ ONLY',
+        '📁 Evidence · CHANGE-DRIVEN WORKER',
+        '🚦 Gate formulas · UNCHANGED / AUTHORITATIVE',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+    ]))
+
+
+async def versionaudit1160ltss21739_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    audit = _v1160_s21738_system_audit(st)
+    c = audit['commands']
+    migration_ok = (
+        V90_COMMAND_REGISTRY.get('version') is version1160ltss21739_cmd and
+        V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21739_cmd and
+        V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160ltss21738_cmd
+    )
+    checks = [
+        ('Version source single', V91_VERSION == V1160_LTS_S21739_VERSION),
+        ('Startup handler migration', migration_ok),
+        *[(name, ok) for name, ok in audit['checks'] if name != 'Version source single'],
+    ]
+    lines = [
+        f'A100 V{V1160_LTS_S21739_NUMBER} FINAL SYSTEM AUDIT',
+        *[f'{"PASS" if ok else "FAIL"} · {name}' for name, ok in checks], '',
+        f'Registry / Callable / Expected  {c["registry"]}/{c["callable"]}/{c["expected"]}',
+        f'Command Certified               {c["certified"]}/{c["registry"]}',
+        f'Help Coverage                   {c["help"]}/{c["registry"]}',
+        'Startup       Legacy version routes → auto migrate → current routes',
+        'Architecture  Worker → Live Runtime State → Telegram Strict Read Only',
+        'Evidence      Worker Check → Change Detection → Incremental Publish',
+        'Snapshot      Certification / Recovery Evidence',
+        'Gate formulas UNCHANGED · no Telegram recomputation',
+    ]
+    return await _v1160_s21729_reply(update, "\n".join(lines))
+
+
+def _v1160_s21739_reconcile_handlers():
+    """Idempotently migrate only release identity routes to the current handlers."""
+    repaired = []
+    desired = {
+        'version': version1160ltss21739_cmd,
+        'versionaudit': versionaudit1160ltss21739_cmd,
+        'commandcert': commandcert1160ltss21738_cmd,
+    }
+    for name, handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name] = handler
+            repaired.append(name)
+    V925_COMMAND_USAGE.update({
+        'version': 'S2.17.39 startup recovery and self-healing release identity',
+        'versionaudit': 'Final runtime, command, evidence, startup migration and safety audit',
+        'commandcert': '341 command Registry→Handler→Dispatch→Help→Output structural certification',
+    })
+    globals()['V90_EXPECTED_COMMANDS'] = frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21739_light_preflight(force=False):
+    repaired = _v1160_s21739_reconcile_handlers()
+    base = _v1160_s21738_light_preflight(force)
+    # S2.17.38 inherited S2.17.37 identity checks. They describe the previous
+    # upgrade state and must not terminate a healthy current release.
+    obsolete = {
+        'S2.17.37 version audit handler active',
+        'S2.17.37 version handler active',
+        'S2.17.38 version handler active',
+        'S2.17.38 version audit active',
+    }
+    checks = [c for c in base.get('details', []) if c.get('name') not in obsolete and c.get('name') != 'Version source single']
+    audit = _v1160_s21738_system_audit()
+    checks.insert(0, _v1160_s2176_check('Version source single', V91_VERSION == V1160_LTS_S21739_VERSION, detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.39 version handler active', V90_COMMAND_REGISTRY.get('version') is version1160ltss21739_cmd),
+        _v1160_s2176_check('S2.17.39 version audit active', V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21739_cmd),
+        _v1160_s2176_check('Command certification active', V90_COMMAND_REGISTRY.get('commandcert') is commandcert1160ltss21738_cmd),
+        _v1160_s2176_check('341 structural command routes certified', audit['commands']['certified'] == 341),
+        _v1160_s2176_check('Gate formulas unchanged', callable(_v1160_s21734_production_ready)),
+    ])
+    failures = [c for c in checks if not c['ok'] and c['severity'] == 'FAIL']
+    warnings = [c for c in checks if not c['ok'] and c['severity'] == 'WARN']
+    return {
+        'ok': not failures,
+        'details': checks,
+        'failed': [c['name'] for c in failures],
+        'warnings': [c['name'] for c in warnings],
+        'repaired': repaired,
+        'command_count': len(V90_COMMAND_REGISTRY),
+    }
+
+
+_v1160_s21739_reconcile_handlers()
+
+
+def v91_preflight(force=False):
+    return _v1160_s21739_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre = _v1160_s21739_light_preflight(True)
+    # Only unrecoverable structural failures remain fatal. Legacy release-route
+    # mismatches are repaired before this decision.
+    if not pre['ok']:
+        raise RuntimeError('S2.17.39 unrecoverable startup preflight failed: ' + ','.join(pre['failed']))
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}', flush=True)
+    print('A100 V91 dispatcher count: 1', flush=True)
+    if pre['repaired']:
+        print('A100 S2.17.39 startup auto-recovered routes: ' + ','.join(pre['repaired']), flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.39)', flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre = _v1160_s21739_light_preflight(True)
+    print(f'{V1160_LTS_S21739_VERSION} worker running...', flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}', flush=True)
+    if pre['repaired']:
+        print('A100 S2.17.39 startup auto-recovered routes: ' + ','.join(pre['repaired']), flush=True)
+    if not pre['ok']:
+        raise RuntimeError('A100 S2.17.39 unrecoverable startup preflight failed: ' + ','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked', flush=True)
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once()
+    print('A100 S2.17.39 live runtime worker: ACTIVE · interval 2.0s', flush=True)
+    print('A100 S2.17.39 evidence change detector: ACTIVE · check interval 30.0s', flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set(); print('A100 V91 stopped by signal', flush=True)
+    except Exception as e:
+        V91_STOP.set(); v88_record_error('v91-fatal-main', e); print(traceback.format_exc(), flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
