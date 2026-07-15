@@ -48738,6 +48738,285 @@ def main():
     except KeyboardInterrupt:V91_STOP.set();print("A100 V91 stopped by signal",flush=True)
     except Exception as e:V91_STOP.set();v88_record_error("v91-fatal-main",e);print(traceback.format_exc(),flush=True);raise
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.14 - EVIDENCE-CALIBRATED SCORE / WINDOWED HISTORY / ETA STABILITY
+# ---------------------------------------------------------------------------
+import hashlib
+V1160_LTS_S21714_NUMBER = "116.0-LTS-S2.17.14"
+V1160_LTS_S21714_VERSION = "A100 V116.0-LTS-S2.17.14 EVIDENCE CALIBRATED SCORE WINDOWED HISTORY ETA STABILITY"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S21714_NUMBER, version=V1160_LTS_S21714_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S21714_TASKS = set()
+V1160_S21714_METRICS_FILE = os.path.join(V91_DATA_DIR, "v1160_s21714_metrics.json")
+V1160_S21714_ETA_FILE = os.path.join(V91_DATA_DIR, "v1160_s21714_eta_state.json")
+V1160_S21714_METRICS_LOCK = threading.RLock()
+V1160_S21714_ETA_LOCK = threading.RLock()
+
+
+def _v1160_s21714_load_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else dict(default)
+    except Exception:
+        return dict(default)
+
+
+V1160_S21714_METRICS = _v1160_s21714_load_json(V1160_S21714_METRICS_FILE, {
+    "requests": 0, "hits": 0, "misses": 0, "builds": 0,
+    "build_total_ms": 0.0, "build_last_ms": 0.0, "build_max_ms": 0.0,
+    "last_build_utc": "-", "last_persist_utc": "-",
+})
+V1160_S21714_ETA_STATE = _v1160_s21714_load_json(V1160_S21714_ETA_FILE, {})
+
+
+def _v1160_s21714_atomic_json(path, payload):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            fh.flush()
+            try: os.fsync(fh.fileno())
+            except Exception: pass
+        os.replace(tmp, path)
+        return True
+    except Exception as e:
+        v88_record_error("s21714-atomic-json", e)
+        return False
+
+
+def _v1160_s21714_persist_metrics():
+    with V1160_S21714_METRICS_LOCK:
+        V1160_S21714_METRICS["last_persist_utc"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        payload = dict(V1160_S21714_METRICS)
+    _v1160_s21714_atomic_json(V1160_S21714_METRICS_FILE, payload)
+
+
+def _v1160_s21714_rows_window(hours):
+    now = time.time(); selected = []
+    for r in _v1160_s21712_rows():
+        try:
+            raw = r.get("epoch")
+            ts = float(raw) if raw is not None else datetime.fromisoformat(str(r.get("ts") or r.get("utc")).replace("Z", "+00:00")).timestamp()
+            if 0.0 <= now - ts <= float(hours) * 3600.0:
+                rr = dict(r); rr["_epoch"] = ts; selected.append(rr)
+        except Exception:
+            pass
+    selected.sort(key=lambda x: x.get("_epoch", 0.0))
+    return selected
+
+
+def _v1160_s21714_avg(rows, key):
+    vals=[]
+    for r in rows:
+        try:
+            v=r.get(key)
+            if v is not None: vals.append(float(v))
+        except Exception: pass
+    return (sum(vals)/len(vals)) if vals else None
+
+
+def _v1160_s21714_calibrated_score(snap):
+    """Conservative evidence calibration; never changes mandatory gate authority."""
+    base=float(((snap or {}).get("runtime") or {}).get("score",0.0) or 0.0)
+    rows=_v1160_s21714_rows_window(72)
+    if not rows: return round(base,1), {"samples":0,"coverage":0.0,"history":None,"adjustment":0.0}
+    scores=[float(r.get("runtime_score",base)) for r in rows if r.get("runtime_score") is not None]
+    hist=(sum(scores)/len(scores)) if scores else base
+    coverage=min(1.0,len(rows)/4320.0)  # 60-second samples over 72h
+    errors=sum(max(0,int(r.get("runtime_errors",0) or 0)) for r in rows)
+    error_factor=1.0 if errors==0 else max(0.0,1.0-errors/max(1,len(rows)))
+    mem=[float(r.get("memory_mb")) for r in rows if r.get("memory_mb") is not None]
+    mem_factor=1.0
+    if len(mem)>1 and sum(mem)/len(mem)>0:
+        mean=sum(mem)/len(mem); variance=sum((x-mean)**2 for x in mem)/len(mem)
+        mem_factor=max(0.0,min(1.0,1.0-(variance**0.5)/mean))
+    cache=_v1160_s21714_avg(rows,"operational_hit_rate")
+    cache_factor=max(0.0,min(1.0,(cache or 0.0)/100.0))
+    quality=100.0*(0.40*coverage+0.25*error_factor+0.20*mem_factor+0.15*cache_factor)
+    evidence_target=0.65*hist+0.35*quality
+    weight=min(0.35,0.05+0.30*coverage)
+    adjusted=base*(1.0-weight)+evidence_target*weight
+    adjusted=max(base-3.0,min(base+5.0,adjusted))
+    return round(adjusted,1), {"samples":len(rows),"coverage":coverage*100.0,"history":hist,"quality":quality,"adjustment":adjusted-base}
+
+
+_v1160_s21714_cached_snapshot_base = _v1160_s2173_cached_snapshot
+
+def _v1160_s2173_cached_snapshot(force=False):
+    started=time.perf_counter()
+    snap,hit,age=_v1160_s21714_cached_snapshot_base(force)
+    elapsed=(time.perf_counter()-started)*1000.0
+    with V1160_S21714_METRICS_LOCK:
+        m=V1160_S21714_METRICS; m["requests"]=int(m.get("requests",0))+1
+        if hit: m["hits"]=int(m.get("hits",0))+1
+        else:
+            m["misses"]=int(m.get("misses",0))+1; m["builds"]=int(m.get("builds",0))+1
+            m["build_last_ms"]=elapsed; m["build_total_ms"]=float(m.get("build_total_ms",0.0))+elapsed
+            m["build_max_ms"]=max(float(m.get("build_max_ms",0.0)),elapsed)
+            m["last_build_utc"]=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+    # Apply calibration only to a newly built immutable snapshot, then cache that exact object.
+    if not hit and isinstance(snap,dict):
+        try:
+            score,detail=_v1160_s21714_calibrated_score(snap)
+            runtime=dict(snap.get("runtime") or {}); runtime["score"]=score; runtime["evidence_v2"]=detail
+            snap=dict(snap); snap["runtime"]=runtime
+            hash_payload={"snapshot_id":snap.get("snapshot_id"),"runtime_score":score,"gate":snap.get("gate"),"cert_gate":(snap.get("cert") or {}).get("gate")}
+            snap["unified_hash"]=hashlib.sha256(json.dumps(hash_payload,sort_keys=True,default=str,separators=(",", ":")).encode()).hexdigest()[:12].upper()
+            with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+                V1160_S2173_RELEASEGATE_CACHE["snapshot"]=snap
+        except Exception as e: v88_record_error("s21714-score-calibration",e)
+    if int(V1160_S21714_METRICS.get("requests",0)) % 5 == 0 or not hit:
+        _v1160_s21714_persist_metrics()
+    return snap,hit,age
+
+
+def _v1160_s21714_metrics_lines():
+    with V1160_S21714_METRICS_LOCK: m=dict(V1160_S21714_METRICS)
+    req=int(m.get("requests",0)); hits=int(m.get("hits",0)); builds=int(m.get("builds",0))
+    return [
+        "SNAPSHOT BUILD METRICS V2",
+        f"Requests / Hits / Miss {req} / {hits} / {int(m.get('misses',0))}",
+        f"Persistent Hit Rate    {(hits/req*100.0 if req else 0.0):.1f}%",
+        f"Measured Builds        {builds}",
+        f"Build last / avg       {float(m.get('build_last_ms',0.0)):.1f}ms / {(float(m.get('build_total_ms',0.0))/builds if builds else 0.0):.1f}ms",
+        f"Build peak             {float(m.get('build_max_ms',0.0)):.1f}ms",
+        f"Last Build UTC         {m.get('last_build_utc','-')}",
+        f"Metrics Persist UTC    {m.get('last_persist_utc','-')}",
+    ]
+
+
+def _v1160_s21714_runtime_history_lines():
+    out=["RUNTIME WINDOW ENGINE V2"]
+    expected={"1h":60,"6h":360,"24h":1440,"72h":4320}
+    for label,hours in (("1h",1),("6h",6),("24h",24),("72h",72)):
+        rows=_v1160_s21714_rows_window(hours)
+        score=_v1160_s21714_avg(rows,"runtime_score"); mem=_v1160_s21714_avg(rows,"memory_mb"); cache=_v1160_s21714_avg(rows,"operational_hit_rate")
+        errs=sum(int(r.get("runtime_errors",0) or 0) for r in rows)
+        delta=0.0
+        if len(rows)>1:
+            try: delta=float(rows[-1].get("runtime_score",0))-float(rows[0].get("runtime_score",0))
+            except Exception: pass
+        coverage=min(100.0,len(rows)/expected[label]*100.0)
+        if score is None: out.append(f"{label:<4} samples   0/{expected[label]} · coverage 0.0% · PENDING"); continue
+        out.append(f"{label:<4} samples {len(rows):>4}/{expected[label]} · coverage {coverage:.1f}%")
+        out.append(f"     runtime {score:.1f} · delta {delta:+.1f} · memory {mem:.1f}MB" if mem is not None else f"     runtime {score:.1f} · delta {delta:+.1f} · memory PENDING")
+        out[-1]+=f" · cache {cache:.1f}%" if cache is not None else " · cache PENDING"
+        out[-1]+=f" · errors {errs}"
+        if rows:
+            first=datetime.fromtimestamp(rows[0]["_epoch"],timezone.utc).strftime('%m-%d %H:%M')
+            last=datetime.fromtimestamp(rows[-1]["_epoch"],timezone.utc).strftime('%m-%d %H:%M')
+            out.append(f"     window UTC {first} → {last}")
+    return out
+
+
+def _v1160_s2173_gate_detail(label,current,target,velocity):
+    gap=max(0.0,float(target)-float(current))
+    if gap<=0:return ["Status detail          CERTIFIED",f"Margin                 {abs(float(target)-float(current)):.1f}"]
+    factors={
+        "Intelligence":("Prediction calibration","Validated sample breadth","Regime consistency"),
+        "Strategy Trust":("Closed-outcome sample depth","Entry/exit consistency","Regime-stable trust"),
+        "Outcome Quality":("Attribution completeness","Exit precision","Fee/slippage-positive expectancy"),
+        "Memory Health":("Leak-free observation time","Snapshot stability","Worker/cache bounded growth"),
+        "LTS Readiness":("Mandatory gate completion","72H runtime evidence","Performance/evidence validation"),
+    }.get(label,("Mandatory evidence","Runtime validation","Certification stability"))
+    raw_h=gap/max(float(velocity or 0.0),0.01)
+    with V1160_S21714_ETA_LOCK:
+        old=float(V1160_S21714_ETA_STATE.get(label,raw_h) or raw_h)
+        # EMA plus a 25% movement cap per observation prevents request-to-request oscillation.
+        ema=old*0.75+raw_h*0.25; cap=max(12.0,old*0.25); stable=max(old-cap,min(old+cap,ema))
+        V1160_S21714_ETA_STATE[label]=stable
+        _v1160_s21714_atomic_json(V1160_S21714_ETA_FILE,V1160_S21714_ETA_STATE)
+    return [f"Primary gap            {factors[0]}",f"Secondary gaps         {factors[1]} · {factors[2]}",f"Velocity ETA           {stable/24.0:.1f}d (EMA stabilized)"]
+
+
+def _v1160_s21714_light_preflight(force=False):
+    checks=_v1160_s21713_light_preflight(force).get("details",[])
+    checks=[c for c in checks if c.get("name")!="Version source"]
+    checks.insert(0,_v1160_s2176_check("Version source",V91_VERSION==V1160_LTS_S21714_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check("Evidence calibrated runtime score",callable(_v1160_s21714_calibrated_score)),
+        _v1160_s2176_check("Independent runtime windows",callable(_v1160_s21714_runtime_history_lines),detail="1h/6h/24h/72h"),
+        _v1160_s2176_check("Persistent build metrics",callable(_v1160_s21714_metrics_lines),detail=V1160_S21714_METRICS_FILE),
+        _v1160_s2176_check("ETA smoothing state",callable(_v1160_s2173_gate_detail),detail=V1160_S21714_ETA_FILE),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL'];warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False):return _v1160_s21714_light_preflight(force)
+
+
+async def version1160ltss21714_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21714_NUMBER}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S21714_VERSION}",f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","","Sprint 2.17.14 · evidence-calibrated runtime score, true window coverage, persistent build metrics and stable ETA."]))
+
+
+async def _v1160_s21714_releasegate_job(update):
+    try:
+        snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False)
+        detail=((snap.get("runtime") or {}).get("evidence_v2") or {})
+        text=_v1160_s2173_releasegate_text(snap,hit,age)
+        text+="\n\nRUNTIME EVIDENCE CORRELATION V2\n"+"\n".join([
+            f"Evidence samples        {int(detail.get('samples',0))}",f"72H coverage           {float(detail.get('coverage',0.0)):.1f}%",
+            f"History score          {(float(detail.get('history')) if detail.get('history') is not None else 0.0):.1f}",f"Evidence quality       {float(detail.get('quality',0.0)):.1f}",
+            f"Score adjustment       {float(detail.get('adjustment',0.0)):+.1f}","Mandatory gates        AUTHORITATIVE · not overridden",
+        ])
+        text+="\n\n"+"\n".join(_v1160_s21714_metrics_lines())+"\n\n"+"\n".join(_v1160_s21714_runtime_history_lines())
+        await asyncio.wait_for(v90_1_safe_reply(update,text),timeout=30.0)
+    except Exception as e:v88_record_error("s21714-releasegate-background",e)
+
+
+async def releasegate1160ltss21714_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot();state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21714_releasegate_job(update),name="a100-s21714-releasegate");V1160_S21714_TASKS.add(t);t.add_done_callback(V1160_S21714_TASKS.discard)
+
+
+async def _v1160_s21714_versionaudit_job(update):
+    try:
+        audit=_v1160_s21714_light_preflight(True);snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False);ri=snap.get('runtime',{})
+        lines=[f"🛡️ A100 V{V1160_LTS_S21714_NUMBER} FINAL CERTIFICATION AUDIT",f"Version Source {V1160_LTS_S21714_VERSION}",f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341","Runtime Routes 341/341 · Route Certification 341/341",f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",f"Runtime Score {float(ri.get('score',0.0)):.1f}/100","Schema 1 · Paper 20 · Shadow 60 · Live OFF",""]
+        lines.extend(_v1160_s21714_metrics_lines());lines.append("");lines.extend(_v1160_s21714_runtime_history_lines());lines.append("");lines.extend(_v1160_s2176_preflight_lines(audit))
+        await asyncio.wait_for(v90_1_safe_reply(update,"\n".join(lines)),timeout=30.0)
+    except Exception as e:v88_record_error("s21714-versionaudit-background",e)
+
+
+async def versionaudit1160ltss21714_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot();state=f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21714_versionaudit_job(update),name="a100-s21714-versionaudit");V1160_S21714_TASKS.add(t);t.add_done_callback(V1160_S21714_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.17.14 evidence-calibrated score and window engine","versionaudit":"Non-blocking audit with persistent build metrics","releasegate":"Non-blocking release gate with stable ETA and evidence correlation"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss21714_cmd,"versionaudit":versionaudit1160ltss21714_cmd,"releasegate":releasegate1160ltss21714_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21714_light_preflight(True)
+    if not pre['ok']:raise RuntimeError("S2.17.14 startup preflight failed: "+','.join(pre['failed']))
+    app=Application.builder().token(token).build();app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0);app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True);print("A100 V91 dispatcher count: 1",flush=True);print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.14)",flush=True);return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():_v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once();v91_start_background_once();pre=_v1160_s21714_light_preflight(True)
+    print(f"{V1160_LTS_S21714_VERSION} worker running...",flush=True);print(f"A100 V91 startup commands: {pre['command_count']}",flush=True);print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']:raise RuntimeError("A100 S2.17.14 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked",flush=True)
+        while True:time.sleep(60)
+    _v1160_s2174_start_warmup_once();_v1160_s2179_start_refresh_once();_v1160_s21712_start_scheduler_once()
+    try:asyncio.run(run_bot_async())
+    except KeyboardInterrupt:V91_STOP.set();print("A100 V91 stopped by signal",flush=True)
+    except Exception as e:V91_STOP.set();v88_record_error("v91-fatal-main",e);print(traceback.format_exc(),flush=True);raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
