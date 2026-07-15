@@ -1,16 +1,16 @@
 {
-  "version": "A100 V116.0-LTS-S2.17",
-  "type": "PATCH",
-  "baseline": "A100 V116.0-LTS-S2.16",
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
-  "files": [
-    "main.py",
-    "CHANGELOG_S2.17.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "test_v1160_lts_s217_activation.py",
-    "changed_files.manifest"
-  ]
+  "version": "A100 V116.0-LTS-S2.17.1",
+  "package_type": "Patch Package",
+  "purpose": "Startup Healthcheck Ordering Hotfix",
+  "changed_files": [
+    "main.py"
+  ],
+  "policies": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "feature_freeze": true,
+    "release_freeze": true
+  }
 }

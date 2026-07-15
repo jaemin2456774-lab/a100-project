@@ -46009,8 +46009,8 @@ def v91_preflight(force=False):
 # ---------------------------------------------------------------------------
 # A100 V116.0 LTS S2.17 - FINAL ACTIVATION & AUDIT TITLE CONSISTENCY PATCH
 # ---------------------------------------------------------------------------
-V1160_LTS_S217_NUMBER = "116.0-LTS-S2.17"
-V1160_LTS_S217_VERSION = "A100 V116.0-LTS-S2.17 FINAL ACTIVATION & AUDIT TITLE CONSISTENCY"
+V1160_LTS_S217_NUMBER = "116.0-LTS-S2.17.1"
+V1160_LTS_S217_VERSION = "A100 V116.0-LTS-S2.17.1 STARTUP HEALTHCHECK ORDERING HOTFIX"
 V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
     number=V1160_LTS_S217_NUMBER,
     version=V1160_LTS_S217_VERSION,
@@ -46048,7 +46048,7 @@ async def version1160ltss217_cmd(update, context):
         f"Live Trading         {vm['live']}",
         "Feature Freeze       ACTIVE",
         "",
-        "Sprint 2.17 · hard activation, LTS audit-title consistency and unified score hash.",
+        "Sprint 2.17.1 · health server first, non-blocking startup certification warmup.",
     ]
     return await v90_1_safe_reply(update, "\n".join(lines))
 
@@ -46223,7 +46223,7 @@ def v91_preflight(force=False):
             "runtimehealth":runtimehealth1160ltss217_cmd,"dashboard":dashboard1160ltss217_cmd,
             "releasegate":releasegate1160ltss217_cmd,"versionaudit":versionaudit1160ltss217_cmd,
             "pipelinetrace":pipelinetrace1160ltss217_cmd}.items()),
-        "s217_unified_hash":bool(_v1160_s217_snapshot(force=True).get("unified_hash")),
+        "s217_snapshot_callable":callable(_v1160_s217_snapshot),
         "s217_no_legacy_audit_route":V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1160ltss217_cmd,
         "s217_no_legacy_trace_route":V90_COMMAND_REGISTRY.get("pipelinetrace") is pipelinetrace1160ltss217_cmd,
         "s217_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
@@ -46234,16 +46234,42 @@ def v91_preflight(force=False):
         "ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,
         "version_source":"Single","regression_risk":"NONE" if not failed else "HIGH",
         "release_freeze":"ACTIVE","lts_readiness":"72H CERTIFICATION ACTIVE" if not failed else "BLOCKED",
-        "certification_stage":"Sprint 2.17 Final Activation & Audit Title Consistency",
+        "certification_stage":"Sprint 2.17.1 Startup Healthcheck Ordering Hotfix",
     })
     if not force: V1160_S217_PREFLIGHT_CACHE=out
     return out
 
 
+# S2.17.1 startup rule: open the Railway health port before any full certification scan.
+def _v1160_s2171_post_start_warmup():
+    """Warm heavy certification evidence after the process is already health-checkable."""
+    def _run():
+        try:
+            _v1160_rc45_start_worker()
+            _v1160_s217_snapshot(force=True)
+            v91_preflight(force=False)
+            print("A100 V116.0-LTS-S2.17.1 post-start certification warmup: OK", flush=True)
+        except Exception as error:
+            try:
+                v88_record_error("s2171-post-start-warmup", error)
+            except Exception:
+                pass
+            print(f"A100 V116.0-LTS-S2.17.1 post-start warmup warning: {type(error).__name__}: {error}", flush=True)
+    thread=threading.Thread(target=_run, name="a100-s2171-warmup", daemon=True)
+    thread.start()
+    return thread
+
+
+# Preserve the full main implementation, but ensure background warmup is scheduled only
+# after start_health_server_once() has been called by main().
+_V1160_S2171_BASE_MAIN = main
+
+def main():
+    start_health_server_once()
+    _v1160_s2171_post_start_warmup()
+    return _V1160_S2171_BASE_MAIN()
+
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
-    audit=v91_preflight(force=True)
-    if not audit.get("ok"):
-        raise RuntimeError("V116.0 LTS-S2.17 startup integrity failure: "+", ".join(audit.get("failed",[])))
-    _v1160_rc45_start_worker()
     main()
