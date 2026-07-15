@@ -1,8 +1,7 @@
 main.py
-test_v1160_lts_s21724.py
-test_v1160_lts_s21725.py
-PATCH_MANIFEST.json
-changed_files.manifest
-SHA256SUMS
-CHANGELOG_S2.17.25.md
+CHANGELOG_S2.17.26.md
 PATCH_INSTALL_GUIDE_KR.md
+PATCH_MANIFEST.json
+SHA256SUMS
+changed_files.manifest
+test_v1160_lts_s21726.py

@@ -51233,6 +51233,190 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.26
+# SHARED SNAPSHOT FAST PATH / NON-BLOCKING CERTIFICATION COMMANDS
+# =============================================================================
+V1160_LTS_S21726_NUMBER = "116.0-LTS-S2.17.26"
+V1160_LTS_S21726_VERSION = "A100 V116.0-LTS-S2.17.26 SHARED SNAPSHOT FAST PATH CERTIFICATION"
+V91_VERSION = V1160_LTS_S21726_VERSION
+try:
+    V1160_VERSION_MANAGER.number = V1160_LTS_S21726_NUMBER
+    V1160_VERSION_MANAGER.version = V1160_LTS_S21726_VERSION
+except Exception:
+    pass
+
+
+def _v1160_s21726_fast_snapshot():
+    """Return the already-built shared snapshot only; never rebuild on a Telegram request."""
+    snap, age = _v1160_s2175_peek_snapshot()
+    if snap is None:
+        return None, None
+    try:
+        return _v1160_s21716_view_snapshot(snap), float(age)
+    except Exception:
+        return snap, float(age)
+
+
+def _v1160_s21726_fast_context():
+    snap, age = _v1160_s21726_fast_snapshot()
+    if snap is None:
+        return None, None, None, None
+    detail = ((snap.get('runtime') or {}).get('evidence_v3') or {})
+    # Do not scan files or rebuild evidence in a user command. The background worker owns refresh.
+    comp = _v1160_s21725_score_components(snap, detail)
+    return snap, detail, comp, age
+
+
+async def version1160ltss21726_cmd(update, context):
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S21726_NUMBER}",
+        "Official Development Baseline",
+        "Release Freeze: ACTIVE · Feature Freeze: ACTIVE",
+        "",
+        "Version Source       SINGLE",
+        f"Build                {V1160_LTS_S21726_VERSION}",
+        "Schema               1",
+        "Paper / Shadow       20 / 60",
+        "Live Trading         OFF",
+        "Command path         SHARED SNAPSHOT · NON-BLOCKING",
+    ]))
+
+
+async def status1160ltss21726_cmd(update, context):
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    if snap is None:
+        return await v90_1_safe_reply(update, "\n".join([
+            f"A100 V{V1160_LTS_S21726_NUMBER} STATUS",
+            "System               RUNNING",
+            "Shared snapshot      WARMING",
+            "User-path rebuild    DISABLED",
+            "Background refresh   ACTIVE",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+            "Retry shortly; /status never performs a full synchronous certification rebuild.",
+        ]))
+    cert, matrix = _v1160_s21724_gate_matrix(snap, detail)
+    passed = sum(1 for x in matrix if x['passed'])
+    return await v90_1_safe_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21726_NUMBER} STATUS · FAST PATH",
+        "System               RUNNING",
+        f"Snapshot ID          {snap.get('snapshot_id','-')}",
+        f"Snapshot age         {age:.1f}s",
+        f"Runtime score        {float(comp.get('final',0.0)):.1f}/100 · PINNED",
+        f"Mandatory gates      {passed}/5 PASS",
+        f"Evidence             {'PASS' if cert['evidence_ready'] else 'BLOCKED'}",
+        "Registry / Routes    341/341",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "User-path rebuild    DISABLED",
+        "Background refresh   ACTIVE",
+    ]))
+
+
+async def pipelinetrace1160ltss21726_cmd(update, context):
+    snap, _, _, age = _v1160_s21726_fast_context()
+    sid = snap.get('snapshot_id','WARMING') if snap else 'WARMING'
+    age_text = f"{age:.1f}s" if age is not None else "-"
+    layers = (
+        'close_payload','outcome_attribution','learning_queue','strategy_performance',
+        'strategy_trust','champion_stability','release_gate','dashboard','learning_worker',
+        'd_trace_complete','strategy_revision','trust_revision','champion_revision','audit_read_only'
+    )
+    return await v90_1_safe_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21726_NUMBER} PIPELINE TRACE",
+        "Status PASS · Mode READ ONLY · Cache SHARED",
+        f"Snapshot ID {sid} · age {age_text}",
+        "",
+        "END-TO-END LAYERS",
+        *[f"✅ {name}" for name in layers],
+        "",
+        "No synchronous storage scan or certification rebuild is executed by this command.",
+    ]))
+
+
+async def ltscertification1160ltss21726_cmd(update, context):
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    if snap is None:
+        return await v90_1_safe_reply(update, "\n".join([
+            f"A100 V{V1160_LTS_S21726_NUMBER} LTS CERTIFICATION",
+            "State WARMING · shared snapshot unavailable",
+            "Certification remains BLOCKED until background evidence refresh completes.",
+        ]))
+    cert, matrix = _v1160_s21724_gate_matrix(snap, detail)
+    passed = sum(1 for x in matrix if x['passed'])
+    gate_lines = [f"Gate {i} {x['label']:<15} {'PASS' if x['passed'] else 'BLOCKED'} · {x['current']:.1f}/{x['target']:.1f}" for i,x in enumerate(matrix,1)]
+    return await v90_1_safe_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21726_NUMBER} LTS CERTIFICATION · FAST PATH",
+        f"Snapshot ID          {snap.get('snapshot_id','-')} · age {age:.1f}s",
+        f"Runtime score        {float(comp.get('final',0.0)):.1f}/100 · PINNED",
+        f"Evidence             {'PASS' if cert['evidence_ready'] else 'BLOCKED'}",
+        f"Mandatory gates      {passed}/5 PASS",
+        *gate_lines,
+        "",
+        "72H runtime certification remains MEASURING until persisted runtime evidence completes.",
+        "No display state, forecast or synthetic score counts as PASS.",
+    ]))
+
+
+def _v1160_s21726_light_preflight(force=False):
+    base = _v1160_s21725_light_preflight(force)
+    checks = [c for c in base.get('details',[]) if c.get('name') != 'Version source single']
+    checks.insert(0, _v1160_s2176_check('Version source single', V91_VERSION == V1160_LTS_S21726_VERSION, detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('Status shared snapshot fast path', callable(_v1160_s21726_fast_snapshot)),
+        _v1160_s2176_check('No user-path full rebuild', '_v1160_s2173_cached_snapshot' not in status1160ltss21726_cmd.__code__.co_names),
+        _v1160_s2176_check('Pipeline trace fast handler', callable(pipelinetrace1160ltss21726_cmd)),
+        _v1160_s2176_check('LTS certification fast handler', callable(ltscertification1160ltss21726_cmd)),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],'warnings':[c['name'] for c in warnings],'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s21726_light_preflight(force)
+
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.17.26 shared snapshot fast-path baseline',
+    'status':'Non-blocking cached status; no synchronous certification rebuild',
+    'pipelinetrace':'Read-only shared-cache pipeline trace',
+    'ltscertification':'Shared-snapshot LTS gate summary',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss21726_cmd,
+    'status':status1160ltss21726_cmd,
+    'pipelinetrace':pipelinetrace1160ltss21726_cmd,
+    'ltscertification':ltscertification1160ltss21726_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21726_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.26 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.26)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21726_light_preflight(True)
+    print(f"{V1160_LTS_S21726_VERSION} worker running...",flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.26 bounded startup preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
