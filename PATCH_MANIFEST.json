@@ -1,15 +1,7 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.16",
-  "package_type": "incremental_patch",
-  "changed_files": [
-    "main.py"
-  ],
-  "preserves": [
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live Trading OFF",
-    "/data"
-  ],
-  "sha256_file": "SHA256SUMS"
+  "version": "A100 V116.0-LTS-S2.17.17",
+  "type": "incremental_patch",
+  "baseline": "A100 V116.0-LTS-S2.17.16",
+  "changed_files": ["main.py"],
+  "preserves": ["Schema 1", "Paper 20", "Shadow 60", "Live Trading OFF", "Registry 341", "/data"]
 }

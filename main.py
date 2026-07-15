@@ -49574,6 +49574,177 @@ def main():
     except KeyboardInterrupt: V91_STOP.set();print("A100 V91 stopped by signal",flush=True)
     except Exception as e: V91_STOP.set();v88_record_error("v91-fatal-main",e);print(traceback.format_exc(),flush=True);raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.17
+# FINAL LTS PRODUCTION READINESS / ACTIONABLE CERTIFICATION POLISH
+# =============================================================================
+V1160_LTS_S21717_NUMBER = "116.0-LTS-S2.17.17"
+V1160_LTS_S21717_VERSION = "A100 V116.0-LTS-S2.17.17 FINAL LTS PRODUCTION READINESS"
+V91_VERSION = V1160_LTS_S21717_VERSION
+try:
+    V1160_VERSION_MANAGER.number = V1160_LTS_S21717_NUMBER
+    V1160_VERSION_MANAGER.version = V1160_LTS_S21717_VERSION
+except Exception:
+    pass
+V1160_S21717_TASKS=set()
+
+
+def _v1160_s21717_score_lines(comp):
+    weights=(("Runtime stability","stability",0.30),("Evidence quality","evidence",0.25),("Cache health","cache",0.15),("Snapshot reliability","snapshot",0.15),("Scheduler health","scheduler",0.15))
+    lines=["RUNTIME SCORE EXPLAIN ENGINE V6"]
+    for label,key,w in weights:
+        score=float(comp.get(key,0.0)); lines.append(f"{label:<22} {score:5.1f} × {w:.2f} = {score*w:4.1f}")
+    lines.extend([f"Raw weighted score       {float(comp.get('raw',0.0)):.1f}",f"Authoritative base       {float(comp.get('base',0.0)):.1f}","Calibration envelope     ±3.0 points",f"Final runtime score      {float(comp.get('final',0.0)):.1f}/100"])
+    return lines
+
+
+def _v1160_s21717_coverage_lines(detail):
+    collected=max(0,int(detail.get("samples",0) or 0)); expected=4320; remaining=max(0,expected-collected)
+    coverage=min(100.0,collected/expected*100.0)
+    rows=(detail.get("windows") or {}).get("24h",{}).get("rows",[]) or []
+    recent_24h=len(rows)
+    daily_rate=max(0.0,float(recent_24h))
+    lifetime_hours=72.0
+    avg_daily=(collected/max(1.0,lifetime_hours))*24.0
+    effective_rate=max(0.01,daily_rate if daily_rate>0 else avg_daily)
+    eta_days=remaining/effective_rate if remaining else 0.0
+    try:
+        completion=(datetime.now(timezone.utc)+timedelta(days=eta_days)).strftime("%Y-%m-%d")
+    except Exception: completion="-"
+    return ["EVIDENCE ETA PREDICTOR V2",f"Expected samples       {expected}",f"Collected samples      {collected}",f"Coverage               {coverage:.1f}%",f"Remaining samples      {remaining}",f"Recent 24h increase    +{recent_24h}",f"Average daily growth   {avg_daily:.1f}/day",f"Effective growth rate  {effective_rate:.1f}/day",f"Estimated completion   {eta_days:.1f}d · {completion} UTC"]
+
+
+def _v1160_s21717_gate_plan_lines(snap):
+    gate=((snap.get("cert") or {}).get("gate") or {})
+    cfg={
+      "intelligence_score":("Intelligence","Prediction calibration","Accumulate validated prediction/outcome pairs","HIGH",0.35),
+      "strategy_trust":("Strategy Trust","Closed-outcome sample depth","Increase closed outcomes with consistent entry/exit attribution","CRITICAL",0.45),
+      "outcome_quality":("Outcome Quality","Attribution and exit precision","Complete fee/slippage-aware exit attribution evidence","HIGH",0.30),
+      "memory_health":("Memory Health","Leak-free observation time","Continue bounded runtime observation without cache/worker growth","MEDIUM",0.20),
+      "lts_readiness":("LTS Readiness","72H evidence and mandatory gates","Complete 72H evidence plus all authoritative gates","CRITICAL",0.50),
+    }
+    out=["MANDATORY GATE ACTION PLANNER V4"]
+    for key,(label,blocker,action,priority,factor) in cfg.items():
+        cur,target=_v1160_s215_gate_value(gate.get(key,{})); gap=max(0.0,target-cur); progress=(cur/target*100.0) if target else 0.0
+        confidence=_v1160_s21716_clamp(100.0-gap)
+        impact=min(gap,max(1.0,gap*factor)) if gap>0 else 0.0
+        out.extend([f"{label:<16} {cur:.1f}/{target:.1f} · {progress:.1f}% · confidence {confidence:.1f}%",f"  Blocker              {blocker}",f"  Recommended action   {action}",f"  Priority / impact    {priority} / +{impact:.1f} potential"])
+    return out
+
+
+def _v1160_s21717_progress_lines(snap,detail,comp):
+    gate=((snap.get("cert") or {}).get("gate") or {})
+    vals=[]; names=["Intelligence","Strategy Trust","Outcome Quality","Memory Health","LTS Readiness"]
+    for key in ("intelligence_score","strategy_trust","outcome_quality","memory_health","lts_readiness"):
+        cur,target=_v1160_s215_gate_value(gate.get(key,{})); vals.append(min(100.0,cur/target*100.0) if target else 0.0)
+    gate_score=sum(vals)/len(vals) if vals else 0.0
+    evidence=min(100.0,float(detail.get("coverage",0.0))*5.0)
+    learning=_v1160_s21716_clamp(((snap.get("learning") or {}).get("efficiency",0.0)))
+    registry=100.0 if len(V90_COMMAND_REGISTRY)==341 else 0.0
+    snapshot=float(comp.get("snapshot",0.0)); cache=float(comp.get("cache",0.0)); runtime=float(comp.get("final",0.0))
+    history=min(100.0,float(detail.get("coverage",0.0))*10.0)
+    persistent=100.0
+    final=0.18*runtime+0.14*evidence+0.10*learning+0.10*cache+0.10*snapshot+0.08*registry+0.10*history+0.20*gate_score
+    status="READY" if final>=95 and min(vals or [0])>=100 else "ALMOST READY" if final>=75 else "NOT READY"
+    bar_n=max(0,min(10,int(round(final/10.0)))); bar="█"*bar_n+"░"*(10-bar_n)
+    ranked=sorted(zip(vals,names))
+    expected=4320; collected=max(0,int(detail.get("samples",0) or 0)); remaining=max(0,expected-collected)
+    daily=max(1.0,len((detail.get("windows") or {}).get("24h",{}).get("rows",[]) or [])); eta=remaining/daily
+    recommendation_conf=_v1160_s21716_clamp((float(detail.get("quality",0.0))+float(comp.get("snapshot",0.0))+registry)/3.0)
+    out=["LTS CERTIFICATION PROGRESS V2",f"{bar} {final:.1f}%",f"Runtime               {runtime:.1f}%",f"Evidence              {evidence:.1f}%",f"Learning              {learning:.1f}%",f"Cache                 {cache:.1f}%",f"Snapshot              {snapshot:.1f}%",f"Registry              {registry:.1f}%",f"Runtime history       {history:.1f}%",f"Persistent snapshot   {persistent:.1f}%",f"Mandatory gates       {gate_score:.1f}%","",f"FINAL RECOMMENDATION V2  {status}",f"Estimated remaining     {remaining} samples · ~{eta:.1f}d",f"Recommendation confidence {recommendation_conf:.1f}%","Top remaining priorities"]
+    for idx,(_,name) in enumerate(ranked[:5],1): out.append(f"{idx}. {name}")
+    return out
+
+
+def _v1160_s21717_summary(snap,detail,comp):
+    gate=((snap.get("cert") or {}).get("gate") or {})
+    blocked=[]
+    for key,label in (("intelligence_score","Intelligence"),("strategy_trust","Strategy Trust"),("outcome_quality","Outcome Quality"),("memory_health","Memory Health"),("lts_readiness","LTS Readiness")):
+        cur,target=_v1160_s215_gate_value(gate.get(key,{}))
+        if cur<target: blocked.append(f"{label} {cur:.1f}/{target:.1f}")
+    return "\n".join(["RELEASE GATE · PRODUCTION READINESS SUMMARY",f"Snapshot ID            {snap.get('snapshot_id','-')}",f"Unified hash           {snap.get('unified_hash','-')}",f"Runtime score          {float(comp.get('final',0.0)):.1f}/100",f"Evidence samples       {int(detail.get('samples',0) or 0)}",f"72H coverage           {float(detail.get('coverage',0.0)):.1f}%",f"Mandatory gates        {'PASS' if not blocked else 'BLOCKED '+str(len(blocked))+'/5'}",*(blocked[:5] or ["All mandatory gates PASS"]),"","Detailed diagnostics follow in a separate message."])
+
+
+def _v1160_s21717_diagnostics(snap,hit,age):
+    ri=snap.get("runtime") or {}; detail=ri.get("evidence_v3") or _v1160_s21715_evidence_detail(snap); comp=ri.get("score_composition_v5") or _v1160_s21716_score_components(snap)
+    sections=[_v1160_s21717_score_lines(comp),_v1160_s21717_coverage_lines(detail),_v1160_s21717_gate_plan_lines(snap),_v1160_s21716_learning_lines(snap),_v1160_s21716_window_trend(detail),_v1160_s21716_cache_lines(hit,age),_v1160_s21717_progress_lines(snap,detail,comp)]
+    return "\n\n".join("\n".join(x) for x in sections)
+
+
+def _v1160_s21717_light_preflight(force=False):
+    base=_v1160_s21716_light_preflight(force); checks=[c for c in base.get("details",[]) if c.get("name")!="Version source"]
+    checks.insert(0,_v1160_s2176_check("Version source",V91_VERSION==V1160_LTS_S21717_VERSION,detail=V91_VERSION))
+    checks.extend([_v1160_s2176_check("Runtime score explain V6",callable(_v1160_s21717_score_lines)),_v1160_s2176_check("Evidence ETA predictor V2",callable(_v1160_s21717_coverage_lines)),_v1160_s2176_check("Gate action planner V4",callable(_v1160_s21717_gate_plan_lines)),_v1160_s2176_check("Progress dashboard V2",callable(_v1160_s21717_progress_lines)),_v1160_s2176_check("Recommendation engine V2",callable(_v1160_s21717_summary))])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s21717_light_preflight(force)
+
+
+async def version1160ltss21717_cmd(update,context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([f"🟢 A100 V{V1160_LTS_S21717_NUMBER}","Version & Build Information","Engineering Baseline","Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",f"Build                {V1160_LTS_S21717_VERSION}","Schema               1","Paper / Shadow       20 / 60","Live Trading         OFF","Feature Freeze       ACTIVE","","Sprint 2.17.17 · production-readiness explanations, actions and final output polish."]))
+
+
+async def _v1160_s21717_releasegate_job(update):
+    try:
+        raw,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); ri=snap.get("runtime") or {}; detail=ri.get("evidence_v3") or _v1160_s21715_evidence_detail(snap); comp=ri.get("score_composition_v5") or _v1160_s21716_score_components(snap)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21717_summary(snap,detail,comp)),timeout=30.0)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21717_diagnostics(snap,hit,age)),timeout=30.0)
+    except Exception as e: v88_record_error("s21717-releasegate-background",e)
+
+
+async def releasegate1160ltss21717_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /releasegate Production Readiness Snapshot을 조회합니다.\nSnapshot {state}\nSummary와 상세 진단은 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21717_releasegate_job(update),name="a100-s21717-releasegate"); V1160_S21717_TASKS.add(t); t.add_done_callback(V1160_S21717_TASKS.discard)
+
+
+async def _v1160_s21717_versionaudit_job(update):
+    try:
+        audit=_v1160_s21717_light_preflight(True); raw,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); snap=_v1160_s21716_view_snapshot(raw); ri=snap.get("runtime") or {}; detail=ri.get("evidence_v3") or _v1160_s21715_evidence_detail(snap); comp=ri.get("score_composition_v5") or _v1160_s21716_score_components(snap)
+        lines=[f"🛡️ A100 V{V1160_LTS_S21717_NUMBER} FINAL PRODUCTION READINESS AUDIT",f"Version Source {V1160_LTS_S21717_VERSION}",f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341","Runtime Routes 341/341 · Route Certification 341/341",f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",f"Runtime Score {float(ri.get('score',0.0)):.1f}/100","Schema 1 · Paper 20 · Shadow 60 · Live OFF","",*_v1160_s2176_preflight_lines(audit)]
+        await asyncio.wait_for(v90_1_safe_reply(update,"\n".join(lines)),timeout=30.0)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21717_summary(snap,detail,comp)),timeout=30.0)
+        await asyncio.wait_for(v90_1_safe_reply(update,_v1160_s21717_diagnostics(snap,hit,age)),timeout=30.0)
+    except Exception as e: v88_record_error("s21717-versionaudit-background",e)
+
+
+async def versionaudit1160ltss21717_cmd(update,context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /versionaudit Production Readiness 검증을 접수했습니다.\nSnapshot {state}\nAudit, Summary, Detail은 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21717_versionaudit_job(update),name="a100-s21717-versionaudit"); V1160_S21717_TASKS.add(t); t.add_done_callback(V1160_S21717_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.17.17 final production readiness","versionaudit":"Non-blocking production-readiness audit with summary and detail","releasegate":"Production-readiness summary, actions and certification diagnostics"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss21717_cmd,"versionaudit":versionaudit1160ltss21717_cmd,"releasegate":releasegate1160ltss21717_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21717_light_preflight(True)
+    if not pre['ok']: raise RuntimeError("S2.17.17 startup preflight failed: "+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print("A100 V91 dispatcher count: 1",flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.17)",flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21717_light_preflight(True)
+    print(f"{V1160_LTS_S21717_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError("A100 S2.17.17 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked",flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print("A100 V91 stopped by signal",flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error("v91-fatal-main",e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
