@@ -51419,288 +51419,393 @@ def main():
 
 
 # =============================================================================
-# A100 V116.0-LTS-S2.17.27
-# REAL-TIME RUNTIME RECOVERY / LIVE STATE READ-ONLY TELEGRAM
-# Baseline: S2.17.26
+# A100 V116.0-LTS-S2.17.28
+# REAL-TIME MONITORING STABILIZATION / STRICT READ-ONLY TELEGRAM
+# Architecture baseline: S2.17.26 / Runtime recovery: S2.17.27
 # =============================================================================
-V1160_LTS_S21727_NUMBER = "116.0-LTS-S2.17.27"
-V1160_LTS_S21727_VERSION = "A100 V116.0-LTS-S2.17.27 REAL-TIME RUNTIME RECOVERY"
-V91_VERSION = V1160_LTS_S21727_VERSION
+V1160_LTS_S21728_NUMBER = "116.0-LTS-S2.17.28"
+V1160_LTS_S21728_VERSION = "A100 V116.0-LTS-S2.17.28 REAL-TIME MONITORING STABILIZATION"
+V91_VERSION = V1160_LTS_S21728_VERSION
 
-# Runtime monitoring is authoritative for process health and freshness.
-# Persisted shared snapshots remain authoritative only for certification scores/evidence
-# and are used as a fallback when the live worker has not produced a state yet.
-V1160_S21727_LIVE_LOCK = threading.RLock()
-V1160_S21727_LIVE_STATE = None
-V1160_S21727_LIVE_THREAD = None
-V1160_S21727_LIVE_STARTED = False
-V1160_S21727_LIVE_INTERVAL = 2.0
+# Live process health is refreshed frequently. Certification evidence is refreshed
+# independently and less often, because evidence is authoritative but not the
+# operational heartbeat. Telegram handlers only copy this in-memory state.
+V1160_S21728_LIVE_LOCK = threading.RLock()
+V1160_S21728_LIVE_STATE = None
+V1160_S21728_LIVE_THREAD = None
+V1160_S21728_LIVE_STARTED = False
+V1160_S21728_LIVE_INTERVAL = 2.0
+V1160_S21728_EVIDENCE_INTERVAL = 30.0
+V1160_S21728_EVIDENCE = {
+    'updated_at': 0.0,
+    'snapshot_available': False,
+    'snapshot_id': '-',
+    'snapshot_age': None,
+    'runtime_score': 0.0,
+    'evidence_ready': False,
+    'gate_passed': 0,
+    'gate_matrix': tuple(),
+    'refresh_count': 0,
+    'last_error': '',
+}
+V1160_S21728_TICK = 0
 
 
-def _v1160_s21727_build_live_state():
+def _v1160_s21728_refresh_evidence(force=False):
+    """Refresh authoritative certification evidence outside Telegram paths."""
+    global V1160_S21728_EVIDENCE
     now = time.time()
-    snap, detail, comp, snap_age = _v1160_s21726_fast_context()
-    cert = None
-    matrix = []
-    if snap is not None:
-        try:
+    with V1160_S21728_LIVE_LOCK:
+        previous = dict(V1160_S21728_EVIDENCE)
+    if not force and now - float(previous.get('updated_at', 0.0)) < V1160_S21728_EVIDENCE_INTERVAL:
+        return previous
+
+    try:
+        snap, detail, comp, snap_age = _v1160_s21726_fast_context()
+        cert, matrix = ({}, [])
+        if snap is not None:
             cert, matrix = _v1160_s21724_gate_matrix(snap, detail or {})
-        except Exception as exc:
-            v88_record_error('s21727-live-gate-view', exc)
-    recent_errors = len(globals().get('V88_RECENT_ERRORS', []))
+        current = {
+            'updated_at': now,
+            'snapshot_available': snap is not None,
+            'snapshot_id': (snap or {}).get('snapshot_id', '-'),
+            'snapshot_age': float(snap_age) if snap_age is not None else None,
+            'runtime_score': float((comp or {}).get('final', 0.0)),
+            'evidence_ready': bool((cert or {}).get('evidence_ready', False)),
+            'gate_passed': sum(1 for row in matrix if row.get('passed')),
+            'gate_matrix': tuple({
+                'label': str(row.get('label', '-')),
+                'current': float(row.get('current', 0.0)),
+                'target': float(row.get('target', 0.0)),
+                'passed': bool(row.get('passed', False)),
+            } for row in matrix),
+            'refresh_count': int(previous.get('refresh_count', 0)) + 1,
+            'last_error': '',
+        }
+    except Exception as exc:
+        v88_record_error('s21728-evidence-refresh', exc)
+        current = dict(previous)
+        current['updated_at'] = now
+        current['last_error'] = f'{type(exc).__name__}: {exc}'[:180]
+
+    with V1160_S21728_LIVE_LOCK:
+        V1160_S21728_EVIDENCE = current
+    return dict(current)
+
+
+def _v1160_s21728_build_live_state(evidence=None):
+    """Build cheap operational state from memory and already-refreshed evidence."""
+    global V1160_S21728_TICK
+    started = time.perf_counter()
+    now = time.time()
+    if evidence is None:
+        with V1160_S21728_LIVE_LOCK:
+            evidence = dict(V1160_S21728_EVIDENCE)
+    V1160_S21728_TICK += 1
     state = {
-        'version': V1160_LTS_S21727_VERSION,
+        'version': V1160_LTS_S21728_VERSION,
         'updated_at': now,
         'worker_heartbeat': now,
         'worker_status': 'RUNNING',
         'source': 'LIVE_RUNTIME',
         'registry_count': len(V90_COMMAND_REGISTRY),
         'route_count': len(V90_COMMAND_REGISTRY),
-        'recent_errors': recent_errors,
+        'recent_errors': len(globals().get('V88_RECENT_ERRORS', [])),
         'schema': 1,
         'paper': 20,
         'shadow': 60,
         'live_trading': False,
-        'snapshot_available': snap is not None,
-        'snapshot_id': (snap or {}).get('snapshot_id', '-'),
-        'snapshot_age': float(snap_age) if snap_age is not None else None,
-        'runtime_score': float((comp or {}).get('final', 0.0)),
-        'evidence_ready': bool((cert or {}).get('evidence_ready', False)),
-        'gate_passed': sum(1 for row in matrix if row.get('passed')),
-        'gate_matrix': tuple({
-            'label': str(row.get('label', '-')),
-            'current': float(row.get('current', 0.0)),
-            'target': float(row.get('target', 0.0)),
-            'passed': bool(row.get('passed', False)),
-        } for row in matrix),
+        'tick': V1160_S21728_TICK,
+        'snapshot_available': bool(evidence.get('snapshot_available', False)),
+        'snapshot_id': evidence.get('snapshot_id', '-'),
+        'snapshot_age': evidence.get('snapshot_age'),
+        'runtime_score': float(evidence.get('runtime_score', 0.0)),
+        'evidence_ready': bool(evidence.get('evidence_ready', False)),
+        'evidence_updated_at': float(evidence.get('updated_at', 0.0)),
+        'evidence_refresh_count': int(evidence.get('refresh_count', 0)),
+        'evidence_last_error': str(evidence.get('last_error', '')),
+        'gate_passed': int(evidence.get('gate_passed', 0)),
+        'gate_matrix': tuple(evidence.get('gate_matrix') or ()),
     }
+    state['cycle_ms'] = (time.perf_counter() - started) * 1000.0
     return state
 
 
-def _v1160_s21727_publish_live_state(state):
-    global V1160_S21727_LIVE_STATE
-    with V1160_S21727_LIVE_LOCK:
-        V1160_S21727_LIVE_STATE = state
+def _v1160_s21728_publish_live_state(state):
+    global V1160_S21728_LIVE_STATE
+    with V1160_S21728_LIVE_LOCK:
+        V1160_S21728_LIVE_STATE = dict(state)
 
 
-def _v1160_s21727_live_loop():
+def _v1160_s21728_live_loop():
     while not V91_STOP.is_set():
-        started = time.time()
+        cycle_started = time.time()
         try:
-            _v1160_s21727_publish_live_state(_v1160_s21727_build_live_state())
+            evidence = _v1160_s21728_refresh_evidence(False)
+            _v1160_s21728_publish_live_state(_v1160_s21728_build_live_state(evidence))
         except Exception as exc:
-            v88_record_error('s21727-live-runtime-worker', exc)
-        remaining = max(0.2, V1160_S21727_LIVE_INTERVAL - (time.time() - started))
+            v88_record_error('s21728-live-runtime-worker', exc)
+        remaining = max(0.2, V1160_S21728_LIVE_INTERVAL - (time.time() - cycle_started))
         V91_STOP.wait(remaining)
 
 
-def _v1160_s21727_start_live_worker_once():
-    global V1160_S21727_LIVE_THREAD, V1160_S21727_LIVE_STARTED
-    with V1160_S21727_LIVE_LOCK:
-        if V1160_S21727_LIVE_STARTED and V1160_S21727_LIVE_THREAD and V1160_S21727_LIVE_THREAD.is_alive():
+def _v1160_s21728_start_live_worker_once():
+    global V1160_S21728_LIVE_THREAD, V1160_S21728_LIVE_STARTED
+    with V1160_S21728_LIVE_LOCK:
+        if V1160_S21728_LIVE_STARTED and V1160_S21728_LIVE_THREAD and V1160_S21728_LIVE_THREAD.is_alive():
             return
-        # Prime synchronously once so the first Telegram command can read a live state.
-        try:
-            V1160_S21727_LIVE_STATE = _v1160_s21727_build_live_state()
-        except Exception as exc:
-            v88_record_error('s21727-live-runtime-prewarm', exc)
-        V1160_S21727_LIVE_STARTED = True
-        V1160_S21727_LIVE_THREAD = threading.Thread(
-            target=_v1160_s21727_live_loop,
-            name='a100-s21727-live-runtime',
-            daemon=True,
-        )
-        V1160_S21727_LIVE_THREAD.start()
+        V1160_S21728_LIVE_STARTED = True
+
+    # Do not hold the live lock while reading certification evidence.
+    try:
+        evidence = _v1160_s21728_refresh_evidence(True)
+        _v1160_s21728_publish_live_state(_v1160_s21728_build_live_state(evidence))
+    except Exception as exc:
+        v88_record_error('s21728-live-runtime-prewarm', exc)
+        _v1160_s21728_publish_live_state(_v1160_s21728_build_live_state({}))
+
+    thread = threading.Thread(
+        target=_v1160_s21728_live_loop,
+        name='a100-s21728-live-runtime',
+        daemon=True,
+    )
+    with V1160_S21728_LIVE_LOCK:
+        V1160_S21728_LIVE_THREAD = thread
+    thread.start()
 
 
-def _v1160_s21727_read_live_state():
-    with V1160_S21727_LIVE_LOCK:
-        state = dict(V1160_S21727_LIVE_STATE) if isinstance(V1160_S21727_LIVE_STATE, dict) else None
-    if state is not None:
-        state['live_age'] = max(0.0, time.time() - float(state.get('updated_at', time.time())))
-        state['worker_fresh'] = state['live_age'] <= max(6.0, V1160_S21727_LIVE_INTERVAL * 3.0)
-        return state
-    # Fallback is intentionally limited to the existing S2.17.26 shared snapshot path.
-    snap, detail, comp, snap_age = _v1160_s21726_fast_context()
-    cert, matrix = ({}, [])
-    if snap is not None:
-        try: cert, matrix = _v1160_s21724_gate_matrix(snap, detail or {})
-        except Exception as exc: v88_record_error('s21727-snapshot-fallback', exc)
-    return {
-        'version': V1160_LTS_S21727_VERSION,
-        'updated_at': time.time(),
-        'live_age': 0.0,
-        'worker_fresh': False,
-        'worker_status': 'WARMING',
-        'source': 'SNAPSHOT_FALLBACK',
-        'registry_count': len(V90_COMMAND_REGISTRY),
-        'route_count': len(V90_COMMAND_REGISTRY),
-        'recent_errors': len(globals().get('V88_RECENT_ERRORS', [])),
-        'schema': 1, 'paper': 20, 'shadow': 60, 'live_trading': False,
-        'snapshot_available': snap is not None,
-        'snapshot_id': (snap or {}).get('snapshot_id', '-'),
-        'snapshot_age': snap_age,
-        'runtime_score': float((comp or {}).get('final', 0.0)),
-        'evidence_ready': bool((cert or {}).get('evidence_ready', False)),
-        'gate_passed': sum(1 for row in matrix if row.get('passed')),
-        'gate_matrix': tuple(matrix),
-    }
+def _v1160_s21728_read_live_state():
+    """Strict memory-only read. Never scan files or calculate gates here."""
+    with V1160_S21728_LIVE_LOCK:
+        state = dict(V1160_S21728_LIVE_STATE) if isinstance(V1160_S21728_LIVE_STATE, dict) else None
+    now = time.time()
+    if state is None:
+        return {
+            'version': V1160_LTS_S21728_VERSION,
+            'updated_at': now,
+            'live_age': 0.0,
+            'worker_fresh': False,
+            'worker_status': 'WARMING',
+            'source': 'LIVE_RUNTIME_WARMING',
+            'registry_count': len(V90_COMMAND_REGISTRY),
+            'route_count': len(V90_COMMAND_REGISTRY),
+            'recent_errors': len(globals().get('V88_RECENT_ERRORS', [])),
+            'schema': 1, 'paper': 20, 'shadow': 60, 'live_trading': False,
+            'snapshot_available': False, 'snapshot_id': '-', 'snapshot_age': None,
+            'runtime_score': 0.0, 'evidence_ready': False,
+            'evidence_updated_at': 0.0, 'evidence_refresh_count': 0,
+            'evidence_last_error': '', 'gate_passed': 0, 'gate_matrix': tuple(),
+            'tick': 0, 'cycle_ms': 0.0,
+        }
+    state['live_age'] = max(0.0, now - float(state.get('updated_at', now)))
+    state['worker_fresh'] = state['live_age'] <= max(6.0, V1160_S21728_LIVE_INTERVAL * 3.0)
+    evidence_at = float(state.get('evidence_updated_at', 0.0))
+    state['evidence_age'] = max(0.0, now - evidence_at) if evidence_at else None
+    return state
 
 
-async def version1160ltss21727_cmd(update, context):
+async def version1160ltss21728_cmd(update, context):
     return await v90_1_safe_reply(update, "\n".join([
-        f"🟢 A100 V{V1160_LTS_S21727_NUMBER}",
-        "Real-Time Runtime Recovery Baseline",
+        f"🟢 A100 V{V1160_LTS_S21728_NUMBER}",
+        "Real-Time Monitoring Stabilization",
         "Release Freeze: ACTIVE · Feature Freeze: ACTIVE",
         "",
         "Runtime authority      LIVE MONITORING WORKER",
-        "Telegram path         LIVE STATE · READ ONLY",
-        "Snapshot role         CERTIFICATION / RECOVERY FALLBACK",
-        "Refresh interval      2 seconds",
+        "Telegram path         MEMORY STATE · STRICT READ ONLY",
+        "Snapshot role         CERTIFICATION / RECOVERY EVIDENCE",
+        "Live refresh          2 seconds",
+        "Evidence refresh      30 seconds",
         "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
     ]))
 
 
-async def status1160ltss21727_cmd(update, context):
-    st = _v1160_s21727_read_live_state()
+async def status1160ltss21728_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
     snap_age = '-' if st.get('snapshot_age') is None else f"{float(st['snapshot_age']):.1f}s"
+    evidence_age = '-' if st.get('evidence_age') is None else f"{float(st['evidence_age']):.1f}s"
     return await v90_1_safe_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21727_NUMBER} STATUS · LIVE READ ONLY",
+        f"A100 V{V1160_LTS_S21728_NUMBER} STATUS · LIVE READ ONLY",
         f"System               {'RUNNING' if st.get('worker_fresh') else 'DEGRADED'}",
         f"Runtime source       {st.get('source')}",
-        f"Live state age       {float(st.get('live_age',0.0)):.1f}s",
+        f"Live state age       {float(st.get('live_age',0.0)):.1f}s · tick {int(st.get('tick',0))}",
         f"Monitor worker       {st.get('worker_status')} · {'FRESH' if st.get('worker_fresh') else 'STALE'}",
-        f"Snapshot fallback    {'AVAILABLE' if st.get('snapshot_available') else 'WARMING'} · {st.get('snapshot_id','-')} · age {snap_age}",
+        f"Worker cycle         {float(st.get('cycle_ms',0.0)):.2f}ms",
+        f"Evidence age         {evidence_age} · refresh {int(st.get('evidence_refresh_count',0))}",
+        f"Snapshot evidence    {'AVAILABLE' if st.get('snapshot_available') else 'WARMING'} · {st.get('snapshot_id','-')} · age {snap_age}",
         f"Runtime score        {float(st.get('runtime_score',0.0)):.1f}/100 · CERT EVIDENCE",
         f"Mandatory gates      {int(st.get('gate_passed',0))}/5 PASS",
         f"Recent errors        {int(st.get('recent_errors',0))}",
         f"Registry / Routes    {int(st.get('registry_count',0))}/{int(st.get('route_count',0))}",
         "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
-        "Command recalculation DISABLED",
+        "Command calculation  DISABLED",
     ]))
 
 
-async def runtimehealth1160ltss21727_cmd(update, context):
-    st = _v1160_s21727_read_live_state()
+async def runtimehealth1160ltss21728_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    evidence_age = '-' if st.get('evidence_age') is None else f"{float(st['evidence_age']):.1f}s"
     return await v90_1_safe_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21727_NUMBER} RUNTIME HEALTH · LIVE",
+        f"A100 V{V1160_LTS_S21728_NUMBER} RUNTIME HEALTH · LIVE",
         f"Worker heartbeat     {float(st.get('live_age',0.0)):.1f}s ago",
         f"Worker freshness     {'PASS' if st.get('worker_fresh') else 'WARN'}",
         f"State authority      {st.get('source')}",
-        f"Telegram isolation   PASS · READ ONLY",
+        f"Worker cycle         {float(st.get('cycle_ms',0.0)):.2f}ms",
+        f"Evidence freshness   {evidence_age}",
+        f"Telegram isolation   PASS · STRICT READ ONLY",
         f"Recent errors        {int(st.get('recent_errors',0))}",
         f"Registry             {int(st.get('registry_count',0))}/341",
         "Snapshot            SUPPORTING EVIDENCE ONLY",
         "User-path scans      DISABLED",
+        "User-path gates      DISABLED",
     ]))
 
 
-async def releasegate1160ltss21727_cmd(update, context):
-    st = _v1160_s21727_read_live_state()
+async def releasegate1160ltss21728_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
     lines = []
     for idx, row in enumerate(st.get('gate_matrix') or (), 1):
-        lines.append(f"Gate {idx} {row.get('label','-'):<15} {'PASS' if row.get('passed') else 'BLOCKED'} · {float(row.get('current',0.0)):.1f}/{float(row.get('target',0.0)):.1f}")
-    if not lines: lines.append('Gate evidence WARMING · latest certification snapshot unavailable')
+        gap = max(0.0, float(row.get('target', 0.0)) - float(row.get('current', 0.0)))
+        lines.append(
+            f"Gate {idx} {row.get('label','-'):<15} "
+            f"{'PASS' if row.get('passed') else 'BLOCKED'} · "
+            f"{float(row.get('current',0.0)):.1f}/{float(row.get('target',0.0)):.1f}"
+            + ("" if row.get('passed') else f" · gap {gap:.1f}")
+        )
+    if not lines:
+        lines.append('Gate evidence WARMING · worker has not published certification evidence')
+    evidence_age = '-' if st.get('evidence_age') is None else f"{float(st['evidence_age']):.1f}s"
     return await v90_1_safe_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21727_NUMBER} RELEASE GATE · LIVE VIEW",
+        f"A100 V{V1160_LTS_S21728_NUMBER} RELEASE GATE · LIVE VIEW",
         f"Runtime state        {'FRESH' if st.get('worker_fresh') else 'STALE'} · age {float(st.get('live_age',0.0)):.1f}s",
-        f"Certification source {'SNAPSHOT EVIDENCE' if st.get('snapshot_available') else 'WARMING'}",
+        f"Certification source WORKER-CACHED SNAPSHOT EVIDENCE · age {evidence_age}",
         f"Runtime score        {float(st.get('runtime_score',0.0)):.1f}/100",
         f"Evidence             {'PASS' if st.get('evidence_ready') else 'BLOCKED'}",
         f"Mandatory gates      {int(st.get('gate_passed',0))}/5 PASS",
         *lines,
         "",
-        "Telegram reads the live state only; gate/evidence computation is not run on command.",
+        "Telegram performs no gate, evidence, file, or snapshot calculation.",
     ]))
 
 
-async def versionaudit1160ltss21727_cmd(update, context):
-    st = _v1160_s21727_read_live_state()
+async def versionaudit1160ltss21728_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    command_names = set()
+    for fn in (status1160ltss21728_cmd, runtimehealth1160ltss21728_cmd, releasegate1160ltss21728_cmd):
+        command_names.update(fn.__code__.co_names)
+    forbidden = {'_v1160_s21726_fast_context', '_v1160_s21724_gate_matrix'}
     checks = [
-        ('Version source single', V91_VERSION == V1160_LTS_S21727_VERSION),
-        ('Live runtime worker', bool(V1160_S21727_LIVE_THREAD and V1160_S21727_LIVE_THREAD.is_alive())),
+        ('Version source single', V91_VERSION == V1160_LTS_S21728_VERSION),
+        ('Live runtime worker', bool(V1160_S21728_LIVE_THREAD and V1160_S21728_LIVE_THREAD.is_alive())),
         ('Live state freshness', bool(st.get('worker_fresh'))),
-        ('Telegram read only', '_v1160_s21724_gate_matrix' not in status1160ltss21727_cmd.__code__.co_names),
-        ('Snapshot fallback', callable(_v1160_s21726_fast_context)),
+        ('Telegram strict read only', not bool(command_names & forbidden)),
+        ('Worker evidence refresh', callable(_v1160_s21728_refresh_evidence)),
+        ('Snapshot evidence retained', callable(_v1160_s21726_fast_context)),
         ('Registry 341', len(V90_COMMAND_REGISTRY) == 341),
         ('Schema/Paper/Shadow/Live', st.get('schema') == 1 and st.get('paper') == 20 and st.get('shadow') == 60 and not st.get('live_trading')),
     ]
     return await v90_1_safe_reply(update, "\n".join([
-        f"A100 V{V1160_LTS_S21727_NUMBER} VERSION AUDIT",
+        f"A100 V{V1160_LTS_S21728_NUMBER} VERSION AUDIT",
         *[f"{'PASS' if ok else 'FAIL'} · {name}" for name, ok in checks],
         "",
         f"Registry / Callable / Expected  {len(V90_COMMAND_REGISTRY)}/341",
-        "Architecture  Worker → Live Runtime State → Telegram Read Only",
-        "Snapshot      Certification / Recovery Fallback",
+        "Architecture  Worker → Live Runtime State → Telegram Strict Read Only",
+        "Snapshot      Certification / Recovery Evidence",
     ]))
 
 
-def _v1160_s21727_light_preflight(force=False):
+def _v1160_s21728_light_preflight(force=False):
     base = _v1160_s21726_light_preflight(force)
     checks = [c for c in base.get('details', []) if c.get('name') != 'Version source single']
-    checks.insert(0, _v1160_s2176_check('Version source single', V91_VERSION == V1160_LTS_S21727_VERSION, detail=V91_VERSION))
+    checks.insert(0, _v1160_s2176_check('Version source single', V91_VERSION == V1160_LTS_S21728_VERSION, detail=V91_VERSION))
+    active_names = set()
+    for fn in (status1160ltss21728_cmd, runtimehealth1160ltss21728_cmd, releasegate1160ltss21728_cmd):
+        active_names.update(fn.__code__.co_names)
     checks.extend([
-        _v1160_s2176_check('Live state builder', callable(_v1160_s21727_build_live_state)),
-        _v1160_s2176_check('Live worker loop', callable(_v1160_s21727_live_loop)),
-        _v1160_s2176_check('Telegram live state read', callable(_v1160_s21727_read_live_state)),
-        _v1160_s2176_check('Status no gate calculation', '_v1160_s21724_gate_matrix' not in status1160ltss21727_cmd.__code__.co_names),
-        _v1160_s2176_check('Snapshot fallback retained', callable(_v1160_s21726_fast_context)),
+        _v1160_s2176_check('Live state builder', callable(_v1160_s21728_build_live_state)),
+        _v1160_s2176_check('Live worker loop', callable(_v1160_s21728_live_loop)),
+        _v1160_s2176_check('Worker evidence refresh', callable(_v1160_s21728_refresh_evidence)),
+        _v1160_s2176_check('Telegram memory read', callable(_v1160_s21728_read_live_state)),
+        _v1160_s2176_check('Telegram no gate calculation', '_v1160_s21724_gate_matrix' not in active_names),
+        _v1160_s2176_check('Telegram no snapshot scan', '_v1160_s21726_fast_context' not in active_names),
+        _v1160_s2176_check('Snapshot evidence retained', callable(_v1160_s21726_fast_context)),
     ])
     failures = [c for c in checks if not c['ok'] and c['severity'] == 'FAIL']
     warnings = [c for c in checks if not c['ok'] and c['severity'] == 'WARN']
-    return {'ok': not failures, 'details': checks, 'failed': [c['name'] for c in failures], 'warnings': [c['name'] for c in warnings], 'command_count': len(V90_COMMAND_REGISTRY)}
+    return {
+        'ok': not failures,
+        'details': checks,
+        'failed': [c['name'] for c in failures],
+        'warnings': [c['name'] for c in warnings],
+        'command_count': len(V90_COMMAND_REGISTRY),
+    }
 
 
-def v91_preflight(force=False): return _v1160_s21727_light_preflight(force)
+def v91_preflight(force=False):
+    return _v1160_s21728_light_preflight(force)
 
 
 V925_COMMAND_USAGE.update({
-    'version': 'S2.17.27 real-time runtime recovery baseline',
-    'status': 'Live runtime state read-only status; snapshot is fallback evidence',
-    'runtimehealth': 'Two-second live worker heartbeat and command isolation health',
-    'releasegate': 'Read-only live view of latest authoritative certification evidence',
-    'versionaudit': 'Real-time architecture and 341-command regression audit',
+    'version': 'S2.17.28 real-time monitoring stabilization',
+    'status': 'Strict memory-only live runtime status; snapshot is evidence only',
+    'runtimehealth': 'Two-second live heartbeat and isolated 30-second evidence refresh',
+    'releasegate': 'Read-only view of worker-cached authoritative certification evidence',
+    'versionaudit': 'Runtime-first architecture and 341-command regression audit',
 })
 V90_COMMAND_REGISTRY.update({
-    'version': version1160ltss21727_cmd,
-    'versionaudit': versionaudit1160ltss21727_cmd,
-    'status': status1160ltss21727_cmd,
-    'runtimehealth': runtimehealth1160ltss21727_cmd,
-    'releasegate': releasegate1160ltss21727_cmd,
+    'version': version1160ltss21728_cmd,
+    'versionaudit': versionaudit1160ltss21728_cmd,
+    'status': status1160ltss21728_cmd,
+    'runtimehealth': runtimehealth1160ltss21728_cmd,
+    'releasegate': releasegate1160ltss21728_cmd,
 })
 V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
 
 
 def build_v44_application(token):
-    pre = _v1160_s21727_light_preflight(True)
-    if not pre['ok']: raise RuntimeError('S2.17.27 startup preflight failed: ' + ','.join(pre['failed']))
+    pre = _v1160_s21728_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError('S2.17.28 startup preflight failed: ' + ','.join(pre['failed']))
     app = Application.builder().token(token).build()
     app.add_handler(MessageHandler(filters.COMMAND, v90_1_dispatch), group=0)
     app.add_error_handler(v88_error_handler)
     print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}", flush=True)
     print('A100 V91 dispatcher count: 1', flush=True)
-    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.27)", flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.28)", flush=True)
     return app
 
 
 def main():
     start_health_server_once()
-    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
-    v90_3_start_background_once(); v91_start_background_once()
-    pre = _v1160_s21727_light_preflight(True)
-    print(f"{V1160_LTS_S21727_VERSION} worker running...", flush=True)
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    pre = _v1160_s21728_light_preflight(True)
+    print(f"{V1160_LTS_S21728_VERSION} worker running...", flush=True)
     print(f"A100 V91 startup commands: {pre['command_count']}", flush=True)
     print(f"A100 V91 data dir: {V91_DATA_DIR}", flush=True)
-    if not pre['ok']: raise RuntimeError('A100 S2.17.27 bounded startup preflight failed: ' + ','.join(pre['failed']))
+    if not pre['ok']:
+        raise RuntimeError('A100 S2.17.28 bounded startup preflight failed: ' + ','.join(pre['failed']))
     if not acquire_v44_process_lock():
         print('A100 V91 duplicate polling process blocked', flush=True)
-        while True: time.sleep(60)
-    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
-    _v1160_s21727_start_live_worker_once()
-    print('A100 S2.17.27 live runtime worker: ACTIVE · interval 2.0s', flush=True)
-    try: asyncio.run(run_bot_async())
-    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal', flush=True)
-    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main', e); print(traceback.format_exc(), flush=True); raise
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    _v1160_s2179_start_refresh_once()
+    _v1160_s21712_start_scheduler_once()
+    _v1160_s21728_start_live_worker_once()
+    print('A100 S2.17.28 live runtime worker: ACTIVE · interval 2.0s', flush=True)
+    print('A100 S2.17.28 certification evidence refresh: ACTIVE · interval 30.0s', flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        print('A100 V91 stopped by signal', flush=True)
+    except Exception as e:
+        V91_STOP.set()
+        v88_record_error('v91-fatal-main', e)
+        print(traceback.format_exc(), flush=True)
+        raise
 
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":

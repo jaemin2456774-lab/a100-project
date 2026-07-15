@@ -1,13 +1,20 @@
 {
-  "version": "116.0-LTS-S2.17.27",
+  "version": "116.0-LTS-S2.17.28",
   "baseline": "116.0-LTS-S2.17.26",
+  "previous_runtime_recovery": "116.0-LTS-S2.17.27",
   "type": "incremental_patch",
   "preserves": {
     "commands": 341,
     "schema": 1,
     "paper": 20,
     "shadow": 60,
-    "live_trading": false
+    "live_trading": false,
+    "existing_data_and_config": true
   },
-  "architecture": "Worker -> Live Runtime State -> Telegram Read Only; Snapshot certification/recovery fallback"
+  "architecture": {
+    "runtime_authority": "2-second live monitoring worker",
+    "telegram": "strict in-memory read only",
+    "certification_evidence": "30-second worker refresh from authoritative snapshot",
+    "snapshot_role": "certification and recovery evidence only"
+  }
 }
