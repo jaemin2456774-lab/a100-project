@@ -1,7 +1,6 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.15",
-  "package_type": "PATCH",
-  "baseline": "A100 V116.0-LTS-S2.17.14",
+  "version": "A100 V116.0-LTS-S2.17.16",
+  "package_type": "incremental_patch",
   "changed_files": [
     "main.py"
   ],
@@ -11,5 +10,6 @@
     "Shadow 60",
     "Live Trading OFF",
     "/data"
-  ]
+  ],
+  "sha256_file": "SHA256SUMS"
 }
