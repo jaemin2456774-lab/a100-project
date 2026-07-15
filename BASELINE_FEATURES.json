@@ -1,0 +1,24 @@
+{
+  "version": "116.0-LTS-S2.18.2",
+  "parent": "116.0-LTS-S2.18.1",
+  "recovery_reference": "116.0-LTS-S2.17.29",
+  "telegram_commands": 341,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live": "OFF",
+  "feature_freeze": true,
+  "release_freeze": true,
+  "protected": [
+    "single_runtime_state",
+    "single_evidence_source",
+    "single_version_source",
+    "unified_formatter",
+    "snapshot_value_freeze",
+    "gate_calculation_once_per_snapshot",
+    "startup_cache_prewarm",
+    "command_isolation",
+    "formula_fingerprint",
+    "341_command_e2e_linkage"
+  ]
+}

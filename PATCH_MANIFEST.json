@@ -1,21 +1,13 @@
 {
-  "version": "A100 V116.0-LTS-S2.18.1",
-  "baseline": "S2.18.0",
+  "version": "A100 V116.0-LTS-S2.18.2",
   "type": "incremental_patch",
-  "preserve": {
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live": "OFF",
-    "data": true,
-    "settings": true
-  },
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s2180.py",
-    "test_v1160_lts_s2181.py",
-    "CHANGELOG_S2.18.1.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
-  ]
+  "baseline": "A100 V116.0-LTS-S2.18.1",
+  "purpose": "baseline contract and regression recovery",
+  "data_migration": false,
+  "configuration_change": false,
+  "telegram_commands": 341,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live": "OFF"
 }
