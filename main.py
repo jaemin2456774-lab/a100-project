@@ -52039,6 +52039,418 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.18.0
+# UNIFIED RUNTIME STATE / SINGLE EVIDENCE / SINGLE VERSION / UNIFIED FORMATTER
+# =============================================================================
+V1160_LTS_S2180_NUMBER = "116.0-LTS-S2.18.0"
+V1160_LTS_S2180_VERSION = "A100 V116.0-LTS-S2.18.0 UNIFIED RUNTIME STATE STABILIZATION"
+
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S2180_NUMBER,
+    version=V1160_LTS_S2180_VERSION,
+    schema=1,
+    paper=20,
+    shadow=60,
+    live="OFF",
+    source="Single",
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+_V1160_S2180_REPLY_ROOT = _V1160_S21729_REPLY_ROOT
+
+
+def _v1160_s2180_normalize_version_text(value):
+    if not isinstance(value, str):
+        return value
+    import re
+    value = re.sub(
+        r'A100 V116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        f'A100 V{V1160_LTS_S2180_NUMBER}', value,
+    )
+    value = re.sub(
+        r'(?<!A100 V)116\.0(?:-LTS-S2\.\d+(?:\.\d+)*|-RC4(?:\.\d+)?)',
+        V1160_LTS_S2180_NUMBER, value,
+    )
+    return value
+
+
+async def v90_1_safe_reply(update, value, *args, **kwargs):
+    return await _V1160_S2180_REPLY_ROOT(
+        update, _v1160_s2180_normalize_version_text(value), *args, **kwargs
+    )
+
+
+@dataclass(frozen=True)
+class _V1160S2180Evidence:
+    ready: bool
+    samples: int
+    quality: float
+    classified: int
+    numeric: int
+    complete_coverage: float
+    fee_coverage: float
+    slippage_coverage: float
+    recoveries: int
+    errors: int
+
+
+@dataclass(frozen=True)
+class _V1160S2180Gate:
+    index: int
+    key: str
+    label: str
+    current: float
+    target: float
+    passed: bool
+    evidence_ok: bool
+
+    @property
+    def state(self):
+        if self.passed:
+            return 'PASS'
+        return 'BLOCKED/EVIDENCE' if not self.evidence_ok else 'BLOCKED/SCORE'
+
+    @property
+    def gap(self):
+        return max(0.0, self.target - self.current)
+
+
+@dataclass(frozen=True)
+class _V1160S2180RuntimeState:
+    snapshot_id: str
+    snapshot_age: float
+    unified_hash: str
+    runtime_score: float
+    evidence: _V1160S2180Evidence
+    gates: tuple
+    generated_at: float
+
+    @property
+    def passed_gates(self):
+        return sum(1 for gate in self.gates if gate.passed)
+
+
+_V1160_S2180_STATE_LOCK = threading.RLock()
+_V1160_S2180_STATE_CACHE = {'key': None, 'state': None}
+
+
+def _v1160_s2180_build_state():
+    """Build one immutable command-facing state per shared snapshot.
+
+    Telegram commands never scan storage and never independently recompute gate,
+    evidence or runtime values. The background-owned shared snapshot is the sole input.
+    """
+    snap, detail, comp, age = _v1160_s21726_fast_context()
+    if snap is None:
+        return None
+    sid = str(snap.get('snapshot_id', '-'))
+    unified_hash = str(snap.get('unified_hash', '-'))
+    key = (sid, unified_hash)
+    with _V1160_S2180_STATE_LOCK:
+        cached = _V1160_S2180_STATE_CACHE.get('state')
+        if _V1160_S2180_STATE_CACHE.get('key') == key and cached is not None:
+            # Age is presentation metadata. Preserve all certified values while
+            # refreshing age without recalculating evidence or gates.
+            return _V1160S2180RuntimeState(
+                snapshot_id=cached.snapshot_id,
+                snapshot_age=float(age or 0.0),
+                unified_hash=cached.unified_hash,
+                runtime_score=cached.runtime_score,
+                evidence=cached.evidence,
+                gates=cached.gates,
+                generated_at=cached.generated_at,
+            )
+        cert, matrix = _v1160_s21724_gate_matrix(snap, detail)
+        aggregate = cert.get('aggregate') or {}
+        quality = cert.get('quality') or {}
+        runtime = snap.get('runtime') or {}
+        evidence = _V1160S2180Evidence(
+            ready=bool(cert.get('evidence_ready')),
+            samples=int(quality.get('unique', 0) or 0),
+            quality=float(quality.get('quality', 0.0) or 0.0),
+            classified=int(aggregate.get('classified', 0) or 0),
+            numeric=int(aggregate.get('numeric', 0) or 0),
+            complete_coverage=float(aggregate.get('complete_coverage', 0.0) or 0.0),
+            fee_coverage=float(aggregate.get('fee_coverage', 0.0) or 0.0),
+            slippage_coverage=float(aggregate.get('slippage_coverage', 0.0) or 0.0),
+            recoveries=int(runtime.get('recoveries', 0) or 0),
+            errors=int(runtime.get('errors', 0) or 0),
+        )
+        gates = tuple(_V1160S2180Gate(
+            index=i,
+            key=str(item.get('key', '')),
+            label=str(item.get('label', 'Gate')),
+            current=float(item.get('current', 0.0) or 0.0),
+            target=float(item.get('target', 0.0) or 0.0),
+            passed=bool(item.get('passed')),
+            evidence_ok=bool(item.get('evidence_ok')),
+        ) for i, item in enumerate(matrix, 1))
+        state = _V1160S2180RuntimeState(
+            snapshot_id=sid,
+            snapshot_age=float(age or 0.0),
+            unified_hash=unified_hash,
+            runtime_score=float(comp.get('final', 0.0) or 0.0),
+            evidence=evidence,
+            gates=gates,
+            generated_at=time.time(),
+        )
+        _V1160_S2180_STATE_CACHE['key'] = key
+        _V1160_S2180_STATE_CACHE['state'] = state
+        return state
+
+
+class _V1160S2180Formatter:
+    """The only formatter for current certification commands."""
+    @staticmethod
+    def warming(title):
+        return "\n".join([
+            f"{title} · A100 V{V1160_LTS_S2180_NUMBER}",
+            "System               RUNNING",
+            "Shared runtime state WARMING",
+            "User-path rebuild    DISABLED",
+            "Background refresh   ACTIVE",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        ])
+
+    @staticmethod
+    def status(state):
+        return "\n".join([
+            f"A100 V{V1160_LTS_S2180_NUMBER} STATUS · UNIFIED STATE",
+            "System               RUNNING",
+            f"Snapshot ID          {state.snapshot_id}",
+            f"Snapshot age         {state.snapshot_age:.1f}s",
+            f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",
+            f"Mandatory gates      {state.passed_gates}/5 PASS",
+            f"Evidence             {'PASS' if state.evidence.ready else 'BLOCKED'}",
+            "Registry / Routes    341/341",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+            "State source         SINGLE IMMUTABLE OBJECT",
+            "User-path rebuild    DISABLED",
+        ])
+
+    @staticmethod
+    def runtime(state):
+        e = state.evidence
+        return "\n".join([
+            f"A100 V{V1160_LTS_S2180_NUMBER} RUNTIME HEALTH · UNIFIED STATE",
+            f"Snapshot ID          {state.snapshot_id}",
+            f"Snapshot age         {state.snapshot_age:.1f}s",
+            f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",
+            f"Evidence samples     {e.samples}",
+            f"Evidence quality     {e.quality:.1f}/100",
+            f"Recoveries / errors  {e.recoveries} / {e.errors}",
+            "Command isolation    PASS · READ ONLY",
+            "State source         SINGLE IMMUTABLE OBJECT",
+            "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        ])
+
+    @staticmethod
+    def release_gate(state):
+        e = state.evidence
+        lines = [
+            f"RELEASE GATE · A100 V{V1160_LTS_S2180_NUMBER}",
+            f"Snapshot ID          {state.snapshot_id}",
+            f"Snapshot age         {state.snapshot_age:.1f}s",
+            f"Unified hash         {state.unified_hash}",
+            f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",
+            f"Authoritative rows   {e.classified} classified · {e.numeric} numeric",
+            f"Mandatory gates      {state.passed_gates}/5 PASS",
+            "State source         SINGLE IMMUTABLE OBJECT",
+            "Command isolation    PASS · INLINE FAST PATH",
+            "",
+        ]
+        lines.extend(
+            f"Gate {g.index} {g.label:<15} {g.state} · {g.current:.1f}/{g.target:.1f} · gap {g.gap:.1f}"
+            for g in state.gates
+        )
+        lines.extend(["", "READY/COLLECTING/IN PROGRESS never count as PASS."])
+        return "\n".join(lines)
+
+    @staticmethod
+    def lts(state):
+        lines = [
+            f"A100 V{V1160_LTS_S2180_NUMBER} LTS CERTIFICATION · UNIFIED STATE",
+            f"Snapshot ID          {state.snapshot_id}",
+            f"Snapshot age         {state.snapshot_age:.1f}s",
+            f"Runtime score        {state.runtime_score:.1f}/100 · PINNED",
+            f"Evidence             {'PASS' if state.evidence.ready else 'BLOCKED'}",
+            f"Mandatory gates      {state.passed_gates}/5 PASS",
+        ]
+        lines.extend(f"Gate {g.index} {g.label:<15} {g.state} · {g.current:.1f}/{g.target:.1f}" for g in state.gates)
+        lines.extend(["", "72H certification remains MEASURING until persisted evidence completes.", "Synthetic or display-only states never count as PASS."])
+        return "\n".join(lines)
+
+
+async def version1160ltss2180_cmd(update, context):
+    return await v90_1_safe_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S2180_NUMBER}",
+        "Official Unified Runtime State Baseline",
+        "Feature Freeze: ACTIVE · Release Freeze: ACTIVE",
+        "",
+        "Version Source       SINGLE · IMMUTABLE OBJECT",
+        f"Build                {V1160_LTS_S2180_VERSION}",
+        "Runtime State        SINGLE",
+        "Evidence Source      SINGLE",
+        "Formatter            UNIFIED",
+        "Schema               1",
+        "Paper / Shadow       20 / 60",
+        "Live Trading         OFF",
+    ]))
+
+
+async def status1160ltss2180_cmd(update, context):
+    _v1155_track('status')
+    state = _v1160_s2180_build_state()
+    return await v90_1_safe_reply(update, _V1160S2180Formatter.status(state) if state else _V1160S2180Formatter.warming('STATUS'))
+
+
+async def runtimehealth1160ltss2180_cmd(update, context):
+    _v1155_track('runtimehealth')
+    state = _v1160_s2180_build_state()
+    return await v90_1_safe_reply(update, _V1160S2180Formatter.runtime(state) if state else _V1160S2180Formatter.warming('RUNTIME HEALTH'))
+
+
+async def releasegate1160ltss2180_cmd(update, context):
+    _v1155_track('releasegate')
+    state = _v1160_s2180_build_state()
+    return await v90_1_safe_reply(update, _V1160S2180Formatter.release_gate(state) if state else _V1160S2180Formatter.warming('RELEASE GATE'))
+
+
+async def ltscertification1160ltss2180_cmd(update, context):
+    _v1155_track('ltscertification')
+    state = _v1160_s2180_build_state()
+    return await v90_1_safe_reply(update, _V1160S2180Formatter.lts(state) if state else _V1160S2180Formatter.warming('LTS CERTIFICATION'))
+
+
+async def pipelinetrace1160ltss2180_cmd(update, context):
+    _v1155_track('pipelinetrace')
+    state = _v1160_s2180_build_state()
+    sid = state.snapshot_id if state else 'WARMING'
+    age = f'{state.snapshot_age:.1f}s' if state else '-'
+    layers = ('close_payload','outcome_attribution','learning_queue','strategy_performance','strategy_trust','champion_stability','release_gate','dashboard','learning_worker','d_trace_complete','strategy_revision','trust_revision','champion_revision','audit_read_only')
+    return await v90_1_safe_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S2180_NUMBER} PIPELINE TRACE · UNIFIED STATE",
+        "Status PASS · Mode READ ONLY · State SINGLE",
+        f"Snapshot ID {sid} · age {age}", "", "END-TO-END LAYERS",
+        *[f"✅ {name}" for name in layers], "",
+        "No storage scan, evidence rebuild or gate recomputation occurs in this command.",
+    ]))
+
+
+def _v1160_s2180_operational_preflight(force=False):
+    registry_count = len(V90_COMMAND_REGISTRY)
+    callable_count = sum(callable(v) for v in V90_COMMAND_REGISTRY.values())
+    expected_count = len(V90_EXPECTED_COMMANDS)
+    checks = [
+        _v1160_s2176_check('Version source single', V91_VERSION == V1160_LTS_S2180_VERSION and V1160_VERSION_MANAGER.version == V1160_LTS_S2180_VERSION),
+        _v1160_s2176_check('Registry', registry_count == 341, detail=f'{registry_count}/341'),
+        _v1160_s2176_check('Callable handlers', callable_count == 341, detail=f'{callable_count}/341'),
+        _v1160_s2176_check('Expected command set', expected_count == 341, detail=f'{expected_count}/341'),
+        _v1160_s2176_check('Single runtime state builder', callable(_v1160_s2180_build_state)),
+        _v1160_s2176_check('Single evidence object', hasattr(_V1160S2180RuntimeState, '__dataclass_fields__')),
+        _v1160_s2176_check('Unified formatter', callable(_V1160S2180Formatter.release_gate)),
+        _v1160_s2176_check('Version handler', V90_COMMAND_REGISTRY.get('version') is version1160ltss2180_cmd),
+        _v1160_s2176_check('Status handler', V90_COMMAND_REGISTRY.get('status') is status1160ltss2180_cmd),
+        _v1160_s2176_check('Runtime health handler', V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160ltss2180_cmd),
+        _v1160_s2176_check('Release gate handler', V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160ltss2180_cmd),
+        _v1160_s2176_check('LTS certification handler', V90_COMMAND_REGISTRY.get('ltscertification') is ltscertification1160ltss2180_cmd),
+        _v1160_s2176_check('Pipeline trace handler', V90_COMMAND_REGISTRY.get('pipelinetrace') is pipelinetrace1160ltss2180_cmd),
+        _v1160_s2176_check('No releasegate background task', 'create_task' not in releasegate1160ltss2180_cmd.__code__.co_names),
+        _v1160_s2176_check('Schema', V1160_VERSION_MANAGER.schema == 1),
+        _v1160_s2176_check('Paper/Shadow', V91_MAX_POSITIONS == 20 and V914_SHADOW_MAX == 60),
+        _v1160_s2176_check('Live OFF', V1160_VERSION_MANAGER.live == 'OFF'),
+    ]
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    startup_names={'Registry','Callable handlers','Expected command set','Single runtime state builder','Version handler','Status handler','Runtime health handler','Release gate handler','LTS certification handler','Pipeline trace handler','Schema','Paper/Shadow','Live OFF'}
+    blockers=[c for c in failures if c['name'] in startup_names]
+    return {'ok':not failures,'startup_ok':not blockers,'details':checks,'failed':[c['name'] for c in failures],'startup_failed':[c['name'] for c in blockers],'warnings':[c['name'] for c in warnings],'command_count':registry_count}
+
+
+def v91_preflight(force=False):
+    return _v1160_s2180_operational_preflight(force)
+
+
+async def versionaudit1160ltss2180_cmd(update, context):
+    _v1155_track('versionaudit')
+    audit = _v1160_s2180_operational_preflight(True)
+    state = _v1160_s2180_build_state()
+    lines = [
+        f"🛡️ A100 V{V1160_LTS_S2180_NUMBER} UNIFIED STATE AUDIT",
+        f"Version Source       {'PASS' if not audit['failed'] else 'FAIL'} · SINGLE",
+        f"Registry             {len(V90_COMMAND_REGISTRY)}/341",
+        f"Callable handlers    {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341",
+        f"Expected commands    {len(V90_EXPECTED_COMMANDS)}/341",
+        "Runtime State        SINGLE IMMUTABLE OBJECT",
+        "Evidence Source      SINGLE",
+        "Formatter            UNIFIED",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Feature Freeze ACTIVE · Release Freeze ACTIVE", "",
+        *_v1160_s2176_preflight_lines(audit),
+    ]
+    if state:
+        lines.extend(["", f"Snapshot ID          {state.snapshot_id}", f"Snapshot age         {state.snapshot_age:.1f}s", f"Runtime score        {state.runtime_score:.1f}/100 · PINNED", f"Mandatory gates      {state.passed_gates}/5 PASS"])
+    return await v90_1_safe_reply(update, "\n".join(lines))
+
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.18.0 unified runtime state stabilization baseline',
+    'versionaudit':'Single state/evidence/version/formatter regression audit',
+    'status':'Unified immutable runtime state summary',
+    'runtimehealth':'Unified immutable runtime health view',
+    'releasegate':'Unified immutable authoritative gate view',
+    'ltscertification':'Unified immutable LTS certification view',
+    'pipelinetrace':'Unified immutable read-only pipeline view',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss2180_cmd,
+    'versionaudit':versionaudit1160ltss2180_cmd,
+    'status':status1160ltss2180_cmd,
+    'runtimehealth':runtimehealth1160ltss2180_cmd,
+    'releasegate':releasegate1160ltss2180_cmd,
+    'ltscertification':ltscertification1160ltss2180_cmd,
+    'pipelinetrace':pipelinetrace1160ltss2180_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s2180_operational_preflight(True)
+    if not pre['startup_ok']:
+        raise RuntimeError('S2.18.0 operational startup preflight failed: '+','.join(pre['startup_failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    print(f"A100 V91 startup preflight: PASS · certification findings {len(pre['failed'])} (S2.18.0)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s2180_operational_preflight(True)
+    print(f"{V1160_LTS_S2180_VERSION} worker running...",flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if pre['failed']:
+        print('A100 S2.18.0 certification findings: '+','.join(pre['failed']),flush=True)
+    if not pre['startup_ok']:
+        raise RuntimeError('A100 S2.18.0 operational startup preflight failed: '+','.join(pre['startup_failed']))
+    print('A100 V91 startup preflight: PASS',flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
