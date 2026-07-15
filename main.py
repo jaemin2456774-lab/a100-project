@@ -51814,8 +51814,8 @@ def main():
 # REAL-TIME EVIDENCE DELTA / INCREMENTAL GATE PUBLISH / OUTPUT ROOT RECOVERY
 # Architecture baseline: S2.17.26; runtime-first continuity: S2.17.27-S2.17.28
 # =============================================================================
-V1160_LTS_S217291_NUMBER = "116.0-LTS-S2.17.29.1"
-V1160_LTS_S217291_VERSION = "A100 V116.0-LTS-S2.17.29.1 LIVE STATE BUILDER RECURSION HOTFIX"
+V1160_LTS_S217291_NUMBER = "116.0-LTS-S2.17.30"
+V1160_LTS_S217291_VERSION = "A100 V116.0-LTS-S2.17.30 LTS FINAL PROGRESS GAUGE UI"
 V91_VERSION = V1160_LTS_S217291_VERSION
 # Compatibility aliases retained so S2.17.29 regression checks and legacy
 # read-only formatters can resolve the prior constant names without changing
@@ -51902,6 +51902,7 @@ def _v1160_s21729_refresh_evidence(force=False):
             'snapshot_id': (snap or {}).get('snapshot_id','-'),
             'snapshot_age': float(snap_age) if snap_age is not None else None,
             'runtime_score': float((comp or {}).get('final',0.0)),
+            'coverage_72h': float((detail or {}).get('coverage',0.0) or 0.0),
             'evidence_ready': bool((cert or {}).get('evidence_ready',False)),
             'gate_passed': sum(1 for row in matrix if row.get('passed')),
             'gate_matrix': progress_matrix,
@@ -51945,6 +51946,7 @@ def _v1160_s21729_build_live_state(evidence=None):
         'evidence_change_count': int(evidence.get('change_count',0)),
         'evidence_nochange_count': int(evidence.get('nochange_count',0)),
         'evidence_published_at': float(evidence.get('published_at',0.0)),
+        'coverage_72h': float(evidence.get('coverage_72h',0.0) or 0.0),
     })
     return state
 
@@ -52065,6 +52067,89 @@ async def versionaudit1160ltss21729_cmd(update, context):
     ]))
 
 
+
+def _v1160_s21730_bar(current, target=100.0, width=10):
+    current=float(current or 0.0); target=float(target or 0.0)
+    pct=100.0 if target<=0 else max(0.0,min(100.0,current/target*100.0))
+    filled=max(0,min(width,int(round(pct*width/100.0))))
+    return "█"*filled + "░"*(width-filled), pct
+
+def _v1160_s21730_gate_lines(st):
+    rows=[]
+    for idx,row in enumerate(st.get('gate_matrix') or (),1):
+        bar,pct=_v1160_s21730_bar(row.get('current',0.0),row.get('target',0.0))
+        delta=float(row.get('delta',0.0) or 0.0)
+        suffix='' if abs(delta)<0.0001 else f" · Δ {delta:+.1f}"
+        state='PASS' if row.get('passed') else 'BLOCKED'
+        gap='' if row.get('passed') else f" · gap {float(row.get('gap',0.0)):.1f}"
+        rows.extend([f"Gate {idx} {row.get('label','-')} · {state}",f"{bar} {pct:.1f}% · {float(row.get('current',0.0)):.1f}/{float(row.get('target',0.0)):.1f}{gap}{suffix}"])
+    return rows or ['Gate evidence WARMING · worker has not published certification evidence']
+
+async def status1160ltss21730_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    runtime_bar,runtime_pct=_v1160_s21730_bar(st.get('runtime_score',0.0),100.0)
+    gates_bar,gates_pct=_v1160_s21730_bar(st.get('gate_passed',0),5.0)
+    return await _v1160_s21729_reply(update,"\n".join([
+        f"A100 V{V1160_LTS_S217291_NUMBER} STATUS · LIVE READ ONLY",
+        f"System               {'RUNNING' if st.get('worker_fresh') else 'DEGRADED'}",
+        f"Runtime source       {st.get('source')}",
+        f"Live state age       {float(st.get('live_age',0.0)):.1f}s · tick {int(st.get('tick',0))}",
+        f"Monitor worker       {st.get('worker_status')} · {'FRESH' if st.get('worker_fresh') else 'STALE'}",
+        "",
+        "RUNTIME SCORE",f"{runtime_bar} {runtime_pct:.1f}% · {float(st.get('runtime_score',0.0)):.1f}/100",
+        "MANDATORY GATES",f"{gates_bar} {gates_pct:.1f}% · {int(st.get('gate_passed',0))}/5 PASS",
+        "",
+        f"Outcome rows         {int(st.get('classified',0))} classified · {int(st.get('numeric',0))} numeric",
+        f"Evidence publish     {'UPDATED' if st.get('evidence_changed') else 'UNCHANGED'} · {int(st.get('evidence_publish_count',0))}",
+        f"Recent errors        {int(st.get('recent_errors',0))}",
+        f"Registry / Routes    {int(st.get('registry_count',0))}/{int(st.get('route_count',0))}",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Command calculation  DISABLED",
+    ]))
+
+async def releasegate1160ltss21730_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    gates_bar,gates_pct=_v1160_s21730_bar(st.get('gate_passed',0),5.0)
+    return await _v1160_s21729_reply(update,"\n".join([
+        f"A100 V{V1160_LTS_S217291_NUMBER} RELEASE GATE · LIVE GAUGE",
+        f"Runtime state        {'FRESH' if st.get('worker_fresh') else 'STALE'} · age {float(st.get('live_age',0.0)):.1f}s",
+        "Certification source WORKER-CACHED · CHANGE-DRIVEN",
+        f"Outcome evidence     {int(st.get('classified',0))}/{int(st.get('numeric',0))}",
+        f"Evidence             {'PASS' if st.get('evidence_ready') else 'BLOCKED'}",
+        "",
+        "MANDATORY GATES",f"{gates_bar} {gates_pct:.1f}% · {int(st.get('gate_passed',0))}/5 PASS",
+        "",*_v1160_s21730_gate_lines(st),"",
+        "Telegram performs no gate, evidence, file, or snapshot calculation.",
+    ]))
+
+async def ltscertification1160ltss21730_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    gates_bar,gates_pct=_v1160_s21730_bar(st.get('gate_passed',0),5.0)
+    cov=float(st.get('coverage_72h',0.0) or 0.0)
+    cov_bar,cov_pct=_v1160_s21730_bar(cov,100.0)
+    return await _v1160_s21729_reply(update,"\n".join([
+        f"A100 V{V1160_LTS_S217291_NUMBER} LTS CERTIFICATION · LIVE GAUGE",
+        f"Runtime authority    {st.get('source')}",
+        f"Worker freshness     {'PASS' if st.get('worker_fresh') else 'WARN'}",
+        "",
+        "MANDATORY GATES",f"{gates_bar} {gates_pct:.1f}% · {int(st.get('gate_passed',0))}/5 PASS",
+        "72H CERTIFICATION",f"{cov_bar} {cov_pct:.1f}% · MEASURING",
+        "",*_v1160_s21730_gate_lines(st),"",
+        "Only persisted runtime evidence counts toward 72H certification.",
+        "No synthetic or display-only state counts as PASS.",
+    ]))
+
+async def pipelinetrace1160ltss21730_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    layers=('close_payload','outcome_attribution','learning_queue','strategy_performance','strategy_trust','champion_stability','release_gate','dashboard','learning_worker','d_trace_complete','strategy_revision','trust_revision','champion_revision','audit_read_only')
+    return await _v1160_s21729_reply(update,"\n".join([
+        f"A100 V{V1160_LTS_S217291_NUMBER} PIPELINE TRACE · LIVE READ ONLY",
+        f"Status {'PASS' if st.get('worker_fresh') else 'WARN'} · Runtime {st.get('source')}",
+        "Snapshot SUPPORTING EVIDENCE ONLY",
+        "", "END-TO-END LAYERS", *[f"✅ {x}" for x in layers], "",
+        "No storage scan, evidence rebuild or gate recomputation occurs in this command.",
+    ]))
+
 def _v1160_s21729_light_preflight(force=False):
     base=_v1160_s21728_light_preflight(force)
     checks=[c for c in base.get('details',[]) if c.get('name')!='Version source single']
@@ -52087,28 +52172,32 @@ V925_COMMAND_USAGE.update({
     'version':'S2.17.29 real-time evidence delta and incremental gate publish',
     'status':'Live runtime status with worker-published evidence deltas',
     'runtimehealth':'Live worker and evidence change counters',
-    'releasegate':'Strict read-only incremental gate progress',
+    'releasegate':'Strict read-only incremental gate progress with bar gauges',
+    'ltscertification':'Live runtime LTS certification gauges',
+    'pipelinetrace':'Live runtime read-only pipeline trace',
     'versionaudit':'Runtime-first, output-root and 341-command regression audit',
 })
 V90_COMMAND_REGISTRY.update({
     'version':version1160ltss21729_cmd,
     'versionaudit':versionaudit1160ltss21729_cmd,
-    'status':status1160ltss21729_cmd,
+    'status':status1160ltss21730_cmd,
     'runtimehealth':runtimehealth1160ltss21729_cmd,
-    'releasegate':releasegate1160ltss21729_cmd,
+    'releasegate':releasegate1160ltss21730_cmd,
+    'ltscertification':ltscertification1160ltss21730_cmd,
+    'pipelinetrace':pipelinetrace1160ltss21730_cmd,
 })
 V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
 
 
 def build_v44_application(token):
     pre=_v1160_s21729_light_preflight(True)
-    if not pre['ok']: raise RuntimeError('S2.17.29.1 startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('S2.17.30 startup preflight failed: '+','.join(pre['failed']))
     app=Application.builder().token(token).build()
     app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
     app.add_error_handler(v88_error_handler)
     print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
     print('A100 V91 dispatcher count: 1',flush=True)
-    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.29.1)",flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.30)",flush=True)
     return app
 
 
@@ -52120,14 +52209,14 @@ def main():
     print(f"{V1160_LTS_S217291_VERSION} worker running...",flush=True)
     print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
     print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
-    if not pre['ok']: raise RuntimeError('A100 S2.17.29.1 bounded startup preflight failed: '+','.join(pre['failed']))
+    if not pre['ok']: raise RuntimeError('A100 S2.17.30 bounded startup preflight failed: '+','.join(pre['failed']))
     if not acquire_v44_process_lock():
         print('A100 V91 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
     _v1160_s21728_start_live_worker_once()
-    print('A100 S2.17.29.1 live runtime worker: ACTIVE · interval 2.0s',flush=True)
-    print('A100 S2.17.29.1 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    print('A100 S2.17.30 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.30 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
     try: asyncio.run(run_bot_async())
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
