@@ -1,1 +1,14 @@
-{"version":"A100 V116.0-LTS-S2.17.10","package_type":"incremental_patch","changed_files":["main.py"],"schema":1,"paper":20,"shadow":60,"live_trading":"OFF"}
+{
+  "version": "A100 V116.0-LTS-S2.17.11",
+  "package_type": "incremental_patch",
+  "changed_files": [
+    "main.py"
+  ],
+  "preserves": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "registry": 341
+  }
+}

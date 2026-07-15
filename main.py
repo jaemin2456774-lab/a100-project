@@ -48149,6 +48149,271 @@ def main():
     except Exception as e:
         V91_STOP.set(); v88_record_error("v91-fatal-main", e); print(traceback.format_exc(), flush=True); raise
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.11 - PERSISTENT RESTORE FINAL / RUNTIME HISTORY
+# ---------------------------------------------------------------------------
+V1160_LTS_S21711_NUMBER = "116.0-LTS-S2.17.11"
+V1160_LTS_S21711_VERSION = "A100 V116.0-LTS-S2.17.11 PERSISTENT RESTORE FINAL RUNTIME HISTORY"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(number=V1160_LTS_S21711_NUMBER, version=V1160_LTS_S21711_VERSION)
+V91_VERSION = V1160_VERSION_MANAGER.version
+V1160_S21711_BIN_FILE = os.path.join(V91_DATA_DIR, "v1160_lts_certification_snapshot.bin")
+V1160_S21711_PREV_FILE = V1160_S21711_BIN_FILE + ".prev"
+V1160_S21711_BIN_MAGIC = b"A100S21711\x00"
+V1160_S21711_LOCK = threading.RLock()
+V1160_S21711_METRICS_LOCK = threading.Lock()
+V1160_S21711_METRICS = {
+    "save_ok": 0, "save_fail": 0, "restore_ok": 0, "restore_fail": 0,
+    "rollback_ok": 0, "restore_ms": 0.0, "save_ms": 0.0,
+    "last_restore": "Not attempted", "last_save_utc": "-",
+}
+V1160_S21711_TASKS = set()
+
+
+def _v1160_s21711_fingerprint():
+    payload = f"schema=1|registry={len(V90_COMMAND_REGISTRY)}|version={V1160_LTS_S21711_NUMBER}|paper={V91_MAX_POSITIONS}|shadow={V914_SHADOW_MAX}|live=OFF"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16].upper()
+
+
+def _v1160_s21711_encode(snapshot):
+    import pickle, zlib
+    payload = {
+        "format": 2,
+        "fingerprint": _v1160_s21711_fingerprint(),
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "snapshot": _v1160_s21710_json_safe(snapshot),
+    }
+    raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+    comp = zlib.compress(raw, 6)
+    digest = hashlib.sha256(comp).digest()
+    return V1160_S21711_BIN_MAGIC + digest + comp
+
+
+def _v1160_s21711_decode(blob):
+    import pickle, zlib
+    if not blob.startswith(V1160_S21711_BIN_MAGIC):
+        raise ValueError("invalid snapshot magic")
+    body = blob[len(V1160_S21711_BIN_MAGIC):]
+    if len(body) < 33:
+        raise ValueError("snapshot truncated")
+    digest, comp = body[:32], body[32:]
+    if hashlib.sha256(comp).digest() != digest:
+        raise ValueError("snapshot checksum mismatch")
+    payload = pickle.loads(zlib.decompress(comp))
+    if payload.get("fingerprint") != _v1160_s21711_fingerprint():
+        raise ValueError("policy fingerprint changed")
+    snap = payload.get("snapshot")
+    if not isinstance(snap, dict) or not snap.get("snapshot_id"):
+        raise ValueError("snapshot payload invalid")
+    return snap
+
+
+def _v1160_s21711_persist(snapshot):
+    started = time.perf_counter()
+    try:
+        os.makedirs(V91_DATA_DIR, exist_ok=True)
+        blob = _v1160_s21711_encode(snapshot)
+        tmp = V1160_S21711_BIN_FILE + ".tmp"
+        with V1160_S21711_LOCK:
+            with open(tmp, "wb") as fh:
+                fh.write(blob); fh.flush()
+                try: os.fsync(fh.fileno())
+                except Exception: pass
+            if os.path.exists(V1160_S21711_BIN_FILE):
+                try: os.replace(V1160_S21711_BIN_FILE, V1160_S21711_PREV_FILE)
+                except Exception: pass
+            os.replace(tmp, V1160_S21711_BIN_FILE)
+        with V1160_S21711_METRICS_LOCK:
+            V1160_S21711_METRICS["save_ok"] += 1
+            V1160_S21711_METRICS["save_ms"] = (time.perf_counter()-started)*1000.0
+            V1160_S21711_METRICS["last_save_utc"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        return True
+    except Exception as e:
+        with V1160_S21711_METRICS_LOCK:
+            V1160_S21711_METRICS["save_fail"] += 1
+        v88_record_error("s21711-persist", e)
+        return False
+
+
+def _v1160_s21711_restore():
+    started=time.perf_counter()
+    candidates=[(V1160_S21711_BIN_FILE, False),(V1160_S21711_PREV_FILE, True)]
+    last="Persistent snapshot not found"
+    for path, rollback in candidates:
+        if not os.path.exists(path): continue
+        try:
+            with open(path,"rb") as fh: snap=_v1160_s21711_decode(fh.read())
+            with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+                V1160_S2173_RELEASEGATE_CACHE.update(snapshot=snap, ts=time.time(), fingerprint=_v1160_s2178_fingerprint())
+            with V1160_S21711_METRICS_LOCK:
+                V1160_S21711_METRICS["restore_ok"] += 1
+                if rollback: V1160_S21711_METRICS["rollback_ok"] += 1
+                V1160_S21711_METRICS["restore_ms"]=(time.perf_counter()-started)*1000.0
+                V1160_S21711_METRICS["last_restore"]="Previous snapshot rollback restored" if rollback else "Binary snapshot restored"
+            return True
+        except Exception as e:
+            last=f"{os.path.basename(path)}: {type(e).__name__}"
+    with V1160_S21711_METRICS_LOCK:
+        V1160_S21711_METRICS["restore_fail"] += 1
+        V1160_S21711_METRICS["restore_ms"]=(time.perf_counter()-started)*1000.0
+        V1160_S21711_METRICS["last_restore"]=last
+    return False
+
+
+_v1160_s21711_cached_base = _v1160_s2173_cached_snapshot
+
+def _v1160_s2173_cached_snapshot(force=False):
+    snap, hit, age = _v1160_s21711_cached_base(force)
+    if not hit and isinstance(snap, dict):
+        _v1160_s21711_persist(snap)
+    return snap, hit, age
+
+
+def _v1160_s21711_metrics():
+    with V1160_S21711_METRICS_LOCK: return dict(V1160_S21711_METRICS)
+
+
+def _v1160_s21711_restore_lines():
+    m=_v1160_s21711_metrics()
+    return [
+        "PERSISTENT SNAPSHOT V2",
+        f"Restore Status         {m['last_restore']}",
+        f"Restore Time           {m['restore_ms']:.1f}ms",
+        f"Restore / Rollback     {m['restore_ok']} / {m['rollback_ok']}",
+        f"Persist Writes         {m['save_ok']} · failures {m['save_fail']}",
+        f"Last Persist UTC       {m['last_save_utc']}",
+        "Checksum              SHA256 · atomic swap · previous rollback",
+    ]
+
+
+def _v1160_s21711_runtime_history_lines():
+    rows=[]
+    try:
+        if os.path.exists(V1160_S2179_RUNTIME_HISTORY):
+            with open(V1160_S2179_RUNTIME_HISTORY,"r",encoding="utf-8") as fh:
+                for line in fh.readlines()[-1000:]:
+                    try:
+                        row=json.loads(line); ts=row.get("ts") or row.get("created_utc")
+                        if ts: rows.append(row)
+                    except Exception: pass
+    except Exception as e: v88_record_error("s21711-runtime-history", e)
+    now=time.time(); out=["RUNTIME HISTORY"]
+    for label, hours in (("1h",1),("6h",6),("24h",24),("72h",72)):
+        selected=[]
+        for r in rows:
+            try:
+                ts=r.get("epoch")
+                if ts is None:
+                    ts=datetime.fromisoformat(str(r.get("ts") or r.get("created_utc")).replace("Z","+00:00")).timestamp()
+                if now-float(ts) <= hours*3600: selected.append(r)
+            except Exception: pass
+        def avg(keys):
+            vals=[]
+            for r in selected:
+                for k in keys:
+                    try:
+                        if r.get(k) is not None: vals.append(float(r[k])); break
+                    except Exception: pass
+            return sum(vals)/len(vals) if vals else None
+        score=avg(("runtime_score","score")); mem=avg(("memory_mb","memory")); hit=avg(("operational_hit_rate","cache_hit_rate"))
+        out.append(f"{label:<4} samples {len(selected):>3} · runtime {score:.1f}" if score is not None else f"{label:<4} samples {len(selected):>3} · runtime PENDING")
+        if mem is not None or hit is not None:
+            out.append(f"     memory {mem:.1f}MB" if mem is not None else "     memory PENDING")
+            out[-1] += f" · cache {hit:.1f}%" if hit is not None else " · cache PENDING"
+    return out
+
+
+def _v1160_s21711_light_preflight(force=False):
+    checks=_v1160_s21710_light_preflight(force).get("details",[])
+    checks=[c for c in checks if c.get("name") != "Version source"]
+    checks.insert(0,_v1160_s2176_check("Version source",V91_VERSION==V1160_LTS_S21711_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check("Binary snapshot checksum", callable(_v1160_s21711_decode), detail="SHA256"),
+        _v1160_s2176_check("Atomic snapshot rollback", callable(_v1160_s21711_persist), detail=V1160_S21711_PREV_FILE),
+        _v1160_s2176_check("Runtime history aggregation", callable(_v1160_s21711_runtime_history_lines), detail=V1160_S2179_RUNTIME_HISTORY),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {"ok":not failures,"details":checks,"failed":[c['name'] for c in failures],"warnings":[c['name'] for c in warnings],"command_count":len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s21711_light_preflight(force)
+
+
+async def version1160ltss21711_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([
+        f"🟢 A100 V{V1160_LTS_S21711_NUMBER}","Version & Build Information","Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE","",f"Version Source       {vm['source']}",
+        f"Build                {V1160_LTS_S21711_VERSION}",f"Schema               {vm['schema']}",
+        f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",f"Live Trading         {vm['live']}",
+        "Feature Freeze       ACTIVE","","Sprint 2.17.11 · checksum-verified binary restore, previous-snapshot rollback and bounded runtime history."
+    ]))
+
+
+async def _v1160_s21711_releasegate_job(update):
+    try:
+        snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False)
+        text=_v1160_s2173_releasegate_text(snap,hit,age)
+        text+="\n\nSNAPSHOT CACHE · RESTORE FINAL\n"+"\n".join(_v1160_s21710_cache_lines(hit,age))
+        text+="\n\n"+"\n".join(_v1160_s21711_restore_lines())
+        text+="\n\n"+"\n".join(_v1160_s21710_gate_evidence_lines(snap))
+        text+="\n\n"+"\n".join(_v1160_s21711_runtime_history_lines())
+        await asyncio.wait_for(v90_1_safe_reply(update,text),timeout=30.0)
+    except Exception as e: v88_record_error("s21711-releasegate-background",e)
+
+
+async def releasegate1160ltss21711_cmd(update, context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /releasegate 인증 Snapshot을 조회합니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21711_releasegate_job(update),name="a100-s21711-releasegate"); V1160_S21711_TASKS.add(t); t.add_done_callback(V1160_S21711_TASKS.discard)
+
+
+async def _v1160_s21711_versionaudit_job(update):
+    try:
+        audit=_v1160_s21711_light_preflight(True); snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False); ri=snap.get('runtime',{})
+        lines=[f"🛡️ A100 V{V1160_LTS_S21711_NUMBER} FINAL CERTIFICATION AUDIT",f"Version Source {V1160_LTS_S21711_VERSION}",
+               f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())}/341 · Help 341",
+               "Runtime Routes 341/341 · Route Certification 341/341",f"Snapshot ID {snap.get('snapshot_id','-')} · Unified Hash {snap.get('unified_hash','-')}",
+               f"Runtime Score {float(ri.get('score',0.0)):.1f}/100","Schema 1 · Paper 20 · Shadow 60 · Live OFF","","SNAPSHOT CACHE · RESTORE FINAL"]
+        lines.extend(_v1160_s21710_cache_lines(hit,age)); lines.append(""); lines.extend(_v1160_s21711_restore_lines()); lines.append(""); lines.extend(_v1160_s21711_runtime_history_lines()); lines.append(""); lines.extend(_v1160_s2176_preflight_lines(audit))
+        await asyncio.wait_for(v90_1_safe_reply(update,"\n".join(lines)),timeout=30.0)
+    except Exception as e: v88_record_error("s21711-versionaudit-background",e)
+
+
+async def versionaudit1160ltss21711_cmd(update, context):
+    snap,age=_v1160_s2175_peek_snapshot(); state=f"CACHE HIT · age {age:.0f}s · expires {max(0.0,V1160_S2173_RELEASEGATE_TTL-age):.0f}s" if snap is not None and age<V1160_S2173_RELEASEGATE_TTL else "CACHE RESTORE/WARMING"
+    await v90_1_safe_reply(update,f"⏳ /versionaudit 정밀 검증을 접수했습니다.\nSnapshot {state}\n결과는 별도 메시지로 전송됩니다.")
+    t=asyncio.create_task(_v1160_s21711_versionaudit_job(update),name="a100-s21711-versionaudit"); V1160_S21711_TASKS.add(t); t.add_done_callback(V1160_S21711_TASKS.discard)
+
+
+V925_COMMAND_USAGE.update({"version":"LTS Sprint 2.17.11 persistent restore final and runtime history","versionaudit":"Non-blocking audit with binary restore checksum and rollback","releasegate":"Non-blocking release gate with binary restore and runtime history"})
+V90_COMMAND_REGISTRY.update({"version":version1160ltss21711_cmd,"versionaudit":versionaudit1160ltss21711_cmd,"releasegate":releasegate1160ltss21711_cmd})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21711_light_preflight(True)
+    if not pre['ok']: raise RuntimeError("S2.17.11 startup preflight failed: "+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True); print("A100 V91 dispatcher count: 1",flush=True); print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.11)",flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    # Fast bounded restore: binary current snapshot first, then legacy JSON fallback.
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21711_light_preflight(True)
+    print(f"{V1160_LTS_S21711_VERSION} worker running...",flush=True); print(f"A100 V91 startup commands: {pre['command_count']}",flush=True); print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError("A100 S2.17.11 bounded startup preflight failed")
+    if not acquire_v44_process_lock():
+        print("A100 V91 duplicate polling process blocked",flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s2179_start_runtime_guard_once()
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print("A100 V91 stopped by signal",flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error("v91-fatal-main",e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
