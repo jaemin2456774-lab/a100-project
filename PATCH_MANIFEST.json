@@ -1,22 +1,13 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.22.2 GOLDEN BASELINE LOCK & PATH TYPE SAFETY",
+  "version": "116.0-LTS-S2.17.27",
+  "baseline": "116.0-LTS-S2.17.26",
   "type": "incremental_patch",
-  "baseline": "A100 V116.0-LTS-S2.17.22.1 RELEASEGATE PATH TYPE SAFETY HOTFIX",
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
-  "runtime_change_policy": "No score, threshold, cache-key, evidence-source or handler redesign.",
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s217222.py",
-    "A100_BASELINE.md",
-    "BASELINE_FEATURES.json",
-    "PATCH_MANIFEST.json",
-    "changed_files.manifest",
-    "SHA256SUMS",
-    "CHANGELOG_S2.17.22.2.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
-  ],
-  "data_preservation": "Existing /data, learning data, certification evidence and configuration preserved."
+  "preserves": {
+    "commands": 341,
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false
+  },
+  "architecture": "Worker -> Live Runtime State -> Telegram Read Only; Snapshot certification/recovery fallback"
 }

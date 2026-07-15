@@ -1,9 +1,13 @@
-# 설치 안내
+# S2.17.27 설치 안내
 
-1. 현재 Railway 프로젝트와 `/data` 볼륨을 유지합니다.
-2. 패치의 `main.py`만 기존 프로젝트의 `main.py`에 덮어씁니다.
-3. `A100_BASELINE.md`, `BASELINE_FEATURES.json`, 테스트와 매니페스트는 저장소 루트에 추가합니다.
-4. 환경변수와 설정 파일은 변경하지 않습니다.
-5. 재배포 후 `/version`, `/versionaudit`, `/releasegate`, `/status`, `/errors`를 확인합니다.
+1. 기존 S2.17.26 프로젝트에서 패치 파일을 같은 경로에 덮어씁니다.
+2. `/data`, 환경변수, 설정 파일은 삭제하거나 초기화하지 않습니다.
+3. Railway를 재배포합니다.
 
-정상 기준: 341/341, Schema 1, Paper 20, Shadow 60, Live OFF, Startup Preflight PASS, 신규 치명 오류 없음.
+정상 시작 로그:
+- `A100 V116.0-LTS-S2.17.27 REAL-TIME RUNTIME RECOVERY worker running...`
+- `A100 V91 startup commands: 341`
+- `A100 S2.17.27 live runtime worker: ACTIVE · interval 2.0s`
+
+확인 명령:
+`/version`, `/versionaudit`, `/status` 2회, `/runtimehealth` 2회, `/releasegate`, `/commandperformance`, `/errors`

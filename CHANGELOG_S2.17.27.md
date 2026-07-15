@@ -1,16 +1,11 @@
 # A100 V116.0 LTS S2.17.27
 
-## Fixed
-- Replaced `/runtimehealth` legacy full runtime/state scan with a read-only shared-snapshot fast path.
-- Removed user-command waiting on Release Gate background work and shared locks.
-- Replaced `/releasegate` background reply task with one inline cached response.
-- Added explicit command-isolation diagnostics.
-- Finalized output-boundary version normalization to S2.17.27 for legacy RC/S2 cached views.
+## Real-Time Runtime Recovery
 
-## Preserved
-- Telegram commands: 341
-- Schema: 1
-- Paper: 20
-- Shadow: 60
-- Live trading: OFF
-- Existing `/data`, environment variables and configuration are untouched.
+- Official baseline: S2.17.26.
+- Added a dedicated 2-second in-memory Live Runtime State worker.
+- Telegram `/status`, `/runtimehealth`, `/releasegate`, `/versionaudit` read the live state only.
+- Shared Snapshot remains authoritative for certification score/evidence and recovery fallback only.
+- No synchronous storage scan, gate rebuild, or evidence rebuild on Telegram command paths.
+- Preserved 341 commands, Schema 1, Paper 20, Shadow 60, Live OFF, existing data and settings.
+- No score inflation, threshold relaxation, or synthetic PASS.

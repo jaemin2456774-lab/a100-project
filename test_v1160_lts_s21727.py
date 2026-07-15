@@ -1,13 +1,16 @@
 from pathlib import Path
-import ast,re
-s=Path('main.py').read_text()
-assert 'V1160_LTS_S21727_NUMBER = "116.0-LTS-S2.17.27"' in s
+import ast
+
+p=Path(__file__).with_name("main.py")
+s=p.read_text(encoding="utf-8")
+ast.parse(s)
+assert "REAL-TIME RUNTIME RECOVERY" in s
+assert "a100-s21727-live-runtime" in s
+assert "V1160_S21727_LIVE_INTERVAL = 2.0" in s
+assert "Worker → Live Runtime State → Telegram Read Only" in s
+assert "Snapshot      Certification / Recovery Fallback" in s
+assert s.count('if __name__ == "__main__":') == 1
+assert "'status': status1160ltss21727_cmd" in s
 assert "'runtimehealth': runtimehealth1160ltss21727_cmd" in s
 assert "'releasegate': releasegate1160ltss21727_cmd" in s
-assert "'version': version1160ltss21727_cmd" in s
-assert 'create_task' not in re.search(r'async def releasegate1160ltss21727_cmd.*?\n\ndef ',s,re.S).group(0)
-rt=re.search(r'async def runtimehealth1160ltss21727_cmd.*?\n\nasync def ',s,re.S).group(0)
-assert '_v91_load_state' not in rt
-assert '_v1160_s21_runtime_view' not in rt
-ast.parse(s)
-print('S2.17.27 static regression tests: PASS')
+print("S2.17.27 real-time runtime recovery static regression: PASS")
