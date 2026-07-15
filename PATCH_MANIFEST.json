@@ -1,15 +1,12 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.2",
-  "package_type": "PATCH",
+  "version": "A100 V116.0-LTS-S2.17.3",
+  "type": "Patch Package",
+  "baseline": "A100 V116.0-LTS-S2.17.2",
+  "title": "Non-Blocking Release Gate & Snapshot Cache",
   "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": "OFF",
-  "files": [
-    "CHANGELOG_S2.17.2.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest",
-    "main.py",
-    "test_v1160_lts_s2172.py"
-  ]
+  "paper_limit": 20,
+  "shadow_limit": 60,
+  "live_trading": false,
+  "feature_freeze": true,
+  "release_freeze": true
 }

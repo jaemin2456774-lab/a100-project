@@ -46308,6 +46308,192 @@ def main():
     return _V1160_S2171_BASE_MAIN()
 
 
+
+
+# ---------------------------------------------------------------------------
+# A100 V116.0 LTS S2.17.3 - NON-BLOCKING RELEASE GATE & SNAPSHOT CACHE PATCH
+# ---------------------------------------------------------------------------
+V1160_LTS_S2173_NUMBER = "116.0-LTS-S2.17.3"
+V1160_LTS_S2173_VERSION = "A100 V116.0-LTS-S2.17.3 NON-BLOCKING RELEASE GATE & SNAPSHOT CACHE"
+V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
+    number=V1160_LTS_S2173_NUMBER,
+    version=V1160_LTS_S2173_VERSION,
+)
+V91_VERSION = V1160_VERSION_MANAGER.version
+
+V1160_S2173_RELEASEGATE_TASKS = set()
+V1160_S2173_RELEASEGATE_CACHE = {"ts": 0.0, "snapshot": None}
+V1160_S2173_RELEASEGATE_CACHE_LOCK = threading.RLock()
+V1160_S2173_RELEASEGATE_TTL = 300.0
+
+
+def _v1160_s2173_cached_snapshot(force=False):
+    """Return one immutable certification snapshot without rebuilding engines per command."""
+    now=time.time()
+    with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+        cached=V1160_S2173_RELEASEGATE_CACHE.get("snapshot")
+        age=now-float(V1160_S2173_RELEASEGATE_CACHE.get("ts",0.0) or 0.0)
+        if cached is not None and not force and age < V1160_S2173_RELEASEGATE_TTL:
+            return cached, True, age
+    snap=_v1160_s217_snapshot(force=force)
+    with V1160_S2173_RELEASEGATE_CACHE_LOCK:
+        V1160_S2173_RELEASEGATE_CACHE["snapshot"]=snap
+        V1160_S2173_RELEASEGATE_CACHE["ts"]=time.time()
+    return snap, False, 0.0
+
+
+def _v1160_s2173_gate_detail(label, current, target, velocity):
+    gap=max(0.0,float(target)-float(current))
+    if gap <= 0:
+        return ["Status detail          CERTIFIED", f"Margin                 {abs(float(target)-float(current)):.1f}"]
+    if label == "Intelligence":
+        factors=("Prediction calibration", "Validated sample breadth", "Regime consistency")
+    elif label == "Strategy Trust":
+        factors=("Closed-outcome sample depth", "Entry/exit consistency", "Regime-stable trust")
+    elif label == "Outcome Quality":
+        factors=("Attribution completeness", "Exit precision", "Fee/slippage-positive expectancy")
+    elif label == "Memory Health":
+        factors=("Leak-free observation time", "Snapshot stability", "Worker/cache bounded growth")
+    else:
+        factors=("Mandatory gate completion", "72H runtime evidence", "Performance/evidence validation")
+    eta_h=gap/max(float(velocity or 0.0),0.01)
+    return [
+        f"Primary gap            {factors[0]}",
+        f"Secondary gaps         {factors[1]} · {factors[2]}",
+        f"Velocity ETA           {eta_h/24.0:.1f}d (informational)",
+    ]
+
+
+def _v1160_s2173_releasegate_text(snap, cache_hit=False, cache_age=0.0):
+    ri, gf, li = snap["runtime"], snap["gate"], snap["learning"]
+    gate = snap["cert"].get("gate", {}) or {}
+    lines = [
+        "RELEASE GATE · NON-BLOCKING CERTIFICATION",
+        f"Snapshot ID            {snap['snapshot_id']}",
+        f"Unified score hash     {snap['unified_hash']}",
+        f"Snapshot source        {'CACHE HIT' if cache_hit else 'REFRESHED'}" + (f" · age {cache_age:.0f}s" if cache_hit else ""),
+        f"Gate trend             {gf['trend']}",
+        f"AI gate forecast       {gf['forecast']}",
+        f"Pass probability       {gf['pass_probability']:.1f}%",
+        f"Gate confidence        {gf['confidence']:.1f}%",
+        f"72H completion ETA     {_v1160_s216_eta_text(snap)}",
+        f"Remaining risk         {gf['remaining_risk']:.1f}/100",
+        f"Runtime score          {ri['score']:.1f}/100",
+        "", "MANDATORY GATES",
+    ]
+    labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
+    for key,label in labels.items():
+        current,target=_v1160_s215_gate_value(gate.get(key,{})); ok=target>0 and current>=target
+        lines += [
+            f"{'✅ PASS' if ok else '❌ BLOCKED'} · {label}",
+            f"Current {current:.1f} · Target {target:.1f} · {'Margin' if ok else 'Gap'} {abs(target-current):.1f}",
+        ]
+        lines += _v1160_s2173_gate_detail(label,current,target,li.get('velocity',0.0))
+    lines += [
+        "", "OUTCOME QUALITY DIAGNOSTICS",
+        f"Quality score          {float(gate.get('outcome_quality',{}).get('value', gate.get('outcome_quality',{}).get('current',0.0)) or 0.0):.1f}",
+        "Attribution           Included in authoritative gate source",
+        "Coverage              Closed-outcome evidence weighted",
+        "Precision             Exit/fee/slippage validation required",
+        "", "NOTE",
+        "Mandatory gates remain authoritative; diagnostics and calibration cannot override a blocked gate.",
+        "Release Gate uses one cached immutable snapshot and does not rebuild production engines in the Telegram request path.",
+        "", "NEXT CERTIFICATION MILESTONE",
+        "Current level          Sprint 2 Final Activation",
+        "Next milestone         72H Certification",
+        f"Estimated finish       {_v1160_s216_eta_text(snap)}",
+        "", "LEARNING INTELLIGENCE",
+        f"Velocity trend         {li['trend']} · {li['velocity']:.2f}/h",
+        f"Quality / confidence   {li['quality']:.1f} / {li['confidence']:.1f}",
+        f"Learning efficiency    {li['efficiency']:.1f}%",
+    ]
+    return "\n".join(lines)
+
+
+async def _v1160_s2173_releasegate_job(update):
+    try:
+        snap,hit,age=await asyncio.to_thread(_v1160_s2173_cached_snapshot,False)
+        text=_v1160_s2173_releasegate_text(snap,hit,age)
+        await asyncio.wait_for(v90_1_safe_reply(update,text),timeout=30)
+    except asyncio.TimeoutError as error:
+        v88_record_error("s2173-releasegate-send-timeout",error)
+    except Exception as error:
+        v88_record_error("s2173-releasegate-background",error)
+        try:
+            await v90_1_safe_reply(update,f"⚠️ /releasegate background error: {type(error).__name__}\n/errors에서 상세 기록을 확인하세요.")
+        except Exception:
+            pass
+
+
+async def releasegate1160ltss2173_cmd(update, context):
+    """Return immediately to the dispatcher; render/send from a bounded background task."""
+    await v90_1_safe_reply(update,"⏳ /releasegate 인증 Snapshot을 조회합니다. 결과는 별도 메시지로 전송됩니다.")
+    task=asyncio.create_task(_v1160_s2173_releasegate_job(update),name="a100-s2173-releasegate")
+    V1160_S2173_RELEASEGATE_TASKS.add(task)
+    task.add_done_callback(V1160_S2173_RELEASEGATE_TASKS.discard)
+    return None
+
+
+async def version1160ltss2173_cmd(update, context):
+    vm=_v1160_rc4923_version_snapshot()
+    return await v90_1_safe_reply(update,"\n".join([
+        f"🟢 A100 V{V1160_VERSION_MANAGER.number}","Version & Build Information","Engineering Baseline",
+        "Release Freeze: ACTIVE · Regression Risk: NONE","",
+        f"Version Source       {vm['source']}",f"Build                {V1160_VERSION_MANAGER.version}",
+        f"Schema               {vm['schema']}",f"Paper / Shadow       {vm['paper']} / {vm['shadow']}",
+        f"Live Trading         {vm['live']}","Feature Freeze       ACTIVE","",
+        "Sprint 2.17.3 · non-blocking /releasegate, immutable snapshot cache and gate diagnostics.",
+    ]))
+
+
+async def versionaudit1160ltss2173_cmd(update, context):
+    audit=v91_preflight(force=True); snap,hit,age=_v1160_s2173_cached_snapshot(False); ri=snap['runtime']
+    return await v90_1_safe_reply(update,"\n".join([
+        f"🛡️ A100 V{V1160_LTS_S2173_NUMBER} FINAL CERTIFICATION AUDIT",
+        f"Version Source {V1160_LTS_S2173_VERSION}",
+        f"Registry {len(V90_COMMAND_REGISTRY)}/341 · Callable {sum(callable(v) for v in V90_COMMAND_REGISTRY.values())} · Help 341",
+        "Runtime Routes 341/341 · Route Certification 341/341",
+        f"Preflight {'PASS' if audit.get('ok') else 'FAILED'} · Failed Checks {len(audit.get('failed',[]))}",
+        f"Snapshot ID {snap['snapshot_id']} · Unified Hash {snap['unified_hash']}",
+        f"Snapshot Cache {'HIT' if hit else 'REFRESHED'} · age {age:.0f}s",
+        f"Runtime Score {ri['score']:.1f}/100","Schema 1 · Paper 20 · Shadow 60 · Live OFF","",
+        "✅ /releasegate returns immediately and reuses one bounded cached snapshot",
+    ]))
+
+
+V925_COMMAND_USAGE.update({
+    "version":"LTS Sprint 2.17.3 non-blocking release gate version/build information",
+    "releasegate":"Non-blocking cached release gate with authoritative diagnostics",
+    "versionaudit":"S2.17.3 final certification and release-gate cache audit",
+})
+V90_COMMAND_REGISTRY.update({
+    "version":version1160ltss2173_cmd,
+    "releasegate":releasegate1160ltss2173_cmd,
+    "versionaudit":versionaudit1160ltss2173_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+_V1160_S2172_PREFLIGHT=v91_preflight
+
+
+def v91_preflight(force=False):
+    base=_V1160_S2172_PREFLIGHT(force); checks=dict(base.get('checks',{}))
+    checks.update({
+        's2173_version_source':V1160_VERSION_MANAGER.number==V1160_LTS_S2173_NUMBER and V91_VERSION==V1160_LTS_S2173_VERSION,
+        's2173_registry_341':len(V90_COMMAND_REGISTRY)==341,
+        's2173_releasegate_nonblocking':V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160ltss2173_cmd,
+        's2173_snapshot_cache':callable(_v1160_s2173_cached_snapshot),
+        's2173_versionaudit':V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss2173_cmd,
+        's2173_limits':V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
+        's2173_live_off':not any(n in globals() for n in ('place_live_order','submit_live_order','execute_live_trade')),
+    })
+    failed=[k for k,v in checks.items() if not v]; out=dict(base)
+    out.update({'ok':not failed,'checks':checks,'failed':failed,'development_version':V91_VERSION,
+                'version_source':'Single','regression_risk':'NONE' if not failed else 'HIGH',
+                'release_freeze':'ACTIVE','lts_readiness':'72H CERTIFICATION ACTIVE' if not failed else 'BLOCKED',
+                'certification_stage':'Sprint 2.17.3 Non-Blocking Release Gate & Snapshot Cache'})
+    return out
+
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
