@@ -1,7 +1,5 @@
-main.py
-CHANGELOG_S2.17.1.md
+CHANGELOG_S2.17.2.md
 PATCH_INSTALL_GUIDE_KR.md
-test_v1160_lts_s2171_startup.py
 changed_files.manifest
-PATCH_MANIFEST.json
-SHA256SUMS
+main.py
+test_v1160_lts_s2172.py

@@ -14,26 +14,44 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 load_dotenv()
 
 # ===== Render Port Fix =====
+_A100_HEALTH_SERVER_LOCK = threading.Lock()
+_A100_HEALTH_SERVER_STARTED = False
+_A100_HEALTH_SERVER_THREAD = None
+
 def start_health_server_once():
-    try:
+    """Start exactly one in-process Railway health server.
+
+    This function is idempotent because legacy main wrappers may call it more than once.
+    """
+    global _A100_HEALTH_SERVER_STARTED, _A100_HEALTH_SERVER_THREAD
+    with _A100_HEALTH_SERVER_LOCK:
+        if _A100_HEALTH_SERVER_STARTED:
+            return _A100_HEALTH_SERVER_THREAD
         port = int(os.environ.get("PORT", "10000"))
+
         class HealthHandler(BaseHTTPRequestHandler):
             def do_GET(self):
                 self.send_response(200)
                 self.send_header("Content-type", "text/plain")
                 self.end_headers()
                 self.wfile.write(b"OK")
+
             def log_message(self, format, *args):
                 return
+
         def run():
             try:
                 HTTPServer(("0.0.0.0", port), HealthHandler).serve_forever()
-            except OSError as e:
-                print(f"Health server already running or failed: {e}", flush=True)
-        threading.Thread(target=run, daemon=True).start()
+            except Exception as error:
+                # A failure after the started flag is set is a real runtime issue.
+                print(f"Health server runtime error: {type(error).__name__}: {error}", flush=True)
+
+        thread = threading.Thread(target=run, name="a100-health-server", daemon=True)
+        _A100_HEALTH_SERVER_STARTED = True
+        _A100_HEALTH_SERVER_THREAD = thread
+        thread.start()
         print(f"Health server listening on port {port}", flush=True)
-    except Exception as e:
-        print(f"Health server start error: {e}", flush=True)
+        return thread
 
 def keep_alive_after_error(e):
     print(f"A100 main error kept alive: {e}", flush=True)
@@ -45914,7 +45932,8 @@ async def releasegate1160ltss216_cmd(update, context):
     labels={"intelligence_score":"Intelligence","strategy_trust":"Strategy Trust","outcome_quality":"Outcome Quality","memory_health":"Memory Health","lts_readiness":"LTS Readiness"}
     for key,label in labels.items():
         current,required=_v1160_s215_gate_value(gate.get(key,{})); ok=required>0 and current>=required
-        lines += [f"{'✅ PASS' if ok else '❌ BLOCKED'} · {label}", f"Current {current:.1f} · Target {required:.1f} · {'Margin' if ok else 'Gap'} {abs(required-current):.1f}"]
+        cause,eta=_v1160_s2172_gate_diagnostic(label,current,required,li.get("velocity",0.0))
+        lines += [f"{'✅ PASS' if ok else '❌ BLOCKED'} · {label}", f"Current {current:.1f} · Target {required:.1f} · {'Margin' if ok else 'Gap'} {abs(required-current):.1f}", f"Driver {cause}", f"{eta}"]
     lines += [
         "", "NOTE", "Mandatory gates remain authoritative; calibration cannot override a blocked gate.",
         "", "NEXT CERTIFICATION MILESTONE", "Current level          Sprint 2 Final Runtime Scheduler",
@@ -46009,8 +46028,8 @@ def v91_preflight(force=False):
 # ---------------------------------------------------------------------------
 # A100 V116.0 LTS S2.17 - FINAL ACTIVATION & AUDIT TITLE CONSISTENCY PATCH
 # ---------------------------------------------------------------------------
-V1160_LTS_S217_NUMBER = "116.0-LTS-S2.17.1"
-V1160_LTS_S217_VERSION = "A100 V116.0-LTS-S2.17.1 STARTUP HEALTHCHECK ORDERING HOTFIX"
+V1160_LTS_S217_NUMBER = "116.0-LTS-S2.17.2"
+V1160_LTS_S217_VERSION = "A100 V116.0-LTS-S2.17.2 SINGLE HEALTH SERVER & GATE DIAGNOSTICS"
 V1160_VERSION_MANAGER = _V1160RC4923VersionManager(
     number=V1160_LTS_S217_NUMBER,
     version=V1160_LTS_S217_VERSION,
@@ -46048,7 +46067,7 @@ async def version1160ltss217_cmd(update, context):
         f"Live Trading         {vm['live']}",
         "Feature Freeze       ACTIVE",
         "",
-        "Sprint 2.17.1 · health server first, non-blocking startup certification warmup.",
+        "Sprint 2.17.2 · single health server, non-blocking startup and gate diagnostics.",
     ]
     return await v90_1_safe_reply(update, "\n".join(lines))
 
@@ -46133,6 +46152,24 @@ async def dashboard1160ltss217_cmd(update, context):
     ] + _v1160_s211_evidence_timeline(snap["rv"], snap["evidence"])
     return await v90_1_safe_reply(update, "\n".join(lines))
 
+
+def _v1160_s2172_gate_diagnostic(label, current, required, velocity):
+    gap=max(0.0, required-current)
+    if gap <= 0:
+        return "Certified margin available", "COMPLETE"
+    eta_h=(gap/max(velocity,0.01)) if velocity > 0 else None
+    if label == "Strategy Trust":
+        cause="Needs more closed outcomes, entry/exit consistency and regime-stable samples"
+    elif label == "Intelligence":
+        cause="Needs confidence calibration, prediction accuracy and broader validated samples"
+    elif label == "Outcome Quality":
+        cause="Needs attribution completeness, exit precision and fee/slippage-positive expectancy"
+    elif label == "Memory Health":
+        cause="Needs longer leak-free runtime, stable snapshots and bounded worker/cache growth"
+    else:
+        cause="Depends on all mandatory gates plus 72H runtime and evidence completion"
+    eta="ETA unavailable" if eta_h is None else (f"ETA {eta_h/24.0:.1f}d at current velocity")
+    return cause, eta
 
 async def releasegate1160ltss217_cmd(update, context):
     snap = _v1160_s217_snapshot()
@@ -46224,6 +46261,7 @@ def v91_preflight(force=False):
             "releasegate":releasegate1160ltss217_cmd,"versionaudit":versionaudit1160ltss217_cmd,
             "pipelinetrace":pipelinetrace1160ltss217_cmd}.items()),
         "s217_snapshot_callable":callable(_v1160_s217_snapshot),
+        "s2172_health_idempotent": callable(start_health_server_once),
         "s217_no_legacy_audit_route":V90_COMMAND_REGISTRY.get("versionaudit") is versionaudit1160ltss217_cmd,
         "s217_no_legacy_trace_route":V90_COMMAND_REGISTRY.get("pipelinetrace") is pipelinetrace1160ltss217_cmd,
         "s217_limits":V91_MAX_POSITIONS==20 and V914_SHADOW_MAX==60,
@@ -46234,7 +46272,7 @@ def v91_preflight(force=False):
         "ok":not failed,"checks":checks,"failed":failed,"development_version":V91_VERSION,
         "version_source":"Single","regression_risk":"NONE" if not failed else "HIGH",
         "release_freeze":"ACTIVE","lts_readiness":"72H CERTIFICATION ACTIVE" if not failed else "BLOCKED",
-        "certification_stage":"Sprint 2.17.1 Startup Healthcheck Ordering Hotfix",
+        "certification_stage":"Sprint 2.17.2 Single Health Server & Gate Diagnostics",
     })
     if not force: V1160_S217_PREFLIGHT_CACHE=out
     return out
@@ -46248,13 +46286,13 @@ def _v1160_s2171_post_start_warmup():
             _v1160_rc45_start_worker()
             _v1160_s217_snapshot(force=True)
             v91_preflight(force=False)
-            print("A100 V116.0-LTS-S2.17.1 post-start certification warmup: OK", flush=True)
+            print("A100 V116.0-LTS-S2.17.2 post-start certification warmup: OK", flush=True)
         except Exception as error:
             try:
                 v88_record_error("s2171-post-start-warmup", error)
             except Exception:
                 pass
-            print(f"A100 V116.0-LTS-S2.17.1 post-start warmup warning: {type(error).__name__}: {error}", flush=True)
+            print(f"A100 V116.0-LTS-S2.17.2 post-start warmup warning: {type(error).__name__}: {error}", flush=True)
     thread=threading.Thread(target=_run, name="a100-s2171-warmup", daemon=True)
     thread.start()
     return thread
