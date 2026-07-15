@@ -1,9 +1,10 @@
 # A100 V116.0 LTS S2.17.29
 
-## Clean stabilization release
-- Rebuilt the frozen VersionManager as a new immutable current-version object instead of attempting field mutation.
-- Replaced inherited historical preflight chains with an independent current-build operational preflight.
-- Registered clean current handlers for `/version`, `/versionaudit`, `/runtimehealth`, and `/releasegate`.
-- Preserved shared-snapshot fast paths and removed user-path rebuild/background reply behavior.
-- Kept 341 commands, Schema 1, Paper 20, Shadow 60, Live OFF, Feature Freeze, and Release Freeze.
-- No data or configuration migration.
+## Real-Time Evidence Delta & Incremental Gate Publish
+
+- Keeps S2.17.26 architectural baseline and S2.17.28 strict read-only Telegram path.
+- Removes active-output dependency on the S2.17.25 legacy version-normalization wrapper.
+- Worker checks authoritative evidence every 30 seconds and publishes only when snapshot/evidence/score/gate values change.
+- Adds per-gate progress, gap and real delta from the previous published evidence.
+- Telegram commands perform no file scan, snapshot creation, evidence rebuild or gate calculation.
+- Preserves 341 commands, Schema 1, Paper 20, Shadow 60 and Live OFF.

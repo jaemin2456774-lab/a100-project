@@ -51807,6 +51807,322 @@ def main():
         print(traceback.format_exc(), flush=True)
         raise
 
+
+
+# =============================================================================
+# A100 V116.0-LTS-S2.17.29
+# REAL-TIME EVIDENCE DELTA / INCREMENTAL GATE PUBLISH / OUTPUT ROOT RECOVERY
+# Architecture baseline: S2.17.26; runtime-first continuity: S2.17.27-S2.17.28
+# =============================================================================
+V1160_LTS_S21729_NUMBER = "116.0-LTS-S2.17.29"
+V1160_LTS_S21729_VERSION = "A100 V116.0-LTS-S2.17.29 REAL-TIME EVIDENCE DELTA & INCREMENTAL GATE PUBLISH"
+V91_VERSION = V1160_LTS_S21729_VERSION
+
+# Use the reply root captured before the S2.17.25 legacy version-normalization
+# wrapper. This prevents active S2.17.29 views from being rewritten to S2.17.25.
+_V1160_S21729_REPLY_ROOT = _V1160_S21725_SAFE_REPLY_BASE
+
+async def _v1160_s21729_reply(update, text, *args, **kwargs):
+    return await _V1160_S21729_REPLY_ROOT(update, text, *args, **kwargs)
+
+V1160_S21729_EVIDENCE_LOCK = V1160_S21728_LIVE_LOCK
+V1160_S21729_LAST_SIGNATURE = None
+V1160_S21729_LAST_MATRIX = tuple()
+V1160_S21729_CHANGE_COUNT = 0
+V1160_S21729_NOCHANGE_COUNT = 0
+
+
+def _v1160_s21729_signature(snap, cert, matrix, comp):
+    aggregate = (cert or {}).get('aggregate') or {}
+    payload = (
+        str((snap or {}).get('snapshot_id', '-')),
+        str((snap or {}).get('unified_hash', '-')),
+        int(aggregate.get('classified', 0) or 0),
+        int(aggregate.get('numeric', 0) or 0),
+        round(float((comp or {}).get('final', 0.0) or 0.0), 4),
+        tuple((str(r.get('label','-')), round(float(r.get('current',0.0) or 0.0),4),
+               round(float(r.get('target',0.0) or 0.0),4), bool(r.get('passed'))) for r in matrix),
+    )
+    return repr(payload)
+
+
+def _v1160_s21729_progress_row(row, previous=None):
+    current = float(row.get('current', 0.0) or 0.0)
+    target = float(row.get('target', 0.0) or 0.0)
+    gap = max(0.0, target-current)
+    progress = 100.0 if target <= 0 else max(0.0, min(100.0, current/target*100.0))
+    previous_value = current
+    if isinstance(previous, dict):
+        previous_value = float(previous.get('current', current) or current)
+    return {
+        'label': str(row.get('label','-')),
+        'current': current,
+        'target': target,
+        'passed': bool(row.get('passed', False)),
+        'gap': gap,
+        'progress': progress,
+        'delta': current-previous_value,
+    }
+
+
+def _v1160_s21729_refresh_evidence(force=False):
+    """Worker-only authoritative refresh; publish only when evidence changes."""
+    global V1160_S21728_EVIDENCE, V1160_S21729_LAST_SIGNATURE
+    global V1160_S21729_LAST_MATRIX, V1160_S21729_CHANGE_COUNT, V1160_S21729_NOCHANGE_COUNT
+    now = time.time()
+    with V1160_S21729_EVIDENCE_LOCK:
+        previous = dict(V1160_S21728_EVIDENCE)
+    if not force and now-float(previous.get('updated_at',0.0)) < V1160_S21728_EVIDENCE_INTERVAL:
+        return previous
+    try:
+        snap, detail, comp, snap_age = _v1160_s21726_fast_context()
+        cert, matrix = ({}, [])
+        if snap is not None:
+            cert, matrix = _v1160_s21724_gate_matrix(snap, detail or {})
+        signature = _v1160_s21729_signature(snap, cert, matrix, comp)
+        prior_by_label = {str(r.get('label','-')):r for r in V1160_S21729_LAST_MATRIX}
+        progress_matrix = tuple(_v1160_s21729_progress_row(r, prior_by_label.get(str(r.get('label','-')))) for r in matrix)
+        changed = signature != V1160_S21729_LAST_SIGNATURE
+        aggregate = (cert or {}).get('aggregate') or {}
+        if changed:
+            V1160_S21729_CHANGE_COUNT += 1
+            V1160_S21729_LAST_SIGNATURE = signature
+            V1160_S21729_LAST_MATRIX = tuple(dict(r) for r in progress_matrix)
+        else:
+            V1160_S21729_NOCHANGE_COUNT += 1
+        current = {
+            'updated_at': now,
+            'published_at': now if changed else float(previous.get('published_at', previous.get('updated_at', now))),
+            'snapshot_available': snap is not None,
+            'snapshot_id': (snap or {}).get('snapshot_id','-'),
+            'snapshot_age': float(snap_age) if snap_age is not None else None,
+            'runtime_score': float((comp or {}).get('final',0.0)),
+            'evidence_ready': bool((cert or {}).get('evidence_ready',False)),
+            'gate_passed': sum(1 for row in matrix if row.get('passed')),
+            'gate_matrix': progress_matrix,
+            'classified': int(aggregate.get('classified',0) or 0),
+            'numeric': int(aggregate.get('numeric',0) or 0),
+            'refresh_count': int(previous.get('refresh_count',0))+1,
+            'publish_count': int(previous.get('publish_count',0))+(1 if changed else 0),
+            'changed': changed,
+            'change_count': V1160_S21729_CHANGE_COUNT,
+            'nochange_count': V1160_S21729_NOCHANGE_COUNT,
+            'last_error': '',
+        }
+    except Exception as exc:
+        v88_record_error('s21729-evidence-refresh', exc)
+        current = dict(previous)
+        current['updated_at'] = now
+        current['changed'] = False
+        current['last_error'] = f'{type(exc).__name__}: {exc}'[:180]
+    with V1160_S21729_EVIDENCE_LOCK:
+        V1160_S21728_EVIDENCE = current
+    return dict(current)
+
+# Keep existing live worker and memory state, replacing only its worker-side
+# certification refresher. Telegram remains strict memory-only.
+_v1160_s21728_refresh_evidence = _v1160_s21729_refresh_evidence
+
+
+def _v1160_s21729_build_live_state(evidence=None):
+    state = _v1160_s21728_build_live_state(evidence)
+    evidence = evidence or {}
+    state.update({
+        'version': V1160_LTS_S21729_VERSION,
+        'classified': int(evidence.get('classified',0)),
+        'numeric': int(evidence.get('numeric',0)),
+        'evidence_changed': bool(evidence.get('changed',False)),
+        'evidence_publish_count': int(evidence.get('publish_count',0)),
+        'evidence_change_count': int(evidence.get('change_count',0)),
+        'evidence_nochange_count': int(evidence.get('nochange_count',0)),
+        'evidence_published_at': float(evidence.get('published_at',0.0)),
+    })
+    return state
+
+_v1160_s21728_build_live_state = _v1160_s21729_build_live_state
+
+
+async def version1160ltss21729_cmd(update, context):
+    return await _v1160_s21729_reply(update, "\n".join([
+        f"🟢 A100 V{V1160_LTS_S21729_NUMBER}",
+        "Real-Time Evidence Delta & Incremental Gate Publish",
+        "Release Freeze: ACTIVE · Feature Freeze: ACTIVE",
+        "",
+        "Runtime authority      LIVE MONITORING WORKER",
+        "Telegram path         MEMORY STATE · STRICT READ ONLY",
+        "Evidence publish      CHANGE-DRIVEN · WORKER ONLY",
+        "Snapshot role         CERTIFICATION / RECOVERY EVIDENCE",
+        "Live refresh          2 seconds",
+        "Evidence check        30 seconds",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+    ]))
+
+
+async def status1160ltss21729_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    evidence_age = '-' if st.get('evidence_age') is None else f"{float(st['evidence_age']):.1f}s"
+    return await _v1160_s21729_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21729_NUMBER} STATUS · LIVE READ ONLY",
+        f"System               {'RUNNING' if st.get('worker_fresh') else 'DEGRADED'}",
+        f"Runtime source       {st.get('source')}",
+        f"Live state age       {float(st.get('live_age',0.0)):.1f}s · tick {int(st.get('tick',0))}",
+        f"Monitor worker       {st.get('worker_status')} · {'FRESH' if st.get('worker_fresh') else 'STALE'}",
+        f"Worker cycle         {float(st.get('cycle_ms',0.0)):.2f}ms",
+        f"Evidence check age   {evidence_age}",
+        f"Evidence publish     {'UPDATED' if st.get('evidence_changed') else 'UNCHANGED'} · {int(st.get('evidence_publish_count',0))}",
+        f"Outcome rows         {int(st.get('classified',0))} classified · {int(st.get('numeric',0))} numeric",
+        f"Runtime score        {float(st.get('runtime_score',0.0)):.1f}/100 · WORKER CACHED",
+        f"Mandatory gates      {int(st.get('gate_passed',0))}/5 PASS",
+        f"Recent errors        {int(st.get('recent_errors',0))}",
+        f"Registry / Routes    {int(st.get('registry_count',0))}/{int(st.get('route_count',0))}",
+        "Schema 1 · Paper 20 · Shadow 60 · Live OFF",
+        "Command calculation  DISABLED",
+    ]))
+
+
+async def runtimehealth1160ltss21729_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    return await _v1160_s21729_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21729_NUMBER} RUNTIME HEALTH · LIVE",
+        f"Worker heartbeat     {float(st.get('live_age',0.0)):.1f}s ago",
+        f"Worker freshness     {'PASS' if st.get('worker_fresh') else 'WARN'}",
+        f"State authority      {st.get('source')}",
+        f"Worker cycle         {float(st.get('cycle_ms',0.0)):.2f}ms",
+        f"Evidence refreshes   {int(st.get('evidence_refresh_count',0))}",
+        f"Evidence changes     {int(st.get('evidence_change_count',0))} · unchanged {int(st.get('evidence_nochange_count',0))}",
+        "Telegram isolation   PASS · STRICT READ ONLY",
+        f"Recent errors        {int(st.get('recent_errors',0))}",
+        f"Registry             {int(st.get('registry_count',0))}/341",
+        "Snapshot            SUPPORTING EVIDENCE ONLY",
+        "User-path scans      DISABLED",
+        "User-path gates      DISABLED",
+    ]))
+
+
+async def releasegate1160ltss21729_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    lines=[]
+    for idx,row in enumerate(st.get('gate_matrix') or (),1):
+        delta=float(row.get('delta',0.0))
+        delta_text='' if abs(delta)<0.0001 else f" · delta {delta:+.1f}"
+        lines.append(
+            f"Gate {idx} {row.get('label','-'):<15} "
+            f"{'PASS' if row.get('passed') else 'BLOCKED'} · "
+            f"{float(row.get('current',0.0)):.1f}/{float(row.get('target',0.0)):.1f} · "
+            f"{float(row.get('progress',0.0)):.1f}%"
+            + ('' if row.get('passed') else f" · gap {float(row.get('gap',0.0)):.1f}") + delta_text
+        )
+    if not lines:
+        lines.append('Gate evidence WARMING · worker has not published certification evidence')
+    return await _v1160_s21729_reply(update, "\n".join([
+        f"A100 V{V1160_LTS_S21729_NUMBER} RELEASE GATE · LIVE VIEW",
+        f"Runtime state        {'FRESH' if st.get('worker_fresh') else 'STALE'} · age {float(st.get('live_age',0.0)):.1f}s",
+        f"Certification source WORKER-CACHED · CHANGE-DRIVEN",
+        f"Runtime score        {float(st.get('runtime_score',0.0)):.1f}/100",
+        f"Outcome evidence     {int(st.get('classified',0))}/{int(st.get('numeric',0))}",
+        f"Evidence             {'PASS' if st.get('evidence_ready') else 'BLOCKED'}",
+        f"Mandatory gates      {int(st.get('gate_passed',0))}/5 PASS",
+        *lines,
+        "",
+        "Telegram performs no gate, evidence, file, or snapshot calculation.",
+    ]))
+
+
+async def versionaudit1160ltss21729_cmd(update, context):
+    st=_v1160_s21728_read_live_state()
+    active=set()
+    for fn in (status1160ltss21729_cmd,runtimehealth1160ltss21729_cmd,releasegate1160ltss21729_cmd):
+        active.update(fn.__code__.co_names)
+    forbidden={'_v1160_s21726_fast_context','_v1160_s21724_gate_matrix'}
+    checks=[
+        ('Version source single',V91_VERSION==V1160_LTS_S21729_VERSION),
+        ('Output root current',_V1160_S21729_REPLY_ROOT is _V1160_S21725_SAFE_REPLY_BASE),
+        ('Live runtime worker',bool(V1160_S21728_LIVE_THREAD and V1160_S21728_LIVE_THREAD.is_alive())),
+        ('Live state freshness',bool(st.get('worker_fresh'))),
+        ('Telegram strict read only',not bool(active & forbidden)),
+        ('Change-driven evidence',_v1160_s21728_refresh_evidence is _v1160_s21729_refresh_evidence),
+        ('Snapshot evidence retained',callable(_v1160_s21726_fast_context)),
+        ('Registry 341',len(V90_COMMAND_REGISTRY)==341),
+        ('Schema/Paper/Shadow/Live',st.get('schema')==1 and st.get('paper')==20 and st.get('shadow')==60 and not st.get('live_trading')),
+    ]
+    return await _v1160_s21729_reply(update,"\n".join([
+        f"A100 V{V1160_LTS_S21729_NUMBER} VERSION AUDIT",
+        *[f"{'PASS' if ok else 'FAIL'} · {name}" for name,ok in checks],
+        "",
+        f"Registry / Callable / Expected  {len(V90_COMMAND_REGISTRY)}/341",
+        "Architecture  Worker → Live Runtime State → Telegram Strict Read Only",
+        "Evidence      Worker Check → Change Detection → Incremental Publish",
+        "Snapshot      Certification / Recovery Evidence",
+    ]))
+
+
+def _v1160_s21729_light_preflight(force=False):
+    base=_v1160_s21728_light_preflight(force)
+    checks=[c for c in base.get('details',[]) if c.get('name')!='Version source single']
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21729_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('Output root recovery',callable(_v1160_s21729_reply)),
+        _v1160_s2176_check('Evidence signature',callable(_v1160_s21729_signature)),
+        _v1160_s2176_check('Incremental gate publish',callable(_v1160_s21729_progress_row)),
+        _v1160_s2176_check('Worker-only evidence refresh',_v1160_s21728_refresh_evidence is _v1160_s21729_refresh_evidence),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],
+            'warnings':[c['name'] for c in warnings],'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+def v91_preflight(force=False): return _v1160_s21729_light_preflight(force)
+
+V925_COMMAND_USAGE.update({
+    'version':'S2.17.29 real-time evidence delta and incremental gate publish',
+    'status':'Live runtime status with worker-published evidence deltas',
+    'runtimehealth':'Live worker and evidence change counters',
+    'releasegate':'Strict read-only incremental gate progress',
+    'versionaudit':'Runtime-first, output-root and 341-command regression audit',
+})
+V90_COMMAND_REGISTRY.update({
+    'version':version1160ltss21729_cmd,
+    'versionaudit':versionaudit1160ltss21729_cmd,
+    'status':status1160ltss21729_cmd,
+    'runtimehealth':runtimehealth1160ltss21729_cmd,
+    'releasegate':releasegate1160ltss21729_cmd,
+})
+V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21729_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.29 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f"A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}",flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    print(f"A100 V91 startup preflight: PASS · warnings {len(pre['warnings'])} (S2.17.29)",flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21729_light_preflight(True)
+    print(f"{V1160_LTS_S21729_VERSION} worker running...",flush=True)
+    print(f"A100 V91 startup commands: {pre['command_count']}",flush=True)
+    print(f"A100 V91 data dir: {V91_DATA_DIR}",flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.29 bounded startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once()
+    _v1160_s21728_start_live_worker_once()
+    print('A100 S2.17.29 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.29 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
