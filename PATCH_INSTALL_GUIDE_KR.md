@@ -1,15 +1,29 @@
-# S2.17.37 Railway 패치 설치 안내
+# S2.17.38 패치 설치 안내
 
-1. Railway에 연결된 실제 GitHub 배포 브랜치의 프로젝트 루트에서 `main.py`를 덮어씁니다.
-2. 다른 데이터·설정·환경변수 파일은 삭제하거나 초기화하지 않습니다.
-3. 변경 파일을 커밋·푸시하고 Railway Deployment가 완료될 때까지 기다립니다.
-4. Railway Deployment Logs에서 `S2.17.37`과 startup preflight PASS를 확인합니다.
-5. Telegram에서 `/version`, `/versionaudit`, `/status` 순서로 실행합니다.
+1. 현재 Railway 배포 저장소를 백업합니다.
+2. ZIP의 `main.py`를 프로젝트 루트에 덮어씁니다.
+3. 변경 파일을 GitHub 배포 브랜치에 커밋·푸시합니다.
+4. Railway에서 새 Deployment를 확인합니다.
+5. 기존 데이터 디렉터리와 환경변수는 변경하지 않습니다.
 
-성공 기준:
-- A100 V116.0-LTS-S2.17.37
-- PASS · Version source single
+## 배포 후 확인
+```
+/version
+/versionaudit
+/commandcert
+/status
+/dashboard
+/releasegate
+/ltscertification
+/runtimehealth
+/pipelinetrace
+/performanceaudit
+/errors
+```
+
+성공 핵심값:
+- S2.17.38
+- Version source single PASS
 - Registry / Callable / Expected 341/341/341
-- Schema 1 · Paper 20 · Shadow 60 · Live OFF
-
-Render는 사용하지 않습니다.
+- Command Certified 341/341
+- Recent errors 0

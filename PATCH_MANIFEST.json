@@ -1,23 +1,10 @@
 {
-  "version": "116.0-LTS-S2.17.37",
-  "baseline": "116.0-LTS-S2.17.36",
-  "package_type": "incremental_patch",
-  "changed_files": [
-    "main.py",
-    "test_v1160_lts_s21737.py",
-    "CHANGELOG_S2.17.37.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "FINAL_COMPREHENSIVE_AUDIT_S2.17.37.md",
-    "AUDIT_METRICS_S2.17.37.json"
-  ],
-  "preserves": {
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": false,
-    "data": true,
-    "configuration": true
-  },
-  "gate_formula_changed": false,
-  "deployment_platform": "Railway"
+  "version": "116.0-LTS-S2.17.38",
+  "baseline": "116.0-LTS-S2.17.37",
+  "type": "incremental_patch",
+  "title": "Final System Certification & Command Integrity",
+  "preserves_data": true,
+  "preserves_config": true,
+  "registry_expected": 341,
+  "live_trading": false
 }
