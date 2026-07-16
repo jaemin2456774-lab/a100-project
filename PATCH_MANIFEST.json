@@ -1,15 +1,14 @@
 {
-  "version": "116.0-LTS-S2.17.40",
-  "baseline": "116.0-LTS-S2.17.39",
-  "type": "incremental_patch",
-  "data_preservation": true,
-  "gate_formula_changed": false,
+  "version": "116.0-LTS-S2.17.41",
+  "type": "patch",
+  "baseline": "S2.17.40",
   "files": [
     "main.py",
-    "test_v1160_lts_s21740.py",
-    "CHANGELOG_S2.17.40.md",
-    "FINAL_COMPREHENSIVE_AUDIT_S2.17.40.md",
+    "test_v1160_lts_s21741.py",
+    "CHANGELOG_S2.17.41.md",
+    "FINAL_COMPREHENSIVE_AUDIT_S2.17.41.md",
     "PATCH_INSTALL_GUIDE_KR.md",
     "changed_files.manifest"
-  ]
+  ],
+  "data_preservation": true
 }
