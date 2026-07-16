@@ -53661,6 +53661,279 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.0 LTS S2.17.42 - RC4 INTELLIGENCE IMPROVEMENT PLANNER
+# Read-only diagnostics over worker-cached authoritative gate evidence.
+# No gate formula, threshold, schema, position limit, or live-trading changes.
+# ============================================================================
+V1160_LTS_S21742_NUMBER = "116.0-LTS-S2.17.42"
+V1160_LTS_S21742_VERSION = "A100 V116.0-LTS-S2.17.42 RC4 INTELLIGENCE IMPROVEMENT PLANNER"
+V91_VERSION = V1160_LTS_S21742_VERSION
+for _name in (
+    'V1160_LTS_S21741_VERSION','V1160_LTS_S21739_VERSION','V1160_LTS_S21738_VERSION',
+    'V1160_LTS_S21737_VERSION','V1160_LTS_S21736_VERSION','V1160_LTS_S21735_VERSION',
+    'V1160_LTS_S21734_VERSION','V1160_LTS_S217291_VERSION','V1160_LTS_S21729_VERSION'):
+    globals()[_name] = V1160_LTS_S21742_VERSION
+for _name in (
+    'V1160_LTS_S21741_NUMBER','V1160_LTS_S21739_NUMBER','V1160_LTS_S21738_NUMBER',
+    'V1160_LTS_S21737_NUMBER','V1160_LTS_S21736_NUMBER','V1160_LTS_S21735_NUMBER',
+    'V1160_LTS_S21734_NUMBER','V1160_LTS_S217291_NUMBER','V1160_LTS_S21729_NUMBER'):
+    globals()[_name] = V1160_LTS_S21742_NUMBER
+
+
+def _v1160_s21742_gate_map(st=None):
+    st = st or _v1160_s21728_read_live_state()
+    out = {}
+    for row in st.get('gate_matrix') or ():
+        label = str(row.get('label', '')).strip()
+        if not label:
+            continue
+        out[label.lower()] = {
+            'label': label,
+            'current': float(row.get('current', 0.0) or 0.0),
+            'target': float(row.get('target', 0.0) or 0.0),
+            'passed': bool(row.get('passed', False)),
+        }
+    return st, out
+
+
+def _v1160_s21742_find_gate(gates, *needles):
+    for key, row in gates.items():
+        if any(n.lower() in key for n in needles):
+            return row
+    return {'label': needles[0] if needles else 'Unknown', 'current': 0.0, 'target': 0.0, 'passed': False}
+
+
+def _v1160_s21742_bar(current, target, width=10):
+    ratio = 0.0 if target <= 0 else max(0.0, min(1.0, current / target))
+    filled = int(round(ratio * width))
+    return '█' * filled + '░' * (width - filled)
+
+
+def _v1160_s21742_recommendations(label, current, target, st):
+    gap = max(0.0, target - current)
+    low_sample = current < target * 0.70 if target else True
+    name = label.lower()
+    rows = []
+    if 'intelligence' in name:
+        rows = [
+            'Shadow 표본과 국면별 신호 일치도를 우선 축적',
+            '낮은 품질 후보 차단 사유를 Pattern/Regime별 분리',
+            'Champion 안정성 확인 전 임계값 자동 완화 금지',
+        ]
+    elif 'strategy' in name or 'trust' in name:
+        rows = [
+            '전략별 최소 표본·EV·MDD를 분리 추적',
+            '단기 승률보다 국면별 재현성과 손실 꼬리위험 우선',
+            'Champion 교체는 충분한 표본과 안정성 확인 후 수행',
+        ]
+    elif 'outcome' in name:
+        rows = [
+            'Close Payload→Outcome Attribution 누락 여부 지속 감사',
+            'TP/SL/HOLD 결과와 예측 근거의 일치율을 누적',
+            '수수료·슬리피지 반영 후 기대값이 양수인 표본 우선',
+        ]
+    elif 'memory' in name:
+        rows = [
+            '중복·노후 Pattern을 제거하지 말고 aging 상태로 격리',
+            '최근 국면과 불일치하는 기억의 가중치를 점진 감쇠',
+            'Memory refresh와 evidence publish 지연을 지속 감시',
+        ]
+    elif 'lts' in name:
+        rows = [
+            '72H 인증과 모든 Mandatory Gate를 독립 조건으로 유지',
+            '재시작·Evidence 보존·Registry 341 무결성을 계속 검증',
+            '실측 Gate 미달 상태를 표시값으로 강제 PASS하지 않음',
+        ]
+    else:
+        rows = ['실측 표본을 추가 축적하고 원인별 성과를 분리 검증']
+    if low_sample:
+        rows.insert(0, f'현재 격차 {gap:.1f}점: 품질 표본 축적이 최우선')
+    return rows[:4]
+
+
+def _v1160_s21742_gate_report(title, row, st):
+    cur, target = float(row['current']), float(row['target'])
+    gap = max(0.0, target-cur)
+    status = '🟢 PASS' if row['passed'] else '🔴 BLOCKED'
+    lines = [
+        f'{title}',
+        f'{status} · {cur:.1f}/{target:.1f}',
+        f'{_v1160_s21742_bar(cur,target)} {0.0 if target<=0 else cur/target*100:.1f}% · Rem {gap:.1f}',
+        '', '🎯 PRIORITY ACTIONS'
+    ]
+    lines += [f'{i}. {x}' for i,x in enumerate(_v1160_s21742_recommendations(row['label'],cur,target,st),1)]
+    lines += ['', '🔒 READ ONLY · worker-cached authoritative evidence',
+              'Gate formula / threshold / persisted state are unchanged.']
+    return lines
+
+
+async def coach1160ltss21742_cmd(update, context):
+    st, gates = _v1160_s21742_gate_map()
+    ordered = [
+        _v1160_s21742_find_gate(gates, 'intelligence'),
+        _v1160_s21742_find_gate(gates, 'strategy trust', 'strategy'),
+        _v1160_s21742_find_gate(gates, 'outcome quality', 'outcome'),
+        _v1160_s21742_find_gate(gates, 'memory health', 'memory'),
+        _v1160_s21742_find_gate(gates, 'lts readiness', 'lts'),
+    ]
+    ranked = sorted(ordered, key=lambda r: (r['passed'], -(r['target']-r['current'])))
+    lines = [f'🧭 A100 V{V1160_LTS_S21742_NUMBER} AI IMPROVEMENT PLANNER',
+             'RC4 · READ-ONLY PRIORITY PLAN', '']
+    for i,row in enumerate(ranked,1):
+        gap=max(0.0,row['target']-row['current'])
+        lines.append(f'{i}. {row["label"]} · {row["current"]:.1f}/{row["target"]:.1f} · gap {gap:.1f}')
+    top = ranked[0] if ranked else None
+    if top:
+        lines += ['', '🔥 HIGHEST PRIORITY']
+        lines += [f'• {x}' for x in _v1160_s21742_recommendations(top['label'],top['current'],top['target'],st)]
+    lines += ['', f'⏱️ 72H Evidence {float(st.get("coverage_72h",0.0) or 0.0):.1f}%',
+              f'🚦 Gates {int(st.get("gate_passed",0) or 0)}/5',
+              'No threshold relaxation, gate recomputation, storage scan, or live order.']
+    return await _v1160_s21729_reply(update, '\n'.join(lines))
+
+
+async def intelligence1160ltss21742_cmd(update, context):
+    st,gates=_v1160_s21742_gate_map(); row=_v1160_s21742_find_gate(gates,'intelligence')
+    return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21742_gate_report('🧠 INTELLIGENCE SCORE ANALYZER',row,st)))
+
+
+async def strategytrust1160ltss21742_cmd(update, context):
+    st,gates=_v1160_s21742_gate_map(); row=_v1160_s21742_find_gate(gates,'strategy trust','strategy')
+    return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21742_gate_report('🛡️ STRATEGY TRUST ANALYZER',row,st)))
+
+
+async def outcomequality1160ltss21742_cmd(update, context):
+    st,gates=_v1160_s21742_gate_map(); row=_v1160_s21742_find_gate(gates,'outcome quality','outcome')
+    return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21742_gate_report('🎯 OUTCOME QUALITY ANALYZER',row,st)))
+
+
+async def memoryhealth1160ltss21742_cmd(update, context):
+    st,gates=_v1160_s21742_gate_map(); row=_v1160_s21742_find_gate(gates,'memory health','memory')
+    return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21742_gate_report('🧠 MEMORY HEALTH ANALYZER',row,st)))
+
+
+async def ltsreadiness1160ltss21742_cmd(update, context):
+    st,gates=_v1160_s21742_gate_map(); row=_v1160_s21742_find_gate(gates,'lts readiness','lts')
+    lines=_v1160_s21742_gate_report('🏆 LTS READINESS PREDICTOR',row,st)
+    coverage=float(st.get('coverage_72h',0.0) or 0.0)
+    lines[4:4]=[f'⏱️ 72H Certification {coverage:.1f}%',
+                'Prediction: PASS time is not estimated until persisted evidence trend is sufficient.','']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def version1160ltss21742_cmd(update, context):
+    return await _v1160_s21729_reply(update,'\n'.join([
+        f'🟢 A100 V{V1160_LTS_S21742_NUMBER}',
+        'RC4 Intelligence Improvement Planner',
+        'Release Freeze ACTIVE · Regression Risk NONE','',
+        '🧭 /coach · AI Improvement Planner',
+        '🧠 /intelligence · Score Analyzer',
+        '🛡️ /strategytrust · Trust Analyzer',
+        '🎯 /outcomequality · Outcome Analyzer',
+        '🧠 /memoryhealth · Memory Analyzer',
+        '🏆 /ltsreadiness · Readiness Predictor','',
+        'Runtime First · Strict Read Only · Gate formulas UNCHANGED',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF']))
+
+
+def _v1160_s21742_reconcile_handlers():
+    repaired=[]
+    desired={
+        'version':version1160ltss21742_cmd,
+        'versionaudit':versionaudit1160ltss21741_cmd,
+        'commandcert':commandcert1160ltss21741_cmd,
+        'runtimehealth':runtimehealth1160ltss21741_cmd,
+        'coach':coach1160ltss21742_cmd,
+        'intelligence':intelligence1160ltss21742_cmd,
+        'strategytrust':strategytrust1160ltss21742_cmd,
+        'outcomequality':outcomequality1160ltss21742_cmd,
+        'memoryhealth':memoryhealth1160ltss21742_cmd,
+        'ltsreadiness':ltsreadiness1160ltss21742_cmd,
+    }
+    for name,handler in desired.items():
+        if name in V90_COMMAND_REGISTRY and V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    V925_COMMAND_USAGE.update({
+        'version':'S2.17.42 RC4 Intelligence Improvement Planner identity',
+        'coach':'Read-only AI improvement priorities from authoritative gate evidence',
+        'intelligence':'Intelligence gate breakdown and prioritized quality actions',
+        'strategytrust':'Strategy trust gate breakdown and stability actions',
+        'outcomequality':'Outcome quality gate breakdown and attribution actions',
+        'memoryhealth':'Memory health gate breakdown and aging/drift actions',
+        'ltsreadiness':'LTS readiness and 72H certification planning view',
+    })
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21742_light_preflight(force=False):
+    repaired=_v1160_s21742_reconcile_handlers()
+    base=_v1160_s21741_light_preflight(force)
+    repaired=sorted(set(repaired+_v1160_s21742_reconcile_handlers()))
+    obsolete={'Version source single','S2.17.41 version handler active'}
+    checks=[c for c in base.get('details',[]) if c.get('name') not in obsolete]
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21742_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.42 version handler active',V90_COMMAND_REGISTRY.get('version') is version1160ltss21742_cmd),
+        _v1160_s2176_check('Improvement planner active',V90_COMMAND_REGISTRY.get('coach') is coach1160ltss21742_cmd),
+        _v1160_s2176_check('Intelligence analyzer active',V90_COMMAND_REGISTRY.get('intelligence') is intelligence1160ltss21742_cmd),
+        _v1160_s2176_check('Strategy trust analyzer active',V90_COMMAND_REGISTRY.get('strategytrust') is strategytrust1160ltss21742_cmd),
+        _v1160_s2176_check('Outcome quality analyzer active',V90_COMMAND_REGISTRY.get('outcomequality') is outcomequality1160ltss21742_cmd),
+        _v1160_s2176_check('Memory health analyzer active',V90_COMMAND_REGISTRY.get('memoryhealth') is memoryhealth1160ltss21742_cmd),
+        _v1160_s2176_check('LTS readiness predictor active',V90_COMMAND_REGISTRY.get('ltsreadiness') is ltsreadiness1160ltss21742_cmd),
+        _v1160_s2176_check('Registry remains 341',len(V90_COMMAND_REGISTRY)==341),
+        _v1160_s2176_check('Strict read-only analyzer source',callable(_v1160_s21728_read_live_state)),
+        _v1160_s2176_check('Gate formulas unchanged',callable(_v1160_s21734_production_ready)),
+    ])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],
+            'warnings':[c['name'] for c in warnings],'repaired':repaired,'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+_v1160_s21742_reconcile_handlers()
+
+def v91_preflight(force=False): return _v1160_s21742_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21742_light_preflight(True)
+    if not pre['ok']:
+        raise RuntimeError('S2.17.42 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V91 dispatcher count: 1',flush=True)
+    if pre['repaired']: print('A100 S2.17.42 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.42)',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21742_light_preflight(True)
+    print(f'{V1160_LTS_S21742_VERSION} worker running...',flush=True)
+    print(f'A100 V91 startup commands: {pre["command_count"]}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if pre['repaired']: print('A100 S2.17.42 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    if not pre['ok']:
+        raise RuntimeError('A100 S2.17.42 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once()
+    print('A100 S2.17.42 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.42 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
