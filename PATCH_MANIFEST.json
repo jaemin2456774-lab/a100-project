@@ -1,12 +1,10 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.42",
-  "baseline": "S2.17.41",
-  "title": "RC4 Intelligence Improvement Planner",
+  "version": "116.0-LTS-S2.17.43",
+  "title": "Unified Summary UI & Runtime Trend Polish",
+  "baseline": "116.0-LTS-S2.17.42",
+  "deployment": "Railway",
   "registry_expected": 341,
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
+  "data_preserved": true,
   "gate_formulas_changed": false,
-  "data_files_included": false
+  "live_trading": false
 }
