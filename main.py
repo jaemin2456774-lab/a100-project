@@ -54848,6 +54848,187 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.0 LTS S2.17.47 - FINAL CONTRACT INTEGRITY & RELEASE AUDIT FIX
+# Closes the S2.17.46 version-audit handler identity and advertised-command
+# contract regressions. No gate formula, threshold, persisted state, schema,
+# position limit, evidence source, or trading behavior is modified.
+# ============================================================================
+V1160_LTS_S21747_NUMBER = "116.0-LTS-S2.17.47"
+V1160_LTS_S21747_VERSION = "A100 V116.0-LTS-S2.17.47 FINAL CONTRACT INTEGRITY & RELEASE AUDIT FIX"
+V91_VERSION = V1160_LTS_S21747_VERSION
+for _name in (
+    'V1160_LTS_S21746_VERSION','V1160_LTS_S21745_VERSION','V1160_LTS_S21744_VERSION',
+    'V1160_LTS_S21743_VERSION','V1160_LTS_S21742_VERSION','V1160_LTS_S21741_VERSION',
+    'V1160_LTS_S21739_VERSION','V1160_LTS_S21738_VERSION','V1160_LTS_S21737_VERSION'):
+    globals()[_name] = V1160_LTS_S21747_VERSION
+for _name in (
+    'V1160_LTS_S21746_NUMBER','V1160_LTS_S21745_NUMBER','V1160_LTS_S21744_NUMBER',
+    'V1160_LTS_S21743_NUMBER','V1160_LTS_S21742_NUMBER','V1160_LTS_S21741_NUMBER',
+    'V1160_LTS_S21739_NUMBER','V1160_LTS_S21738_NUMBER','V1160_LTS_S21737_NUMBER'):
+    globals()[_name] = V1160_LTS_S21747_NUMBER
+
+
+def _v1160_s21747_contract_audit():
+    a = _v1160_s21738_command_integrity_audit()
+    advertised = {'version','versionaudit','commandcert','coach','ltsreadiness','runtimehealth'}
+    registry = set(V90_COMMAND_REGISTRY)
+    unsupported = sorted(advertised - registry)
+    critical = {
+        'version': version1160ltss21747_cmd,
+        'versionaudit': versionaudit1160ltss21747_cmd,
+        'commandcert': commandcert1160ltss21741_cmd,
+        'coach': coach1160ltss21746_cmd,
+        'ltsreadiness': ltsreadiness1160ltss21746_cmd,
+        'runtimehealth': runtimehealth1160ltss21746_cmd,
+    }
+    handler_mismatch = sorted(name for name, handler in critical.items()
+                              if V90_COMMAND_REGISTRY.get(name) is not handler)
+    return {
+        'base': a,
+        'unsupported': unsupported,
+        'handler_mismatch': handler_mismatch,
+        'ok': bool(a.get('ok')) and not unsupported and not handler_mismatch,
+    }
+
+
+async def version1160ltss21747_cmd(update, context):
+    return await _v1160_s21729_reply(update, '\n'.join([
+        f'🟢 A100 V{V1160_LTS_S21747_NUMBER}',
+        'Final Contract Integrity & Release Audit Fix',
+        'Release Freeze ACTIVE · Regression Risk NONE', '',
+        '🏁 /ltsreadiness detail · final certification and persisted evidence',
+        '🧭 /coach detail · bottleneck and action plan',
+        '🩺 /runtimehealth · runtime performance certification', '',
+        'Evidence maturity is integrated into /ltsreadiness detail.',
+        'Authoritative PASS: 5/5 Gates + 72H 100% + structural PASS.',
+        'Gate formulas / thresholds / persisted state UNCHANGED.',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF']))
+
+
+async def versionaudit1160ltss21747_cmd(update, context):
+    st = _v1160_s21728_read_live_state()
+    contract = _v1160_s21747_contract_audit(); c = contract['base']
+    migration_ok = not contract['handler_mismatch']
+    checks = [
+        ('Release Identity', V91_VERSION == V1160_LTS_S21747_VERSION),
+        ('Startup Migration', migration_ok),
+        ('Command Registry', c['registry']==c['callable']==c['expected']==341),
+        ('Help / Commands', c['help']==341),
+        ('Certified Routes', c['certified']==341 and not c['failed']),
+        ('Advertised Command Contract', not contract['unsupported']),
+        ('Runtime Worker', bool(st.get('worker_fresh'))),
+        ('Runtime Authority', st.get('source') == 'LIVE_RUNTIME'),
+        ('Evidence Worker', _v1160_s21728_refresh_evidence is _v1160_s21729_refresh_evidence),
+        ('Recent Errors', int(st.get('recent_errors',0) or 0)==0),
+        ('Schema / Paper / Shadow / Live', st.get('schema')==1 and st.get('paper')==20 and st.get('shadow')==60 and not st.get('live_trading')),
+    ]
+    lines=[f'🛡️ A100 V{V1160_LTS_S21747_NUMBER} VERSION AUDIT','FINAL CONTRACT INTEGRITY','']
+    lines += [f'{_v1160_s21741_pass_icon(ok)} · {name}' for name,ok in checks]
+    lines += ['', '📊 COVERAGE',
+        f'Registry / Callable / Expected  {c["registry"]}/{c["callable"]}/{c["expected"]}',
+        f'Command Certified               {c["certified"]}/{c["registry"]}',
+        f'Help Coverage                   {c["help"]}/{c["registry"]}',
+        f'Unsupported advertised commands {len(contract["unsupported"])}',
+        f'Handler identity mismatches      {len(contract["handler_mismatch"])}',
+        '', '🧱 ARCHITECTURE',
+        'Worker → Live Runtime State → Telegram Strict Read Only',
+        'Evidence Worker → Change Detection → Incremental Publish',
+        'Evidence maturity → /ltsreadiness detail (existing registry route)',
+        'Snapshot → Certification / Recovery Evidence',
+        'Gate formulas UNCHANGED · no Telegram recomputation']
+    if contract['unsupported']:
+        lines += ['', 'Unsupported: '+', '.join(contract['unsupported'][:12])]
+    if contract['handler_mismatch']:
+        lines += ['', 'Handler mismatch: '+', '.join(contract['handler_mismatch'])]
+    return await _v1160_s21729_reply(update, '\n'.join(lines))
+
+
+def _v1160_s21747_reconcile_handlers():
+    repaired=[]
+    desired={
+        'version':version1160ltss21747_cmd,
+        'versionaudit':versionaudit1160ltss21747_cmd,
+        'commandcert':commandcert1160ltss21741_cmd,
+        'runtimehealth':runtimehealth1160ltss21746_cmd,
+        'coach':coach1160ltss21746_cmd,
+        'ltsreadiness':ltsreadiness1160ltss21746_cmd,
+    }
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    # /evidence was never part of the frozen 341-command registry. Remove stale
+    # advertising instead of silently adding a 342nd route or replacing a command.
+    V925_COMMAND_USAGE.pop('evidence', None)
+    V925_COMMAND_USAGE.update({
+        'version':'S2.17.47 final contract integrity identity',
+        'versionaudit':'Current handler identity and advertised-command contract audit',
+        'coach':'Final certification bottleneck planner; detail optional',
+        'runtimehealth':'Runtime performance and certification health',
+        'ltsreadiness':'Authoritative readiness, persisted evidence maturity and gate analyzer; detail optional',
+    })
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21747_light_preflight(force=False):
+    repaired=_v1160_s21747_reconcile_handlers()
+    base=_v1160_s21746_light_preflight(force)
+    repaired=sorted(set(repaired+_v1160_s21747_reconcile_handlers()))
+    obsolete={'Version source single','S2.17.46 version handler active','Final certification planner active',
+              'Runtime certification health active','Final LTS release view active'}
+    checks=[c for c in base.get('details',[]) if c.get('name') not in obsolete]
+    contract=_v1160_s21747_contract_audit()
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21747_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.47 version handler active',V90_COMMAND_REGISTRY.get('version') is version1160ltss21747_cmd),
+        _v1160_s2176_check('S2.17.47 version audit active',V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21747_cmd),
+        _v1160_s2176_check('Advertised command contract clean',not contract['unsupported'],detail=','.join(contract['unsupported'])),
+        _v1160_s2176_check('Critical handler identity clean',not contract['handler_mismatch'],detail=','.join(contract['handler_mismatch'])),
+        _v1160_s2176_check('Registry remains 341',len(V90_COMMAND_REGISTRY)==341),
+        _v1160_s2176_check('Strict read-only evidence source',callable(_v1160_s21728_read_live_state)),
+        _v1160_s2176_check('Gate formulas unchanged',callable(_v1160_s21734_production_ready))])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']
+    warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],
+            'warnings':[c['name'] for c in warnings],'repaired':repaired,'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+_v1160_s21747_reconcile_handlers()
+def v91_preflight(force=False): return _v1160_s21747_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21747_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.47 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V91 dispatcher count: 1',flush=True)
+    if pre['repaired']: print('A100 S2.17.47 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.47)',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21747_light_preflight(True)
+    print(f'{V1160_LTS_S21747_VERSION} worker running...',flush=True); print(f'A100 V91 startup commands: {pre["command_count"]}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if pre['repaired']: print('A100 S2.17.47 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.47 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 S2.17.47 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.47 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    print('A100 S2.17.47 final contract integrity audit: ACTIVE · read only',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

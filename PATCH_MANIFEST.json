@@ -1,21 +1,25 @@
 {
-  "release": "A100 V116.0 LTS S2.17.46",
-  "title": "Final Certification Intelligence & Release View",
-  "baseline": "S2.17.45",
-  "deployment": "Railway",
-  "registry_expected": 341,
-  "schema": 1,
-  "paper_positions": 20,
-  "shadow_positions": 60,
-  "live_trading": false,
+  "version": "116.0-LTS-S2.17.47",
+  "baseline": "116.0-LTS-S2.17.46",
+  "type": "incremental_patch",
+  "title": "Final Contract Integrity & Release Audit Fix",
+  "preserves": [
+    "Schema 1",
+    "Paper 20",
+    "Shadow 60",
+    "Live Trading OFF",
+    "Registry 341",
+    "Runtime First",
+    "Strict Read Only",
+    "Evidence Worker",
+    "Gate formulas and thresholds"
+  ],
   "files": [
     "main.py",
-    "test_v1160_lts_s21746.py",
-    "CHANGELOG_S2.17.46.md",
-    "FINAL_COMPREHENSIVE_AUDIT_S2.17.46.md",
+    "test_v1160_lts_s21747.py",
+    "CHANGELOG_S2.17.47.md",
+    "FINAL_COMPREHENSIVE_AUDIT_S2.17.47.md",
     "PATCH_INSTALL_GUIDE_KR.md",
     "changed_files.manifest"
-  ],
-  "data_preservation": "100%",
-  "gate_formulas_changed": false
+  ]
 }
