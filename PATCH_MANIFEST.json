@@ -1,20 +1,17 @@
 {
-  "version": "116.0-LTS-S2.17.49",
-  "type": "incremental_patch",
-  "baseline": "116.0-LTS-S2.17.48",
+  "version": "116.0-LTS-S2.17.50",
+  "title": "Help Registry Synchronization & Signal Discovery",
+  "baseline": "116.0-LTS-S2.17.49",
+  "patch_type": "incremental",
+  "registry_expected": 341,
+  "new_commands": 0,
   "files": [
     "main.py",
-    "CHANGELOG_S2.17.49.md",
-    "FINAL_COMPREHENSIVE_AUDIT_S2.17.49.md",
+    "CHANGELOG_S2.17.50.md",
+    "FINAL_COMPREHENSIVE_AUDIT_S2.17.50.md",
     "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
-  ],
-  "preserves": [
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live Trading OFF",
-    "Registry 341",
-    "Railway /data and settings"
+    "changed_files.manifest",
+    "PATCH_MANIFEST.json",
+    "SHA256SUMS"
   ]
 }
