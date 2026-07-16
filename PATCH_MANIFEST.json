@@ -1,40 +1,20 @@
 {
-  "version": "116.0-LTS-S2.17.48",
-  "baseline": "116.0-LTS-S2.17.47",
+  "version": "116.0-LTS-S2.17.49",
   "type": "incremental_patch",
-  "title": "Final Release Audit & Certificate Readiness",
-  "registry_expected": 341,
-  "data_config_preserved": true,
+  "baseline": "116.0-LTS-S2.17.48",
   "files": [
-    {
-      "path": "main.py",
-      "size": 2932833,
-      "sha256": "5c4d2e89fb3415363fe2a3b4ff004aa6e9fc22ef77f95f1e3f887d4bbd0b6ec6"
-    },
-    {
-      "path": "test_v1160_lts_s21748.py",
-      "size": 551,
-      "sha256": "bc78f4dc7927a8c648c1a094047a55f1bd3aa7bfa070a0ccd82aefea9636a4ab"
-    },
-    {
-      "path": "CHANGELOG_S2.17.48.md",
-      "size": 740,
-      "sha256": "fbbd6479ce827c2e9d73d8f26fb5332ed0326b048791fb553ccb1f1bab927202"
-    },
-    {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_S2.17.48.md",
-      "size": 706,
-      "sha256": "c08bd31550325c20ff9ae3834df99e246eea1e33d1013a4c6a356fde0e9a3f97"
-    },
-    {
-      "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 720,
-      "sha256": "a901a780746bf6c0959fefbbed2816341234136bf0e73b0c1ce6537af5bd6d96"
-    },
-    {
-      "path": "changed_files.manifest",
-      "size": 173,
-      "sha256": "c2f38155589f4fe2719fe08a66a4baeaad7387a7f81f3bf47100aa019ac8351f"
-    }
+    "main.py",
+    "CHANGELOG_S2.17.49.md",
+    "FINAL_COMPREHENSIVE_AUDIT_S2.17.49.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
+  ],
+  "preserves": [
+    "Schema 1",
+    "Paper 20",
+    "Shadow 60",
+    "Live Trading OFF",
+    "Registry 341",
+    "Railway /data and settings"
   ]
 }
