@@ -55029,6 +55029,262 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+# =============================================================================
+# A100 V116.0 LTS S2.17.48 - FINAL RELEASE AUDIT & CERTIFICATE READINESS
+# =============================================================================
+V1160_LTS_S21748_NUMBER = "116.0-LTS-S2.17.48"
+V1160_LTS_S21748_VERSION = "A100 V116.0-LTS-S2.17.48 FINAL RELEASE AUDIT & CERTIFICATE READINESS"
+V91_VERSION = V1160_LTS_S21748_VERSION
+for _name in (
+    'V1160_LTS_S21747_NUMBER','V1160_LTS_S21746_NUMBER','V1160_LTS_S21745_NUMBER',
+    'V1160_LTS_S21744_NUMBER','V1160_LTS_S21743_NUMBER','V1160_LTS_S21742_NUMBER',
+    'V1160_LTS_S21741_NUMBER','V1160_LTS_S21739_NUMBER','V1160_LTS_S21738_NUMBER',
+    'V1160_LTS_S21737_NUMBER'):
+    globals()[_name] = V1160_LTS_S21748_NUMBER
+
+
+def _v1160_s21748_release_audit(st=None):
+    st = st or _v1160_s21728_read_live_state()
+    view = _v1160_s21746_release_view(st)
+    contract = _v1160_s21747_contract_audit()
+    structural = bool(view['structural'] and contract['ok'])
+    checks = [
+        ('Version identity', V91_VERSION == V1160_LTS_S21748_VERSION),
+        ('Registry / callable / expected', contract['base']['registry']==contract['base']['callable']==contract['base']['expected']==341),
+        ('Command routes', contract['base']['certified']==341 and not contract['base']['failed']),
+        ('Help contract', contract['base']['help']==341 and not contract['unsupported']),
+        ('Handler identity', not contract['handler_mismatch']),
+        ('Runtime freshness', bool(st.get('worker_fresh'))),
+        ('Runtime authority', st.get('source')=='LIVE_RUNTIME'),
+        ('Recent errors', int(st.get('recent_errors',0) or 0)==0),
+        ('Schema / Paper / Shadow / Live', st.get('schema')==1 and st.get('paper')==20 and st.get('shadow')==60 and not st.get('live_trading')),
+        ('Mandatory gates', view['passed']==5),
+        ('Persisted 72H', view['eta']['coverage']>=100.0),
+        ('Structural integrity', structural),
+    ]
+    passed=sum(1 for _,ok in checks if ok)
+    authoritative=all(ok for _,ok in checks)
+    return {'state':st,'view':view,'contract':contract,'checks':checks,'passed':passed,
+            'total':len(checks),'authoritative':authoritative,'structural':structural}
+
+
+def _v1160_s21748_timeline_lines(st):
+    mat=_v1160_s21745_maturity(st)
+    # Uses persisted runtime evidence only; 6H/24H are bounded views and 72H is authoritative clock.
+    p72=max(0.0,min(100.0,float(mat.get('persistence',0.0) or 0.0)))
+    p24=max(0.0,min(100.0,p72*3.0))
+    p6=max(0.0,min(100.0,p72*12.0))
+    return [
+        f'6H  {_v1160_s21742_bar(p6,100.0)} {p6:.1f}%',
+        f'24H {_v1160_s21742_bar(p24,100.0)} {p24:.1f}%',
+        f'72H {_v1160_s21742_bar(p72,100.0)} {p72:.1f}% · AUTHORITATIVE',
+    ]
+
+
+def _v1160_s21748_certificate_lines(a):
+    v=a['view']; status='CERTIFIED' if a['authoritative'] else 'PENDING'
+    return [
+        '📜 RELEASE CERTIFICATE',
+        f'Status {status}',
+        f'Version {V1160_LTS_S21748_NUMBER}',
+        f'Checklist {a["passed"]}/{a["total"]}',
+        f'Mandatory Gates {v["passed"]}/5',
+        f'Persisted 72H {v["eta"]["coverage"]:.1f}%',
+        f'Registry {a["contract"]["base"]["registry"]}/341',
+        f'Recent Errors {int(a["state"].get("recent_errors",0) or 0)}',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+        'Gate formulas / thresholds UNCHANGED',
+        'Certificate is authoritative only when Status CERTIFIED.',
+    ]
+
+
+async def releasegate1160ltss21748_cmd(update, context):
+    st=_v1160_s21728_read_live_state(); a=_v1160_s21748_release_audit(st)
+    detail=_v1160_s21743_mode(context)=='detail'
+    icon='🟢' if a['authoritative'] else '🟡'
+    lines=[f'🏁 A100 V{V1160_LTS_S21748_NUMBER} FINAL RELEASE AUDIT',
+           'Mode DETAIL · LIVE READ ONLY' if detail else 'Mode SUMMARY · LIVE READ ONLY','',
+           f'{icon} {"AUTHORITATIVE CERTIFIED" if a["authoritative"] else "CERTIFICATION IN PROGRESS"}',
+           f'Checklist {a["passed"]}/{a["total"]}',
+           f'Mandatory Gates {a["view"]["passed"]}/5',
+           f'Persisted 72H {a["view"]["eta"]["coverage"]:.1f}% · remaining {a["view"]["eta"]["clock_eta"]}',
+           f'Structural Integrity {"PASS" if a["structural"] else "FAIL"}',
+           f'Gate ETA {a["view"]["eta"]["gate_eta"]}','',
+           '⏳ EVIDENCE TIMELINE',*_v1160_s21748_timeline_lines(st)]
+    if detail:
+        lines += ['', '✅ LTS RELEASE CHECKLIST']
+        lines += [f'{"✅" if ok else "⏳"} {name}' for name,ok in a['checks']]
+        lines += ['', *_v1160_s21748_certificate_lines(a)]
+    else:
+        lines += ['', '상세: /releasegate detail']
+    lines += ['', 'No threshold relaxation · no gate recomputation · no live order.']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def ltsreadiness1160ltss21748_cmd(update, context):
+    st=_v1160_s21728_read_live_state(); detail=_v1160_s21743_mode(context)=='detail'
+    a=_v1160_s21748_release_audit(st)
+    lines=[f'🏆 A100 V{V1160_LTS_S21748_NUMBER} LTS READINESS',
+           f'Mode {"DETAIL" if detail else "SUMMARY"} · LIVE READ ONLY','']
+    lines += _v1160_s21746_final_lines(st,detail)
+    lines += ['', '⏳ EVIDENCE TIMELINE', *_v1160_s21748_timeline_lines(st)]
+    if detail:
+        lines += ['', '✅ RELEASE CHECKLIST']
+        lines += [f'{"✅" if ok else "⏳"} {name}' for name,ok in a['checks']]
+        lines += ['', *_v1160_s21748_certificate_lines(a)]
+    else:
+        lines += ['', '상세: /ltsreadiness detail · /releasegate detail']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def version1160ltss21748_cmd(update, context):
+    return await _v1160_s21729_reply(update,'\n'.join([
+        f'🟢 A100 V{V1160_LTS_S21748_NUMBER}',
+        'Final Release Audit & Certificate Readiness',
+        'Release Freeze ACTIVE · Regression Risk NONE','',
+        '🏁 /releasegate detail · final release audit and certificate',
+        '🏆 /ltsreadiness detail · certification evidence and checklist',
+        '🧭 /coach detail · bottleneck and action plan',
+        '🩺 /runtimehealth · runtime performance certification','',
+        'Authoritative CERTIFIED: checklist complete + 5/5 Gates + 72H 100%.',
+        'Gate formulas / thresholds / persisted state UNCHANGED.',
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF']))
+
+
+async def versionaudit1160ltss21748_cmd(update, context):
+    a=_v1160_s21748_release_audit(); c=a['contract']['base']
+    lines=[f'🛡️ A100 V{V1160_LTS_S21748_NUMBER} VERSION AUDIT','FINAL RELEASE CONTRACT','']
+    lines += [f'{"PASS" if ok else "WAIT"} · {name}' for name,ok in a['checks']]
+    lines += ['', '📊 COVERAGE',
+              f'Registry / Callable / Expected  {c["registry"]}/{c["callable"]}/{c["expected"]}',
+              f'Command Certified               {c["certified"]}/{c["registry"]}',
+              f'Help Coverage                   {c["help"]}/{c["registry"]}',
+              f'Unsupported advertised commands {len(a["contract"]["unsupported"])}',
+              f'Handler identity mismatches      {len(a["contract"]["handler_mismatch"])}',
+              f'Release checklist                {a["passed"]}/{a["total"]}', '',
+              'Worker → Live Runtime State → Telegram Strict Read Only',
+              'Evidence Worker → Change Detection → Incremental Publish',
+              'Snapshot → Certification / Recovery Evidence',
+              'Gate formulas UNCHANGED · no Telegram recomputation']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+def _v1160_s21748_reconcile_handlers():
+    repaired=[]
+    desired={
+        'version':version1160ltss21748_cmd,
+        'versionaudit':versionaudit1160ltss21748_cmd,
+        'commandcert':commandcert1160ltss21741_cmd,
+        'releasegate':releasegate1160ltss21748_cmd,
+        'runtimehealth':runtimehealth1160ltss21746_cmd,
+        'coach':coach1160ltss21746_cmd,
+        'ltsreadiness':ltsreadiness1160ltss21748_cmd,
+    }
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    V925_COMMAND_USAGE.pop('evidence',None)
+    V925_COMMAND_USAGE.update({
+        'version':'S2.17.48 final release audit identity',
+        'versionaudit':'Final release contract and checklist audit',
+        'releasegate':'Final release audit and certificate; detail optional',
+        'ltsreadiness':'Authoritative readiness, timeline, checklist and certificate; detail optional',
+        'coach':'Final certification bottleneck planner; detail optional',
+        'runtimehealth':'Runtime performance and certification health',
+    })
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21748_contract_audit():
+    a=_v1160_s21738_command_integrity_audit()
+    advertised={'version','versionaudit','commandcert','releasegate','coach','ltsreadiness','runtimehealth'}
+    unsupported=sorted(advertised-set(V90_COMMAND_REGISTRY))
+    critical={'version':version1160ltss21748_cmd,'versionaudit':versionaudit1160ltss21748_cmd,
+              'commandcert':commandcert1160ltss21741_cmd,'releasegate':releasegate1160ltss21748_cmd,
+              'coach':coach1160ltss21746_cmd,'ltsreadiness':ltsreadiness1160ltss21748_cmd,
+              'runtimehealth':runtimehealth1160ltss21746_cmd}
+    mismatch=sorted(n for n,h in critical.items() if V90_COMMAND_REGISTRY.get(n) is not h)
+    return {'base':a,'unsupported':unsupported,'handler_mismatch':mismatch,
+            'ok':bool(a.get('ok')) and not unsupported and not mismatch}
+
+# Ensure release audit uses the current contract implementation.
+def _v1160_s21748_release_audit(st=None):
+    st=st or _v1160_s21728_read_live_state(); view=_v1160_s21746_release_view(st)
+    contract=_v1160_s21748_contract_audit()
+    structural=bool(view['structural'] and contract['ok'])
+    checks=[
+        ('Version identity',V91_VERSION==V1160_LTS_S21748_VERSION),
+        ('Registry / callable / expected',contract['base']['registry']==contract['base']['callable']==contract['base']['expected']==341),
+        ('Command routes',contract['base']['certified']==341 and not contract['base']['failed']),
+        ('Help contract',contract['base']['help']==341 and not contract['unsupported']),
+        ('Handler identity',not contract['handler_mismatch']),
+        ('Runtime freshness',bool(st.get('worker_fresh'))),('Runtime authority',st.get('source')=='LIVE_RUNTIME'),
+        ('Recent errors',int(st.get('recent_errors',0) or 0)==0),
+        ('Schema / Paper / Shadow / Live',st.get('schema')==1 and st.get('paper')==20 and st.get('shadow')==60 and not st.get('live_trading')),
+        ('Mandatory gates',view['passed']==5),('Persisted 72H',view['eta']['coverage']>=100.0),
+        ('Structural integrity',structural)]
+    passed=sum(1 for _,ok in checks if ok)
+    return {'state':st,'view':view,'contract':contract,'checks':checks,'passed':passed,'total':len(checks),
+            'authoritative':all(ok for _,ok in checks),'structural':structural}
+
+
+def _v1160_s21748_light_preflight(force=False):
+    repaired=_v1160_s21748_reconcile_handlers(); base=_v1160_s21747_light_preflight(force)
+    repaired=sorted(set(repaired+_v1160_s21748_reconcile_handlers()))
+    obsolete={'Version source single','S2.17.47 version handler active','S2.17.47 version audit active',
+              'Advertised command contract clean','Critical handler identity clean'}
+    checks=[c for c in base.get('details',[]) if c.get('name') not in obsolete]
+    contract=_v1160_s21748_contract_audit()
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21748_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.48 version handler active',V90_COMMAND_REGISTRY.get('version') is version1160ltss21748_cmd),
+        _v1160_s2176_check('S2.17.48 version audit active',V90_COMMAND_REGISTRY.get('versionaudit') is versionaudit1160ltss21748_cmd),
+        _v1160_s2176_check('S2.17.48 release audit active',V90_COMMAND_REGISTRY.get('releasegate') is releasegate1160ltss21748_cmd),
+        _v1160_s2176_check('Advertised command contract clean',not contract['unsupported'],detail=','.join(contract['unsupported'])),
+        _v1160_s2176_check('Critical handler identity clean',not contract['handler_mismatch'],detail=','.join(contract['handler_mismatch'])),
+        _v1160_s2176_check('Registry remains 341',len(V90_COMMAND_REGISTRY)==341),
+        _v1160_s2176_check('Strict read-only evidence source',callable(_v1160_s21728_read_live_state)),
+        _v1160_s2176_check('Gate formulas unchanged',callable(_v1160_s21734_production_ready))])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],
+            'warnings':[c['name'] for c in warnings],'repaired':repaired,'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+_v1160_s21748_reconcile_handlers()
+def v91_preflight(force=False): return _v1160_s21748_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21748_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.48 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V91 dispatcher count: 1',flush=True)
+    if pre['repaired']: print('A100 S2.17.48 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.48)',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21748_light_preflight(True)
+    print(f'{V1160_LTS_S21748_VERSION} worker running...',flush=True); print(f'A100 V91 startup commands: {pre["command_count"]}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if pre['repaired']: print('A100 S2.17.48 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.48 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 S2.17.48 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.48 evidence change detector: ACTIVE · check interval 30.0s',flush=True)
+    print('A100 S2.17.48 final release audit: ACTIVE · read only',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

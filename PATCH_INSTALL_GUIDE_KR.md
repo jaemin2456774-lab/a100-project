@@ -1,19 +1,27 @@
-# S2.17.47 패치 설치 안내
+# S2.17.48 Railway 패치 설치 안내
 
-1. Railway에 연결된 저장소의 프로젝트 루트에 ZIP의 변경 파일을 덮어씁니다.
-2. `/data`, 데이터베이스, 환경 변수, 설정 파일은 삭제하거나 초기화하지 않습니다.
-3. 변경 내용을 커밋하고 Railway에서 새 Deployment를 실행합니다.
-4. 시작 로그에서 `S2.17.47`, Registry 341, startup preflight PASS를 확인합니다.
+1. 기존 프로젝트 루트의 `main.py`를 백업합니다.
+2. ZIP의 `main.py`를 프로젝트 루트에 덮어씁니다.
+3. `/data`, Railway Volume, 환경 변수, DB 파일은 삭제하거나 변경하지 않습니다.
+4. GitHub 커밋 후 Railway에서 새 Deployment를 실행합니다.
+5. 시작 로그에서 S2.17.48과 Registry 341, preflight PASS를 확인합니다.
 
-## 배포 후 검증
+## 배포 후 검증 명령
 ```
 /version
 /versionaudit
 /commandcert
+/releasegate
+/releasegate detail
 /ltsreadiness
 /ltsreadiness detail
 /runtimehealth
 /errors
 ```
 
-`/evidence`는 동결된 341개 Registry에 포함되지 않으므로 더 이상 지원 명령으로 안내하지 않습니다. Evidence 성숙도와 72시간 인증 정보는 `/ltsreadiness detail`에서 확인합니다.
+## 최종 CERTIFIED 조건
+- Mandatory Gates 5/5
+- Persisted 72H 100%
+- Structural Integrity PASS
+- Registry 341/341
+- Recent Errors 0
