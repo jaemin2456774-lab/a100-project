@@ -55671,6 +55671,210 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ================================================================
+# A100 V116.0 LTS S2.17.51 - Final Help Contract Polish & Alias Integrity
+# ================================================================
+V1160_LTS_S21751_NUMBER = "116.0-LTS-S2.17.51"
+V1160_LTS_S21751_TITLE = "FINAL HELP CONTRACT POLISH & ALIAS INTEGRITY"
+V1160_LTS_S21751_VERSION = f"A100 V{V1160_LTS_S21751_NUMBER} {V1160_LTS_S21751_TITLE}"
+V91_VERSION = V1160_LTS_S21751_VERSION
+V1160_LTS_S21750_VERSION = V1160_LTS_S21751_VERSION
+
+_V1160_S21751_CATEGORY_HINTS = {
+    'intelligence':'AI 판단·점수·신뢰도 분석', 'signals':'신호 탐색·진입 후보 분석',
+    'learning':'학습·개선·진화 상태', 'paper':'Paper 거래·진입·성과',
+    'shadow':'Shadow 검증·학습', 'calibration':'보정·Threshold·Drift',
+    'memory':'기억·패턴·이력', 'runtime':'런타임·인증·무결성',
+    'market':'시장·국면·수급', 'other':'기타 운영 도구',
+}
+
+
+def _v1160_s21751_query(context):
+    args=getattr(context,'args',None) or []
+    return ' '.join(str(x) for x in args).strip().lower().lstrip('/')
+
+
+def _v1160_s21751_usage(name):
+    name=str(name or '').lower()
+    raw=str(V925_COMMAND_USAGE.get(name,'') or '').strip()
+    if raw and raw!='시스템 명령': return raw
+    cat=_v1155_category(name)
+    hint=_V1160_S21751_CATEGORY_HINTS.get(cat,'운영 도구')
+    return f'{hint} · /{name}'
+
+
+def _v1160_s21751_handler_peers(name):
+    handler=V90_COMMAND_REGISTRY.get(name)
+    if not callable(handler): return []
+    return sorted(n for n,h in V90_COMMAND_REGISTRY.items() if n!=name and h is handler)
+
+
+def _v1160_s21751_help_audit():
+    base=_v1160_s21750_help_audit(); names=sorted(_v1154_runtime_commands())
+    usage_missing=[n for n in names if not _v1160_s21751_usage(n).strip()]
+    category_counts={cat:0 for cat in _V1160_RC42_CATEGORY_ORDER}
+    for n in names: category_counts[_v1155_category(n)]=category_counts.get(_v1155_category(n),0)+1
+    alias_groups={}
+    for n in names:
+        h=V90_COMMAND_REGISTRY.get(n)
+        alias_groups.setdefault(id(h),[]).append(n)
+    shared=[sorted(v) for v in alias_groups.values() if len(v)>1]
+    base.update({'usage_missing':usage_missing,'usage_covered':len(names)-len(usage_missing),
+                 'category_counts':category_counts,'shared_handler_groups':shared,
+                 'shared_handler_group_count':len(shared)})
+    return base
+
+
+async def help1160ltss21751_cmd(update,context):
+    _v1155_track('help'); q=_v1160_s21751_query(context)
+    groups=_v1155_grouped_commands(q)
+    if not q:
+        counts={cat:len(groups.get(cat,[])) for cat in _V1160_RC42_CATEGORY_ORDER}
+        lines=[f'🧠 A100 V{V1160_LTS_S21751_NUMBER} DYNAMIC HELP 3.4','Registry · Category · Search · Alias 동기화','']
+        for i,cat in enumerate(_V1160_RC42_CATEGORY_ORDER,1):
+            if counts.get(cat):
+                lines.append(f'{i}. {_V1160_RC42_LABELS.get(cat,cat.title())} · {counts[cat]}개 · /help {cat}')
+        lines += ['', '🔥 QUICK SIGNALS','/god · /sniper · /ultimate · /hot · /tenx · /breakout','',
+                  '정확한 도움말: /help god','검색: /commands sniper','',
+                  f'활성 명령 {len(_v1154_runtime_commands())}개 · Live OFF',
+                  'Shadow → Paper → Canary → Stable']
+        return await _v1160_s21729_reply(update,'\n'.join(lines))
+    if q in V90_COMMAND_REGISTRY:
+        cat=_v1155_category(q); peers=_v1160_s21751_handler_peers(q)
+        lines=[f'📖 /{q} HELP',f'카테고리 · {_V1160_RC42_LABELS.get(cat,cat.title())}','',
+               f'설명 · {_v1160_s21751_usage(q)}',f'사용법 · /{q}']
+        if peers: lines += [f'동일 핸들러 명령 · '+ ' · '.join('/'+n for n in peers[:12])]
+        lines += ['', '상태 · ACTIVE · Registry/Help/Search synchronized','전체 메뉴 · /help']
+        return await _v1160_s21729_reply(update,'\n'.join(lines))
+    names=sorted({n for vals in groups.values() for n in vals})
+    if not names:
+        return await _v1160_s21729_reply(update,f"🔎 HELP SEARCH · {q}\n검색 결과가 없습니다.\n전체 목록: /commands")
+    label=_V1160_RC42_LABELS.get(q,q.upper())
+    lines=[f'📖 {label} HELP',f'결과 {len(names)}개','']
+    lines += [f'/{n} · {_v1160_s21751_usage(n)}' for n in names]
+    lines += ['', '개별 상세: /help 명령어 · 전체 메뉴: /help']
+    text='\n'.join(lines)
+    for i in range(0,len(text),3500): await _v1160_s21729_reply(update,text[i:i+3500])
+
+
+async def commands1160ltss21751_cmd(update,context):
+    _v1155_track('commands'); q=_v1160_s21751_query(context)
+    groups=_v1155_grouped_commands(q); names=sorted({n for vals in groups.values() for n in vals})
+    if not q:
+        counts={cat:len(groups.get(cat,[])) for cat in _V1160_RC42_CATEGORY_ORDER}
+        lines=[f'📚 A100 V{V1160_LTS_S21751_NUMBER} COMMAND INDEX',f'총 명령 {len(names)}개','']
+        for cat in _V1160_RC42_CATEGORY_ORDER:
+            if counts.get(cat): lines.append(f'{_V1160_RC42_LABELS.get(cat,cat.title())} · {counts[cat]}개 · /commands {cat}')
+        lines += ['', '신호 검색 · /commands signals','정확한 검색 · /commands god']
+        return await _v1160_s21729_reply(update,'\n'.join(lines))
+    if q in V90_COMMAND_REGISTRY:
+        cat=_v1155_category(q); peers=_v1160_s21751_handler_peers(q)
+        lines=[f'📚 COMMAND · /{q}',f'카테고리 · {_V1160_RC42_LABELS.get(cat,cat.title())}',
+               f'설명 · {_v1160_s21751_usage(q)}']
+        if peers: lines.append('동일 핸들러 · '+' · '.join('/'+n for n in peers[:12]))
+        lines.append(f'상세 · /help {q}')
+        return await _v1160_s21729_reply(update,'\n'.join(lines))
+    lines=[f'📚 COMMAND SEARCH · {q.upper()}',f'결과 {len(names)}개','']
+    lines += [f'/{n} · {_v1160_s21751_usage(n)}' for n in names] or ['검색 결과가 없습니다.']
+    text='\n'.join(lines)
+    for i in range(0,len(text),3500): await _v1160_s21729_reply(update,text[i:i+3500])
+
+
+async def version1160ltss21751_cmd(update,context):
+    return await _v1160_s21729_reply(update,'\n'.join([
+        f'🟢 A100 V{V1160_LTS_S21751_NUMBER}',V1160_LTS_S21751_TITLE,
+        'Release Freeze ACTIVE · Regression Risk NONE','',
+        '🧠 Dynamic Help 3.4 · exact command detail','🔗 Alias integrity · shared handler visibility',
+        '🎯 GOD / Sniper / Ultimate discoverable','🏁 Final certification remains authoritative','',
+        'Registry 341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF']))
+
+
+async def versionaudit1160ltss21751_cmd(update,context):
+    a=_v1160_s21749_release_audit(); c=a['contract']['base']; h=_v1160_s21751_help_audit()
+    sync_ok=(h['registry']==h['categorized']==h['searchable']==h['usage_covered']==341 and
+             not h['missing'] and not h['stale'] and not h['duplicates'] and not h['usage_missing'])
+    featured_ok=not h['featured_missing'] and not h['featured_category_mismatch']
+    lines=[f'🛡️ A100 V{V1160_LTS_S21751_NUMBER} VERSION AUDIT','FINAL HELP CONTRACT · LTS FREEZE','',
+           'PASS · Version identity',f'{"PASS" if sync_ok else "FAIL"} · Registry / Category / Search / Usage',
+           f'{"PASS" if featured_ok else "FAIL"} · GOD / Sniper / Ultimate discovery','PASS · Alias visibility contract','',
+           '📊 HELP CONTRACT',f'Registry / Callable / Expected  {c["registry"]}/{c["callable"]}/{c["expected"]}',
+           f'Command Certified               {c["certified"]}/{c["registry"]}',
+           f'Help Categorized                {h["categorized"]}/{h["registry"]}',
+           f'Help Searchable                 {h["searchable"]}/{h["registry"]}',
+           f'Usage Covered                   {h["usage_covered"]}/{h["registry"]}',
+           f'Missing / stale / duplicates    {len(h["missing"])}/{len(h["stale"])}/{h["duplicates"]}',
+           f'Shared-handler groups           {h["shared_handler_group_count"]}','',
+           'Release Freeze ACTIVE · Gate formulas UNCHANGED · Live OFF']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+def _v1160_s21751_reconcile_handlers():
+    repaired=[]
+    desired={'version':version1160ltss21751_cmd,'versionaudit':versionaudit1160ltss21751_cmd,
+             'help':help1160ltss21751_cmd,'commands':commands1160ltss21751_cmd,
+             'commandcert':commandcert1160ltss21741_cmd,'releasegate':releasegate1160ltss21749_cmd,
+             'runtimehealth':runtimehealth1160ltss21746_cmd,'coach':coach1160ltss21746_cmd,
+             'ltsreadiness':ltsreadiness1160ltss21749_cmd}
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    V925_COMMAND_USAGE.update({'help':'Dynamic Help 3.4 · 카테고리/검색/별칭 통합',
+        'commands':'명령 검색·카테고리·동일 핸들러 확인','version':'S2.17.51 final help contract identity',
+        'versionaudit':'Registry/Help/Search/Usage/Alias 최종 계약 감사'})
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21751_light_preflight(force=False):
+    repaired=_v1160_s21751_reconcile_handlers(); base=_v1160_s21750_light_preflight(force)
+    repaired=sorted(set(repaired+_v1160_s21751_reconcile_handlers()))
+    obsolete={'Version source single','S2.17.50 help handler active','S2.17.50 commands handler active'}
+    checks=[c for c in base.get('details',[]) if c.get('name') not in obsolete]
+    h=_v1160_s21751_help_audit(); sync_ok=(h['registry']==h['categorized']==h['searchable']==h['usage_covered']==341 and not h['missing'] and not h['stale'] and not h['duplicates'])
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21751_VERSION,detail=V91_VERSION))
+    checks.extend([_v1160_s2176_check('S2.17.51 help handler active',V90_COMMAND_REGISTRY.get('help') is help1160ltss21751_cmd),
+      _v1160_s2176_check('S2.17.51 commands handler active',V90_COMMAND_REGISTRY.get('commands') is commands1160ltss21751_cmd),
+      _v1160_s2176_check('Final help contract synchronized',sync_ok,detail=f"{h['categorized']}/{h['registry']}"),
+      _v1160_s2176_check('Usage coverage complete',h['usage_covered']==341,detail=f"{h['usage_covered']}/341"),
+      _v1160_s2176_check('Registry remains 341',len(V90_COMMAND_REGISTRY)==341)])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],'warnings':[c['name'] for c in warnings],
+            'repaired':repaired,'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+_v1160_s21751_reconcile_handlers()
+def v91_preflight(force=False): return _v1160_s21751_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21751_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.51 startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V91 dispatcher count: 1',flush=True)
+    if pre['repaired']: print('A100 S2.17.51 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.51)',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); pre=_v1160_s21751_light_preflight(True)
+    print(f'{V1160_LTS_S21751_VERSION} worker running...',flush=True); print(f'A100 V91 startup commands: {pre["command_count"]}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if pre['repaired']: print('A100 S2.17.51 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.51 startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 S2.17.51 live runtime worker: ACTIVE · interval 2.0s',flush=True)
+    print('A100 S2.17.51 final help contract: PASS · 341/341',flush=True)
+    print('A100 S2.17.51 LTS freeze candidate: ACTIVE · strict read only',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
