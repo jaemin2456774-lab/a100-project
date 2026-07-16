@@ -1,24 +1,21 @@
 {
-  "version": "116.0-LTS-S2.17.45",
-  "type": "incremental_patch",
-  "baseline": "116.0-LTS-S2.17.44",
-  "preserves": [
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live Trading OFF",
-    "Registry 341",
-    "Runtime First",
-    "Strict Read Only",
-    "Evidence Worker",
-    "existing data and configuration"
-  ],
-  "changed_files": [
+  "release": "A100 V116.0 LTS S2.17.46",
+  "title": "Final Certification Intelligence & Release View",
+  "baseline": "S2.17.45",
+  "deployment": "Railway",
+  "registry_expected": 341,
+  "schema": 1,
+  "paper_positions": 20,
+  "shadow_positions": 60,
+  "live_trading": false,
+  "files": [
     "main.py",
-    "test_v1160_lts_s21745.py",
-    "CHANGELOG_S2.17.45.md",
-    "FINAL_COMPREHENSIVE_AUDIT_S2.17.45.md",
+    "test_v1160_lts_s21746.py",
+    "CHANGELOG_S2.17.46.md",
+    "FINAL_COMPREHENSIVE_AUDIT_S2.17.46.md",
     "PATCH_INSTALL_GUIDE_KR.md",
     "changed_files.manifest"
-  ]
+  ],
+  "data_preservation": "100%",
+  "gate_formulas_changed": false
 }
