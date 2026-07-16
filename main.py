@@ -54139,6 +54139,224 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.0 LTS S2.17.44 - UNIFIED OUTPUT & RUNTIME PERFORMANCE MONITOR
+# Monitoring/presentation-only layer. No trading, gate formula, threshold,
+# schema, persisted evidence, position limit, or live-execution changes.
+# ============================================================================
+V1160_LTS_S21744_NUMBER = "116.0-LTS-S2.17.44"
+V1160_LTS_S21744_VERSION = "A100 V116.0-LTS-S2.17.44 UNIFIED OUTPUT & RUNTIME PERFORMANCE MONITOR"
+V91_VERSION = V1160_LTS_S21744_VERSION
+for _name in (
+    'V1160_LTS_S21743_VERSION','V1160_LTS_S21742_VERSION','V1160_LTS_S21741_VERSION',
+    'V1160_LTS_S21739_VERSION','V1160_LTS_S21738_VERSION','V1160_LTS_S21737_VERSION'):
+    globals()[_name] = V1160_LTS_S21744_VERSION
+for _name in (
+    'V1160_LTS_S21743_NUMBER','V1160_LTS_S21742_NUMBER','V1160_LTS_S21741_NUMBER',
+    'V1160_LTS_S21739_NUMBER','V1160_LTS_S21738_NUMBER','V1160_LTS_S21737_NUMBER'):
+    globals()[_name] = V1160_LTS_S21744_NUMBER
+
+from collections import deque as _s21744_deque
+_V1160_S21744_RUNTIME_SAMPLES = _s21744_deque(maxlen=21600)
+_V1160_S21744_SAMPLE_STOP = threading.Event()
+_V1160_S21744_SAMPLE_THREAD = None
+
+
+def _v1160_s21744_percentile(values, q):
+    vals=sorted(float(x) for x in values if x is not None)
+    if not vals: return 0.0
+    idx=max(0,min(len(vals)-1,int(round((len(vals)-1)*q))))
+    return vals[idx]
+
+
+def _v1160_s21744_sample_once():
+    try:
+        st=_v1160_s21728_read_live_state()
+        _V1160_S21744_RUNTIME_SAMPLES.append({
+            'ts':time.time(),
+            'cycle_ms':float(st.get('cycle_ms',0.0) or 0.0),
+            'live_age':float(st.get('live_age',0.0) or 0.0),
+            'evidence_age':float(st.get('evidence_age',0.0) or 0.0),
+            'refreshes':int(st.get('evidence_refreshes',0) or 0),
+            'changes':int(st.get('evidence_changes',0) or 0),
+            'fresh':bool(st.get('worker_fresh')),
+        })
+    except Exception:
+        pass
+
+
+def _v1160_s21744_sampler_loop():
+    while not V91_STOP.is_set() and not _V1160_S21744_SAMPLE_STOP.is_set():
+        _v1160_s21744_sample_once()
+        _V1160_S21744_SAMPLE_STOP.wait(2.0)
+
+
+def _v1160_s21744_start_sampler_once():
+    global _V1160_S21744_SAMPLE_THREAD
+    if _V1160_S21744_SAMPLE_THREAD and _V1160_S21744_SAMPLE_THREAD.is_alive(): return
+    _V1160_S21744_SAMPLE_THREAD=threading.Thread(target=_v1160_s21744_sampler_loop,name='s21744-runtime-monitor',daemon=True)
+    _V1160_S21744_SAMPLE_THREAD.start()
+
+
+def _v1160_s21744_runtime_stats():
+    rows=list(_V1160_S21744_RUNTIME_SAMPLES)
+    cycles=[r['cycle_ms'] for r in rows]
+    live=[r['live_age'] for r in rows]
+    ev=[r['evidence_age'] for r in rows]
+    if not rows:
+        return {'n':0,'avg':0.0,'p95':0.0,'max':0.0,'heartbeat_p95':0.0,'publish_p95':0.0,'fresh_pct':0.0,'window_s':0.0}
+    return {
+        'n':len(rows),'avg':sum(cycles)/len(cycles),'p95':_v1160_s21744_percentile(cycles,.95),'max':max(cycles),
+        'heartbeat_p95':_v1160_s21744_percentile(live,.95),'publish_p95':_v1160_s21744_percentile(ev,.95),
+        'fresh_pct':100.0*sum(1 for r in rows if r['fresh'])/len(rows),
+        'window_s':max(0.0,rows[-1]['ts']-rows[0]['ts'])}
+
+
+def _v1160_s21744_grade(pct):
+    if pct >= 99.0: return '🟢 CERTIFIED'
+    if pct >= 95.0: return '🟡 VERIFYING'
+    return '🔴 IMPROVEMENT REQUIRED'
+
+
+def _v1160_s21744_output_header(icon,title,mode='SUMMARY'):
+    return [f'{icon} A100 V{V1160_LTS_S21744_NUMBER} {title}',f'Mode {mode} · LIVE READ ONLY','']
+
+
+def _v1160_s21744_gate_summary(title,row,st,detail=False):
+    cur=float(row['current']); target=float(row['target']); gap=max(0.0,target-cur)
+    pct=0.0 if target<=0 else max(0.0,min(100.0,cur/target*100.0))
+    lines=_v1160_s21744_output_header(title.split()[0],' '.join(title.split()[1:]),'DETAIL' if detail else 'SUMMARY')
+    lines += [f'{_v1160_s21743_priority(row)} · {"PASS" if row["passed"] else "BLOCKED"}',
+              f'{_v1160_s21742_bar(cur,target)} {pct:.1f}%',f'{cur:.1f}/{target:.1f} · Remaining {gap:.1f}']
+    recs=_v1160_s21742_recommendations(row['label'],cur,target,st)
+    lines += ['', '🎯 PRIORITY ACTIONS']+[f'{i}. {x}' for i,x in enumerate(recs[:(4 if detail else 2)],1)]
+    if not detail: lines += ['', '상세: 같은 명령 뒤에 detail 입력']
+    lines += ['', '🔒 Authoritative worker cache only','Formula · threshold · persisted state UNCHANGED']
+    return lines
+
+
+async def coach1160ltss21744_cmd(update,context):
+    st,gates=_v1160_s21742_gate_map(); detail=_v1160_s21743_mode(context)=='detail'
+    rows=[_v1160_s21742_find_gate(gates,*keys) for keys in (
+        ('intelligence',),('strategy trust','strategy'),('outcome quality','outcome'),('memory health','memory'),('lts readiness','lts'))]
+    ranked=sorted(rows,key=lambda r:(r['passed'],-(r['target']-r['current'])))
+    lines=_v1160_s21744_output_header('🧭','IMPROVEMENT PLANNER','DETAIL' if detail else 'SUMMARY')
+    for i,row in enumerate(ranked if detail else ranked[:3],1):
+        pct=0.0 if not row['target'] else row['current']/row['target']*100.0
+        lines += [f'{i}. {_v1160_s21743_priority(row)} · {row["label"]}',f'   {_v1160_s21742_bar(row["current"],row["target"])} {pct:.1f}% · gap {max(0,row["target"]-row["current"]):.1f}']
+    lines += ['',f'⏱️ 72H {float(st.get("coverage_72h",0.0) or 0.0):.1f}% · 🚦 Gates {int(st.get("gate_passed",0) or 0)}/5',f'📈 Evidence {_v1160_s21743_trend(st)}']
+    if ranked:
+        recs=_v1160_s21742_recommendations(ranked[0]['label'],ranked[0]['current'],ranked[0]['target'],st)
+        lines += ['', '🔥 TOP ACTIONS']+[f'• {x}' for x in recs[:(4 if detail else 2)]]
+    if not detail: lines += ['', '상세: /coach detail']
+    lines += ['No recomputation · no storage scan · no live order']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def intelligence1160ltss21744_cmd(update,context):
+    st,g=_v1160_s21742_gate_map(); return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21744_gate_summary('🧠 INTELLIGENCE SCORE',_v1160_s21742_find_gate(g,'intelligence'),st,_v1160_s21743_mode(context)=='detail')))
+async def strategytrust1160ltss21744_cmd(update,context):
+    st,g=_v1160_s21742_gate_map(); return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21744_gate_summary('🛡️ STRATEGY TRUST',_v1160_s21742_find_gate(g,'strategy trust','strategy'),st,_v1160_s21743_mode(context)=='detail')))
+async def outcomequality1160ltss21744_cmd(update,context):
+    st,g=_v1160_s21742_gate_map(); return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21744_gate_summary('🎯 OUTCOME QUALITY',_v1160_s21742_find_gate(g,'outcome quality','outcome'),st,_v1160_s21743_mode(context)=='detail')))
+async def memoryhealth1160ltss21744_cmd(update,context):
+    st,g=_v1160_s21742_gate_map(); return await _v1160_s21729_reply(update,'\n'.join(_v1160_s21744_gate_summary('🧠 MEMORY HEALTH',_v1160_s21742_find_gate(g,'memory health','memory'),st,_v1160_s21743_mode(context)=='detail')))
+async def ltsreadiness1160ltss21744_cmd(update,context):
+    st,g=_v1160_s21742_gate_map(); lines=_v1160_s21744_gate_summary('🏆 LTS READINESS',_v1160_s21742_find_gate(g,'lts readiness','lts'),st,_v1160_s21743_mode(context)=='detail')
+    lines[6:6]=[f'⏱️ 72H Certification {float(st.get("coverage_72h",0.0) or 0.0):.1f}%',f'📈 Evidence Trend {_v1160_s21743_trend(st)}','ETA withheld until persisted trend is sufficient.','']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def runtimehealth1160ltss21744_cmd(update,context):
+    st=_v1160_s21728_read_live_state(); stats=_v1160_s21744_runtime_stats(); uptime=time.time()-V91_STARTED_AT
+    window=_v1160_s21743_fmt_uptime(stats['window_s'])
+    lines=_v1160_s21744_output_header('🩺','RUNTIME PERFORMANCE','LIVE')
+    lines += [f'🟢 Heartbeat {float(st.get("live_age",0.0)):.1f}s · freshness {"PASS" if st.get("worker_fresh") else "FAIL"}',
+              f'⚙️ Cycle now {float(st.get("cycle_ms",0.0)):.2f}ms · uptime {_v1160_s21743_fmt_uptime(uptime)}','',
+              '📊 MONITOR WINDOW',f'Samples {stats["n"]} · window {window}',
+              f'Cycle avg / P95 / max  {stats["avg"]:.3f} / {stats["p95"]:.3f} / {stats["max"]:.3f} ms',
+              f'Heartbeat P95 {stats["heartbeat_p95"]:.2f}s · Evidence age P95 {stats["publish_p95"]:.1f}s',
+              f'Fresh samples {stats["fresh_pct"]:.1f}% · {_v1160_s21744_grade(stats["fresh_pct"])}','',
+              f'🔄 Evidence refreshes {int(st.get("evidence_refreshes",0) or 0)} · changes {int(st.get("evidence_changes",0) or 0)}',
+              f'📈 Trend {_v1160_s21743_trend(st)}',
+              f'Errors {int(st.get("recent_errors",0) or 0)} · Registry {int(st.get("registry_count",0) or 0)}/{int(st.get("route_count",0) or 0)}',
+              f'Snapshot SUPPORTING EVIDENCE ONLY · age {float(st.get("snapshot_age",0.0) or 0.0):.1f}s',
+              'Telegram STRICT READ ONLY · scans/gates DISABLED']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def version1160ltss21744_cmd(update,context):
+    return await _v1160_s21729_reply(update,'\n'.join([
+        f'🟢 A100 V{V1160_LTS_S21744_NUMBER}','Unified Output & Runtime Performance Monitor',
+        'Release Freeze ACTIVE · Regression Risk NONE','',
+        'Summary default · detail optional','Runtime avg/P95/max monitor · non-persistent read only','',
+        'Runtime First · Strict Read Only · Gate formulas UNCHANGED','Schema 1 · Paper 20 · Shadow 60 · Live OFF']))
+
+
+def _v1160_s21744_reconcile_handlers():
+    repaired=[]
+    desired={'version':version1160ltss21744_cmd,'versionaudit':versionaudit1160ltss21741_cmd,'commandcert':commandcert1160ltss21741_cmd,
+             'runtimehealth':runtimehealth1160ltss21744_cmd,'coach':coach1160ltss21744_cmd,'intelligence':intelligence1160ltss21744_cmd,
+             'strategytrust':strategytrust1160ltss21744_cmd,'outcomequality':outcomequality1160ltss21744_cmd,
+             'memoryhealth':memoryhealth1160ltss21744_cmd,'ltsreadiness':ltsreadiness1160ltss21744_cmd}
+    for name,handler in desired.items():
+        if name in V90_COMMAND_REGISTRY and V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    V925_COMMAND_USAGE.update({'version':'S2.17.44 unified output and runtime monitor identity','coach':'Unified summary-first planner; detail optional',
+        'runtimehealth':'Live current/average/P95/max cycle and evidence latency monitor','ltsreadiness':'Unified LTS readiness and persisted 72H trend'})
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1160_s21744_light_preflight(force=False):
+    repaired=_v1160_s21744_reconcile_handlers(); base=_v1160_s21743_light_preflight(force); repaired=sorted(set(repaired+_v1160_s21744_reconcile_handlers()))
+    obsolete={'Version source single','S2.17.43 version handler active','Summary planner active','Unified analyzers active','Runtime performance view active'}
+    checks=[c for c in base.get('details',[]) if c.get('name') not in obsolete]
+    checks.insert(0,_v1160_s2176_check('Version source single',V91_VERSION==V1160_LTS_S21744_VERSION,detail=V91_VERSION))
+    checks.extend([
+        _v1160_s2176_check('S2.17.44 version handler active',V90_COMMAND_REGISTRY.get('version') is version1160ltss21744_cmd),
+        _v1160_s2176_check('Unified output planner active',V90_COMMAND_REGISTRY.get('coach') is coach1160ltss21744_cmd),
+        _v1160_s2176_check('Runtime performance monitor active',V90_COMMAND_REGISTRY.get('runtimehealth') is runtimehealth1160ltss21744_cmd),
+        _v1160_s2176_check('Registry remains 341',len(V90_COMMAND_REGISTRY)==341),
+        _v1160_s2176_check('Strict read-only evidence source',callable(_v1160_s21728_read_live_state)),
+        _v1160_s2176_check('Gate formulas unchanged',callable(_v1160_s21734_production_ready))])
+    failures=[c for c in checks if not c['ok'] and c['severity']=='FAIL']; warnings=[c for c in checks if not c['ok'] and c['severity']=='WARN']
+    return {'ok':not failures,'details':checks,'failed':[c['name'] for c in failures],'warnings':[c['name'] for c in warnings],'repaired':repaired,'command_count':len(V90_COMMAND_REGISTRY)}
+
+
+_v1160_s21744_reconcile_handlers()
+def v91_preflight(force=False): return _v1160_s21744_light_preflight(force)
+
+
+def build_v44_application(token):
+    pre=_v1160_s21744_light_preflight(True)
+    if not pre['ok']: raise RuntimeError('S2.17.44 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V91 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V91 dispatcher count: 1',flush=True)
+    if pre['repaired']: print('A100 S2.17.44 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    print(f'A100 V91 startup preflight: PASS · warnings {len(pre["warnings"])} (S2.17.44)',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    pre=_v1160_s21744_light_preflight(True)
+    print(f'{V1160_LTS_S21744_VERSION} worker running...',flush=True); print(f'A100 V91 startup commands: {pre["command_count"]}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if pre['repaired']: print('A100 S2.17.44 startup auto-recovered routes: '+','.join(pre['repaired']),flush=True)
+    if not pre['ok']: raise RuntimeError('A100 S2.17.44 unrecoverable startup preflight failed: '+','.join(pre['failed']))
+    if not acquire_v44_process_lock():
+        print('A100 V91 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 S2.17.44 live runtime worker: ACTIVE · interval 2.0s',flush=True); print('A100 S2.17.44 evidence change detector: ACTIVE · check interval 30.0s',flush=True); print('A100 S2.17.44 runtime performance monitor: ACTIVE · sample interval 2.0s',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

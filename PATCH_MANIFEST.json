@@ -1,10 +1,22 @@
 {
-  "version": "116.0-LTS-S2.17.43",
-  "title": "Unified Summary UI & Runtime Trend Polish",
-  "baseline": "116.0-LTS-S2.17.42",
-  "deployment": "Railway",
-  "registry_expected": 341,
-  "data_preserved": true,
-  "gate_formulas_changed": false,
-  "live_trading": false
+  "version": "116.0-LTS-S2.17.44",
+  "type": "incremental_patch",
+  "baseline": "116.0-LTS-S2.17.43",
+  "files": [
+    "main.py",
+    "test_v1160_lts_s21744.py",
+    "CHANGELOG_S2.17.44.md",
+    "FINAL_COMPREHENSIVE_AUDIT_S2.17.44.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest",
+    "SHA256SUMS"
+  ],
+  "preserves": [
+    "Schema 1",
+    "Paper 20",
+    "Shadow 60",
+    "Live OFF",
+    "Registry 341",
+    "/data and settings"
+  ]
 }
