@@ -1,20 +1,24 @@
 {
-  "version": "A100 V116.0-LTS-S2.17.51",
-  "title": "FINAL HELP CONTRACT POLISH & ALIAS INTEGRITY",
-  "baseline": "A100 V116.0-LTS-S2.17.50",
-  "package_type": "incremental_patch",
-  "changed_project_files": [
-    "main.py"
+  "version": "A100 V116.1 DEV S44",
+  "title": "Memory Leak Containment & Certification Continuity Hotfix",
+  "base": "A100 V116.1 DEV S43",
+  "deployment": "DEV PREBUILT / HOLD",
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S44.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S44.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "PATCH_MANIFEST.json",
+    "SHA256SUMS",
+    "changed_files.manifest"
   ],
-  "preserves": [
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live Trading OFF",
-    "Registry 341",
-    "Runtime First",
-    "Strict Read Only",
-    "Evidence Worker"
-  ],
-  "new_commands": 0
+  "safety": {
+    "runtime_mutation": false,
+    "certification_mutation": false,
+    "consensus_override": false,
+    "release_gate_override": false,
+    "order_authority": false,
+    "adaptive_weight_locked": true,
+    "live_trading": false
+  }
 }

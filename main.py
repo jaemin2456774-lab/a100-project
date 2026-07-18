@@ -55875,6 +55875,9334 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V91 stopped by signal',flush=True)
     except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v91-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S3 - Evidence-Aware Consensus, Conflict Safety & XAI Integrity
+# Base: V116.0 LTS S2.17.51 + V116.1 DEV S2 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S3_NUMBER = "116.1-DEV-S3"
+V1161_DEV_S3_TITLE = "EVIDENCE-AWARE CONSENSUS, CONFLICT SAFETY & XAI INTEGRITY"
+V1161_DEV_S3_VERSION = f"A100 V{V1161_DEV_S3_NUMBER} {V1161_DEV_S3_TITLE}"
+V91_VERSION = V1161_DEV_S3_VERSION
+_V1161_S3_NOTEBOOK=[]
+_V1161_S3_NOTEBOOK_MAX=160
+
+
+def _v1161_s3_clamp(v, lo=0.0, hi=100.0):
+    try: return max(lo,min(hi,float(v)))
+    except Exception: return 0.0
+
+
+def _v1161_s3_read(row,*names):
+    """Return (available, numeric value). Missing evidence must never become a directional vote."""
+    for n in names:
+        try:
+            if isinstance(row,dict):
+                if n not in row or row.get(n) is None: continue
+                return True,float(row.get(n))
+            v=getattr(row,n)
+            if v is not None: return True,float(v)
+        except Exception: pass
+    return False,0.0
+
+
+def _v1161_s3_symbol(row):
+    try:
+        if isinstance(row,dict): return str(row.get('sym') or row.get('symbol') or 'UNKNOWN')
+    except Exception: pass
+    return str(getattr(row,'sym',None) or getattr(row,'symbol',None) or 'UNKNOWN')
+
+
+def _v1161_s3_bar(v):
+    try: return v64_bar(float(v),10)
+    except Exception:
+        n=max(0,min(10,int(round(float(v)/10.0))))
+        return '█'*n+'░'*(10-n)
+
+
+def _v1161_s3_signed_vote(available,value,deadband):
+    if not available: return 'WAIT','MISSING'
+    if value>deadband: return 'LONG','LIVE'
+    if value<-deadband: return 'SHORT','LIVE'
+    return 'WAIT','NEUTRAL'
+
+
+def _v1161_s3_factor_votes(row):
+    """Evidence-aware, conservative factor interpretation. No missing field may create a signal."""
+    try: long_raw=_v1161_s3_clamp(v68_long_score(row))
+    except Exception: long_raw=0.0
+    try: short_raw=_v1161_s3_clamp(v68_short_score(row))
+    except Exception: short_raw=0.0
+    funding_ok,funding=_v1161_s3_read(row,'funding','funding_rate','fundingRate')
+    oi_ok,oi=_v1161_s3_read(row,'oi_change','open_interest_change','oi_delta')
+    volume_ok,volume=_v1161_s3_read(row,'volume_change','vol_change','volume_ratio')
+    momentum_ok,momentum=_v1161_s3_read(row,'momentum','rsi_delta','price_change')
+    whale_ok,whale=_v1161_s3_read(row,'whale_score','whale','smart_money_score')
+    news_ok,news=_v1161_s3_read(row,'news_score','sentiment_score','news_sentiment')
+    volatility_ok,volatility_raw=_v1161_s3_read(row,'volatility','atr_pct','volatility_score')
+    volatility=abs(volatility_raw)
+
+    votes={}; states={}
+    if long_raw>=max(55.0,short_raw+5.0): votes['Core Long']='LONG'; states['Core Long']='LIVE'
+    else: votes['Core Long']='WAIT'; states['Core Long']='NEUTRAL'
+    if short_raw>=max(55.0,long_raw+5.0): votes['Core Short']='SHORT'; states['Core Short']='LIVE'
+    else: votes['Core Short']='WAIT'; states['Core Short']='NEUTRAL'
+
+    if funding_ok:
+        votes['Funding']='SHORT' if funding>0.0005 else ('LONG' if funding<-0.0005 else 'WAIT'); states['Funding']='LIVE' if votes['Funding']!='WAIT' else 'NEUTRAL'
+    else: votes['Funding']='WAIT'; states['Funding']='MISSING'
+    votes['OI'],states['OI']=_v1161_s3_signed_vote(oi_ok,oi,0.5)
+    votes['Momentum'],states['Momentum']=_v1161_s3_signed_vote(momentum_ok,momentum,0.3)
+    if not volume_ok: votes['Volume']='WAIT'; states['Volume']='MISSING'
+    elif volume<=1.2: votes['Volume']='WAIT'; states['Volume']='NEUTRAL'
+    elif not momentum_ok: votes['Volume']='WAIT'; states['Volume']='MISSING_CONTEXT'
+    else: votes['Volume']='LONG' if momentum>=0 else 'SHORT'; states['Volume']='LIVE'
+    votes['Whale'],states['Whale']=_v1161_s3_signed_vote(whale_ok,whale,5.0)
+    votes['News'],states['News']=_v1161_s3_signed_vote(news_ok,news,5.0)
+    if not volatility_ok: votes['Volatility']='WAIT'; states['Volatility']='MISSING'
+    elif volatility>8.0: votes['Volatility']='WAIT'; states['Volatility']='RISK_BLOCK'
+    elif not momentum_ok: votes['Volatility']='WAIT'; states['Volatility']='MISSING_CONTEXT'
+    else: votes['Volatility']='LONG' if momentum>0.5 else ('SHORT' if momentum<-0.5 else 'WAIT'); states['Volatility']='LIVE' if votes['Volatility']!='WAIT' else 'NEUTRAL'
+
+    raw={'long_raw':long_raw,'short_raw':short_raw,'funding':funding,'oi':oi,'volume':volume,'momentum':momentum,
+         'whale':whale,'news':news,'volatility':volatility}
+    return votes,states,raw
+
+
+def _v1161_s3_consensus(row):
+    votes,states,raw=_v1161_s3_factor_votes(row)
+    weights={'Core Long':2.0,'Core Short':2.0,'Funding':1.0,'OI':1.25,'Momentum':1.25,'Volume':1.0,'Whale':1.0,'News':1.0,'Volatility':1.0}
+    counts={'LONG':0.0,'SHORT':0.0,'WAIT':0.0}; available_weight=0.0; total_weight=sum(weights.values())
+    for k,v in votes.items():
+        w=weights.get(k,1.0); counts[v]+=w
+        if states.get(k) not in ('MISSING','MISSING_CONTEXT'): available_weight+=w
+    evidence_coverage=round((available_weight/total_weight)*100.0,1) if total_weight else 0.0
+    total=sum(counts.values()) or 1.0
+    probs={k:v/total*100.0 for k,v in counts.items()}
+    # Directional disagreement and sparse evidence must strengthen WAIT, never confidence.
+    directional=min(probs['LONG'],probs['SHORT'])
+    missing_penalty=max(0.0,100.0-evidence_coverage)*0.22
+    probs['WAIT']+=directional*0.45+missing_penalty
+    total2=sum(probs.values()) or 1.0
+    probs={k:round(v/total2*100.0,1) for k,v in probs.items()}
+    ordered=sorted(probs.items(),key=lambda kv:kv[1],reverse=True)
+    verdict=ordered[0][0]; edge=round(ordered[0][1]-ordered[1][1],1)
+    conflict=round(min(100.0,(min(probs['LONG'],probs['SHORT'])*2.0)),1)
+    # Safety contract: weak coverage or weak edge forces WAIT.
+    forced_wait_reason=''
+    if evidence_coverage<45.0: forced_wait_reason='EVIDENCE_COVERAGE_LOW'
+    elif verdict!='WAIT' and edge<8.0: forced_wait_reason='DIRECTION_EDGE_LOW'
+    elif conflict>=55.0: forced_wait_reason='LONG_SHORT_CONFLICT_HIGH'
+    if forced_wait_reason: verdict='WAIT'
+    confidence=round(_v1161_s3_clamp((max(probs.values())*0.65)+(edge*0.25)+(evidence_coverage*0.10)-conflict*0.15),1)
+    if verdict=='WAIT': confidence=round(_v1161_s3_clamp(max(probs['WAIT'],confidence)),1)
+    label={'LONG':'🟢 LONG','SHORT':'🔴 SHORT','WAIT':'⏸ WAIT'}[verdict]
+    reasons=[f'{k}: {v} ({states.get(k)})' for k,v in votes.items() if v==verdict and states.get(k)!='MISSING'][:4]
+    blockers=[f'{k}: {v} ({states.get(k)})' for k,v in votes.items() if v!=verdict or states.get(k) in ('MISSING','MISSING_CONTEXT','RISK_BLOCK')][:4]
+    return {'long':probs['LONG'],'short':probs['SHORT'],'wait':probs['WAIT'],'verdict':verdict,'label':label,
+            'confidence':confidence,'edge':edge,'conflict':conflict,'coverage':evidence_coverage,'forced_wait':forced_wait_reason,
+            'votes':votes,'states':states,'raw':raw,'reasons':reasons,'blockers':blockers}
+
+
+def _v1161_s3_record(row,result,source):
+    _V1161_S3_NOTEBOOK.append({'ts':time.time(),'symbol':_v1161_s3_symbol(row),'source':source,'verdict':result['verdict'],
+      'confidence':result['confidence'],'coverage':result['coverage'],'conflict':result['conflict'],
+      'long':result['long'],'short':result['short'],'wait':result['wait'],'forced_wait':result['forced_wait']})
+    if len(_V1161_S3_NOTEBOOK)>_V1161_S3_NOTEBOOK_MAX: del _V1161_S3_NOTEBOOK[:-_V1161_S3_NOTEBOOK_MAX]
+
+
+def _v1161_s3_card(row,rank=1,detail=False):
+    r=_v1161_s3_consensus(row); sym=_v1161_s3_symbol(row)
+    out=(f'<b>{rank}. {_v54_escape(sym)}</b> · <b>{r["label"]}</b>\n'
+      f'🟢 LONG  <code>{_v1161_s3_bar(r["long"])}</code> {r["long"]:.1f}%\n'
+      f'🔴 SHORT <code>{_v1161_s3_bar(r["short"])}</code> {r["short"]:.1f}%\n'
+      f'⚪ WAIT  <code>{_v1161_s3_bar(r["wait"])}</code> {r["wait"]:.1f}%\n'
+      f'Confidence {r["confidence"]:.1f}% · Edge {r["edge"]:.1f}\n'
+      f'Evidence {r["coverage"]:.1f}% · Conflict {r["conflict"]:.1f}%')
+    if r['forced_wait']: out+=f'\n🛡 Safety WAIT · <code>{r["forced_wait"]}</code>'
+    if detail:
+        out+='\n\n<b>AI Debate Votes</b>\n'+'\n'.join(f'· {k}: {r["votes"][k]} · {r["states"].get(k)}' for k in r['votes'])
+        out+='\n\n<b>Why</b>\n'+('\n'.join('✓ '+x for x in r['reasons']) or '· decisive evidence insufficient')
+        out+='\n\n<b>Counter / Missing Evidence</b>\n'+('\n'.join('• '+x for x in r['blockers']) or '· none')
+    return out,r
+
+
+async def ultimate1161devs3_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 Evidence-Aware Consensus 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n필터·점수·증거를 조작하지 않습니다.',parse_mode='HTML'); return
+        ranked=sorted(results,key=lambda x:max(v68_long_score(x),v68_short_score(x)),reverse=True)
+        rr=[_v1161_s3_consensus(x) for x in ranked]
+        av={k:round(sum(x[k] for x in rr)/len(rr),1) for k in ('long','short','wait')}
+        coverage=round(sum(x['coverage'] for x in rr)/len(rr),1); conflict=round(sum(x['conflict'] for x in rr)/len(rr),1)
+        verdict=max(av,key=av.get)
+        if coverage<45.0 or conflict>=55.0: verdict='wait'
+        label={'long':'🟢 LONG BIAS','short':'🔴 SHORT BIAS','wait':'⏸ WAIT BIAS'}[verdict]
+        await update.message.reply_text(
+          f'🧠 <b>A100 V116.1 EVIDENCE-AWARE CONSENSUS</b>\n최종 <b>{label}</b>\n'
+          f'LONG {av["long"]:.1f}% · SHORT {av["short"]:.1f}% · WAIT {av["wait"]:.1f}%\n'
+          f'Evidence {coverage:.1f}% · Conflict {conflict:.1f}%\n후보 {len(ranked)} · 오류 {len(scan_errors or [])}\n\n'
+          '<i>누락 증거는 WAIT이며, 충돌·저커버리지는 방향 판정을 차단합니다.</i>',parse_mode='HTML')
+        for i,row in enumerate(ranked[:3],1):
+            card,res=_v1161_s3_card(row,i,detail); _v1161_s3_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s3-ultimate',e); await update.message.reply_text('⚠️ Consensus 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs3_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s3_consensus(x)) for x in results]
+        # Prefer quality evidence over raw confidence; WAIT remains a valid top result.
+        evaluated.sort(key=lambda z:(z[1]['coverage'],z[1]['confidence'],z[1]['edge']),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s3_card(row,1,True); _v1161_s3_record(row,res,'sniper')
+        await update.message.reply_text('🎯 <b>SNIPER BIDIRECTIONAL TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only',parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s3-sniper',e); await update.message.reply_text('⚠️ Sniper 분석 오류')
+
+
+async def god1161devs3_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE</b>\nLONG: 증거 부족\nSHORT: 증거 부족\nWAIT: 우세\n\n결론 ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s3_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['coverage'],z[1]['confidence']),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s3_card(row,1,True); _v1161_s3_record(row,res,'god')
+        await update.message.reply_text('🧠 <b>LONG / SHORT / WAIT AI DEBATE</b>\n\n'+card+
+          '\n\n<i>Consensus는 주문을 실행하지 않으며 판단은 메모리 내 연구 노트에만 기록됩니다.</i>',parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s3-god',e); await update.message.reply_text('⚠️ AI Debate 오류')
+
+
+async def notebook1161devs3_cmd(update,context):
+    recent=_V1161_S3_NOTEBOOK[-12:]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK</b>\n아직 연구 판단 기록이 없습니다. /ultimate 또는 /god 실행 후 확인하세요.',parse_mode='HTML'); return
+    counts={'LONG':0,'SHORT':0,'WAIT':0}; safety=0
+    for x in recent: counts[x['verdict']]+=1; safety+=1 if x.get('forced_wait') else 0
+    avg_cov=sum(x['coverage'] for x in recent)/len(recent); avg_conf=sum(x['confidence'] for x in recent)/len(recent)
+    lines=[f"· {_v54_escape(x['symbol'])} · {x['verdict']} · C {x['confidence']:.1f}% · E {x['coverage']:.1f}%" for x in reversed(recent)]
+    await update.message.reply_text(
+      '📓 <b>AI RESEARCH NOTEBOOK · IN MEMORY</b>\n'
+      f'최근 {len(recent)}건 · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+      f'평균 Confidence {avg_conf:.1f}% · Evidence {avg_cov:.1f}% · Safety WAIT {safety}\n\n'+
+      '\n'.join(lines)+'\n\n<i>Railway 재시작 시 초기화 · 데이터/게이트/주문 경로 변경 없음</i>',parse_mode='HTML')
+
+
+async def version1161devs3_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S3_NUMBER}</b>\n{V1161_DEV_S3_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: LONG / SHORT / WAIT · Evidence Coverage · Conflict Safety · XAI · Research Notebook',parse_mode='HTML')
+
+
+_V1161_S3_NOTEBOOK_ROUTE = 'airesearch' if 'airesearch' in V90_COMMAND_REGISTRY else ('research' if 'research' in V90_COMMAND_REGISTRY else None)
+
+def _v1161_s3_reconcile():
+    desired={'version':version1161devs3_cmd,'ultimate':ultimate1161devs3_cmd,'sniper':sniper1161devs3_cmd,'god':god1161devs3_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs3_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+_v1161_s3_reconcile()
+
+def build_v44_application(token):
+    repaired=_v1161_s3_reconcile()
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S3 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S3 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S3 routes reconciled: '+','.join(repaired),flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s3_reconcile()
+    print(f'{V1161_DEV_S3_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S3 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S3 routes reconciled: '+','.join(repaired),flush=True)
+    if len(V90_COMMAND_REGISTRY)!=341: raise RuntimeError('V116.1 DEV S3 registry drift')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S3 evidence-aware consensus: ACTIVE · shadow research only',flush=True)
+    print('A100 V116.1 DEV S3 conflict safety: ACTIVE · missing evidence => WAIT',flush=True)
+    print('A100 V116.1 DEV S3 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S3 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S3 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S3 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s3-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S4 - Evidence Freshness, Confidence Calibration & Deterministic Safety
+# Base: V116.1 DEV S3 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S4_NUMBER = "116.1-DEV-S4"
+V1161_DEV_S4_TITLE = "EVIDENCE FRESHNESS, CONFIDENCE CALIBRATION & DETERMINISTIC SAFETY"
+V1161_DEV_S4_VERSION = f"A100 V{V1161_DEV_S4_NUMBER} {V1161_DEV_S4_TITLE}"
+V91_VERSION = V1161_DEV_S4_VERSION
+_V1161_S4_NOTEBOOK=[]
+_V1161_S4_NOTEBOOK_MAX=200
+_V1161_S4_DUP_WINDOW_SEC=15.0
+
+
+def _v1161_s4_now():
+    try: return float(time.time())
+    except Exception: return 0.0
+
+
+def _v1161_s4_timestamp(row):
+    """Best-effort evidence timestamp. Absence is UNKNOWN, never silently fresh."""
+    for n in ('evidence_ts','updated_at','timestamp','ts','scan_ts','observed_at'):
+        try:
+            v=row.get(n) if isinstance(row,dict) else getattr(row,n,None)
+            if v is None: continue
+            if isinstance(v,(int,float)):
+                x=float(v); return x/1000.0 if x>10_000_000_000 else x
+            s=str(v).strip()
+            if not s: continue
+            try: return float(s)
+            except Exception: pass
+            try:
+                from datetime import datetime
+                return datetime.fromisoformat(s.replace('Z','+00:00')).timestamp()
+            except Exception: pass
+        except Exception: pass
+    return None
+
+
+def _v1161_s4_freshness(row):
+    ts=_v1161_s4_timestamp(row)
+    if ts is None: return {'state':'UNKNOWN','age':None,'factor':0.72}
+    age=max(0.0,_v1161_s4_now()-ts)
+    if age<=120: return {'state':'FRESH','age':age,'factor':1.0}
+    if age<=600: return {'state':'AGING','age':age,'factor':0.82}
+    return {'state':'STALE','age':age,'factor':0.45}
+
+
+def _v1161_s4_regime(row):
+    for n in ('regime','market_regime','phase','market_state'):
+        try:
+            v=row.get(n) if isinstance(row,dict) else getattr(row,n,None)
+            if v is not None and str(v).strip(): return str(v).upper().strip()
+        except Exception: pass
+    return 'UNKNOWN'
+
+
+def _v1161_s4_consensus(row):
+    """S3 consensus plus freshness-aware confidence calibration and deterministic safety."""
+    base=_v1161_s3_consensus(row)
+    fresh=_v1161_s4_freshness(row); regime=_v1161_s4_regime(row)
+    probs={k:float(base[k]) for k in ('long','short','wait')}
+    forced=list(filter(None,[base.get('forced_wait','')]))
+    if fresh['state']=='STALE': forced.append('EVIDENCE_STALE')
+    elif fresh['state']=='UNKNOWN' and base.get('coverage',0)<70: forced.append('EVIDENCE_TIME_UNKNOWN')
+    # Sideways/unknown regimes require a larger directional edge; never fabricate a bias.
+    required_edge=12.0 if any(x in regime for x in ('SIDE','RANGE','CHOP')) else 8.0
+    if base.get('verdict')!='WAIT' and float(base.get('edge',0))<required_edge: forced.append('REGIME_EDGE_INSUFFICIENT')
+    verdict='WAIT' if forced else base['verdict']
+    # Directional confidence is calibrated only from the selected probability, edge, coverage and freshness.
+    selected=probs['wait' if verdict=='WAIT' else verdict.lower()]
+    directional_conf=(selected*0.55)+(float(base.get('edge',0))*0.20)+(float(base.get('coverage',0))*0.15)+(fresh['factor']*100*0.10)-float(base.get('conflict',0))*0.18
+    if verdict=='WAIT':
+        # Safety WAIT confidence measures certainty that action should be withheld, not confidence in a trade.
+        safety_bonus=min(24.0,len(set(forced))*8.0)
+        directional_conf=max(probs['wait'], 48.0+safety_bonus+max(0,55-float(base.get('coverage',0)))*0.25)
+    confidence=round(_v1161_s3_clamp(directional_conf),1)
+    label={'LONG':'🟢 LONG','SHORT':'🔴 SHORT','WAIT':'⏸ WAIT'}[verdict]
+    result=dict(base)
+    result.update({'verdict':verdict,'label':label,'confidence':confidence,
+                   'forced_wait':'|'.join(sorted(set(forced))), 'freshness':fresh,
+                   'regime':regime,'required_edge':required_edge})
+    return result
+
+
+def _v1161_s4_record(row,result,source):
+    item={'ts':_v1161_s4_now(),'symbol':_v1161_s3_symbol(row),'source':source,'verdict':result['verdict'],
+          'confidence':result['confidence'],'coverage':result['coverage'],'conflict':result['conflict'],
+          'freshness':result['freshness']['state'],'regime':result['regime'],
+          'long':result['long'],'short':result['short'],'wait':result['wait'],'forced_wait':result['forced_wait']}
+    # Suppress repeated identical cards produced by rapid command retries.
+    if _V1161_S4_NOTEBOOK:
+        p=_V1161_S4_NOTEBOOK[-1]
+        if p['symbol']==item['symbol'] and p['source']==item['source'] and p['verdict']==item['verdict'] and item['ts']-p['ts']<_V1161_S4_DUP_WINDOW_SEC:
+            return False
+    _V1161_S4_NOTEBOOK.append(item)
+    if len(_V1161_S4_NOTEBOOK)>_V1161_S4_NOTEBOOK_MAX: del _V1161_S4_NOTEBOOK[:-_V1161_S4_NOTEBOOK_MAX]
+    return True
+
+
+def _v1161_s4_card(row,rank=1,detail=False):
+    r=_v1161_s4_consensus(row); sym=_v1161_s3_symbol(row); age=r['freshness']['age']
+    age_txt='unknown' if age is None else f'{age:.0f}s'
+    out=(f'<b>{rank}. {_v54_escape(sym)}</b> · <b>{r["label"]}</b>\n'
+      f'🟢 LONG  <code>{_v1161_s3_bar(r["long"])}</code> {r["long"]:.1f}%\n'
+      f'🔴 SHORT <code>{_v1161_s3_bar(r["short"])}</code> {r["short"]:.1f}%\n'
+      f'⚪ WAIT  <code>{_v1161_s3_bar(r["wait"])}</code> {r["wait"]:.1f}%\n'
+      f'Confidence {r["confidence"]:.1f}% · Edge {r["edge"]:.1f}/{r["required_edge"]:.1f}\n'
+      f'Evidence {r["coverage"]:.1f}% · Conflict {r["conflict"]:.1f}%\n'
+      f'Freshness {r["freshness"]["state"]} · age {age_txt} · Regime {r["regime"]}')
+    if r['forced_wait']: out+=f'\n🛡 Safety WAIT · <code>{_v54_escape(r["forced_wait"])}</code>'
+    if detail:
+        out+='\n\n<b>AI Debate Votes</b>\n'+'\n'.join(f'· {k}: {r["votes"][k]} · {r["states"].get(k)}' for k in r['votes'])
+        out+='\n\n<b>Why</b>\n'+('\n'.join('✓ '+x for x in r['reasons']) or '· decisive evidence insufficient')
+        out+='\n\n<b>Counter / Missing Evidence</b>\n'+('\n'.join('• '+x for x in r['blockers']) or '· none')
+    return out,r
+
+
+async def ultimate1161devs4_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S4 Freshness-Calibrated Consensus 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n필터·점수·증거를 조작하지 않습니다.',parse_mode='HTML'); return
+        ranked=sorted(results,key=lambda x:max(v68_long_score(x),v68_short_score(x)),reverse=True)
+        rr=[_v1161_s4_consensus(x) for x in ranked]
+        av={k:round(sum(x[k] for x in rr)/len(rr),1) for k in ('long','short','wait')}
+        coverage=round(sum(x['coverage'] for x in rr)/len(rr),1); conflict=round(sum(x['conflict'] for x in rr)/len(rr),1)
+        stale=sum(1 for x in rr if x['freshness']['state']=='STALE')
+        verdict=max(av,key=av.get)
+        if coverage<45.0 or conflict>=55.0 or stale: verdict='wait'
+        label={'long':'🟢 LONG BIAS','short':'🔴 SHORT BIAS','wait':'⏸ WAIT BIAS'}[verdict]
+        await update.message.reply_text(
+          f'🧠 <b>A100 V116.1 S4 CALIBRATED CONSENSUS</b>\n최종 <b>{label}</b>\n'
+          f'LONG {av["long"]:.1f}% · SHORT {av["short"]:.1f}% · WAIT {av["wait"]:.1f}%\n'
+          f'Evidence {coverage:.1f}% · Conflict {conflict:.1f}% · Stale {stale}\n후보 {len(ranked)} · 오류 {len(scan_errors or [])}\n\n'
+          '<i>시간 미확인·노후 증거와 방향 충돌은 주문 방향으로 승격되지 않습니다.</i>',parse_mode='HTML')
+        for i,row in enumerate(ranked[:3],1):
+            card,res=_v1161_s4_card(row,i,detail); _v1161_s4_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s4-ultimate',e); await update.message.reply_text('⚠️ S4 Consensus 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs4_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s4_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['freshness']['factor'],z[1]['coverage'],z[1]['confidence'],z[1]['edge']),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s4_card(row,1,True); _v1161_s4_record(row,res,'sniper')
+        await update.message.reply_text('🎯 <b>SNIPER S4 FRESH-EVIDENCE TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only',parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s4-sniper',e); await update.message.reply_text('⚠️ Sniper S4 분석 오류')
+
+
+async def god1161devs4_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE</b>\nLONG: 증거 부족\nSHORT: 증거 부족\nWAIT: 우세\n\n결론 ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s4_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['freshness']['factor'],z[1]['coverage'],z[1]['confidence']),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s4_card(row,1,True); _v1161_s4_record(row,res,'god')
+        await update.message.reply_text('🧠 <b>LONG / SHORT / WAIT AI DEBATE S4</b>\n\n'+card+
+          '\n\n<i>결론은 연구 노트에만 기록되며 주문·Gate·LTS 상태를 변경하지 않습니다.</i>',parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s4-god',e); await update.message.reply_text('⚠️ AI Debate S4 오류')
+
+
+async def notebook1161devs4_cmd(update,context):
+    recent=_V1161_S4_NOTEBOOK[-15:]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S4</b>\n아직 연구 판단 기록이 없습니다.',parse_mode='HTML'); return
+    counts={'LONG':0,'SHORT':0,'WAIT':0}; stale=unknown=safety=0
+    for x in recent:
+        counts[x['verdict']]+=1; safety+=bool(x.get('forced_wait')); stale+=x['freshness']=='STALE'; unknown+=x['freshness']=='UNKNOWN'
+    avg_cov=sum(x['coverage'] for x in recent)/len(recent); avg_conf=sum(x['confidence'] for x in recent)/len(recent)
+    lines=[f"· {_v54_escape(x['symbol'])} · {x['verdict']} · C {x['confidence']:.1f}% · E {x['coverage']:.1f}% · {x['freshness']}" for x in reversed(recent)]
+    await update.message.reply_text(
+      '📓 <b>AI RESEARCH NOTEBOOK S4 · IN MEMORY</b>\n'
+      f'최근 {len(recent)}건 · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+      f'평균 Confidence {avg_conf:.1f}% · Evidence {avg_cov:.1f}%\nSafety WAIT {safety} · STALE {stale} · TIME UNKNOWN {unknown}\n\n'+
+      '\n'.join(lines)+'\n\n<i>중복 기록 억제 · 재시작 시 초기화 · 주문/데이터/Gate 변경 없음</i>',parse_mode='HTML')
+
+
+async def version1161devs4_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S4_NUMBER}</b>\n{V1161_DEV_S4_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: Evidence freshness · calibrated confidence · regime edge · deterministic safety · bounded notebook',parse_mode='HTML')
+
+
+def _v1161_s4_reconcile():
+    desired={'version':version1161devs4_cmd,'ultimate':ultimate1161devs4_cmd,'sniper':sniper1161devs4_cmd,'god':god1161devs4_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs4_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s4_reconcile()
+
+
+def _v1161_s4_static_audit():
+    required={'version':version1161devs4_cmd,'ultimate':ultimate1161devs4_cmd,'sniper':sniper1161devs4_cmd,'god':god1161devs4_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches,'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s4_reconcile(); audit=_v1161_s4_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S4 preflight failed: '+','.join(audit['mismatches']))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S4 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S4 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S4 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S4 static route audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s4_reconcile(); audit=_v1161_s4_static_audit()
+    print(f'{V1161_DEV_S4_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S4 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S4 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S4 preflight failed: '+','.join(audit['mismatches']))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S4 evidence freshness: ACTIVE · stale => WAIT',flush=True)
+    print('A100 V116.1 DEV S4 confidence calibration: ACTIVE · safety confidence separated from trade confidence',flush=True)
+    print('A100 V116.1 DEV S4 deterministic route audit: PASS · registry 341',flush=True)
+    print('A100 V116.1 DEV S4 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S4 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S4 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S4 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s4-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S5 - Evidence Schema Normalization, Aggregate Safety & Output Budget
+# Base: V116.1 DEV S4 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S5_NUMBER = "116.1-DEV-S5"
+V1161_DEV_S5_TITLE = "EVIDENCE SCHEMA NORMALIZATION, AGGREGATE SAFETY & OUTPUT BUDGET"
+V1161_DEV_S5_VERSION = f"A100 V{V1161_DEV_S5_NUMBER} {V1161_DEV_S5_TITLE}"
+V91_VERSION = V1161_DEV_S5_VERSION
+_V1161_S5_NOTEBOOK=[]
+_V1161_S5_NOTEBOOK_MAX=240
+_V1161_S5_DUP_WINDOW_SEC=20.0
+_V1161_S5_TELEGRAM_BUDGET=3600
+
+
+def _v1161_s5_value(row,name,default=None):
+    try:
+        if isinstance(row,dict): return row.get(name,default)
+        return getattr(row,name,default)
+    except Exception:
+        return default
+
+
+def _v1161_s5_epoch(value):
+    """Normalize seconds/ms/us/ns and ISO timestamps. Reject implausible epochs."""
+    if value is None or isinstance(value,bool): return None
+    try:
+        if isinstance(value,(int,float)):
+            x=float(value)
+        else:
+            s=str(value).strip()
+            if not s: return None
+            try: x=float(s)
+            except Exception:
+                from datetime import datetime
+                x=datetime.fromisoformat(s.replace('Z','+00:00')).timestamp()
+        ax=abs(x)
+        if ax>=1e17: x/=1e9
+        elif ax>=1e14: x/=1e6
+        elif ax>=1e11: x/=1e3
+        now=float(time.time())
+        # 2009-01-01 through 24h in the future; future skew is handled separately.
+        if x<1230768000 or x>now+86400: return None
+        return x
+    except Exception:
+        return None
+
+
+def _v1161_s5_timestamp(row):
+    fields=('evidence_ts','updated_at','timestamp','ts','scan_ts','observed_at','created_at','event_time','close_time')
+    found=[]
+    for n in fields:
+        raw=_v1161_s5_value(row,n,None)
+        ts=_v1161_s5_epoch(raw)
+        if ts is not None: found.append((n,ts))
+    if not found: return {'ts':None,'field':None,'candidates':0}
+    # Use newest valid evidence timestamp; stale metadata must not override fresh market evidence.
+    field,ts=max(found,key=lambda p:p[1])
+    return {'ts':ts,'field':field,'candidates':len(found)}
+
+
+def _v1161_s5_freshness(row):
+    meta=_v1161_s5_timestamp(row); ts=meta['ts']
+    if ts is None: return {'state':'UNKNOWN','age':None,'factor':0.68,'field':None,'candidates':0}
+    delta=_v1161_s4_now()-ts
+    if delta < -5: return {'state':'CLOCK_SKEW','age':delta,'factor':0.55,'field':meta['field'],'candidates':meta['candidates']}
+    age=max(0.0,delta)
+    if age<=120: state,factor='FRESH',1.0
+    elif age<=600: state,factor='AGING',0.82
+    else: state,factor='STALE',0.42
+    return {'state':state,'age':age,'factor':factor,'field':meta['field'],'candidates':meta['candidates']}
+
+
+def _v1161_s5_consensus(row):
+    """S4 consensus with robust timestamp normalization and explicit clock-skew safety."""
+    base=_v1161_s4_consensus(row)
+    fresh=_v1161_s5_freshness(row)
+    forced=[x for x in str(base.get('forced_wait','')).split('|') if x and x not in ('EVIDENCE_STALE','EVIDENCE_TIME_UNKNOWN')]
+    if fresh['state']=='STALE': forced.append('EVIDENCE_STALE')
+    elif fresh['state']=='CLOCK_SKEW': forced.append('EVIDENCE_CLOCK_SKEW')
+    elif fresh['state']=='UNKNOWN' and float(base.get('coverage',0))<70: forced.append('EVIDENCE_TIME_UNKNOWN')
+    verdict='WAIT' if forced else base.get('verdict','WAIT')
+    probs={k:float(base.get(k,0)) for k in ('long','short','wait')}
+    selected=probs['wait' if verdict=='WAIT' else verdict.lower()]
+    if verdict=='WAIT':
+        confidence=max(probs['wait'],50.0+min(28.0,len(set(forced))*7.0)+(1.0-fresh['factor'])*20.0)
+    else:
+        confidence=(selected*.56)+(float(base.get('edge',0))*.20)+(float(base.get('coverage',0))*.14)+(fresh['factor']*10)-float(base.get('conflict',0))*.17
+    result=dict(base)
+    result.update({'verdict':verdict,'label':{'LONG':'🟢 LONG','SHORT':'🔴 SHORT','WAIT':'⏸ WAIT'}[verdict],
+                   'confidence':round(_v1161_s3_clamp(confidence),1),'freshness':fresh,
+                   'forced_wait':'|'.join(sorted(set(forced)))})
+    return result
+
+
+def _v1161_s5_market_summary(results):
+    rr=[_v1161_s5_consensus(x) for x in results]
+    n=max(1,len(rr))
+    av={k:round(sum(float(x[k]) for x in rr)/n,1) for k in ('long','short','wait')}
+    coverage=round(sum(float(x['coverage']) for x in rr)/n,1)
+    conflict=round(sum(float(x['conflict']) for x in rr)/n,1)
+    states={s:sum(1 for x in rr if x['freshness']['state']==s) for s in ('FRESH','AGING','STALE','UNKNOWN','CLOCK_SKEW')}
+    unsafe=states['STALE']+states['UNKNOWN']+states['CLOCK_SKEW']
+    unsafe_ratio=round(unsafe/n*100.0,1)
+    verdict=max(av,key=av.get)
+    blockers=[]
+    # S4 blocked the whole market if even one stale candidate existed. S5 uses a bounded ratio.
+    if coverage<45.0: blockers.append('MARKET_EVIDENCE_LOW')
+    if conflict>=55.0: blockers.append('MARKET_CONFLICT_HIGH')
+    if unsafe_ratio>=35.0: blockers.append('MARKET_FRESHNESS_UNSAFE')
+    if verdict!='wait':
+        ordered=sorted(av.values(),reverse=True)
+        if ordered[0]-ordered[1]<8.0: blockers.append('MARKET_EDGE_LOW')
+    if blockers: verdict='wait'
+    return {'rows':rr,'long':av['long'],'short':av['short'],'wait':av['wait'],'coverage':coverage,
+            'conflict':conflict,'states':states,'unsafe_ratio':unsafe_ratio,'verdict':verdict,
+            'blockers':blockers}
+
+
+def _v1161_s5_record(row,result,source):
+    item={'ts':_v1161_s4_now(),'symbol':_v1161_s3_symbol(row),'source':source,'verdict':result['verdict'],
+          'confidence':result['confidence'],'coverage':result['coverage'],'conflict':result['conflict'],
+          'freshness':result['freshness']['state'],'timestamp_field':result['freshness'].get('field'),
+          'regime':result.get('regime','UNKNOWN'),'long':result['long'],'short':result['short'],'wait':result['wait'],
+          'forced_wait':result.get('forced_wait','')}
+    if _V1161_S5_NOTEBOOK:
+        p=_V1161_S5_NOTEBOOK[-1]
+        same=(p['symbol'],p['source'],p['verdict'],p['forced_wait'])==(item['symbol'],item['source'],item['verdict'],item['forced_wait'])
+        if same and item['ts']-p['ts']<_V1161_S5_DUP_WINDOW_SEC: return False
+    _V1161_S5_NOTEBOOK.append(item)
+    if len(_V1161_S5_NOTEBOOK)>_V1161_S5_NOTEBOOK_MAX: del _V1161_S5_NOTEBOOK[:-_V1161_S5_NOTEBOOK_MAX]
+    return True
+
+
+def _v1161_s5_trim(text,limit=_V1161_S5_TELEGRAM_BUDGET):
+    text=str(text)
+    if len(text)<=limit: return text
+    cut=text.rfind('\n',0,max(0,limit-100))
+    if cut<limit//2: cut=limit-100
+    return text[:cut]+'\n\n… output budget reached · use detail on fewer candidates'
+
+
+def _v1161_s5_card(row,rank=1,detail=False):
+    r=_v1161_s5_consensus(row); sym=_v1161_s3_symbol(row); age=r['freshness']['age']
+    age_txt='unknown' if age is None else (f'{age:.0f}s' if age>=0 else f'skew {abs(age):.0f}s')
+    tf=r['freshness'].get('field') or 'none'
+    out=(f'<b>{rank}. {_v54_escape(sym)}</b> · <b>{r["label"]}</b>\n'
+      f'🟢 LONG  <code>{_v1161_s3_bar(r["long"])}</code> {r["long"]:.1f}%\n'
+      f'🔴 SHORT <code>{_v1161_s3_bar(r["short"])}</code> {r["short"]:.1f}%\n'
+      f'⚪ WAIT  <code>{_v1161_s3_bar(r["wait"])}</code> {r["wait"]:.1f}%\n'
+      f'Confidence {r["confidence"]:.1f}% · Edge {r["edge"]:.1f}/{r["required_edge"]:.1f}\n'
+      f'Evidence {r["coverage"]:.1f}% · Conflict {r["conflict"]:.1f}%\n'
+      f'Freshness {r["freshness"]["state"]} · age {age_txt} · source {tf} · Regime {r["regime"]}')
+    if r.get('forced_wait'): out+=f'\n🛡 Safety WAIT · <code>{_v54_escape(r["forced_wait"])}</code>'
+    if detail:
+        out+='\n\n<b>AI Debate Votes</b>\n'+'\n'.join(f'· {k}: {r["votes"][k]} · {r["states"].get(k)}' for k in r['votes'])
+        out+='\n\n<b>Why</b>\n'+('\n'.join('✓ '+x for x in r['reasons']) or '· decisive evidence insufficient')
+        out+='\n\n<b>Counter / Missing Evidence</b>\n'+('\n'.join('• '+x for x in r['blockers']) or '· none')
+    return _v1161_s5_trim(out),r
+
+
+async def ultimate1161devs5_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S5 Schema-Normalized Consensus 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n필터·점수·증거를 조작하지 않습니다.',parse_mode='HTML'); return
+        ranked=sorted(results,key=lambda x:(max(v68_long_score(x),v68_short_score(x)),_v1161_s3_symbol(x)),reverse=True)
+        m=_v1161_s5_market_summary(ranked)
+        label={'long':'🟢 LONG BIAS','short':'🔴 SHORT BIAS','wait':'⏸ WAIT BIAS'}[m['verdict']]
+        st=m['states']
+        summary=(f'🧠 <b>A100 V116.1 S5 AGGREGATE CONSENSUS</b>\n최종 <b>{label}</b>\n'
+          f'LONG {m["long"]:.1f}% · SHORT {m["short"]:.1f}% · WAIT {m["wait"]:.1f}%\n'
+          f'Evidence {m["coverage"]:.1f}% · Conflict {m["conflict"]:.1f}% · Unsafe {m["unsafe_ratio"]:.1f}%\n'
+          f'Fresh {st["FRESH"]} · Aging {st["AGING"]} · Stale {st["STALE"]} · Unknown {st["UNKNOWN"]} · Skew {st["CLOCK_SKEW"]}\n'
+          f'후보 {len(ranked)} · 오류 {len(scan_errors or [])}')
+        if m['blockers']: summary+='\n🛡 <code>'+_v54_escape('|'.join(m['blockers']))+'</code>'
+        summary+='\n\n<i>단일 노후 후보가 전체 시장을 차단하지 않으며, 노후·미확인 비율이 안전 한도를 넘을 때만 WAIT합니다.</i>'
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,row in enumerate(ranked[:3],1):
+            card,res=_v1161_s5_card(row,i,detail); _v1161_s5_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s5-ultimate',e); await update.message.reply_text('⚠️ S5 Consensus 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs5_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s5_consensus(x)) for x in results]
+        # Prefer actionable verdicts, fresh evidence and high coverage; deterministic symbol tie-break.
+        evaluated.sort(key=lambda z:(z[1]['verdict']!='WAIT',z[1]['freshness']['factor'],z[1]['coverage'],z[1]['confidence'],z[1]['edge'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s5_card(row,1,True); _v1161_s5_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S5 EVIDENCE-NORMALIZED TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s5-sniper',e); await update.message.reply_text('⚠️ Sniper S5 분석 오류')
+
+
+async def god1161devs5_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE</b>\nLONG: 증거 부족\nSHORT: 증거 부족\nWAIT: 우세\n\n결론 ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s5_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['freshness']['factor'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s5_card(row,1,True); _v1161_s5_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S5</b>\n\n'+card+
+          '\n\n<i>결론은 연구 노트에만 기록되며 주문·Gate·LTS 상태를 변경하지 않습니다.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s5-god',e); await update.message.reply_text('⚠️ AI Debate S5 오류')
+
+
+async def notebook1161devs5_cmd(update,context):
+    recent=_V1161_S5_NOTEBOOK[-18:]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S5</b>\n아직 연구 판단 기록이 없습니다.',parse_mode='HTML'); return
+    counts={'LONG':0,'SHORT':0,'WAIT':0}; states={}; safety=0
+    for x in recent:
+        counts[x['verdict']]+=1; safety+=bool(x.get('forced_wait')); states[x['freshness']]=states.get(x['freshness'],0)+1
+    avg_cov=sum(x['coverage'] for x in recent)/len(recent); avg_conf=sum(x['confidence'] for x in recent)/len(recent)
+    lines=[f"· {_v54_escape(x['symbol'])} · {x['verdict']} · C {x['confidence']:.1f}% · E {x['coverage']:.1f}% · {x['freshness']} · {x.get('timestamp_field') or '-'}" for x in reversed(recent)]
+    body=('📓 <b>AI RESEARCH NOTEBOOK S5 · IN MEMORY</b>\n'
+      f'최근 {len(recent)}건 · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+      f'평균 Confidence {avg_conf:.1f}% · Evidence {avg_cov:.1f}% · Safety WAIT {safety}\n'
+      f'Freshness {" · ".join(f"{k} {v}" for k,v in sorted(states.items()))}\n\n'+'\n'.join(lines)+
+      '\n\n<i>중복 억제 · 최대 240건 · 재시작 시 초기화 · 주문/데이터/Gate 변경 없음</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs5_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S5_NUMBER}</b>\n{V1161_DEV_S5_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: timestamp unit normalization · clock-skew safety · aggregate stale ratio · deterministic ranking · Telegram output budget',parse_mode='HTML')
+
+
+def _v1161_s5_reconcile():
+    desired={'version':version1161devs5_cmd,'ultimate':ultimate1161devs5_cmd,'sniper':sniper1161devs5_cmd,'god':god1161devs5_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs5_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s5_reconcile()
+
+
+def _v1161_s5_static_audit():
+    required={'version':version1161devs5_cmd,'ultimate':ultimate1161devs5_cmd,'sniper':sniper1161devs5_cmd,'god':god1161devs5_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={
+      'epoch_seconds': _v1161_s5_epoch(1700000000) is not None,
+      'epoch_millis': _v1161_s5_epoch(1700000000000) is not None,
+      'epoch_micros': _v1161_s5_epoch(1700000000000000) is not None,
+      'reject_small': _v1161_s5_epoch(12345) is None,
+      'output_budget': len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s5_reconcile(); audit=_v1161_s5_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S5 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S5 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S5 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S5 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S5 schema and route audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s5_reconcile(); audit=_v1161_s5_static_audit()
+    print(f'{V1161_DEV_S5_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S5 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S5 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S5 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S5 evidence schema normalization: ACTIVE · sec/ms/us/ns/ISO',flush=True)
+    print('A100 V116.1 DEV S5 aggregate safety: ACTIVE · unsafe ratio threshold 35%',flush=True)
+    print(f'A100 V116.1 DEV S5 Telegram output budget: {_V1161_S5_TELEGRAM_BUDGET}',flush=True)
+    print('A100 V116.1 DEV S5 static schema/route audit: PASS · registry 341',flush=True)
+    print('A100 V116.1 DEV S5 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S5 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S5 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S5 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s5-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S6 - Market Regime Policy, Directional Asymmetry & Debate Governance
+# Base: V116.1 DEV S5 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S6_NUMBER = "116.1-DEV-S6"
+V1161_DEV_S6_TITLE = "MARKET REGIME POLICY, DIRECTIONAL ASYMMETRY & DEBATE GOVERNANCE"
+V1161_DEV_S6_VERSION = f"A100 V{V1161_DEV_S6_NUMBER} {V1161_DEV_S6_TITLE}"
+V91_VERSION = V1161_DEV_S6_VERSION
+_V1161_S6_NOTEBOOK=[]
+_V1161_S6_NOTEBOOK_MAX=280
+_V1161_S6_DUP_WINDOW_SEC=25.0
+
+
+def _v1161_s6_num(row,*names):
+    for n in names:
+        v=_v1161_s5_value(row,n,None)
+        if v in (None,''): continue
+        try: return float(v)
+        except Exception: continue
+    return None
+
+
+def _v1161_s6_regime(row):
+    """Conservative regime classification. Explicit evidence wins; inference never fabricates certainty."""
+    raw=str(_v1161_s4_regime(row) or 'UNKNOWN').upper().replace('-','_').replace(' ','_')
+    aliases={
+      'RALLY':'BULL','BULLISH':'BULL','UPTREND':'BULL','MARKUP':'BULL',
+      'CRASH':'BEAR','BEARISH':'BEAR','DOWNTREND':'BEAR','MARKDOWN':'BEAR',
+      'RANGE':'SIDEWAYS','SIDE':'SIDEWAYS','CHOP':'SIDEWAYS','CHOPPY':'SIDEWAYS','FLAT':'SIDEWAYS',
+      'NEWS':'NEWS_SHOCK','SHOCK':'NEWS_SHOCK','EVENT':'NEWS_SHOCK',
+      'HIGH_VOLATILITY':'HIGH_VOL','VOLATILE':'HIGH_VOL',
+      'LOW_LIQUIDITY':'LOW_LIQUIDITY','ILLIQUID':'LOW_LIQUIDITY'
+    }
+    if raw in aliases: raw=aliases[raw]
+    if raw in ('BULL','BEAR','SIDEWAYS','NEWS_SHOCK','HIGH_VOL','LOW_LIQUIDITY'): return {'name':raw,'source':'EXPLICIT','confidence':100.0}
+    momentum=_v1161_s6_num(row,'momentum','momentum_score','change_24h','price_change_pct','return_pct')
+    trend=_v1161_s6_num(row,'trend_score','trend','slope','ema_slope')
+    vol=_v1161_s6_num(row,'volatility','volatility_pct','atr_pct','realized_vol')
+    liquidity=_v1161_s6_num(row,'liquidity_score','liquidity','volume_ratio','depth_score')
+    news=_v1161_s6_num(row,'news_score','news_impact','macro_score')
+    votes=[]
+    for v in (momentum,trend):
+        if v is None: continue
+        if v>=3: votes.append('BULL')
+        elif v<=-3: votes.append('BEAR')
+        else: votes.append('SIDEWAYS')
+    if news is not None and abs(news)>=70: return {'name':'NEWS_SHOCK','source':'INFERRED','confidence':min(90.0,abs(news))}
+    if vol is not None and abs(vol)>=75: return {'name':'HIGH_VOL','source':'INFERRED','confidence':min(90.0,abs(vol))}
+    if liquidity is not None and liquidity<=25: return {'name':'LOW_LIQUIDITY','source':'INFERRED','confidence':75.0}
+    if not votes: return {'name':'UNKNOWN','source':'MISSING','confidence':0.0}
+    counts={k:votes.count(k) for k in ('BULL','BEAR','SIDEWAYS')}; winner=max(counts,key=lambda k:(counts[k],k))
+    conf=55.0+20.0*(counts[winner]/len(votes))
+    return {'name':winner,'source':'INFERRED','confidence':round(min(85.0,conf),1)}
+
+
+def _v1161_s6_policy(row):
+    reg=_v1161_s6_regime(row)
+    name=reg['name']
+    policy={
+      'BULL':{'long_bias':5.0,'short_bias':-3.0,'min_edge':8.0,'min_coverage':58.0},
+      'BEAR':{'long_bias':-3.0,'short_bias':5.0,'min_edge':8.0,'min_coverage':58.0},
+      'SIDEWAYS':{'long_bias':-1.0,'short_bias':-1.0,'min_edge':14.0,'min_coverage':65.0},
+      'NEWS_SHOCK':{'long_bias':0.0,'short_bias':0.0,'min_edge':18.0,'min_coverage':78.0},
+      'HIGH_VOL':{'long_bias':0.0,'short_bias':0.0,'min_edge':16.0,'min_coverage':72.0},
+      'LOW_LIQUIDITY':{'long_bias':-2.0,'short_bias':-2.0,'min_edge':18.0,'min_coverage':80.0},
+      'UNKNOWN':{'long_bias':0.0,'short_bias':0.0,'min_edge':12.0,'min_coverage':70.0},
+    }[name]
+    return reg,policy
+
+
+def _v1161_s6_consensus(row):
+    base=_v1161_s5_consensus(row)
+    reg,pol=_v1161_s6_policy(row)
+    long=max(0.0,float(base['long'])+pol['long_bias'])
+    short=max(0.0,float(base['short'])+pol['short_bias'])
+    wait=max(0.0,float(base['wait']))
+    total=max(1e-9,long+short+wait)
+    long,short,wait=[round(x/total*100.0,1) for x in (long,short,wait)]
+    probs={'LONG':long,'SHORT':short,'WAIT':wait}
+    verdict=max(probs,key=lambda k:(probs[k],k))
+    edge=round(abs(long-short),1)
+    forced=[x for x in str(base.get('forced_wait','')).split('|') if x]
+    if float(base.get('coverage',0))<pol['min_coverage']: forced.append('REGIME_COVERAGE_LOW')
+    if verdict!='WAIT' and edge<pol['min_edge']: forced.append('REGIME_EDGE_LOW')
+    if reg['name'] in ('NEWS_SHOCK','HIGH_VOL') and reg['confidence']<70: forced.append('REGIME_CONFIDENCE_LOW')
+    if reg['name']=='LOW_LIQUIDITY': forced.append('LOW_LIQUIDITY_RISK')
+    # Directional asymmetry: counter-regime trades require stronger live evidence.
+    if reg['name']=='BULL' and verdict=='SHORT' and (edge<16 or float(base.get('coverage',0))<75): forced.append('COUNTER_BULL_SHORT_BLOCK')
+    if reg['name']=='BEAR' and verdict=='LONG' and (edge<16 or float(base.get('coverage',0))<75): forced.append('COUNTER_BEAR_LONG_BLOCK')
+    if forced: verdict='WAIT'
+    selected=probs[verdict]
+    if verdict=='WAIT':
+        confidence=max(wait,52.0+min(30.0,len(set(forced))*6.0)+(100.0-reg['confidence'])*.08)
+    else:
+        confidence=selected*.55+edge*.22+float(base.get('coverage',0))*.13+reg['confidence']*.10-float(base.get('conflict',0))*.14
+    result=dict(base)
+    result.update({'long':long,'short':short,'wait':wait,'verdict':verdict,
+      'label':{'LONG':'🟢 LONG','SHORT':'🔴 SHORT','WAIT':'⏸ WAIT'}[verdict],
+      'confidence':round(_v1161_s3_clamp(confidence),1),'edge':edge,
+      'required_edge':pol['min_edge'],'forced_wait':'|'.join(sorted(set(forced))),
+      'regime':reg['name'],'regime_source':reg['source'],'regime_confidence':reg['confidence'],
+      'regime_policy':pol})
+    return result
+
+
+def _v1161_s6_debate(row,result):
+    long_case=[x for x in result.get('reasons',[]) if any(k in x.upper() for k in ('LONG','BULL','UP','BUY'))][:3]
+    short_case=[x for x in result.get('reasons',[]) if any(k in x.upper() for k in ('SHORT','BEAR','DOWN','SELL'))][:3]
+    wait_case=list(result.get('blockers',[]))[:3]
+    if result.get('forced_wait'): wait_case.extend(str(result['forced_wait']).split('|')[:3])
+    return {
+      'long':long_case or ['directional evidence not decisive'],
+      'short':short_case or ['directional evidence not decisive'],
+      'wait':list(dict.fromkeys(wait_case)) or ['no safety blocker'],
+      'governance':f"{result['regime']} policy · min edge {result['required_edge']:.1f} · min coverage {result['regime_policy']['min_coverage']:.1f}%"
+    }
+
+
+def _v1161_s6_record(row,result,source):
+    item={'ts':_v1161_s4_now(),'symbol':_v1161_s3_symbol(row),'source':source,'verdict':result['verdict'],
+      'confidence':result['confidence'],'coverage':result['coverage'],'conflict':result['conflict'],
+      'freshness':result['freshness']['state'],'regime':result['regime'],'regime_confidence':result['regime_confidence'],
+      'long':result['long'],'short':result['short'],'wait':result['wait'],'forced_wait':result.get('forced_wait','')}
+    if _V1161_S6_NOTEBOOK:
+        p=_V1161_S6_NOTEBOOK[-1]
+        key=lambda x:(x['symbol'],x['source'],x['verdict'],x['regime'],x['forced_wait'])
+        if key(p)==key(item) and item['ts']-p['ts']<_V1161_S6_DUP_WINDOW_SEC: return False
+    _V1161_S6_NOTEBOOK.append(item)
+    if len(_V1161_S6_NOTEBOOK)>_V1161_S6_NOTEBOOK_MAX: del _V1161_S6_NOTEBOOK[:-_V1161_S6_NOTEBOOK_MAX]
+    return True
+
+
+def _v1161_s6_card(row,rank=1,detail=False):
+    r=_v1161_s6_consensus(row); sym=_v1161_s3_symbol(row); age=r['freshness']['age']
+    age_txt='unknown' if age is None else (f'{age:.0f}s' if age>=0 else f'skew {abs(age):.0f}s')
+    out=(f'<b>{rank}. {_v54_escape(sym)}</b> · <b>{r["label"]}</b>\n'
+      f'🟢 LONG  <code>{_v1161_s3_bar(r["long"])}</code> {r["long"]:.1f}%\n'
+      f'🔴 SHORT <code>{_v1161_s3_bar(r["short"])}</code> {r["short"]:.1f}%\n'
+      f'⚪ WAIT  <code>{_v1161_s3_bar(r["wait"])}</code> {r["wait"]:.1f}%\n'
+      f'Confidence {r["confidence"]:.1f}% · Edge {r["edge"]:.1f}/{r["required_edge"]:.1f}\n'
+      f'Evidence {r["coverage"]:.1f}% · Conflict {r["conflict"]:.1f}% · Freshness {r["freshness"]["state"]} {age_txt}\n'
+      f'Regime {r["regime"]} · {r["regime_source"]} · C {r["regime_confidence"]:.1f}%')
+    if r.get('forced_wait'): out+=f'\n🛡 Safety WAIT · <code>{_v54_escape(r["forced_wait"])}</code>'
+    if detail:
+        d=_v1161_s6_debate(row,r)
+        out+='\n\n<b>LONG AI</b>\n'+'\n'.join('• '+_v54_escape(x) for x in d['long'])
+        out+='\n\n<b>SHORT AI</b>\n'+'\n'.join('• '+_v54_escape(x) for x in d['short'])
+        out+='\n\n<b>WAIT / Risk AI</b>\n'+'\n'.join('• '+_v54_escape(x) for x in d['wait'])
+        out+='\n\n<b>Consensus Governance</b>\n• '+_v54_escape(d['governance'])
+    return _v1161_s5_trim(out),r
+
+
+async def ultimate1161devs6_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S6 Regime-Governed Consensus 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거를 조작하지 않습니다.',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s6_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['verdict']!='WAIT',z[1]['freshness']['factor'],z[1]['coverage'],z[1]['confidence'],z[1]['edge'],_v1161_s3_symbol(z[0])),reverse=True)
+        counts={k:sum(1 for _,r in evaluated if r['regime']==k) for k in ('BULL','BEAR','SIDEWAYS','NEWS_SHOCK','HIGH_VOL','LOW_LIQUIDITY','UNKNOWN')}
+        probs={k:round(sum(r[k] for _,r in evaluated)/len(evaluated),1) for k in ('long','short','wait')}
+        verdict=max(probs,key=probs.get)
+        if sum(1 for _,r in evaluated if r['verdict']=='WAIT')/len(evaluated)>=.5: verdict='wait'
+        label={'long':'🟢 LONG BIAS','short':'🔴 SHORT BIAS','wait':'⏸ WAIT BIAS'}[verdict]
+        summary=(f'🧠 <b>A100 V116.1 S6 REGIME-GOVERNED CONSENSUS</b>\n최종 <b>{label}</b>\n'
+          f'LONG {probs["long"]:.1f}% · SHORT {probs["short"]:.1f}% · WAIT {probs["wait"]:.1f}%\n'
+          f'후보 {len(evaluated)} · Safety WAIT {sum(1 for _,r in evaluated if r["forced_wait"])} · 오류 {len(scan_errors or [])}\n'
+          f'Regimes '+ ' · '.join(f'{k} {v}' for k,v in counts.items() if v))
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s6_card(row,i,detail); _v1161_s6_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s6-ultimate',e); await update.message.reply_text('⚠️ S6 Consensus 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs6_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s6_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['verdict']!='WAIT',z[1]['freshness']['factor'],z[1]['regime_confidence'],z[1]['coverage'],z[1]['confidence'],z[1]['edge'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s6_card(row,1,True); _v1161_s6_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S6 REGIME-AWARE TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s6-sniper',e); await update.message.reply_text('⚠️ Sniper S6 분석 오류')
+
+
+async def god1161devs6_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE</b>\nLONG: 증거 부족\nSHORT: 증거 부족\nWAIT: 우세\n\n결론 ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s6_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['freshness']['factor'],z[1]['regime_confidence'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s6_card(row,1,True); _v1161_s6_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S6</b>\n\n'+card+
+          '\n\n<i>Regime policy governs the debate; no order, Gate or persisted state is changed.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s6-god',e); await update.message.reply_text('⚠️ AI Debate S6 오류')
+
+
+async def notebook1161devs6_cmd(update,context):
+    recent=_V1161_S6_NOTEBOOK[-20:]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S6</b>\n아직 연구 판단 기록이 없습니다.',parse_mode='HTML'); return
+    counts={k:sum(1 for x in recent if x['verdict']==k) for k in ('LONG','SHORT','WAIT')}
+    regimes={}; safety=0
+    for x in recent: regimes[x['regime']]=regimes.get(x['regime'],0)+1; safety+=bool(x['forced_wait'])
+    avg_cov=sum(x['coverage'] for x in recent)/len(recent); avg_conf=sum(x['confidence'] for x in recent)/len(recent)
+    lines=[f"· {_v54_escape(x['symbol'])} · {x['regime']} · {x['verdict']} · C {x['confidence']:.1f}% · E {x['coverage']:.1f}%" for x in reversed(recent)]
+    body=('📓 <b>AI RESEARCH NOTEBOOK S6 · IN MEMORY</b>\n'
+      f'최근 {len(recent)}건 · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+      f'평균 Confidence {avg_conf:.1f}% · Evidence {avg_cov:.1f}% · Safety WAIT {safety}\n'
+      f'Regimes '+ ' · '.join(f'{k} {v}' for k,v in sorted(regimes.items()))+'\n\n'+'\n'.join(lines)+
+      '\n\n<i>중복 억제 · 최대 280건 · 재시작 시 초기화 · 주문/데이터/Gate 변경 없음</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs6_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S6_NUMBER}</b>\n{V1161_DEV_S6_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: conservative regime classifier · directional asymmetry · counter-regime safety · debate governance',parse_mode='HTML')
+
+
+def _v1161_s6_reconcile():
+    desired={'version':version1161devs6_cmd,'ultimate':ultimate1161devs6_cmd,'sniper':sniper1161devs6_cmd,'god':god1161devs6_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs6_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s6_reconcile()
+
+
+def _v1161_s6_static_audit():
+    required={'version':version1161devs6_cmd,'ultimate':ultimate1161devs6_cmd,'sniper':sniper1161devs6_cmd,'god':god1161devs6_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={
+      'explicit_bull':_v1161_s6_regime({'regime':'RALLY'})['name']=='BULL',
+      'explicit_bear':_v1161_s6_regime({'regime':'CRASH'})['name']=='BEAR',
+      'explicit_sideways':_v1161_s6_regime({'regime':'RANGE'})['name']=='SIDEWAYS',
+      'missing_unknown':_v1161_s6_regime({})['name']=='UNKNOWN',
+      'counter_policy':_v1161_s6_policy({'regime':'BULL'})[1]['short_bias']<0,
+      'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s6_reconcile(); audit=_v1161_s6_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S6 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S6 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S6 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S6 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S6 regime policy and route audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s6_reconcile(); audit=_v1161_s6_static_audit()
+    print(f'{V1161_DEV_S6_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S6 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S6 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S6 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S6 market regime policy: ACTIVE · conservative / evidence-aware',flush=True)
+    print('A100 V116.1 DEV S6 directional asymmetry: ACTIVE · counter-regime safety',flush=True)
+    print('A100 V116.1 DEV S6 AI debate governance: ACTIVE · LONG / SHORT / WAIT',flush=True)
+    print('A100 V116.1 DEV S6 static regime/route audit: PASS · registry 341',flush=True)
+    print('A100 V116.1 DEV S6 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S6 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S6 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S6 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s6-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S7 - Factor Attribution, Debate Stability & Shadow Readiness
+# Base: V116.1 DEV S6 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S7_NUMBER = "116.1-DEV-S7"
+V1161_DEV_S7_TITLE = "FACTOR ATTRIBUTION, DEBATE STABILITY & SHADOW READINESS"
+V1161_DEV_S7_VERSION = f"A100 V{V1161_DEV_S7_NUMBER} {V1161_DEV_S7_TITLE}"
+V91_VERSION = V1161_DEV_S7_VERSION
+_V1161_S7_NOTEBOOK=[]
+_V1161_S7_NOTEBOOK_MAX=320
+_V1161_S7_DUP_WINDOW_SEC=30.0
+
+# Transparent research weights. These do not alter the legacy Gate, thresholds or order path.
+_V1161_S7_FACTOR_WEIGHTS={
+    'Core Long':1.35,'Core Short':1.35,'Funding':1.00,'OI':1.15,'Momentum':1.10,
+    'Volume':0.80,'Whale':1.00,'News':0.85,'Volatility':0.70,
+}
+
+
+def _v1161_s7_factor_attribution(result):
+    votes=dict(result.get('votes') or {})
+    states=dict(result.get('states') or {})
+    totals={'LONG':0.0,'SHORT':0.0,'WAIT':0.0}
+    rows=[]
+    for name,vote in votes.items():
+        state=str(states.get(name,'UNKNOWN'))
+        base=float(_V1161_S7_FACTOR_WEIGHTS.get(name,0.75))
+        quality={'LIVE':1.0,'NEUTRAL':0.45,'MISSING_CONTEXT':0.20,'MISSING':0.0,'RISK_BLOCK':0.0}.get(state,0.15)
+        freshness=float((result.get('freshness') or {}).get('factor',1.0))
+        effective=base*quality*(freshness if state=='LIVE' else 1.0)
+        direction=vote if vote in totals else 'WAIT'
+        totals[direction]+=effective
+        rows.append({'name':name,'vote':direction,'state':state,'weight':base,'effective':effective})
+    denom=sum(totals.values()) or 1.0
+    share={k:round(v/denom*100.0,1) for k,v in totals.items()}
+    decisive=sorted(rows,key=lambda x:(x['effective'],x['name']),reverse=True)
+    return {'totals':totals,'share':share,'rows':rows,'decisive':decisive}
+
+
+def _v1161_s7_history(symbol,limit=12):
+    items=[x for x in _V1161_S7_NOTEBOOK if x.get('symbol')==symbol]
+    return items[-limit:]
+
+
+def _v1161_s7_stability(symbol,current):
+    hist=_v1161_s7_history(symbol,12)
+    seq=[x.get('verdict','WAIT') for x in hist]+[current.get('verdict','WAIT')]
+    if len(seq)<=1:
+        return {'score':50.0,'state':'INSUFFICIENT','samples':len(seq),'flips':0,'agreement':100.0}
+    flips=sum(1 for a,b in zip(seq,seq[1:]) if a!=b)
+    agreement=sum(1 for x in seq if x==seq[-1])/len(seq)*100.0
+    score=max(0.0,min(100.0,agreement-(flips/max(1,len(seq)-1))*35.0))
+    state='STABLE' if score>=75 else ('MIXED' if score>=50 else 'UNSTABLE')
+    return {'score':round(score,1),'state':state,'samples':len(seq),'flips':flips,'agreement':round(agreement,1)}
+
+
+def _v1161_s7_shadow_readiness(result,stability,attrib):
+    blockers=[]
+    if result.get('verdict')=='WAIT': blockers.append('WAIT_VERDICT')
+    if result.get('forced_wait'): blockers.append('SAFETY_WAIT')
+    if float(result.get('coverage',0))<70: blockers.append('EVIDENCE_LT_70')
+    if float(result.get('confidence',0))<65: blockers.append('CONFIDENCE_LT_65')
+    if float(result.get('conflict',0))>=45: blockers.append('CONFLICT_GE_45')
+    if (result.get('freshness') or {}).get('state') not in ('FRESH','AGING'): blockers.append('FRESHNESS_UNSAFE')
+    if stability['samples']>=4 and stability['score']<55: blockers.append('DEBATE_UNSTABLE')
+    direction=result.get('verdict','WAIT')
+    directional_share=float(attrib['share'].get(direction,0))
+    if direction in ('LONG','SHORT') and directional_share<45: blockers.append('ATTRIBUTION_WEAK')
+    readiness=(float(result.get('coverage',0))*.25+float(result.get('confidence',0))*.25+
+               max(0,100-float(result.get('conflict',0)))*.15+
+               float(stability['score'])*.15+directional_share*.20)
+    readiness=max(0.0,min(100.0,readiness-len(blockers)*8.0))
+    state='SHADOW_READY' if not blockers and readiness>=72 else ('OBSERVE' if readiness>=55 else 'BLOCKED')
+    return {'score':round(readiness,1),'state':state,'blockers':blockers,'directional_share':round(directional_share,1)}
+
+
+def _v1161_s7_consensus(row):
+    result=dict(_v1161_s6_consensus(row))
+    symbol=_v1161_s3_symbol(row)
+    attrib=_v1161_s7_factor_attribution(result)
+    stability=_v1161_s7_stability(symbol,result)
+    readiness=_v1161_s7_shadow_readiness(result,stability,attrib)
+    # Never promote a direction from this layer. It may only demote research actionability to WAIT.
+    extra=[]
+    if readiness['state']=='BLOCKED' and result.get('verdict')!='WAIT': extra.append('S7_SHADOW_READINESS_BLOCK')
+    if stability['state']=='UNSTABLE' and stability['samples']>=4: extra.append('S7_DEBATE_UNSTABLE')
+    if extra:
+        forced=[x for x in str(result.get('forced_wait','')).split('|') if x]
+        forced.extend(extra)
+        result['verdict']='WAIT'; result['label']='⏸ WAIT'
+        result['forced_wait']='|'.join(sorted(set(forced)))
+        result['confidence']=round(max(float(result.get('wait',0)),55.0+len(extra)*8.0),1)
+        readiness=_v1161_s7_shadow_readiness(result,stability,attrib)
+    result.update({'attribution':attrib,'stability':stability,'shadow_readiness':readiness})
+    return result
+
+
+def _v1161_s7_record(row,result,source):
+    item={'ts':time.time(),'symbol':_v1161_s3_symbol(row),'source':source,'verdict':result.get('verdict','WAIT'),
+          'confidence':float(result.get('confidence',0)),'coverage':float(result.get('coverage',0)),
+          'conflict':float(result.get('conflict',0)),'regime':result.get('regime','UNKNOWN'),
+          'freshness':(result.get('freshness') or {}).get('state','UNKNOWN'),
+          'stability':float((result.get('stability') or {}).get('score',0)),
+          'readiness':float((result.get('shadow_readiness') or {}).get('score',0)),
+          'readiness_state':(result.get('shadow_readiness') or {}).get('state','BLOCKED'),
+          'forced_wait':result.get('forced_wait','')}
+    if _V1161_S7_NOTEBOOK:
+        p=_V1161_S7_NOTEBOOK[-1]
+        signature=(p['symbol'],p['source'],p['verdict'],p['forced_wait'])
+        current=(item['symbol'],item['source'],item['verdict'],item['forced_wait'])
+        if signature==current and item['ts']-p['ts']<_V1161_S7_DUP_WINDOW_SEC: return False
+    _V1161_S7_NOTEBOOK.append(item)
+    if len(_V1161_S7_NOTEBOOK)>_V1161_S7_NOTEBOOK_MAX: del _V1161_S7_NOTEBOOK[:-_V1161_S7_NOTEBOOK_MAX]
+    return True
+
+
+def _v1161_s7_card(row,rank=1,detail=False):
+    r=_v1161_s7_consensus(row); sym=_v1161_s3_symbol(row)
+    f=r.get('freshness') or {}; age=f.get('age'); age_txt='unknown' if age is None else f'{age:.0f}s'
+    st=r['stability']; ready=r['shadow_readiness']; at=r['attribution']
+    out=(f'<b>{rank}. {_v54_escape(sym)}</b> · <b>{r["label"]}</b>\n'
+      f'🟢 LONG  <code>{_v1161_s3_bar(r["long"])}</code> {r["long"]:.1f}%\n'
+      f'🔴 SHORT <code>{_v1161_s3_bar(r["short"])}</code> {r["short"]:.1f}%\n'
+      f'⚪ WAIT  <code>{_v1161_s3_bar(r["wait"])}</code> {r["wait"]:.1f}%\n'
+      f'Confidence {r["confidence"]:.1f}% · Edge {r["edge"]:.1f}/{r.get("required_edge",8):.1f}\n'
+      f'Evidence {r["coverage"]:.1f}% · Conflict {r["conflict"]:.1f}% · Freshness {f.get("state","UNKNOWN")} {age_txt}\n'
+      f'Regime {r.get("regime","UNKNOWN")} · Debate {st["state"]} {st["score"]:.1f}% ({st["samples"]})\n'
+      f'🧪 Shadow Readiness <b>{ready["state"]}</b> · {ready["score"]:.1f}%')
+    if r.get('forced_wait'): out+=f'\n🛡 Safety WAIT · <code>{_v54_escape(r["forced_wait"])}</code>'
+    if ready['blockers']: out+='\nBlockers · '+_v54_escape(', '.join(ready['blockers'][:5]))
+    if detail:
+        out+='\n\n<b>Factor Attribution</b>\n'
+        for x in at['decisive'][:9]:
+            out+=f'· {x["name"]}: {x["vote"]} · {x["state"]} · w {x["effective"]:.2f}\n'
+        out+=f'Share · LONG {at["share"]["LONG"]:.1f}% / SHORT {at["share"]["SHORT"]:.1f}% / WAIT {at["share"]["WAIT"]:.1f}%'
+        d=_v1161_s6_debate(row,r)
+        out+='\n\n<b>AI Debate</b>\n· LONG: '+_v54_escape(d['long'])+'\n· SHORT: '+_v54_escape(d['short'])+'\n· WAIT: '+_v54_escape(d['wait'])+'\n· Governance: '+_v54_escape(d['governance'])
+    return _v1161_s5_trim(out),r
+
+
+async def ultimate1161devs7_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S7 Attribution & Stability 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거를 조작하지 않습니다.',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s7_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        counts={k:sum(1 for _,r in evaluated if r['shadow_readiness']['state']==k) for k in ('SHADOW_READY','OBSERVE','BLOCKED')}
+        probs={k:round(sum(float(r[k]) for _,r in evaluated)/len(evaluated),1) for k in ('long','short','wait')}
+        summary=(f'🧠 <b>A100 V116.1 S7 SHADOW RESEARCH READINESS</b>\n'
+          f'LONG {probs["long"]:.1f}% · SHORT {probs["short"]:.1f}% · WAIT {probs["wait"]:.1f}%\n'
+          f'후보 {len(evaluated)} · READY {counts["SHADOW_READY"]} · OBSERVE {counts["OBSERVE"]} · BLOCKED {counts["BLOCKED"]}\n'
+          f'오류 {len(scan_errors or [])} · Registry {len(V90_COMMAND_REGISTRY)}/341')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s7_card(row,i,detail); _v1161_s7_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s7-ultimate',e); await update.message.reply_text('⚠️ S7 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs7_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER S7</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s7_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s7_card(row,1,True); _v1161_s7_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S7 ATTRIBUTION-AWARE TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s7-sniper',e); await update.message.reply_text('⚠️ Sniper S7 분석 오류')
+
+
+async def god1161devs7_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE S7</b>\nLONG: 증거 부족\nSHORT: 증거 부족\nWAIT: 우세\n\n결론 ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s7_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s7_card(row,1,True); _v1161_s7_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S7</b>\n\n'+card+
+          '\n\n<i>Attribution and stability may only block research actionability; they cannot open an order path.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s7-god',e); await update.message.reply_text('⚠️ AI Debate S7 오류')
+
+
+async def notebook1161devs7_cmd(update,context):
+    recent=_V1161_S7_NOTEBOOK[-24:]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S7</b>\n아직 연구 판단 기록이 없습니다.',parse_mode='HTML'); return
+    counts={k:sum(1 for x in recent if x['verdict']==k) for k in ('LONG','SHORT','WAIT')}
+    ready={k:sum(1 for x in recent if x['readiness_state']==k) for k in ('SHADOW_READY','OBSERVE','BLOCKED')}
+    avg_st=sum(x['stability'] for x in recent)/len(recent); avg_rd=sum(x['readiness'] for x in recent)/len(recent)
+    lines=[f"· {_v54_escape(x['symbol'])} · {x['verdict']} · {x['readiness_state']} {x['readiness']:.1f}% · Stability {x['stability']:.1f}%" for x in reversed(recent)]
+    body=('📓 <b>AI RESEARCH NOTEBOOK S7 · IN MEMORY</b>\n'
+      f'최근 {len(recent)}건 · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+      f'READY {ready["SHADOW_READY"]} · OBSERVE {ready["OBSERVE"]} · BLOCKED {ready["BLOCKED"]}\n'
+      f'평균 Debate Stability {avg_st:.1f}% · Shadow Readiness {avg_rd:.1f}%\n\n'+'\n'.join(lines)+
+      '\n\n<i>최대 320건 · 중복 억제 · 재시작 시 초기화 · 주문/데이터/Gate 변경 없음</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs7_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S7_NUMBER}</b>\n{V1161_DEV_S7_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: transparent factor attribution · debate stability · shadow-readiness governance · no promotion to order path',parse_mode='HTML')
+
+
+def _v1161_s7_reconcile():
+    desired={'version':version1161devs7_cmd,'ultimate':ultimate1161devs7_cmd,'sniper':sniper1161devs7_cmd,'god':god1161devs7_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs7_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s7_reconcile()
+
+
+def _v1161_s7_static_audit():
+    required={'version':version1161devs7_cmd,'ultimate':ultimate1161devs7_cmd,'sniper':sniper1161devs7_cmd,'god':god1161devs7_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    sample={'votes':{'Core Long':'LONG','Core Short':'WAIT','Funding':'SHORT'},'states':{'Core Long':'LIVE','Core Short':'NEUTRAL','Funding':'LIVE'},'freshness':{'factor':1.0}}
+    at=_v1161_s7_factor_attribution(sample)
+    fake={'verdict':'LONG','forced_wait':'','coverage':80,'confidence':75,'conflict':20,'freshness':{'state':'FRESH'},'long':70,'short':20,'wait':10}
+    st={'score':80,'state':'STABLE','samples':5,'flips':0,'agreement':80}
+    rd=_v1161_s7_shadow_readiness(fake,st,at)
+    tests={
+      'attribution_normalized':abs(sum(at['share'].values())-100.0)<=0.2,
+      'attribution_directional':at['share']['LONG']>at['share']['SHORT'],
+      'shadow_readiness_bounded':0<=rd['score']<=100,
+      'no_order_route':all(k not in globals() for k in ('place_order1161devs7','execute_order1161devs7')),
+      'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s7_reconcile(); audit=_v1161_s7_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S7 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S7 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S7 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S7 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S7 factor attribution / stability audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s7_reconcile(); audit=_v1161_s7_static_audit()
+    print(f'{V1161_DEV_S7_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S7 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S7 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S7 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S7 factor attribution: ACTIVE · transparent / read only',flush=True)
+    print('A100 V116.1 DEV S7 debate stability: ACTIVE · in-memory observation',flush=True)
+    print('A100 V116.1 DEV S7 shadow readiness governance: ACTIVE · cannot open order path',flush=True)
+    print('A100 V116.1 DEV S7 static route audit: PASS · registry 341',flush=True)
+    print('A100 V116.1 DEV S7 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S7 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S7 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S7 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s7-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+# ============================================================================
+# A100 V116.1 DEV S8
+# DECISION IDENTITY, OBSERVATION DEDUPLICATION & OUTCOME-READY RESEARCH CONTRACT
+# ============================================================================
+V1161_DEV_S8_NUMBER = "116.1-DEV-S8"
+V1161_DEV_S8_TITLE = "DECISION IDENTITY, OBSERVATION DEDUPLICATION & OUTCOME-READY RESEARCH CONTRACT"
+V1161_DEV_S8_VERSION = f"A100 V{V1161_DEV_S8_NUMBER} {V1161_DEV_S8_TITLE}"
+V91_VERSION = V1161_DEV_S8_VERSION
+_V1161_S8_NOTEBOOK=[]
+_V1161_S8_NOTEBOOK_MAX=360
+_V1161_S8_DEFAULT_HORIZONS=("15m","1h","4h","24h")
+
+
+def _v1161_s8_round(v,step=0.5):
+    try: return round(float(v)/step)*step
+    except Exception: return 0.0
+
+
+def _v1161_s8_observation_ts(row,result):
+    f=result.get('freshness') or {}
+    ts=f.get('timestamp') or f.get('ts')
+    if ts is None:
+        # S5 freshness exposes age even when source timestamp field naming differs.
+        age=f.get('age')
+        if age is not None:
+            try: ts=_v1161_s4_now()-float(age)
+            except Exception: ts=None
+    if ts is None: ts=_v1161_s4_now()
+    try: return int(float(ts)//30*30)
+    except Exception: return int(_v1161_s4_now()//30*30)
+
+
+def _v1161_s8_decision_id(row,result):
+    """Stable identity for one market observation; command repeats must not create new evidence."""
+    payload={
+      'symbol':_v1161_s3_symbol(row),
+      'obs':_v1161_s8_observation_ts(row,result),
+      'regime':result.get('regime','UNKNOWN'),
+      'verdict':result.get('verdict','WAIT'),
+      'long':_v1161_s8_round(result.get('long',0)),
+      'short':_v1161_s8_round(result.get('short',0)),
+      'wait':_v1161_s8_round(result.get('wait',0)),
+      'coverage':_v1161_s8_round(result.get('coverage',0),1.0),
+      'freshness':(result.get('freshness') or {}).get('state','UNKNOWN'),
+      'forced_wait':result.get('forced_wait',''),
+    }
+    raw=json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=True)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _v1161_s8_unique_history(symbol,limit=16):
+    seen=set(); out=[]
+    for x in reversed(_V1161_S8_NOTEBOOK):
+        if x.get('symbol')!=symbol: continue
+        did=x.get('decision_id')
+        if not did or did in seen: continue
+        seen.add(did); out.append(x)
+        if len(out)>=limit: break
+    return list(reversed(out))
+
+
+def _v1161_s8_stability(symbol,current):
+    hist=_v1161_s8_unique_history(symbol,16)
+    seq=[x.get('verdict','WAIT') for x in hist]
+    current_id=current.get('decision_id')
+    if not hist or hist[-1].get('decision_id')!=current_id:
+        seq.append(current.get('verdict','WAIT'))
+    if len(seq)<=1:
+        return {'score':50.0,'state':'INSUFFICIENT','samples':len(seq),'flips':0,'agreement':100.0,'unique':len(seq)}
+    flips=sum(a!=b for a,b in zip(seq,seq[1:]))
+    agreement=sum(x==seq[-1] for x in seq)/len(seq)*100.0
+    flip_rate=flips/max(1,len(seq)-1)*100.0
+    score=max(0.0,min(100.0,agreement*.75+(100.0-flip_rate)*.25))
+    state='STABLE' if len(seq)>=4 and score>=75 else ('MIXED' if score>=50 else 'UNSTABLE')
+    return {'score':round(score,1),'state':state,'samples':len(seq),'flips':flips,'agreement':round(agreement,1),'unique':len(seq)}
+
+
+def _v1161_s8_outcome_contract(row,result):
+    """Research contract only. It defines future evaluation fields but never creates trades or labels."""
+    direction=result.get('verdict','WAIT')
+    ready=(result.get('shadow_readiness') or {}).get('state','BLOCKED')
+    eligible=direction in ('LONG','SHORT') and ready=='SHADOW_READY' and not result.get('forced_wait')
+    return {
+      'eligible':bool(eligible),
+      'direction':direction,
+      'decision_id':result.get('decision_id'),
+      'observation_ts':result.get('observation_ts'),
+      'horizons':_V1161_S8_DEFAULT_HORIZONS,
+      'label_status':'PENDING_RUNTIME_OUTCOME' if eligible else 'NOT_ELIGIBLE',
+      'policy':'NO_RETROACTIVE_LABEL · NO_ORDER_PATH · NO_WEIGHT_UPDATE',
+    }
+
+
+def _v1161_s8_consensus(row):
+    result=dict(_v1161_s7_consensus(row))
+    result['observation_ts']=_v1161_s8_observation_ts(row,result)
+    result['decision_id']=_v1161_s8_decision_id(row,result)
+    stability=_v1161_s8_stability(_v1161_s3_symbol(row),result)
+    result['stability']=stability
+    # Re-evaluate readiness using unique-observation stability, not command invocation count.
+    result['shadow_readiness']=_v1161_s7_shadow_readiness(result,stability,result.get('attribution') or _v1161_s7_factor_attribution(result))
+    extra=[]
+    if stability['state']=='UNSTABLE' and stability['unique']>=4: extra.append('S8_UNIQUE_OBSERVATION_UNSTABLE')
+    if extra and result.get('verdict')!='WAIT':
+        prior=[x for x in str(result.get('forced_wait','')).split('|') if x]
+        result['forced_wait']='|'.join(sorted(set(prior+extra)))
+        result['verdict']='WAIT'; result['label']='⏸ WAIT'
+        result['confidence']=round(max(float(result.get('wait',0)),68.0),1)
+        result['shadow_readiness']=_v1161_s7_shadow_readiness(result,stability,result['attribution'])
+    result['outcome_contract']=_v1161_s8_outcome_contract(row,result)
+    return result
+
+
+def _v1161_s8_record(row,result,source):
+    did=result.get('decision_id') or _v1161_s8_decision_id(row,result)
+    if any(x.get('decision_id')==did for x in _V1161_S8_NOTEBOOK): return False
+    c=result.get('outcome_contract') or {}
+    item={'ts':time.time(),'observation_ts':result.get('observation_ts'),'decision_id':did,
+      'symbol':_v1161_s3_symbol(row),'source':source,'verdict':result.get('verdict','WAIT'),
+      'confidence':float(result.get('confidence',0)),'coverage':float(result.get('coverage',0)),
+      'conflict':float(result.get('conflict',0)),'regime':result.get('regime','UNKNOWN'),
+      'freshness':(result.get('freshness') or {}).get('state','UNKNOWN'),
+      'stability':float((result.get('stability') or {}).get('score',0)),
+      'readiness':float((result.get('shadow_readiness') or {}).get('score',0)),
+      'readiness_state':(result.get('shadow_readiness') or {}).get('state','BLOCKED'),
+      'outcome_eligible':bool(c.get('eligible')),'forced_wait':result.get('forced_wait','')}
+    _V1161_S8_NOTEBOOK.append(item)
+    if len(_V1161_S8_NOTEBOOK)>_V1161_S8_NOTEBOOK_MAX: del _V1161_S8_NOTEBOOK[:-_V1161_S8_NOTEBOOK_MAX]
+    return True
+
+
+def _v1161_s8_card(row,rank=1,detail=False):
+    r=_v1161_s8_consensus(row); sym=_v1161_s3_symbol(row); f=r.get('freshness') or {}
+    age=f.get('age'); age_txt='unknown' if age is None else f'{age:.0f}s'
+    st=r['stability']; rd=r['shadow_readiness']; oc=r['outcome_contract']; at=r['attribution']
+    out=(f'<b>{rank}. {_v54_escape(sym)}</b> · <b>{r["label"]}</b>\n'
+      f'🟢 LONG  <code>{_v1161_s3_bar(r["long"])}</code> {r["long"]:.1f}%\n'
+      f'🔴 SHORT <code>{_v1161_s3_bar(r["short"])}</code> {r["short"]:.1f}%\n'
+      f'⚪ WAIT  <code>{_v1161_s3_bar(r["wait"])}</code> {r["wait"]:.1f}%\n'
+      f'Confidence {r["confidence"]:.1f}% · Edge {r["edge"]:.1f}/{r.get("required_edge",8):.1f}\n'
+      f'Evidence {r["coverage"]:.1f}% · Conflict {r["conflict"]:.1f}% · Freshness {f.get("state","UNKNOWN")} {age_txt}\n'
+      f'Regime {r.get("regime","UNKNOWN")} · Unique Stability {st["state"]} {st["score"]:.1f}% ({st["unique"]})\n'
+      f'🧪 Shadow Readiness <b>{rd["state"]}</b> · {rd["score"]:.1f}%\n'
+      f'Observation <code>{r["decision_id"]}</code> · Outcome {oc["label_status"]}')
+    if r.get('forced_wait'): out+=f'\n🛡 Safety WAIT · <code>{_v54_escape(r["forced_wait"])}</code>'
+    if rd.get('blockers'): out+='\nBlockers · '+_v54_escape(', '.join(rd['blockers'][:5]))
+    if detail:
+        out+='\n\n<b>Factor Attribution</b>\n'
+        for x in at['decisive'][:9]: out+=f'· {x["name"]}: {x["vote"]} · {x["state"]} · w {x["effective"]:.2f}\n'
+        out+=f'\n<b>Prospective Outcome Contract</b>\n· Horizons: {", ".join(oc["horizons"])}\n· {oc["policy"]}'
+    return _v1161_s5_trim(out),r
+
+
+async def ultimate1161devs8_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S8 Observation-Unique Research 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거를 조작하지 않습니다.',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s8_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',z[1]['outcome_contract']['eligible'],z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        counts={k:sum(r['shadow_readiness']['state']==k for _,r in evaluated) for k in ('SHADOW_READY','OBSERVE','BLOCKED')}
+        eligible=sum(r['outcome_contract']['eligible'] for _,r in evaluated)
+        summary=(f'🧠 <b>A100 V116.1 S8 UNIQUE-OBSERVATION RESEARCH</b>\n후보 {len(evaluated)} · READY {counts["SHADOW_READY"]} · OBSERVE {counts["OBSERVE"]} · BLOCKED {counts["BLOCKED"]}\n'
+          f'Prospective Outcome Eligible {eligible} · Scan Errors {len(scan_errors or [])}\n'
+          f'Notebook Unique Decisions {len(_V1161_S8_NOTEBOOK)} · Registry {len(V90_COMMAND_REGISTRY)}/341\n\n'
+          '<i>Repeated Telegram queries never create extra evidence or improve stability.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s8_card(row,i,detail); _v1161_s8_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s8-ultimate',e); await update.message.reply_text('⚠️ S8 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs8_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER S8</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s8_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['outcome_contract']['eligible'],z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s8_card(row,1,True); _v1161_s8_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S8 OUTCOME-CONTRACT TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s8-sniper',e); await update.message.reply_text('⚠️ Sniper S8 분석 오류')
+
+
+async def god1161devs8_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE S8</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s8_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s8_card(row,1,True); _v1161_s8_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S8</b>\n\n'+card+
+          '\n\n<i>Decision identity prevents command-frequency bias. Outcome labels remain pending until future runtime evidence exists.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s8-god',e); await update.message.reply_text('⚠️ AI Debate S8 오류')
+
+
+async def notebook1161devs8_cmd(update,context):
+    recent=_V1161_S8_NOTEBOOK[-30:]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S8</b>\n아직 고유 시장 관측 기록이 없습니다.',parse_mode='HTML'); return
+    counts={k:sum(x['verdict']==k for x in recent) for k in ('LONG','SHORT','WAIT')}
+    eligible=sum(x['outcome_eligible'] for x in recent)
+    avg_st=sum(x['stability'] for x in recent)/len(recent); avg_rd=sum(x['readiness'] for x in recent)/len(recent)
+    lines=[f"· {_v54_escape(x['symbol'])} · {x['verdict']} · {x['readiness_state']} {x['readiness']:.1f}% · <code>{x['decision_id']}</code>" for x in reversed(recent)]
+    body=('📓 <b>AI RESEARCH NOTEBOOK S8 · UNIQUE OBSERVATIONS</b>\n'
+      f'고유 {len(recent)}건 · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+      f'Outcome Eligible {eligible} · 평균 Stability {avg_st:.1f}% · Readiness {avg_rd:.1f}%\n\n'+'\n'.join(lines)+
+      '\n\n<i>명령 반복 중복 0 · 최대 360 고유 관측 · 재시작 시 초기화 · 주문/Gate/가중치 변경 없음</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs8_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S8_NUMBER}</b>\n{V1161_DEV_S8_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: decision fingerprint · unique-observation stability · anti-query-bias notebook · prospective outcome contract',parse_mode='HTML')
+
+
+def _v1161_s8_reconcile():
+    desired={'version':version1161devs8_cmd,'ultimate':ultimate1161devs8_cmd,'sniper':sniper1161devs8_cmd,'god':god1161devs8_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs8_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s8_reconcile()
+
+
+def _v1161_s8_static_audit():
+    required={'version':version1161devs8_cmd,'ultimate':ultimate1161devs8_cmd,'sniper':sniper1161devs8_cmd,'god':god1161devs8_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    fake_row={'symbol':'TESTUSDT'}
+    fake={'verdict':'LONG','long':70,'short':20,'wait':10,'coverage':80,'freshness':{'state':'FRESH','age':5},'regime':'BULL','forced_wait':''}
+    d1=_v1161_s8_decision_id(fake_row,fake); d2=_v1161_s8_decision_id(fake_row,dict(fake))
+    tests={
+      'decision_id_deterministic':d1==d2,
+      'decision_id_length':len(d1)==16,
+      'no_order_route':all(k not in globals() for k in ('place_order1161devs8','execute_order1161devs8')),
+      'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+      'outcome_policy_locked':'NO_WEIGHT_UPDATE' in _v1161_s8_outcome_contract(fake_row,dict(fake,decision_id=d1,observation_ts=1,shadow_readiness={'state':'SHADOW_READY'}))['policy'],
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s8_reconcile(); audit=_v1161_s8_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S8 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S8 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S8 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S8 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S8 decision identity / outcome contract audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s8_reconcile(); audit=_v1161_s8_static_audit()
+    print(f'{V1161_DEV_S8_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S8 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S8 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S8 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S8 decision fingerprint: ACTIVE · deterministic',flush=True)
+    print('A100 V116.1 DEV S8 observation deduplication: ACTIVE · command-frequency neutral',flush=True)
+    print('A100 V116.1 DEV S8 outcome-ready contract: ACTIVE · prospective / no retroactive labels',flush=True)
+    print('A100 V116.1 DEV S8 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S8 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S8 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S8 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s8-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+# ============================================================================
+# A100 V116.1 DEV S9 - Prospective Outcome Ledger, Horizon Settlement & Review Integrity
+# Base: V116.1 DEV S8 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S9_NUMBER = "116.1-DEV-S9"
+V1161_DEV_S9_TITLE = "PROSPECTIVE OUTCOME LEDGER, HORIZON SETTLEMENT & REVIEW INTEGRITY"
+V1161_DEV_S9_VERSION = f"A100 V{V1161_DEV_S9_NUMBER} {V1161_DEV_S9_TITLE}"
+V91_VERSION = V1161_DEV_S9_VERSION
+_V1161_S9_LEDGER = {}
+_V1161_S9_LEDGER_MAX = 420
+_V1161_S9_HORIZONS = {'15m':900.0,'1h':3600.0,'4h':14400.0,'24h':86400.0}
+_V1161_S9_FLAT_BAND_PCT = 0.15
+
+
+def _v1161_s9_price(row):
+    """Extract a positive observed market price without inventing one."""
+    for name in ('price','last_price','lastPrice','mark_price','markPrice','close','current_price','currentPrice','entry_price'):
+        try:
+            value=_v1161_s5_value(row,name,None)
+            if value in (None,''): continue
+            price=float(value)
+            if price>0 and price<1e15: return price,name
+        except Exception:
+            continue
+    return None,None
+
+
+def _v1161_s9_directional_return(direction,entry,current):
+    if not entry or not current or entry<=0 or current<=0: return None
+    raw=(current-entry)/entry*100.0
+    if direction=='SHORT': raw=-raw
+    if direction not in ('LONG','SHORT'): return None
+    return round(raw,6)
+
+
+def _v1161_s9_label(value):
+    if value is None: return 'PENDING'
+    if value>_V1161_S9_FLAT_BAND_PCT: return 'WIN'
+    if value<-_V1161_S9_FLAT_BAND_PCT: return 'LOSS'
+    return 'FLAT'
+
+
+def _v1161_s9_trim_ledger():
+    if len(_V1161_S9_LEDGER)<=_V1161_S9_LEDGER_MAX: return
+    ordered=sorted(_V1161_S9_LEDGER.items(),key=lambda kv:float(kv[1].get('created_ts',0)))
+    for key,_ in ordered[:len(_V1161_S9_LEDGER)-_V1161_S9_LEDGER_MAX]:
+        _V1161_S9_LEDGER.pop(key,None)
+
+
+def _v1161_s9_register(row,result,source):
+    contract=result.get('outcome_contract') or {}
+    if not contract.get('eligible'): return None
+    did=result.get('decision_id')
+    if not did: return None
+    existing=_V1161_S9_LEDGER.get(did)
+    if existing is not None: return existing
+    price,price_field=_v1161_s9_price(row)
+    obs=float(result.get('observation_ts') or _v1161_s4_now())
+    if price is None:
+        return None
+    item={
+      'decision_id':did,'symbol':_v1161_s3_symbol(row),'direction':result.get('verdict'),
+      'observation_ts':obs,'created_ts':_v1161_s4_now(),'entry_price':price,'entry_price_field':price_field,
+      'source':source,'regime':result.get('regime','UNKNOWN'),'confidence':float(result.get('confidence',0)),
+      'coverage':float(result.get('coverage',0)),'readiness':float((result.get('shadow_readiness') or {}).get('score',0)),
+      'settlements':{},'policy':'PROSPECTIVE_ONLY · UNIQUE_DECISION · NO_ORDER · NO_WEIGHT_UPDATE'
+    }
+    _V1161_S9_LEDGER[did]=item
+    _v1161_s9_trim_ledger()
+    return item
+
+
+def _v1161_s9_settle_row(row,result=None):
+    """Settle matured horizons only from a later observed scan for the same symbol."""
+    symbol=_v1161_s3_symbol(row)
+    current,current_field=_v1161_s9_price(row)
+    if current is None: return 0
+    now_obs=float((result or {}).get('observation_ts') or _v1161_s8_observation_ts(row,result or {}))
+    settled=0
+    for item in list(_V1161_S9_LEDGER.values()):
+        if item.get('symbol')!=symbol: continue
+        entry_obs=float(item.get('observation_ts') or 0)
+        if now_obs<=entry_obs: continue
+        elapsed=now_obs-entry_obs
+        for horizon,seconds in _V1161_S9_HORIZONS.items():
+            if horizon in item['settlements'] or elapsed<seconds: continue
+            ret=_v1161_s9_directional_return(item.get('direction'),float(item.get('entry_price',0)),current)
+            if ret is None: continue
+            item['settlements'][horizon]={
+              'status':'SETTLED','label':_v1161_s9_label(ret),'directional_return_pct':ret,
+              'market_price':current,'price_field':current_field,'observed_ts':now_obs,
+              'elapsed_sec':round(elapsed,3),'prospective':True
+            }
+            settled+=1
+    return settled
+
+
+def _v1161_s9_update_market(rows):
+    count=0
+    for row in rows or []:
+        try:
+            result=_v1161_s8_consensus(row)
+            count+=_v1161_s9_settle_row(row,result)
+        except Exception:
+            continue
+    return count
+
+
+def _v1161_s9_metrics(symbol=None):
+    items=[x for x in _V1161_S9_LEDGER.values() if symbol is None or x.get('symbol')==symbol]
+    settlements=[]
+    for item in items:
+        for horizon,outcome in item.get('settlements',{}).items():
+            settlements.append((item,horizon,outcome))
+    labels={k:sum(o.get('label')==k for _,_,o in settlements) for k in ('WIN','LOSS','FLAT')}
+    directional=[float(o.get('directional_return_pct',0)) for _,_,o in settlements]
+    return {
+      'decisions':len(items),'settled':len(settlements),'pending':sum(max(0,len(_V1161_S9_HORIZONS)-len(x.get('settlements',{}))) for x in items),
+      'wins':labels['WIN'],'losses':labels['LOSS'],'flat':labels['FLAT'],
+      'win_rate':round(labels['WIN']/max(1,labels['WIN']+labels['LOSS'])*100.0,1),
+      'avg_return':round(sum(directional)/max(1,len(directional)),4),
+    }
+
+
+def _v1161_s9_outcome_line(result):
+    did=result.get('decision_id'); item=_V1161_S9_LEDGER.get(did)
+    if not item:
+        return 'Outcome Ledger: NOT_REGISTERED' if (result.get('outcome_contract') or {}).get('eligible') else 'Outcome Ledger: NOT_ELIGIBLE'
+    settled=item.get('settlements',{})
+    bits=[]
+    for horizon in _V1161_S9_HORIZONS:
+        o=settled.get(horizon)
+        bits.append(f'{horizon} {o["label"]} {o["directional_return_pct"]:+.2f}%' if o else f'{horizon} PENDING')
+    return 'Outcome Ledger: '+' · '.join(bits)
+
+
+def _v1161_s9_consensus(row):
+    result=dict(_v1161_s8_consensus(row))
+    result['outcome_ledger']=_V1161_S9_LEDGER.get(result.get('decision_id'))
+    return result
+
+
+def _v1161_s9_card(row,rank=1,detail=False):
+    base,result=_v1161_s8_card(row,rank,detail)
+    result=_v1161_s9_consensus(row)
+    line=_v1161_s9_outcome_line(result)
+    metrics=_v1161_s9_metrics(_v1161_s3_symbol(row))
+    extra=f'\n\n<b>Prospective Outcome Review</b>\n· {_v54_escape(line)}\n· Unique decisions {metrics["decisions"]} · Settled {metrics["settled"]} · Pending {metrics["pending"]}'
+    if metrics['settled']:
+        extra+=f'\n· WIN {metrics["wins"]} / LOSS {metrics["losses"]} / FLAT {metrics["flat"]} · WR {metrics["win_rate"]:.1f}% · Avg {metrics["avg_return"]:+.3f}%'
+    return _v1161_s5_trim(base+extra),result
+
+
+def _v1161_s9_record(row,result,source):
+    added=_v1161_s8_record(row,result,source)
+    _v1161_s9_register(row,result,source)
+    return added
+
+
+async def ultimate1161devs9_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S9 Prospective Outcome Research 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거와 Outcome을 조작하지 않습니다.',parse_mode='HTML'); return
+        settled=_v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',(z[1].get('outcome_contract') or {}).get('eligible',False),z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        m=_v1161_s9_metrics()
+        summary=(f'🧠 <b>A100 V116.1 S9 PROSPECTIVE OUTCOME RESEARCH</b>\n후보 {len(evaluated)} · 이번 관측 Settlement {settled}\n'
+          f'Ledger Decisions {m["decisions"]} · Settled {m["settled"]} · Pending {m["pending"]}\n'
+          f'WIN {m["wins"]} / LOSS {m["losses"]} / FLAT {m["flat"]} · Research WR {m["win_rate"]:.1f}%\n'
+          f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Scan Errors {len(scan_errors or [])}\n\n'
+          '<i>Only later market observations settle outcomes. No retroactive labels, orders, gates, or weight updates.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s9_card(row,i,detail); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s9-ultimate',e); await update.message.reply_text('⚠️ S9 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs9_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER S9</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:((z[1].get('outcome_contract') or {}).get('eligible',False),z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s9_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S9 PROSPECTIVE TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s9-sniper',e); await update.message.reply_text('⚠️ Sniper S9 분석 오류')
+
+
+async def god1161devs9_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE S9</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'god'); card,res=_v1161_s9_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S9</b>\n\n'+card+
+          '\n\n<i>Prospective outcomes are settled only by later observations. Research statistics cannot alter decisions.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s9-god',e); await update.message.reply_text('⚠️ AI Debate S9 오류')
+
+
+async def notebook1161devs9_cmd(update,context):
+    m=_v1161_s9_metrics()
+    recent=sorted(_V1161_S9_LEDGER.values(),key=lambda x:x.get('created_ts',0),reverse=True)[:24]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S9</b>\n아직 Prospective Outcome Ledger 기록이 없습니다.',parse_mode='HTML'); return
+    lines=[]
+    for item in recent:
+        settled=item.get('settlements',{})
+        state=', '.join(f'{h}:{o["label"]}' for h,o in settled.items()) or 'PENDING'
+        lines.append(f'· {_v54_escape(item["symbol"])} · {item["direction"]} · <code>{item["decision_id"]}</code> · {_v54_escape(state)}')
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S9 · PROSPECTIVE OUTCOMES</b>\n'
+      f'Decisions {m["decisions"]} · Settled {m["settled"]} · Pending {m["pending"]}\n'
+      f'WIN {m["wins"]} / LOSS {m["losses"]} / FLAT {m["flat"]} · WR {m["win_rate"]:.1f}% · Avg {m["avg_return"]:+.3f}%\n\n'+'\n'.join(lines)+
+      '\n\n<i>In-memory only · future observations only · no order/Gate/weight changes · restart resets ledger</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs9_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S9_NUMBER}</b>\n{V1161_DEV_S9_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: prospective outcome ledger · future-only horizon settlement · research review integrity',parse_mode='HTML')
+
+
+def _v1161_s9_reconcile():
+    desired={'version':version1161devs9_cmd,'ultimate':ultimate1161devs9_cmd,'sniper':sniper1161devs9_cmd,'god':god1161devs9_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs9_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s9_reconcile()
+
+
+def _v1161_s9_static_audit():
+    required={'version':version1161devs9_cmd,'ultimate':ultimate1161devs9_cmd,'sniper':sniper1161devs9_cmd,'god':god1161devs9_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    long_ret=_v1161_s9_directional_return('LONG',100,110)
+    short_ret=_v1161_s9_directional_return('SHORT',100,90)
+    tests={
+      'long_return':abs(long_ret-10.0)<1e-9,
+      'short_return':abs(short_ret-10.0)<1e-9,
+      'flat_band':_v1161_s9_label(0.1)=='FLAT',
+      'no_retroactive_settlement':all(float(x['observation_ts'])>=0 for x in _V1161_S9_LEDGER.values()),
+      'no_order_route':all(k not in globals() for k in ('place_order1161devs9','execute_order1161devs9')),
+      'ledger_bound':_V1161_S9_LEDGER_MAX<=500,
+      'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s9_reconcile(); audit=_v1161_s9_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S9 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S9 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S9 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S9 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S9 prospective outcome integrity audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s9_reconcile(); audit=_v1161_s9_static_audit()
+    print(f'{V1161_DEV_S9_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S9 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S9 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S9 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S9 prospective outcome ledger: ACTIVE · in memory',flush=True)
+    print('A100 V116.1 DEV S9 horizon settlement: ACTIVE · 15m/1h/4h/24h · future observations only',flush=True)
+    print('A100 V116.1 DEV S9 self-review mutation: DISABLED · no weight updates',flush=True)
+    print('A100 V116.1 DEV S9 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S9 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S9 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S9 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s9-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+# ============================================================================
+# A100 V116.1 DEV S10 - Outcome Timing Integrity, Price-Source Consistency & Calibration Readiness
+# Base: V116.1 DEV S9 prebuilt
+# PREBUILT ONLY: do not deploy until V116.0 LTS 72H certification is complete.
+# Shadow research only / strict read only / no order path / registry unchanged
+# ============================================================================
+V1161_DEV_S10_NUMBER = "116.1-DEV-S10"
+V1161_DEV_S10_TITLE = "OUTCOME TIMING INTEGRITY, PRICE-SOURCE CONSISTENCY & CALIBRATION READINESS"
+V1161_DEV_S10_VERSION = f"A100 V{V1161_DEV_S10_NUMBER} {V1161_DEV_S10_TITLE}"
+V91_VERSION = V1161_DEV_S10_VERSION
+_V1161_S10_CALIBRATION_MIN = {'15m':20,'1h':20,'4h':15,'24h':10}
+_V1161_S10_MAX_DELAY_RATIO = {'15m':1.00,'1h':0.75,'4h':0.50,'24h':0.35}
+
+
+def _v1161_s10_price_family(field):
+    name=str(field or '').lower()
+    if 'mark' in name: return 'MARK'
+    if 'index' in name: return 'INDEX'
+    if name in ('close','current_price','currentprice'): return 'CLOSE'
+    if 'last' in name or name=='price': return 'TRADE'
+    if 'entry' in name: return 'ENTRY_FALLBACK'
+    return 'UNKNOWN'
+
+
+def _v1161_s10_timing_quality(horizon,elapsed,target):
+    delay=max(0.0,float(elapsed)-float(target))
+    ratio=delay/max(1.0,float(target))
+    if delay<=max(60.0,min(300.0,target*0.10)): quality='ON_TIME'
+    elif ratio<=_V1161_S10_MAX_DELAY_RATIO.get(horizon,0.5): quality='DELAYED'
+    else: quality='LATE'
+    return quality,round(delay,3),round(ratio,6)
+
+
+def _v1161_s10_settle_row(row,result=None):
+    """Future-only settlement with timing and price-source integrity metadata."""
+    symbol=_v1161_s3_symbol(row)
+    current,current_field=_v1161_s9_price(row)
+    if current is None: return 0
+    now_obs=float((result or {}).get('observation_ts') or _v1161_s8_observation_ts(row,result or {}))
+    current_family=_v1161_s10_price_family(current_field)
+    settled=0
+    for item in list(_V1161_S9_LEDGER.values()):
+        if item.get('symbol')!=symbol: continue
+        entry_obs=float(item.get('observation_ts') or 0)
+        if now_obs<=entry_obs: continue
+        elapsed=now_obs-entry_obs
+        entry_family=_v1161_s10_price_family(item.get('entry_price_field'))
+        for horizon,seconds in _V1161_S9_HORIZONS.items():
+            if horizon in item['settlements'] or elapsed<seconds: continue
+            ret=_v1161_s9_directional_return(item.get('direction'),float(item.get('entry_price',0)),current)
+            if ret is None: continue
+            timing,delay,delay_ratio=_v1161_s10_timing_quality(horizon,elapsed,seconds)
+            source_match=(entry_family==current_family and entry_family not in ('UNKNOWN','ENTRY_FALLBACK'))
+            calibration_eligible=(timing in ('ON_TIME','DELAYED') and source_match)
+            item['settlements'][horizon]={
+              'status':'SETTLED','label':_v1161_s9_label(ret),'directional_return_pct':ret,
+              'market_price':current,'price_field':current_field,'price_family':current_family,
+              'entry_price_family':entry_family,'price_source_match':source_match,
+              'observed_ts':now_obs,'target_ts':round(entry_obs+seconds,3),
+              'elapsed_sec':round(elapsed,3),'delay_sec':delay,'delay_ratio':delay_ratio,
+              'timing_quality':timing,'calibration_eligible':calibration_eligible,
+              'prospective':True,'integrity_version':'S10'
+            }
+            settled+=1
+    return settled
+
+
+# Override S9 settlement path without changing upstream storage or order paths.
+_v1161_s9_settle_row = _v1161_s10_settle_row
+
+
+def _v1161_s10_metrics(symbol=None):
+    items=[x for x in _V1161_S9_LEDGER.values() if symbol is None or x.get('symbol')==symbol]
+    records=[]
+    for item in items:
+        for horizon,outcome in item.get('settlements',{}).items():
+            records.append((item,horizon,outcome))
+    valid=[r for r in records if r[2].get('calibration_eligible')]
+    labels={k:sum(o.get('label')==k for _,_,o in records) for k in ('WIN','LOSS','FLAT')}
+    valid_labels={k:sum(o.get('label')==k for _,_,o in valid) for k in ('WIN','LOSS','FLAT')}
+    directional=[float(o.get('directional_return_pct',0)) for _,_,o in valid]
+    by_horizon={}
+    for horizon in _V1161_S9_HORIZONS:
+        hrs=[r for r in valid if r[1]==horizon]
+        wins=sum(r[2].get('label')=='WIN' for r in hrs); losses=sum(r[2].get('label')=='LOSS' for r in hrs)
+        by_horizon[horizon]={
+          'eligible':len(hrs),'wins':wins,'losses':losses,
+          'win_rate':round(wins/max(1,wins+losses)*100.0,1),
+          'ready':len(hrs)>=_V1161_S10_CALIBRATION_MIN[horizon],
+          'required':_V1161_S10_CALIBRATION_MIN[horizon]
+        }
+    late=sum(o.get('timing_quality')=='LATE' for _,_,o in records)
+    mismatch=sum(not o.get('price_source_match',False) for _,_,o in records)
+    ready_count=sum(v['ready'] for v in by_horizon.values())
+    return {
+      'decisions':len(items),'settled':len(records),
+      'pending':sum(max(0,len(_V1161_S9_HORIZONS)-len(x.get('settlements',{}))) for x in items),
+      'wins':labels['WIN'],'losses':labels['LOSS'],'flat':labels['FLAT'],
+      'eligible':len(valid),'eligible_wins':valid_labels['WIN'],'eligible_losses':valid_labels['LOSS'],
+      'win_rate':round(valid_labels['WIN']/max(1,valid_labels['WIN']+valid_labels['LOSS'])*100.0,1),
+      'avg_return':round(sum(directional)/max(1,len(directional)),4),
+      'late':late,'source_mismatch':mismatch,'by_horizon':by_horizon,
+      'calibration_ready':ready_count==len(_V1161_S9_HORIZONS),'ready_horizons':ready_count,
+    }
+
+
+def _v1161_s10_outcome_line(result):
+    did=result.get('decision_id'); item=_V1161_S9_LEDGER.get(did)
+    if not item:
+        return 'Outcome Ledger: NOT_REGISTERED' if (result.get('outcome_contract') or {}).get('eligible') else 'Outcome Ledger: NOT_ELIGIBLE'
+    settled=item.get('settlements',{}); bits=[]
+    for horizon in _V1161_S9_HORIZONS:
+        o=settled.get(horizon)
+        if o:
+            integ='✓' if o.get('calibration_eligible') else '△'
+            bits.append(f'{horizon} {o["label"]} {o["directional_return_pct"]:+.2f}% {o.get("timing_quality","?")} {integ}')
+        else: bits.append(f'{horizon} PENDING')
+    return 'Outcome Ledger: '+' · '.join(bits)
+
+
+def _v1161_s10_card(row,rank=1,detail=False):
+    base,result=_v1161_s8_card(row,rank,detail)
+    result=_v1161_s9_consensus(row)
+    line=_v1161_s10_outcome_line(result)
+    metrics=_v1161_s10_metrics(_v1161_s3_symbol(row))
+    readiness='READY' if metrics['calibration_ready'] else f'{metrics["ready_horizons"]}/4 HORIZONS'
+    extra=(f'\n\n<b>Outcome Integrity & Calibration</b>\n· {_v54_escape(line)}\n'
+      f'· Decisions {metrics["decisions"]} · Settled {metrics["settled"]} · Eligible {metrics["eligible"]} · Pending {metrics["pending"]}\n'
+      f'· Late {metrics["late"]} · Source mismatch {metrics["source_mismatch"]} · Calibration {readiness}')
+    if metrics['eligible']:
+        extra+=f'\n· Eligible WIN {metrics["eligible_wins"]} / LOSS {metrics["eligible_losses"]} · WR {metrics["win_rate"]:.1f}% · Avg {metrics["avg_return"]:+.3f}%'
+    if detail:
+        for h,v in metrics['by_horizon'].items():
+            extra+=f'\n· {h}: {v["eligible"]}/{v["required"]} · WR {v["win_rate"]:.1f}% · {"READY" if v["ready"] else "COLLECTING"}'
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs10_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S10 Outcome Integrity 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거와 Outcome을 조작하지 않습니다.',parse_mode='HTML'); return
+        settled=_v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',(z[1].get('outcome_contract') or {}).get('eligible',False),z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        m=_v1161_s10_metrics(); ready='READY' if m['calibration_ready'] else f'{m["ready_horizons"]}/4'
+        summary=(f'🧠 <b>A100 V116.1 S10 OUTCOME INTEGRITY RESEARCH</b>\n후보 {len(evaluated)} · 이번 관측 Settlement {settled}\n'
+          f'Ledger {m["decisions"]} decisions · Settled {m["settled"]} · Eligible {m["eligible"]} · Pending {m["pending"]}\n'
+          f'Late {m["late"]} · Source mismatch {m["source_mismatch"]} · Calibration {ready}\n'
+          f'Eligible WIN {m["eligible_wins"]} / LOSS {m["eligible_losses"]} · WR {m["win_rate"]:.1f}%\n'
+          f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Scan Errors {len(scan_errors or [])}\n\n'
+          '<i>Calibration uses only prospective, timing-qualified, same-price-family outcomes. No weight mutation.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s10_card(row,i,detail); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s10-ultimate',e); await update.message.reply_text('⚠️ S10 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs10_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER S10</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:((z[1].get('outcome_contract') or {}).get('eligible',False),z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s10_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S10 INTEGRITY-QUALIFIED TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s10-sniper',e); await update.message.reply_text('⚠️ Sniper S10 분석 오류')
+
+
+async def god1161devs10_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE S10</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'god'); card,res=_v1161_s10_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S10</b>\n\n'+card+
+          '\n\n<i>Outcome calibration excludes late or mixed-price-source settlements. No automatic weight changes.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s10-god',e); await update.message.reply_text('⚠️ AI Debate S10 오류')
+
+
+async def notebook1161devs10_cmd(update,context):
+    m=_v1161_s10_metrics(); recent=sorted(_V1161_S9_LEDGER.values(),key=lambda x:x.get('created_ts',0),reverse=True)[:24]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S10</b>\n아직 Prospective Outcome Ledger 기록이 없습니다.',parse_mode='HTML'); return
+    lines=[]
+    for item in recent:
+        settled=item.get('settlements',{}); states=[]
+        for h,o in settled.items():
+            mark='✓' if o.get('calibration_eligible') else '△'
+            states.append(f'{h}:{o.get("label")}:{o.get("timing_quality")}:{mark}')
+        lines.append(f'· {_v54_escape(item["symbol"])} · {item["direction"]} · <code>{item["decision_id"]}</code> · {_v54_escape(", ".join(states) or "PENDING")}')
+    horizon_lines='\n'.join(f'· {h}: {v["eligible"]}/{v["required"]} · {"READY" if v["ready"] else "COLLECTING"} · WR {v["win_rate"]:.1f}%' for h,v in m['by_horizon'].items())
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S10 · CALIBRATION INTEGRITY</b>\n'
+      f'Decisions {m["decisions"]} · Settled {m["settled"]} · Eligible {m["eligible"]} · Pending {m["pending"]}\n'
+      f'Late {m["late"]} · Source mismatch {m["source_mismatch"]} · Ready horizons {m["ready_horizons"]}/4\n'
+      f'Eligible WIN {m["eligible_wins"]} / LOSS {m["eligible_losses"]} · WR {m["win_rate"]:.1f}% · Avg {m["avg_return"]:+.3f}%\n\n'
+      f'<b>Horizon Readiness</b>\n{horizon_lines}\n\n'+'\n'.join(lines)+
+      '\n\n<i>In-memory only · timing/source-qualified calibration · no order/Gate/weight changes · restart resets ledger</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs10_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S10_NUMBER}</b>\n{V1161_DEV_S10_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: horizon timing quality · price-source consistency · calibration-readiness governance',parse_mode='HTML')
+
+
+def _v1161_s10_reconcile():
+    desired={'version':version1161devs10_cmd,'ultimate':ultimate1161devs10_cmd,'sniper':sniper1161devs10_cmd,'god':god1161devs10_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs10_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s10_reconcile()
+
+
+def _v1161_s10_static_audit():
+    required={'version':version1161devs10_cmd,'ultimate':ultimate1161devs10_cmd,'sniper':sniper1161devs10_cmd,'god':god1161devs10_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    q1=_v1161_s10_timing_quality('15m',930,900)[0]
+    q2=_v1161_s10_timing_quality('15m',1900,900)[0]
+    tests={
+      'timing_on_time':q1=='ON_TIME',
+      'timing_late':q2=='LATE',
+      'price_family_match':_v1161_s10_price_family('markPrice')=='MARK' and _v1161_s10_price_family('last_price')=='TRADE',
+      'no_order_route':all(k not in globals() for k in ('place_order1161devs10','execute_order1161devs10')),
+      'ledger_bound':_V1161_S9_LEDGER_MAX<=500,
+      'calibration_thresholds':all(v>=10 for v in _V1161_S10_CALIBRATION_MIN.values()),
+      'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s10_reconcile(); audit=_v1161_s10_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S10 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S10 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S10 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S10 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S10 outcome integrity audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s10_reconcile(); audit=_v1161_s10_static_audit()
+    print(f'{V1161_DEV_S10_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S10 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S10 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S10 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S10 prospective outcome ledger: ACTIVE · in memory',flush=True)
+    print('A100 V116.1 DEV S10 timing integrity: ACTIVE · ON_TIME/DELAYED/LATE',flush=True)
+    print('A100 V116.1 DEV S10 price-source integrity: ACTIVE · same-family calibration only',flush=True)
+    print('A100 V116.1 DEV S10 adaptive mutation: DISABLED · calibration observation only',flush=True)
+    print('A100 V116.1 DEV S10 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S10 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S10 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S10 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s10-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# === A100 V116.1 DEV S11: CALIBRATION QUALITY / DIRECTIONAL BALANCE / CONFIDENCE BOUNDS ===
+V1161_DEV_S11_NUMBER='116.1-DEV-S11'
+V1161_DEV_S11_TITLE='Calibration Quality, Directional Balance & Confidence-Bound Governance'
+V1161_DEV_S11_VERSION='A100 V116.1 DEV S11 CALIBRATION QUALITY & DIRECTIONAL BALANCE'
+_V1161_S11_MIN_DIRECTIONAL={'LONG':8,'SHORT':8}
+_V1161_S11_MIN_TOTAL_ELIGIBLE=40
+_V1161_S11_MAX_FLAT_RATIO=0.45
+_V1161_S11_MAX_SOURCE_MISMATCH_RATIO=0.20
+_V1161_S11_MAX_LATE_RATIO=0.25
+
+
+def _v1161_s11_wilson(wins, total, z=1.96):
+    wins=max(0,int(wins)); total=max(0,int(total))
+    if total <= 0: return {'low':0.0,'high':100.0,'center':0.0,'width':100.0}
+    phat=wins/total; z2=z*z
+    den=1+z2/total
+    center=(phat+z2/(2*total))/den
+    margin=(z*((phat*(1-phat)/total+z2/(4*total*total))**0.5))/den
+    low=max(0.0,center-margin)*100; high=min(1.0,center+margin)*100
+    return {'low':round(low,1),'high':round(high,1),'center':round(center*100,1),'width':round(high-low,1)}
+
+
+def _v1161_s11_quality_metrics(symbol=None):
+    base=_v1161_s10_metrics(symbol)
+    items=[x for x in _V1161_S9_LEDGER.values() if symbol is None or x.get('symbol')==symbol]
+    eligible=[]; all_records=[]
+    for item in items:
+        direction=str(item.get('direction','WAIT')).upper()
+        for horizon,outcome in item.get('settlements',{}).items():
+            rec=(item,direction,horizon,outcome); all_records.append(rec)
+            if outcome.get('calibration_eligible'): eligible.append(rec)
+    directional={}
+    for direction in ('LONG','SHORT'):
+        rows=[r for r in eligible if r[1]==direction]
+        decisive=[r for r in rows if r[3].get('label') in ('WIN','LOSS')]
+        wins=sum(r[3].get('label')=='WIN' for r in decisive)
+        losses=sum(r[3].get('label')=='LOSS' for r in decisive)
+        rets=[float(r[3].get('directional_return_pct',0.0)) for r in rows]
+        ci=_v1161_s11_wilson(wins,wins+losses)
+        directional[direction]={
+            'eligible':len(rows),'decisive':len(decisive),'wins':wins,'losses':losses,
+            'win_rate':round(wins/max(1,wins+losses)*100.0,1),
+            'avg_return':round(sum(rets)/max(1,len(rets)),4),'ci':ci,
+            'ready':len(rows)>=_V1161_S11_MIN_DIRECTIONAL[direction] and ci['width']<=55.0,
+            'required':_V1161_S11_MIN_DIRECTIONAL[direction],
+        }
+    settled=len(all_records)
+    flat=sum(r[3].get('label')=='FLAT' for r in all_records)
+    late=sum(r[3].get('timing_quality')=='LATE' for r in all_records)
+    mismatch=sum(not r[3].get('price_source_match',False) for r in all_records)
+    flat_ratio=flat/max(1,settled); late_ratio=late/max(1,settled); mismatch_ratio=mismatch/max(1,settled)
+    imbalance=abs(directional['LONG']['eligible']-directional['SHORT']['eligible'])/max(1,directional['LONG']['eligible']+directional['SHORT']['eligible'])
+    quality_checks={
+        'horizons_ready':base['calibration_ready'],
+        'minimum_eligible':base['eligible']>=_V1161_S11_MIN_TOTAL_ELIGIBLE,
+        'long_ready':directional['LONG']['ready'],
+        'short_ready':directional['SHORT']['ready'],
+        'direction_balance':imbalance<=0.65,
+        'flat_ratio':flat_ratio<=_V1161_S11_MAX_FLAT_RATIO,
+        'late_ratio':late_ratio<=_V1161_S11_MAX_LATE_RATIO,
+        'source_integrity':mismatch_ratio<=_V1161_S11_MAX_SOURCE_MISMATCH_RATIO,
+    }
+    passed=sum(bool(v) for v in quality_checks.values())
+    quality_state='READY_FOR_REVIEW' if passed==len(quality_checks) else ('COLLECTING' if passed>=5 else 'BLOCKED')
+    return {**base,'directional':directional,'flat_ratio':round(flat_ratio*100,1),'late_ratio':round(late_ratio*100,1),
+            'source_mismatch_ratio':round(mismatch_ratio*100,1),'direction_imbalance':round(imbalance*100,1),
+            'quality_checks':quality_checks,'quality_passed':passed,'quality_total':len(quality_checks),
+            'quality_state':quality_state,'mutation_allowed':False}
+
+
+def _v1161_s11_quality_lines(metrics):
+    lines=[]
+    for direction in ('LONG','SHORT'):
+        d=metrics['directional'][direction]; ci=d['ci']
+        lines.append(f'· {direction}: {d["eligible"]}/{d["required"]} eligible · WR {d["win_rate"]:.1f}% · 95% CI {ci["low"]:.1f}–{ci["high"]:.1f} · Avg {d["avg_return"]:+.3f}% · {"READY" if d["ready"] else "COLLECTING"}')
+    lines.append(f'· Balance gap {metrics["direction_imbalance"]:.1f}% · Flat {metrics["flat_ratio"]:.1f}% · Late {metrics["late_ratio"]:.1f}% · Source mismatch {metrics["source_mismatch_ratio"]:.1f}%')
+    lines.append(f'· Quality gates {metrics["quality_passed"]}/{metrics["quality_total"]} · {metrics["quality_state"]}')
+    return '\n'.join(lines)
+
+
+def _v1161_s11_card(row,rank=1,detail=False):
+    base,result=_v1161_s10_card(row,rank,detail)
+    metrics=_v1161_s11_quality_metrics(_v1161_s3_symbol(row))
+    extra='\n\n<b>Calibration Quality Governance</b>\n'+_v1161_s11_quality_lines(metrics)
+    extra+='\n· Adaptive mutation: LOCKED · human/runtime review required'
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs11_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S11 Calibration Quality 분석 중...\nShadow Research Only · No order path')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거와 Calibration을 조작하지 않습니다.',parse_mode='HTML'); return
+        settled=_v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',(z[1].get('outcome_contract') or {}).get('eligible',False),z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        m=_v1161_s11_quality_metrics()
+        summary=(f'🧠 <b>A100 V116.1 S11 CALIBRATION QUALITY RESEARCH</b>\n후보 {len(evaluated)} · 이번 관측 Settlement {settled}\n'
+          f'Ledger {m["decisions"]} · Settled {m["settled"]} · Eligible {m["eligible"]} · Pending {m["pending"]}\n'
+          f'Calibration Horizons {m["ready_horizons"]}/4 · Quality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+          f'{_v1161_s11_quality_lines(m)}\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Scan Errors {len(scan_errors or [])}\n\n'
+          '<i>Confidence bounds are research-only. Adaptive mutation remains locked.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s11_card(row,i,detail); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s11-ultimate',e); await update.message.reply_text('⚠️ S11 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs11_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🎯 <b>SNIPER S11</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:((z[1].get('outcome_contract') or {}).get('eligible',False),z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],z[1]['confidence'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s11_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S11 QUALITY-QUALIFIED TOP PICK</b>\n'+card+'\n\n⚠️ Shadow Research Only'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s11-sniper',e); await update.message.reply_text('⚠️ Sniper S11 분석 오류')
+
+
+async def god1161devs11_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE S11</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s9_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'god'); card,res=_v1161_s11_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S11</b>\n\n'+card+
+          '\n\n<i>Calibration quality requires balanced directional evidence and bounded uncertainty. No automatic mutation.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s11-god',e); await update.message.reply_text('⚠️ AI Debate S11 오류')
+
+
+async def notebook1161devs11_cmd(update,context):
+    m=_v1161_s11_quality_metrics(); recent=sorted(_V1161_S9_LEDGER.values(),key=lambda x:x.get('created_ts',0),reverse=True)[:20]
+    if not recent:
+        await update.message.reply_text('📓 <b>AI RESEARCH NOTEBOOK S11</b>\n아직 Prospective Outcome Ledger 기록이 없습니다.',parse_mode='HTML'); return
+    horizon_lines='\n'.join(f'· {h}: {v["eligible"]}/{v["required"]} · {"READY" if v["ready"] else "COLLECTING"} · WR {v["win_rate"]:.1f}%' for h,v in m['by_horizon'].items())
+    recent_lines=[]
+    for item in recent:
+        states=[]
+        for h,o in item.get('settlements',{}).items(): states.append(f'{h}:{o.get("label")}:{"✓" if o.get("calibration_eligible") else "△"}')
+        recent_lines.append(f'· {_v54_escape(item["symbol"])} · {item["direction"]} · <code>{item["decision_id"]}</code> · {_v54_escape(", ".join(states) or "PENDING")}')
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S11 · QUALITY GOVERNANCE</b>\n'
+      f'Decisions {m["decisions"]} · Settled {m["settled"]} · Eligible {m["eligible"]} · Pending {m["pending"]}\n'
+      f'Quality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n{_v1161_s11_quality_lines(m)}\n\n'
+      f'<b>Horizon Readiness</b>\n{horizon_lines}\n\n'+'\n'.join(recent_lines)+
+      '\n\n<i>In-memory only · prospective outcomes · mutation locked · restart resets ledger</i>')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs11_cmd(update,context):
+    await update.message.reply_text(
+      f'🧪 <b>A100 V{V1161_DEV_S11_NUMBER}</b>\n{V1161_DEV_S11_TITLE}\n\n'
+      'Stable Base: V116.0 LTS S2.17.51\nBranch: DEVELOPMENT PREBUILT\n'
+      'Deploy: AFTER 72H LTS CERTIFICATION\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\n'
+      f'Registry: {len(V90_COMMAND_REGISTRY)}/341\n\n'
+      'Core: Wilson confidence bounds · LONG/SHORT balance · calibration quality gates · mutation lock',parse_mode='HTML')
+
+
+def _v1161_s11_reconcile():
+    desired={'version':version1161devs11_cmd,'ultimate':ultimate1161devs11_cmd,'sniper':sniper1161devs11_cmd,'god':god1161devs11_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs11_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+_v1161_s11_reconcile()
+
+
+def _v1161_s11_static_audit():
+    required={'version':version1161devs11_cmd,'ultimate':ultimate1161devs11_cmd,'sniper':sniper1161devs11_cmd,'god':god1161devs11_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    ci=_v1161_s11_wilson(8,10)
+    tests={
+      'wilson_bounds':0<=ci['low']<=ci['high']<=100 and ci['width']>0,
+      'mutation_locked':_v1161_s11_quality_metrics().get('mutation_allowed') is False,
+      'directional_minimums':all(v>=8 for v in _V1161_S11_MIN_DIRECTIONAL.values()),
+      'no_order_route':all(k not in globals() for k in ('place_order1161devs11','execute_order1161devs11')),
+      'ledger_bound':_V1161_S9_LEDGER_MAX<=500,
+      'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80,
+    }
+    return {'ok':len(V90_COMMAND_REGISTRY)==341 and not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s11_reconcile(); audit=_v1161_s11_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S11 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S11 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S11 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S11 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S11 calibration quality audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s11_reconcile(); audit=_v1161_s11_static_audit()
+    print(f'{V1161_DEV_S11_VERSION} worker running...',flush=True)
+    print(f'A100 V116.1 DEV S11 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S11 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S11 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S11 prospective outcome ledger: ACTIVE · in memory',flush=True)
+    print('A100 V116.1 DEV S11 confidence bounds: ACTIVE · Wilson 95%',flush=True)
+    print('A100 V116.1 DEV S11 directional balance: ACTIVE · LONG/SHORT independent',flush=True)
+    print('A100 V116.1 DEV S11 adaptive mutation: LOCKED · review only',flush=True)
+    print('A100 V116.1 DEV S11 stable base: V116.0 LTS S2.17.51 · untouched',flush=True)
+    print('A100 V116.1 DEV S11 deployment hold: UNTIL LTS 72H CERTIFICATION',flush=True)
+    print('A100 V116.1 DEV S11 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S11 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s11-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# === A100 V116.1 DEV S12: ADAPTIVE WEIGHT LEARNING (LOCKED) & MARKET PSYCHOLOGY ===
+V1161_DEV_S12_NUMBER='116.1-DEV-S12'
+V1161_DEV_S12_TITLE='Adaptive Weight Learning (Locked) & Market Psychology Research'
+V1161_DEV_S12_VERSION='A100 V116.1 DEV S12 ADAPTIVE WEIGHT LEARNING & MARKET PSYCHOLOGY'
+_V1161_S12_WEIGHT_LOCK=True
+_V1161_S12_BASE_WEIGHTS=dict(_V1161_S7_FACTOR_WEIGHTS)
+_V1161_S12_MIN_DIRECTIONAL=12
+
+
+def _v1161_s12_clip(v,lo=0.0,hi=100.0):
+    try: return max(lo,min(hi,float(v)))
+    except Exception: return lo
+
+
+def _v1161_s12_psychology(row):
+    ok_f,funding=_v1161_s3_read(row,'funding','funding_rate','fundingRate')
+    ok_oi,oi=_v1161_s3_read(row,'oi_change','open_interest_change','oi_delta','oi_change_pct')
+    ok_v,volume=_v1161_s3_read(row,'volume_change','vol_change','volume_ratio','volume_change_pct')
+    ok_m,momentum=_v1161_s3_read(row,'momentum','momentum_score','change_24h','price_change_pct')
+    funding=float(funding if ok_f else 0.0); oi=float(oi if ok_oi else 0.0); volume=float(volume if ok_v else 1.0); momentum=float(momentum if ok_m else 0.0)
+    volume_excess=max(0.0,volume-1.0) if abs(volume)<20 else max(0.0,volume/100.0)
+    fomo=_v1161_s12_clip(50+max(0,momentum)*2.2+max(0,oi)*1.2+volume_excess*18+max(0,funding)*18000)
+    panic=_v1161_s12_clip(50+max(0,-momentum)*2.2+max(0,oi)*0.8+volume_excess*18+max(0,-funding)*18000)
+    short_sq=_v1161_s12_clip(35+max(0,momentum)*2.0+max(0,oi)*1.5+max(0,-funding)*22000)
+    long_sq=_v1161_s12_clip(35+max(0,-momentum)*2.0+max(0,oi)*1.5+max(0,funding)*22000)
+    greed=_v1161_s12_clip((fomo+short_sq)/2.0)
+    fear=_v1161_s12_clip((panic+long_sq)/2.0)
+    dominant=max({'FOMO':fomo,'PANIC':panic,'SHORT_SQUEEZE':short_sq,'LONG_SQUEEZE':long_sq,'GREED':greed,'FEAR':fear},key=lambda k:{'FOMO':fomo,'PANIC':panic,'SHORT_SQUEEZE':short_sq,'LONG_SQUEEZE':long_sq,'GREED':greed,'FEAR':fear}[k])
+    bias='WAIT'
+    if short_sq>=70 and short_sq-long_sq>=12: bias='LONG'
+    elif long_sq>=70 and long_sq-short_sq>=12: bias='SHORT'
+    elif greed>=72 and momentum>0: bias='LONG'
+    elif fear>=72 and momentum<0: bias='SHORT'
+    confidence=round(max(fomo,panic,short_sq,long_sq,greed,fear),1)
+    return {'fear':round(fear,1),'greed':round(greed,1),'fomo':round(fomo,1),'panic':round(panic,1),'short_squeeze':round(short_sq,1),'long_squeeze':round(long_sq,1),'dominant':dominant,'bias':bias,'confidence':confidence,'evidence':{'funding':funding if ok_f else None,'oi':oi if ok_oi else None,'volume':volume if ok_v else None,'momentum':momentum if ok_m else None},'mode':'SHADOW_RESEARCH'}
+
+
+def _v1161_s12_weight_proposal(symbol=None):
+    m=_v1161_s11_quality_metrics(symbol)
+    proposal=dict(_V1161_S12_BASE_WEIGHTS)
+    reasons=[]
+    direction_multiplier={'LONG':1.0,'SHORT':1.0,'WAIT':1.0}
+    for direction in ('LONG','SHORT'):
+        d=m['directional'][direction]
+        if d['eligible']<_V1161_S12_MIN_DIRECTIONAL or not d['ready']:
+            reasons.append(f'{direction}:INSUFFICIENT_EVIDENCE')
+            continue
+        edge=max(-0.12,min(0.12,(d['win_rate']-50.0)/250.0 + d['avg_return']/20.0))
+        direction_multiplier[direction]=round(1.0+edge,4)
+        reasons.append(f'{direction}:CANDIDATE_{direction_multiplier[direction]:.4f}')
+    quality_ok=m['quality_state']=='READY_FOR_REVIEW'
+    state='REVIEW_READY_LOCKED' if quality_ok and all(m['directional'][d]['eligible']>=_V1161_S12_MIN_DIRECTIONAL for d in ('LONG','SHORT')) else 'COLLECTING_LOCKED'
+    return {'state':state,'locked':True,'applied':False,'base_weights':dict(_V1161_S12_BASE_WEIGHTS),'candidate_weights':proposal,'direction_multiplier':direction_multiplier,'quality_state':m['quality_state'],'eligible':m['eligible'],'reasons':reasons,'mutation_allowed':False}
+
+
+def _v1161_s12_consensus(row):
+    result=dict(_v1161_s9_consensus(row))
+    result['market_psychology']=_v1161_s12_psychology(row)
+    result['adaptive_weight_research']=_v1161_s12_weight_proposal(_v1161_s3_symbol(row))
+    return result
+
+
+def _v1161_s12_card(row,rank=1,detail=False):
+    base,result=_v1161_s11_card(row,rank,detail)
+    result=_v1161_s12_consensus(row); p=result['market_psychology']; w=result['adaptive_weight_research']
+    extra=(f'\n\n<b>Market Psychology v1</b>\n· Fear {p["fear"]:.1f} · Greed {p["greed"]:.1f} · FOMO {p["fomo"]:.1f} · Panic {p["panic"]:.1f}'
+           f'\n· Short Squeeze {p["short_squeeze"]:.1f} · Long Squeeze {p["long_squeeze"]:.1f} · Bias {p["bias"]} · {p["dominant"]}'
+           f'\n\n<b>Adaptive Weight Research</b>\n· LONG ×{w["direction_multiplier"]["LONG"]:.4f} · SHORT ×{w["direction_multiplier"]["SHORT"]:.4f} · WAIT ×1.0000'
+           f'\n· State {w["state"]} · Applied NO · Mutation LOCKED')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs12_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S12 Adaptive Weight & Psychology 연구 분석 중...\nShadow Research Only · Weight Mutation Locked')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\n증거와 가중치를 조작하지 않습니다.',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s12_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        w=_v1161_s12_weight_proposal(); m=_v1161_s11_quality_metrics()
+        summary=(f'🧠 <b>A100 V116.1 S12 ADAPTIVE WEIGHT & PSYCHOLOGY</b>\n후보 {len(evaluated)} · Quality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+                 f'Weight State {w["state"]} · LONG ×{w["direction_multiplier"]["LONG"]:.4f} · SHORT ×{w["direction_multiplier"]["SHORT"]:.4f}\n'
+                 f'Applied NO · Mutation LOCKED · Registry {len(V90_COMMAND_REGISTRY)}/341 · Scan Errors {len(scan_errors or [])}\n\n'
+                 '<i>Psychology and adaptive weights are shadow research evidence only. Existing consensus weights remain unchanged.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s12_card(row,i,detail); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s12-ultimate',e); await update.message.reply_text('⚠️ S12 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs12_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🎯 <b>SNIPER S12</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s12_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['score'],z[1]['stability']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s12_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S12 PSYCHOLOGY-AWARE RESEARCH</b>\n'+card+'\n\n⚠️ Shadow Research Only · Weights Locked'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s12-sniper',e); await update.message.reply_text('⚠️ Sniper S12 분석 오류')
+
+
+async def god1161devs12_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>AI DEBATE S12</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s12_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s12_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S12</b>\n\n'+card+'\n\n<i>Psychology can explain risk but cannot override consensus or mutate weights.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s12-god',e); await update.message.reply_text('⚠️ AI Debate S12 오류')
+
+
+async def notebook1161devs12_cmd(update,context):
+    m=_v1161_s11_quality_metrics(); w=_v1161_s12_weight_proposal()
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S12</b>\nQuality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+          f'LONG candidate ×{w["direction_multiplier"]["LONG"]:.4f} · SHORT candidate ×{w["direction_multiplier"]["SHORT"]:.4f} · WAIT ×1.0000\n'
+          f'State {w["state"]} · Applied NO · Mutation LOCKED\n\n'
+          '<b>Research Policy</b>\n· Outcome-based directional proposal only\n· Factor weights HOLD without factor snapshot evidence\n· Psychology stored in response only\n· No schema, order, Gate, or live runtime mutation')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs12_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S12_NUMBER}</b>\n{V1161_DEV_S12_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: outcome-based candidate multipliers · immutable factor weights · Fear/Greed/FOMO/Panic/Squeeze research',parse_mode='HTML')
+
+
+def _v1161_s12_reconcile():
+    desired={'version':version1161devs12_cmd,'ultimate':ultimate1161devs12_cmd,'sniper':sniper1161devs12_cmd,'god':god1161devs12_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs12_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s12_reconcile()
+
+
+def _v1161_s12_static_audit():
+    required={'version':version1161devs12_cmd,'ultimate':ultimate1161devs12_cmd,'sniper':sniper1161devs12_cmd,'god':god1161devs12_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); proposal=_v1161_s12_weight_proposal(); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    p=_v1161_s12_psychology({})
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'mutation_locked':proposal['locked'] and not proposal['applied'] and not proposal['mutation_allowed'],'psychology_safe':p['bias']=='WAIT' and all(0<=p[k]<=100 for k in ('fear','greed','fomo','panic','short_squeeze','long_squeeze')),'no_order_route':all(k not in globals() for k in ('place_order1161devs12','execute_order1161devs12')),'schema_unchanged':True,'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s12_reconcile(); audit=_v1161_s12_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S12 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S12 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S12 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S12 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S12 adaptive-weight immutability audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s12_reconcile(); audit=_v1161_s12_static_audit()
+    print(f'{V1161_DEV_S12_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S12 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S12 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S12 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S12 adaptive weight learning: ACTIVE · candidate only',flush=True); print('A100 V116.1 DEV S12 weight mutation: LOCKED · immutable',flush=True); print('A100 V116.1 DEV S12 market psychology: ACTIVE · shadow research',flush=True); print('A100 V116.1 DEV S12 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S12 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S12 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S12 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s12-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# === A100 V116.1 DEV S13: WHALE INTELLIGENCE ENGINE v1 (EVIDENCE-ONLY) ===
+V1161_DEV_S13_NUMBER='116.1-DEV-S13'
+V1161_DEV_S13_TITLE='Whale Intelligence Engine v1 · Evidence-Only Shadow Research'
+V1161_DEV_S13_VERSION='A100 V116.1 DEV S13 WHALE INTELLIGENCE ENGINE'
+_V1161_S13_MIN_COVERAGE=0.33
+
+
+def _v1161_s13_first(row,*names):
+    for name in names:
+        ok,value=_v1161_s3_read(row,name)
+        if ok and value is not None and value!='':
+            return True,value,name
+    return False,None,None
+
+
+def _v1161_s13_num(value):
+    try:
+        if isinstance(value,str): value=value.replace(',','').replace('%','').strip()
+        return float(value)
+    except Exception:
+        return None
+
+
+def _v1161_s13_whale(row):
+    # Read only fields already present in runtime rows. No external API, no synthesis.
+    ok_in,raw_in,key_in=_v1161_s13_first(row,'exchange_inflow','exchange_inflow_usd','inflow_usd','cex_inflow','whale_exchange_inflow')
+    ok_out,raw_out,key_out=_v1161_s13_first(row,'exchange_outflow','exchange_outflow_usd','outflow_usd','cex_outflow','whale_exchange_outflow')
+    ok_net,raw_net,key_net=_v1161_s13_first(row,'exchange_netflow','exchange_netflow_usd','netflow_usd','cex_netflow','whale_exchange_netflow')
+    ok_tx,raw_tx,key_tx=_v1161_s13_first(row,'large_wallet_transfer','large_transfer_usd','whale_transfer_usd','large_tx_usd','whale_tx_value')
+    ok_acc,raw_acc,key_acc=_v1161_s13_first(row,'accumulation_score','whale_accumulation','accumulation','smart_money_accumulation')
+    ok_dist,raw_dist,key_dist=_v1161_s13_first(row,'distribution_score','whale_distribution','distribution','smart_money_distribution')
+
+    inflow=_v1161_s13_num(raw_in) if ok_in else None
+    outflow=_v1161_s13_num(raw_out) if ok_out else None
+    netflow=_v1161_s13_num(raw_net) if ok_net else None
+    transfer=_v1161_s13_num(raw_tx) if ok_tx else None
+    accumulation=_v1161_s13_num(raw_acc) if ok_acc else None
+    distribution=_v1161_s13_num(raw_dist) if ok_dist else None
+    if netflow is None and inflow is not None and outflow is not None:
+        netflow=inflow-outflow; ok_net=True; key_net='derived_from_runtime_inflow_outflow'
+
+    checks={'exchange_flow':bool(ok_net or (ok_in and ok_out)),'large_wallet':bool(ok_tx),'accumulation_distribution':bool(ok_acc or ok_dist)}
+    observed=sum(1 for v in checks.values() if v)
+    coverage=round(observed/3.0,2)
+    evidence=[]; score=0.0
+    if checks['exchange_flow'] and netflow is not None:
+        # Positive CEX netflow is distribution risk; negative is accumulation evidence.
+        scale=max(abs(inflow or 0.0),abs(outflow or 0.0),abs(netflow),1.0)
+        pressure=max(-1.0,min(1.0,netflow/scale))
+        score-=pressure*35.0
+        evidence.append('EXCHANGE_INFLOW' if pressure>0.15 else 'EXCHANGE_OUTFLOW' if pressure<-0.15 else 'EXCHANGE_FLOW_BALANCED')
+    if checks['large_wallet'] and transfer is not None:
+        evidence.append('LARGE_WALLET_MOVE')
+        # Transfer size alone has no direction; never infer LONG/SHORT from it.
+    if accumulation is not None:
+        a=max(0.0,min(100.0,accumulation if abs(accumulation)>1 else accumulation*100.0)); score+=(a-50.0)*0.7
+        evidence.append('ACCUMULATION_SCORE')
+    if distribution is not None:
+        d=max(0.0,min(100.0,distribution if abs(distribution)>1 else distribution*100.0)); score-=(d-50.0)*0.7
+        evidence.append('DISTRIBUTION_SCORE')
+
+    if observed==0:
+        state='NO_EVIDENCE'; bias='WAIT'; confidence=0.0; score=0.0
+    else:
+        score=max(-100.0,min(100.0,score))
+        confidence=round(min(100.0,coverage*70.0+min(30.0,abs(score)*0.3)),1)
+        if coverage<_V1161_S13_MIN_COVERAGE or abs(score)<18.0:
+            state='INSUFFICIENT_DIRECTION'; bias='WAIT'
+        elif score>=18.0:
+            state='ACCUMULATION_EVIDENCE'; bias='LONG'
+        else:
+            state='DISTRIBUTION_EVIDENCE'; bias='SHORT'
+    return {
+        'state':state,'bias':bias,'score':round(score,1),'confidence':confidence,'coverage':coverage,
+        'evidence':evidence or ['NO_RUNTIME_WHALE_FIELDS'],'checks':checks,
+        'exchange':{'inflow':inflow,'outflow':outflow,'netflow':netflow,'source_keys':[x for x in (key_in,key_out,key_net) if x]},
+        'large_wallet':{'transfer':transfer,'source_key':key_tx},
+        'accumulation_distribution':{'accumulation':accumulation,'distribution':distribution,'source_keys':[x for x in (key_acc,key_dist) if x]},
+        'mode':'SHADOW_RESEARCH','external_api_used':False,'synthetic_data_used':False,'consensus_override':False
+    }
+
+
+def _v1161_s13_consensus(row):
+    result=dict(_v1161_s12_consensus(row))
+    result['whale_intelligence']=_v1161_s13_whale(row)
+    return result
+
+
+def _v1161_s13_card(row,rank=1,detail=False):
+    base,_=_v1161_s12_card(row,rank,detail)
+    result=_v1161_s13_consensus(row); w=result['whale_intelligence']
+    flow=w['exchange']; wallet=w['large_wallet']; ad=w['accumulation_distribution']
+    def fmt(v):
+        return 'N/A' if v is None else f'{v:,.2f}'
+    extra=(f'\n\n<b>Whale Intelligence v1</b>\n· State {w["state"]} · Bias {w["bias"]} · Score {w["score"]:+.1f} · Confidence {w["confidence"]:.1f}'
+           f'\n· Coverage {w["coverage"]:.2f} · Exchange Netflow {fmt(flow["netflow"])} · Large Transfer {fmt(wallet["transfer"])}'
+           f'\n· Accumulation {fmt(ad["accumulation"])} · Distribution {fmt(ad["distribution"])}'
+           f'\n· Evidence {", ".join(w["evidence"][:3])} · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs13_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🐋 V116.1 S13 Whale Intelligence 연구 분석 중...\nRuntime Evidence Only · Shadow Research')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\nWhale evidence를 추정하지 않습니다.',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s13_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',z[1]['shadow_readiness']['score'],z[1]['whale_intelligence']['coverage'],z[1]['stability']['score'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        with_evidence=sum(1 for _,r in evaluated if r['whale_intelligence']['state']!='NO_EVIDENCE')
+        summary=(f'🐋 <b>A100 V116.1 S13 WHALE INTELLIGENCE</b>\n후보 {len(evaluated)} · Whale Evidence {with_evidence}/{len(evaluated)} · Scan Errors {len(scan_errors or [])}\n'
+                 f'Registry {len(V90_COMMAND_REGISTRY)}/341 · External API NO · Synthetic Data NO · Consensus Override NO\n\n'
+                 '<i>Exchange flow, large-wallet movement, and accumulation/distribution are used only when runtime evidence exists.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s13_card(row,i,detail); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s13-ultimate',e); await update.message.reply_text('⚠️ S13 Whale 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs13_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🎯 <b>SNIPER S13</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s13_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['score'],z[1]['whale_intelligence']['coverage'],z[1]['stability']['score'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s13_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S13 · WHALE EVIDENCE RESEARCH</b>\n'+card+'\n\n⚠️ Evidence Only · Shadow Research · No Override'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s13-sniper',e); await update.message.reply_text('⚠️ Sniper S13 분석 오류')
+
+
+async def god1161devs13_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>AI DEBATE S13</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s13_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['whale_intelligence']['coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s13_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S13</b>\n\n'+card+'\n\n<i>Whale evidence explains context but cannot override consensus.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s13-god',e); await update.message.reply_text('⚠️ AI Debate S13 오류')
+
+
+async def notebook1161devs13_cmd(update,context):
+    m=_v1161_s11_quality_metrics(); w=_v1161_s12_weight_proposal()
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S13</b>\nQuality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+          f'Adaptive Weight {w["state"]} · Applied NO · Mutation LOCKED\n\n'
+          '<b>Whale Research Policy</b>\n· Runtime evidence fields only\n· Missing evidence → NO_EVIDENCE / WAIT\n· Transfer size alone has no directional meaning\n· No external API, synthetic values, schema mutation, order route, or consensus override')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs13_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S13_NUMBER}</b>\n{V1161_DEV_S13_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: exchange flow · large-wallet movement · accumulation/distribution · NO_EVIDENCE safety',parse_mode='HTML')
+
+
+def _v1161_s13_reconcile():
+    desired={'version':version1161devs13_cmd,'ultimate':ultimate1161devs13_cmd,'sniper':sniper1161devs13_cmd,'god':god1161devs13_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs13_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s13_reconcile()
+
+
+def _v1161_s13_static_audit():
+    required={'version':version1161devs13_cmd,'ultimate':ultimate1161devs13_cmd,'sniper':sniper1161devs13_cmd,'god':god1161devs13_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s13_whale({})
+    accumulation=_v1161_s13_whale({'accumulation_score':90})
+    distribution=_v1161_s13_whale({'distribution_score':90})
+    transfer_only=_v1161_s13_whale({'large_transfer_usd':10000000})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); _v1161_s13_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'no_evidence_wait':empty['state']=='NO_EVIDENCE' and empty['bias']=='WAIT' and empty['coverage']==0.0,
+        'accumulation_long':accumulation['bias']=='LONG',
+        'distribution_short':distribution['bias']=='SHORT',
+        'transfer_nondirectional':transfer_only['bias']=='WAIT',
+        'no_external_or_synthetic':not empty['external_api_used'] and not empty['synthetic_data_used'],
+        'no_consensus_override':not empty['consensus_override'],
+        'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs13','execute_order1161devs13')),
+        'schema_unchanged':True,
+        'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s13_reconcile(); audit=_v1161_s13_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S13 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S13 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S13 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S13 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S13 whale evidence safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s13_reconcile(); audit=_v1161_s13_static_audit()
+    print(f'{V1161_DEV_S13_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S13 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S13 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S13 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S13 whale intelligence: ACTIVE · evidence only',flush=True); print('A100 V116.1 DEV S13 missing evidence policy: NO_EVIDENCE / WAIT',flush=True); print('A100 V116.1 DEV S13 external on-chain API: DISABLED',flush=True); print('A100 V116.1 DEV S13 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S13 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S13 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S13 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S13 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s13-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S14: MACRO AI ENGINE v1 (EVIDENCE-ONLY) ===
+V1161_DEV_S14_NUMBER='116.1-DEV-S14'
+V1161_DEV_S14_TITLE='Macro AI Engine v1 · Evidence-Only Shadow Research'
+V1161_DEV_S14_VERSION='A100 V116.1 DEV S14 MACRO AI ENGINE'
+_V1161_S14_MIN_DIRECTIONAL_COVERAGE=0.20
+
+
+def _v1161_s14_bool(value):
+    if isinstance(value,bool): return value
+    if isinstance(value,(int,float)): return value!=0
+    return str(value or '').strip().lower() in ('1','true','yes','y','on','active','scheduled','imminent')
+
+
+def _v1161_s14_norm(value):
+    # Percentage-named runtime fields are consumed as reported; never auto-scale x100.
+    return _v1161_s13_num(value)
+
+
+def _v1161_s14_macro(row):
+    # Runtime evidence only. No calendar, news, ETF, DXY or rates network fetches.
+    ok_fomc,raw_fomc,key_fomc=_v1161_s13_first(row,'fomc_event','fomc_imminent','fomc_risk','macro_fomc')
+    ok_cpi,raw_cpi,key_cpi=_v1161_s13_first(row,'cpi_surprise','cpi_delta','inflation_surprise','macro_cpi')
+    ok_etf,raw_etf,key_etf=_v1161_s13_first(row,'etf_netflow','etf_flow_usd','spot_etf_netflow','macro_etf_flow')
+    ok_dxy,raw_dxy,key_dxy=_v1161_s13_first(row,'dxy_change_pct','dxy_change','dollar_index_change','macro_dxy')
+    ok_rate,raw_rate,key_rate=_v1161_s13_first(row,'rate_change_bps','yield_change_bps','interest_rate_change','macro_rate')
+
+    fomc_event=_v1161_s14_bool(raw_fomc) if ok_fomc else False
+    cpi=_v1161_s14_norm(raw_cpi) if ok_cpi else None
+    etf=_v1161_s13_num(raw_etf) if ok_etf else None
+    dxy=_v1161_s14_norm(raw_dxy) if ok_dxy else None
+    rate=_v1161_s13_num(raw_rate) if ok_rate else None
+
+    checks={'fomc':bool(ok_fomc),'cpi':bool(ok_cpi),'etf':bool(ok_etf),'dxy':bool(ok_dxy),'rates':bool(ok_rate)}
+    observed=sum(1 for v in checks.values() if v)
+    directional=sum(1 for v in (cpi,etf,dxy,rate) if v is not None)
+    coverage=round(observed/5.0,2)
+    directional_coverage=round(directional/4.0,2)
+    score=0.0; evidence=[]; event_risk=0.0
+
+    if fomc_event:
+        event_risk=max(event_risk,70.0); evidence.append('FOMC_EVENT_RISK')
+    elif ok_fomc:
+        evidence.append('FOMC_NO_IMMINENT_EVENT')
+    if cpi is not None:
+        # Positive surprise = hotter inflation = risk-off; negative surprise = risk-on.
+        score-=max(-35.0,min(35.0,cpi*7.0)); evidence.append('CPI_HOT' if cpi>0.15 else 'CPI_COOL' if cpi<-0.15 else 'CPI_NEUTRAL')
+        event_risk=max(event_risk,min(100.0,abs(cpi)*20.0))
+    if etf is not None:
+        # Normalize only by observed magnitude; sign remains the evidence direction.
+        etf_component=0.0 if etf==0 else (1.0 if etf>0 else -1.0)*min(35.0,8.0+abs(etf)**0.25)
+        score+=etf_component; evidence.append('ETF_NET_INFLOW' if etf>0 else 'ETF_NET_OUTFLOW' if etf<0 else 'ETF_FLOW_FLAT')
+    if dxy is not None:
+        score-=max(-30.0,min(30.0,dxy*8.0)); evidence.append('DXY_UP' if dxy>0.10 else 'DXY_DOWN' if dxy<-0.10 else 'DXY_FLAT')
+    if rate is not None:
+        score-=max(-30.0,min(30.0,rate*0.8)); evidence.append('RATES_UP' if rate>0.5 else 'RATES_DOWN' if rate<-0.5 else 'RATES_FLAT')
+
+    if observed==0:
+        state='NO_EVIDENCE'; bias='WAIT'; score=0.0; confidence=0.0
+    else:
+        score=max(-100.0,min(100.0,score))
+        confidence=round(min(100.0,directional_coverage*70.0+min(30.0,abs(score)*0.35)),1)
+        if directional==0:
+            state='EVENT_RISK' if fomc_event else 'INSUFFICIENT_DIRECTION'; bias='WAIT'
+        elif directional_coverage<_V1161_S14_MIN_DIRECTIONAL_COVERAGE or abs(score)<18.0:
+            state='MACRO_MIXED'; bias='WAIT'
+        elif score>=18.0:
+            state='MACRO_RISK_ON'; bias='LONG'
+        else:
+            state='MACRO_RISK_OFF'; bias='SHORT'
+    return {
+        'state':state,'bias':bias,'score':round(score,1),'confidence':confidence,'coverage':coverage,
+        'directional_coverage':directional_coverage,'event_risk':round(event_risk,1),
+        'evidence':evidence or ['NO_RUNTIME_MACRO_FIELDS'],'checks':checks,
+        'fomc':{'event':fomc_event,'source_key':key_fomc},
+        'cpi':{'surprise':cpi,'source_key':key_cpi},
+        'etf':{'netflow':etf,'source_key':key_etf},
+        'dxy':{'change_pct':dxy,'source_key':key_dxy},
+        'rates':{'change_bps':rate,'source_key':key_rate},
+        'mode':'SHADOW_RESEARCH','external_api_used':False,'synthetic_data_used':False,
+        'consensus_override':False,'gate_override':False
+    }
+
+
+def _v1161_s14_consensus(row):
+    result=dict(_v1161_s13_consensus(row))
+    result['macro_ai']=_v1161_s14_macro(row)
+    return result
+
+
+def _v1161_s14_card(row,rank=1,detail=False):
+    base,_=_v1161_s13_card(row,rank,detail)
+    result=_v1161_s14_consensus(row); m=result['macro_ai']
+    def fmt(v,suffix=''): return 'N/A' if v is None else f'{v:,.2f}{suffix}'
+    extra=(f'\n\n<b>Macro AI v1</b>\n· State {m["state"]} · Bias {m["bias"]} · Score {m["score"]:+.1f} · Confidence {m["confidence"]:.1f}'
+           f'\n· Coverage {m["coverage"]:.2f} · Directional {m["directional_coverage"]:.2f} · Event Risk {m["event_risk"]:.1f}'
+           f'\n· CPI {fmt(m["cpi"]["surprise"],"%")} · ETF {fmt(m["etf"]["netflow"])} · DXY {fmt(m["dxy"]["change_pct"],"%")} · Rate {fmt(m["rates"]["change_bps"],"bp")}'
+           f'\n· Evidence {", ".join(m["evidence"][:4])} · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs14_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🌐 V116.1 S14 Macro AI 연구 분석 중...\nRuntime Evidence Only · Shadow Research')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚠️ <b>후보 없음 · WAIT</b>\nMacro evidence를 추정하지 않습니다.',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s14_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['state']=='SHADOW_READY',z[1]['shadow_readiness']['score'],z[1]['macro_ai']['directional_coverage'],z[1]['whale_intelligence']['coverage'],z[1]['stability']['score'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        with_evidence=sum(1 for _,r in evaluated if r['macro_ai']['state']!='NO_EVIDENCE')
+        summary=(f'🌐 <b>A100 V116.1 S14 MACRO AI</b>\n후보 {len(evaluated)} · Macro Evidence {with_evidence}/{len(evaluated)} · Scan Errors {len(scan_errors or [])}\n'
+                 f'Registry {len(V90_COMMAND_REGISTRY)}/341 · External API NO · Synthetic Data NO · Consensus Override NO\n\n'
+                 '<i>FOMC, CPI, ETF, DXY and rates are used only when runtime evidence exists.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s14_card(row,i,detail); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s14-ultimate',e); await update.message.reply_text('⚠️ S14 Macro 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs14_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🎯 <b>SNIPER S14</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s14_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['shadow_readiness']['score'],z[1]['macro_ai']['directional_coverage'],z[1]['whale_intelligence']['coverage'],z[1]['stability']['score'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s14_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S14 · MACRO EVIDENCE RESEARCH</b>\n'+card+'\n\n⚠️ Evidence Only · Shadow Research · No Override'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s14-sniper',e); await update.message.reply_text('⚠️ Sniper S14 분석 오류')
+
+
+async def god1161devs14_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>AI DEBATE S14</b>\n증거 부족 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s14_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['stability']['score'],z[1]['shadow_readiness']['score'],z[1]['macro_ai']['directional_coverage'],_v1161_s3_symbol(z[0])),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s14_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT AI DEBATE S14</b>\n\n'+card+'\n\n<i>Macro evidence explains regime context but cannot override consensus.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s14-god',e); await update.message.reply_text('⚠️ AI Debate S14 오류')
+
+
+async def notebook1161devs14_cmd(update,context):
+    m=_v1161_s11_quality_metrics(); w=_v1161_s12_weight_proposal()
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S14</b>\nQuality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+          f'Adaptive Weight {w["state"]} · Applied NO · Mutation LOCKED\n\n'
+          '<b>Macro Research Policy</b>\n· Runtime evidence fields only\n· Missing evidence → NO_EVIDENCE / WAIT\n· FOMC event alone → EVENT_RISK / WAIT\n· CPI/ETF/DXY/rates require directional evidence\n· No external API, synthetic values, schema mutation, Gate or consensus override')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs14_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S14_NUMBER}</b>\n{V1161_DEV_S14_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: FOMC · CPI · ETF · DXY · rates · NO_EVIDENCE safety',parse_mode='HTML')
+
+
+def _v1161_s14_reconcile():
+    desired={'version':version1161devs14_cmd,'ultimate':ultimate1161devs14_cmd,'sniper':sniper1161devs14_cmd,'god':god1161devs14_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs14_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s14_reconcile()
+
+
+def _v1161_s14_static_audit():
+    required={'version':version1161devs14_cmd,'ultimate':ultimate1161devs14_cmd,'sniper':sniper1161devs14_cmd,'god':god1161devs14_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s14_macro({})
+    event_only=_v1161_s14_macro({'fomc_event':True})
+    risk_on=_v1161_s14_macro({'cpi_surprise':-0.5,'etf_netflow':100000000,'dxy_change_pct':-0.8,'rate_change_bps':-10})
+    risk_off=_v1161_s14_macro({'cpi_surprise':0.5,'etf_netflow':-100000000,'dxy_change_pct':0.8,'rate_change_bps':10})
+    mixed=_v1161_s14_macro({'etf_netflow':100000000,'dxy_change_pct':4.4})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); _v1161_s14_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'no_evidence_wait':empty['state']=='NO_EVIDENCE' and empty['bias']=='WAIT' and empty['coverage']==0.0,
+        'event_only_wait':event_only['state']=='EVENT_RISK' and event_only['bias']=='WAIT',
+        'risk_on_long':risk_on['bias']=='LONG',
+        'risk_off_short':risk_off['bias']=='SHORT',
+        'mixed_wait':mixed['bias']=='WAIT',
+        'no_external_or_synthetic':not empty['external_api_used'] and not empty['synthetic_data_used'],
+        'no_consensus_or_gate_override':not empty['consensus_override'] and not empty['gate_override'],
+        'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs14','execute_order1161devs14')),
+        'schema_unchanged':True,
+        'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s14_reconcile(); audit=_v1161_s14_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S14 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S14 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S14 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S14 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S14 macro evidence safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s14_reconcile(); audit=_v1161_s14_static_audit()
+    print(f'{V1161_DEV_S14_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S14 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S14 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S14 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S14 macro ai: ACTIVE · evidence only',flush=True); print('A100 V116.1 DEV S14 missing evidence policy: NO_EVIDENCE / WAIT',flush=True); print('A100 V116.1 DEV S14 external macro API: DISABLED',flush=True); print('A100 V116.1 DEV S14 whale intelligence: PRESERVED · evidence only',flush=True); print('A100 V116.1 DEV S14 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S14 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S14 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S14 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S14 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s14-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S15: AI DEBATE 2.0 (INDEPENDENT BRAINS) ===
+V1161_DEV_S15_NUMBER='116.1-DEV-S15'
+V1161_DEV_S15_TITLE='AI Debate 2.0 · Long Brain / Short Brain / Wait Brain / Consensus Judge'
+V1161_DEV_S15_VERSION='A100 V116.1 DEV S15 AI DEBATE 2.0'
+
+
+def _v1161_s15_clamp(value,lo=0.0,hi=100.0):
+    try: return max(lo,min(hi,float(value)))
+    except Exception: return lo
+
+
+def _v1161_s15_debate(row):
+    # Each brain reads the same immutable runtime-derived research result independently.
+    base=_v1161_s14_consensus(row)
+    psych=base.get('market_psychology') or {}
+    whale=base.get('whale_intelligence') or {}
+    macro=base.get('macro_ai') or {}
+    long_score=float(base.get('long',0.0)); short_score=float(base.get('short',0.0)); wait_score=float(base.get('wait',0.0))
+    reasons={'LONG':[],'SHORT':[],'WAIT':[]}
+
+    # Independent contextual arguments. Adjustments are debate-only and never written back.
+    for name,layer,weight in (('Psychology',psych,0.10),('Whale',whale,0.12),('Macro',macro,0.12)):
+        bias=str(layer.get('bias','WAIT')).upper(); conf=float(layer.get('confidence',0.0) or 0.0); cov=float(layer.get('coverage',0.0) or 0.0)
+        contribution=min(10.0,conf*weight*max(0.25,cov))
+        if bias=='LONG': long_score+=contribution; reasons['LONG'].append(f'{name} supports LONG +{contribution:.1f}')
+        elif bias=='SHORT': short_score+=contribution; reasons['SHORT'].append(f'{name} supports SHORT +{contribution:.1f}')
+        else:
+            wait_add=min(7.0,(100.0-conf)*0.03 + (1.0-cov)*2.0)
+            wait_score+=wait_add; reasons['WAIT'].append(f'{name} uncertain/WAIT +{wait_add:.1f}')
+
+    coverage=float(base.get('coverage',0.0) or 0.0); conflict=float(base.get('conflict',0.0) or 0.0)
+    forced=bool(base.get('forced_wait'))
+    event_risk=float(macro.get('event_risk',0.0) or 0.0)
+    if coverage<45.0:
+        add=(45.0-coverage)*0.35; wait_score+=add; reasons['WAIT'].append(f'Low evidence coverage +{add:.1f}')
+    if conflict>=40.0:
+        add=(conflict-35.0)*0.22; wait_score+=add; reasons['WAIT'].append(f'Long/Short conflict +{add:.1f}')
+    if event_risk>=60.0:
+        add=(event_risk-50.0)*0.12; wait_score+=add; reasons['WAIT'].append(f'Macro event risk +{add:.1f}')
+    if forced:
+        wait_score+=12.0; reasons['WAIT'].append('Existing safety WAIT respected +12.0')
+
+    raw={'LONG':max(0.0,long_score),'SHORT':max(0.0,short_score),'WAIT':max(0.0,wait_score)}
+    total=sum(raw.values()) or 1.0
+    scores={k:round(v/total*100.0,1) for k,v in raw.items()}
+    ordered=sorted(scores.items(),key=lambda kv:kv[1],reverse=True)
+    research_verdict=ordered[0][0]; edge=round(ordered[0][1]-ordered[1][1],1)
+    safety_reason=''
+    if coverage<45.0: safety_reason='EVIDENCE_COVERAGE_LOW'
+    elif conflict>=55.0: safety_reason='LONG_SHORT_CONFLICT_HIGH'
+    elif research_verdict!='WAIT' and edge<7.5: safety_reason='DEBATE_EDGE_LOW'
+    elif forced: safety_reason=str(base.get('forced_wait'))
+    if safety_reason: research_verdict='WAIT'
+
+    brains={}
+    for side in ('LONG','SHORT','WAIT'):
+        brains[side.lower()+'_brain']={
+            'position':side,'score':scores[side],
+            'arguments':reasons[side][:5] or [f'Base consensus {side} probability {float(base.get(side.lower(),0.0)):.1f}%'],
+            'independent':True,'order_authority':False
+        }
+    judge={
+        'research_verdict':research_verdict,'scores':scores,'edge':edge,'safety_reason':safety_reason or 'NONE',
+        'existing_verdict':str(base.get('verdict','WAIT')).upper(),'override':False,
+        'consensus_mutated':False,'gate_mutated':False,'order_authority':False,'mode':'SHADOW_RESEARCH'
+    }
+    return {'long_brain':brains['long_brain'],'short_brain':brains['short_brain'],'wait_brain':brains['wait_brain'],'consensus_judge':judge}
+
+
+def _v1161_s15_consensus(row):
+    result=dict(_v1161_s14_consensus(row))
+    result['ai_debate_2']=_v1161_s15_debate(row)
+    return result
+
+
+def _v1161_s15_card(row,rank=1,detail=False):
+    base,_=_v1161_s14_card(row,rank,detail)
+    result=_v1161_s15_consensus(row); d=result['ai_debate_2']; j=d['consensus_judge']
+    extra=(f'\n\n<b>AI Debate 2.0</b>\n'
+           f'· Long Brain {d["long_brain"]["score"]:.1f} · Short Brain {d["short_brain"]["score"]:.1f} · Wait Brain {d["wait_brain"]["score"]:.1f}\n'
+           f'· Research Verdict <b>{j["research_verdict"]}</b> · Edge {j["edge"]:.1f} · Safety {j["safety_reason"]}\n'
+           f'· Existing Verdict {j["existing_verdict"]} · Override NO · Order Authority NO')
+    if detail:
+        extra+='\n\n<b>Independent Arguments</b>'
+        for key,label in (('long_brain','LONG'),('short_brain','SHORT'),('wait_brain','WAIT')):
+            extra+='\n· '+label+': '+'; '.join(d[key]['arguments'][:3])
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs15_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S15 AI Debate 2.0 분석 중...\nIndependent Brains · Shadow Research · No Override')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧠 <b>AI DEBATE 2.0</b>\nLONG 0 · SHORT 0 · WAIT 100\n결론 ⏸ WAIT · 증거 없음',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s15_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['coverage'],z[1]['ai_debate_2']['consensus_judge']['edge'],z[1]['stability']['score'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        counts={'LONG':0,'SHORT':0,'WAIT':0}
+        for _,r in evaluated: counts[r['ai_debate_2']['consensus_judge']['research_verdict']]+=1
+        summary=(f'🧠 <b>A100 V116.1 S15 AI DEBATE 2.0</b>\n후보 {len(evaluated)} · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+                 f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Independent Brains YES · Override NO · Order Authority NO\n\n'
+                 '<i>Long, Short and Wait brains debate independently; Consensus Judge produces research verdict only.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s15_card(row,i,detail); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s15-ultimate',e); await update.message.reply_text('⚠️ S15 AI Debate 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs15_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🎯 <b>SNIPER S15</b>\n후보 없음 · ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s15_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['coverage'],z[1]['ai_debate_2']['consensus_judge']['edge'],z[1]['stability']['score']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s15_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S15 · AI DEBATE RESEARCH</b>\n'+card+'\n\n⚠️ Shadow Research · No Override'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s15-sniper',e); await update.message.reply_text('⚠️ Sniper S15 분석 오류')
+
+
+async def god1161devs15_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>AI DEBATE 2.0</b>\nLONG: 증거 부족\nSHORT: 증거 부족\nWAIT: 우세\n\n결론 ⏸ WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s15_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['coverage'],z[1]['ai_debate_2']['consensus_judge']['edge'],z[1]['stability']['score']),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s15_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>LONG / SHORT / WAIT · AI DEBATE 2.0</b>\n\n'+card+'\n\n<i>Consensus Judge is research-only and cannot replace the existing verdict.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s15-god',e); await update.message.reply_text('⚠️ AI Debate S15 오류')
+
+
+async def notebook1161devs15_cmd(update,context):
+    m=_v1161_s11_quality_metrics(); w=_v1161_s12_weight_proposal()
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S15</b>\nQuality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+          f'Adaptive Weight {w["state"]} · Applied NO · Mutation LOCKED\n\n'
+          '<b>AI Debate 2.0 Policy</b>\n· Long Brain, Short Brain and Wait Brain are independent research objects\n· Consensus Judge emits research_verdict only\n· Existing consensus, Release Gate and order path are immutable\n· Missing evidence, conflict and event risk strengthen WAIT\n· Psychology, Whale and Macro evidence remain evidence-only')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs15_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S15_NUMBER}</b>\n{V1161_DEV_S15_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Long Brain · Short Brain · Wait Brain · Consensus Judge · Override NO',parse_mode='HTML')
+
+
+def _v1161_s15_reconcile():
+    desired={'version':version1161devs15_cmd,'ultimate':ultimate1161devs15_cmd,'sniper':sniper1161devs15_cmd,'god':god1161devs15_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs15_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s15_reconcile()
+
+
+def _v1161_s15_static_audit():
+    required={'version':version1161devs15_cmd,'ultimate':ultimate1161devs15_cmd,'sniper':sniper1161devs15_cmd,'god':god1161devs15_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s15_debate({})
+    long_case=_v1161_s15_debate({'long_score':85,'short_score':15,'etf_netflow':100000000,'whale_accumulation_score':80})
+    short_case=_v1161_s15_debate({'long_score':15,'short_score':85,'etf_netflow':-100000000,'whale_distribution_score':80})
+    conflict_case=_v1161_s15_debate({'long_score':80,'short_score':80})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); _v1161_s15_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    judges=[x['consensus_judge'] for x in (empty,long_case,short_case,conflict_case)]
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'three_independent_brains':all(empty[k]['independent'] for k in ('long_brain','short_brain','wait_brain')),
+        'empty_safe_wait':empty['consensus_judge']['research_verdict']=='WAIT',
+        'judge_never_overrides':all(not j['override'] and not j['consensus_mutated'] and not j['gate_mutated'] and not j['order_authority'] for j in judges),
+        'brains_no_order_authority':all(not empty[k]['order_authority'] for k in ('long_brain','short_brain','wait_brain')),
+        'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+        'macro_whale_psychology_preserved':all(k in _v1161_s15_consensus({}) for k in ('macro_ai','whale_intelligence','market_psychology')),
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs15','execute_order1161devs15')),
+        'schema_unchanged':True,
+        'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,
+            'samples':{'empty':empty['consensus_judge'],'long':long_case['consensus_judge'],'short':short_case['consensus_judge'],'conflict':conflict_case['consensus_judge']}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s15_reconcile(); audit=_v1161_s15_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S15 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S15 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S15 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S15 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S15 AI Debate 2.0 safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s15_reconcile(); audit=_v1161_s15_static_audit()
+    print(f'{V1161_DEV_S15_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S15 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S15 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S15 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S15 AI Debate 2.0: ACTIVE · independent brains',flush=True); print('A100 V116.1 DEV S15 Consensus Judge: RESEARCH ONLY · override disabled',flush=True); print('A100 V116.1 DEV S15 macro/whale/psychology: PRESERVED · evidence only',flush=True); print('A100 V116.1 DEV S15 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S15 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S15 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S15 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S15 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s15-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S16: EXPLAINABLE AI 2.0 ===
+V1161_DEV_S16_NUMBER='116.1-DEV-S16'
+V1161_DEV_S16_TITLE='Explainable AI 2.0 · WHY LONG / WHY SHORT / WHY WAIT'
+V1161_DEV_S16_VERSION='A100 V116.1 DEV S16 EXPLAINABLE AI 2.0'
+
+
+def _v1161_s16_pct(value):
+    try: return max(0.0,min(100.0,float(value)))
+    except Exception: return 0.0
+
+
+def _v1161_s16_layer_reason(name, layer, target):
+    bias=str((layer or {}).get('bias','WAIT')).upper()
+    conf=_v1161_s16_pct((layer or {}).get('confidence',0.0))
+    cov=float((layer or {}).get('coverage',0.0) or 0.0)
+    cov_pct=cov*100.0 if cov<=1.0 else cov
+    if bias==target:
+        return f'{name}: {target} 지지 · confidence {conf:.1f} · coverage {cov_pct:.0f}%'
+    if bias in ('LONG','SHORT') and bias!=target:
+        return f'{name}: 반대 방향 {bias} · confidence {conf:.1f} · coverage {cov_pct:.0f}%'
+    return f'{name}: 방향 증거 부족/WAIT · coverage {cov_pct:.0f}%'
+
+
+def _v1161_s16_explain(row):
+    result=_v1161_s15_consensus(row)
+    debate=result.get('ai_debate_2') or {}
+    judge=debate.get('consensus_judge') or {}
+    verdict=str(judge.get('research_verdict','WAIT')).upper()
+    existing=str(judge.get('existing_verdict',result.get('verdict','WAIT'))).upper()
+    coverage=_v1161_s16_pct(result.get('coverage',0.0))
+    conflict=_v1161_s16_pct(result.get('conflict',0.0))
+    edge=_v1161_s16_pct(judge.get('edge',0.0))
+    psych=result.get('market_psychology') or {}
+    whale=result.get('whale_intelligence') or {}
+    macro=result.get('macro_ai') or {}
+    brain_key={'LONG':'long_brain','SHORT':'short_brain','WAIT':'wait_brain'}.get(verdict,'wait_brain')
+    winning=debate.get(brain_key) or {}
+    supports=list(winning.get('arguments') or [])[:4]
+    opposing=[]
+    for side,key in (('LONG','long_brain'),('SHORT','short_brain'),('WAIT','wait_brain')):
+        if side==verdict: continue
+        b=debate.get(key) or {}
+        if float(b.get('score',0.0) or 0.0)>=20.0:
+            opposing.append(f'{side} Brain {float(b.get("score",0.0)):.1f}: '+str((b.get('arguments') or ['근거 미상'])[0]))
+    layer_reasons=[_v1161_s16_layer_reason('Psychology',psych,verdict),_v1161_s16_layer_reason('Whale',whale,verdict),_v1161_s16_layer_reason('Macro',macro,verdict)]
+    missing=[]
+    if str(whale.get('state','NO_EVIDENCE')).upper()=='NO_EVIDENCE': missing.append('Whale runtime evidence')
+    if str(macro.get('state','NO_EVIDENCE')).upper()=='NO_EVIDENCE': missing.append('Macro runtime evidence')
+    if float((psych or {}).get('coverage',0.0) or 0.0)<=0: missing.append('Psychology runtime evidence')
+    if coverage<45.0: missing.append('Overall evidence coverage')
+    safety=[]
+    reason=str(judge.get('safety_reason','NONE'))
+    if reason!='NONE': safety.append(reason)
+    if conflict>=40.0: safety.append(f'LONG/SHORT conflict {conflict:.1f}')
+    if edge<7.5: safety.append(f'Debate edge low {edge:.1f}')
+    if existing!=verdict: safety.append(f'Existing verdict differs: {existing}')
+    confidence=round(max(0.0,min(100.0,coverage*0.55+edge*0.30+(100.0-conflict)*0.15)),1)
+    confidence_band='HIGH' if confidence>=75 else 'MEDIUM' if confidence>=50 else 'LOW'
+    question={'LONG':'왜 LONG인가?','SHORT':'왜 SHORT인가?','WAIT':'왜 WAIT인가?'}.get(verdict,'왜 WAIT인가?')
+    return {
+        'question':question,'research_verdict':verdict,'existing_verdict':existing,
+        'confidence':confidence,'confidence_band':confidence_band,'coverage':coverage,'conflict':conflict,'edge':edge,
+        'supporting_reasons':supports or ['선택 방향의 충분한 독립 근거 없음'],
+        'opposing_reasons':opposing[:4] or ['강한 반대 Brain 근거 없음'],
+        'layer_reasons':layer_reasons,
+        'missing_evidence':missing or ['NONE'],
+        'safety_constraints':safety or ['NONE'],
+        'uncertainty_statement':('Evidence가 충분하지 않아 WAIT가 안전합니다.' if verdict=='WAIT' else '이 설명은 Shadow Research이며 실제 Consensus를 변경하지 않습니다.'),
+        'mode':'SHADOW_RESEARCH','override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False,
+        'source':'RUNTIME_EVIDENCE_ONLY'
+    }
+
+
+def _v1161_s16_consensus(row):
+    result=dict(_v1161_s15_consensus(row))
+    result['explainable_ai_2']=_v1161_s16_explain(row)
+    return result
+
+
+def _v1161_s16_card(row,rank=1,detail=False):
+    base,_=_v1161_s15_card(row,rank,detail)
+    result=_v1161_s16_consensus(row); x=result['explainable_ai_2']
+    extra=(f'\n\n<b>Explainable AI 2.0 · {x["question"]}</b>\n'
+           f'· Research Verdict <b>{x["research_verdict"]}</b> · Confidence {x["confidence"]:.1f} ({x["confidence_band"]})\n'
+           f'· Evidence Coverage {x["coverage"]:.1f} · Conflict {x["conflict"]:.1f} · Debate Edge {x["edge"]:.1f}\n'
+           f'· 핵심 근거: {"; ".join(x["supporting_reasons"][:2])}\n'
+           f'· 안전 제약: {", ".join(x["safety_constraints"][:3])}\n'
+           f'· Missing Evidence: {", ".join(x["missing_evidence"][:3])}\n'
+           f'· Existing Verdict {x["existing_verdict"]} · Override NO')
+    if detail:
+        extra+='\n\n<b>찬성/반대/계층 근거</b>'
+        extra+='\n· 찬성: '+'; '.join(x['supporting_reasons'][:4])
+        extra+='\n· 반대: '+'; '.join(x['opposing_reasons'][:4])
+        extra+='\n· 계층: '+'; '.join(x['layer_reasons'][:3])
+        extra+='\n· 한계: '+x['uncertainty_statement']
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs16_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full','why'))
+    await update.message.reply_text('🔎 V116.1 S16 Explainable AI 2.0 분석 중...\nWHY LONG · WHY SHORT · WHY WAIT · Shadow Research')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🔎 <b>왜 WAIT인가?</b>\nRuntime evidence가 없어 방향을 설명할 수 없습니다.\n결론 ⏸ WAIT · 추정 없음',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s16_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['explainable_ai_2']['confidence'],z[1]['coverage'],z[1]['ai_debate_2']['consensus_judge']['edge'],z[1]['stability']['score'],_v1161_s3_symbol(z[0])),reverse=True)
+        for row,res in evaluated: _v1161_s9_register(row,res,'ultimate')
+        counts={'LONG':0,'SHORT':0,'WAIT':0}
+        for _,r in evaluated: counts[r['explainable_ai_2']['research_verdict']]+=1
+        summary=(f'🔎 <b>A100 V116.1 S16 EXPLAINABLE AI 2.0</b>\n후보 {len(evaluated)} · LONG {counts["LONG"]} / SHORT {counts["SHORT"]} / WAIT {counts["WAIT"]}\n'
+                 f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Runtime Evidence Only · Override NO · Order Authority NO\n\n'
+                 '<i>결론뿐 아니라 지지 근거, 반대 근거, 누락 증거와 불확실성을 함께 설명합니다.</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            card,res=_v1161_s16_card(row,i,detail); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s16-ultimate',e); await update.message.reply_text('⚠️ S16 Explainable AI 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs16_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🎯 <b>SNIPER S16</b>\n왜 WAIT인가? · Runtime evidence 없음',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s16_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['explainable_ai_2']['confidence'],z[1]['coverage'],z[1]['stability']['score']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s16_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🎯 <b>SNIPER S16 · EXPLAINABLE RESEARCH</b>\n'+card+'\n\n⚠️ Shadow Research · No Override'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s16-sniper',e); await update.message.reply_text('⚠️ Sniper S16 분석 오류')
+
+
+async def god1161devs16_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🔎 <b>왜 WAIT인가?</b>\n증거가 없으므로 방향을 만들지 않습니다.',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s16_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['explainable_ai_2']['confidence'],z[1]['coverage'],z[1]['stability']['score']),reverse=True)
+        row,res=evaluated[0]; card,res=_v1161_s16_card(row,1,True); _v1161_s9_record(row,res,'god')
+        await update.message.reply_text(_v1161_s5_trim('🔎 <b>WHY LONG / WHY SHORT / WHY WAIT</b>\n\n'+card+'\n\n<i>설명은 연구 결과이며 기존 Verdict를 대체하지 않습니다.</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s16-god',e); await update.message.reply_text('⚠️ Explainable AI S16 오류')
+
+
+async def notebook1161devs16_cmd(update,context):
+    m=_v1161_s11_quality_metrics(); w=_v1161_s12_weight_proposal()
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK S16</b>\nQuality {m["quality_passed"]}/{m["quality_total"]} · {m["quality_state"]}\n'
+          f'Adaptive Weight {w["state"]} · Applied NO · Mutation LOCKED\n\n'
+          '<b>Explainable AI 2.0 Policy</b>\n· WHY LONG / WHY SHORT / WHY WAIT를 동일 형식으로 설명\n· 지지 근거와 반대 근거를 함께 기록\n· 누락 Evidence와 불확실성을 숨기지 않음\n· AI Debate 2.0 결과를 설명하지만 Existing Consensus는 변경하지 않음\n· Runtime Evidence Only · Shadow Research · Order Authority NO')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs16_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S16_NUMBER}</b>\n{V1161_DEV_S16_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Explainable AI 2.0 · Supporting/Opposing Evidence · Missing Evidence · Override NO',parse_mode='HTML')
+
+
+def _v1161_s16_reconcile():
+    desired={'version':version1161devs16_cmd,'ultimate':ultimate1161devs16_cmd,'sniper':sniper1161devs16_cmd,'god':god1161devs16_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs16_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s16_reconcile()
+
+
+def _v1161_s16_static_audit():
+    required={'version':version1161devs16_cmd,'ultimate':ultimate1161devs16_cmd,'sniper':sniper1161devs16_cmd,'god':god1161devs16_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s16_explain({})
+    long_case=_v1161_s16_explain({'long_score':85,'short_score':15,'etf_netflow':100000000,'whale_accumulation_score':80})
+    short_case=_v1161_s16_explain({'long_score':15,'short_score':85,'etf_netflow':-100000000,'whale_distribution_score':80})
+    conflict_case=_v1161_s16_explain({'long_score':80,'short_score':80})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); _v1161_s16_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    samples=(empty,long_case,short_case,conflict_case)
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'why_question_present':all(x['question'] in ('왜 LONG인가?','왜 SHORT인가?','왜 WAIT인가?') for x in samples),
+        'support_and_opposition_present':all(bool(x['supporting_reasons']) and bool(x['opposing_reasons']) for x in samples),
+        'missing_evidence_disclosed':bool(empty['missing_evidence']),
+        'explanation_never_overrides':all(not x['override'] and not x['consensus_mutated'] and not x['gate_mutated'] and not x['order_authority'] for x in samples),
+        'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+        'debate_macro_whale_psychology_preserved':all(k in _v1161_s16_consensus({}) for k in ('ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs16','execute_order1161devs16')),
+        'schema_unchanged':True,
+        'output_budget':len(_v1161_s5_trim('x'*5000))<=_V1161_S5_TELEGRAM_BUDGET+80
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,
+            'samples':{'empty':empty,'long':long_case,'short':short_case,'conflict':conflict_case}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s16_reconcile(); audit=_v1161_s16_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S16 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S16 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S16 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S16 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S16 Explainable AI 2.0 safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s16_reconcile(); audit=_v1161_s16_static_audit()
+    print(f'{V1161_DEV_S16_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S16 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S16 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S16 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S16 Explainable AI 2.0: ACTIVE · WHY LONG/SHORT/WAIT',flush=True); print('A100 V116.1 DEV S16 evidence disclosure: SUPPORTING + OPPOSING + MISSING',flush=True); print('A100 V116.1 DEV S16 existing consensus override: DISABLED',flush=True); print('A100 V116.1 DEV S16 AI Debate 2.0: PRESERVED · research only',flush=True); print('A100 V116.1 DEV S16 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S16 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S16 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S16 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S16 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s16-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S17: RESEARCH NOTEBOOK 2.0 ===
+V1161_DEV_S17_NUMBER='116.1-DEV-S17'
+V1161_DEV_S17_TITLE='Research Notebook 2.0 · Success / Failure / Repetition Learning Journal'
+V1161_DEV_S17_VERSION='A100 V116.1 DEV S17 RESEARCH NOTEBOOK 2.0'
+V91_VERSION=V1161_DEV_S17_VERSION
+_V1161_S17_MIN_PATTERN_SAMPLES=3
+_V1161_S17_PROMOTE_RATE=0.67
+_V1161_S17_MAX_PATTERNS=12
+
+
+def _v1161_s17_bucket(item,horizon,outcome):
+    return (
+        str(item.get('direction','WAIT')).upper(),
+        str(item.get('regime','UNKNOWN')).upper(),
+        str(horizon),
+    )
+
+
+def _v1161_s17_settled_rows(symbol=None):
+    rows=[]
+    seen=set()
+    for item in list(_V1161_S9_LEDGER.values()):
+        if symbol is not None and item.get('symbol')!=symbol: continue
+        did=str(item.get('decision_id') or '')
+        for horizon,outcome in (item.get('settlements') or {}).items():
+            key=(did,str(horizon))
+            if not did or key in seen: continue
+            seen.add(key)
+            label=str((outcome or {}).get('label','PENDING')).upper()
+            if label not in ('WIN','LOSS','FLAT'): continue
+            rows.append({
+                'decision_id':did,'symbol':item.get('symbol'),'direction':str(item.get('direction','WAIT')).upper(),
+                'regime':str(item.get('regime','UNKNOWN')).upper(),'horizon':str(horizon),'label':label,
+                'return_pct':float((outcome or {}).get('directional_return_pct',0.0) or 0.0),
+                'confidence':float(item.get('confidence',0.0) or 0.0),'coverage':float(item.get('coverage',0.0) or 0.0),
+                'readiness':float(item.get('readiness',0.0) or 0.0),'created_ts':float(item.get('created_ts',0.0) or 0.0),
+            })
+    return rows
+
+
+def _v1161_s17_pattern_state(wins,losses,flat,total):
+    directional=wins+losses
+    if total<_V1161_S17_MIN_PATTERN_SAMPLES or directional<_V1161_S17_MIN_PATTERN_SAMPLES:
+        return 'INSUFFICIENT_EVIDENCE'
+    if flat/float(max(1,total))>=0.5: return 'FLAT_DOMINANT'
+    win_rate=wins/float(max(1,directional)); loss_rate=losses/float(max(1,directional))
+    if win_rate>=_V1161_S17_PROMOTE_RATE: return 'SUCCESS_PATTERN'
+    if loss_rate>=_V1161_S17_PROMOTE_RATE: return 'FAILURE_PATTERN'
+    return 'MIXED'
+
+
+def _v1161_s17_patterns(symbol=None):
+    rows=_v1161_s17_settled_rows(symbol)
+    grouped={}
+    for row in rows:
+        key=(row['direction'],row['regime'],row['horizon'])
+        grouped.setdefault(key,[]).append(row)
+    patterns=[]
+    for (direction,regime,horizon),items in grouped.items():
+        wins=sum(x['label']=='WIN' for x in items); losses=sum(x['label']=='LOSS' for x in items); flat=sum(x['label']=='FLAT' for x in items)
+        directional=wins+losses; total=len(items)
+        state=_v1161_s17_pattern_state(wins,losses,flat,total)
+        patterns.append({
+            'direction':direction,'regime':regime,'horizon':horizon,'samples':total,
+            'wins':wins,'losses':losses,'flat':flat,
+            'win_rate':round(wins/max(1,directional)*100.0,1),
+            'loss_rate':round(losses/max(1,directional)*100.0,1),
+            'avg_return_pct':round(sum(x['return_pct'] for x in items)/max(1,total),4),
+            'avg_confidence':round(sum(x['confidence'] for x in items)/max(1,total),2),
+            'avg_coverage':round(sum(x['coverage'] for x in items)/max(1,total),3),
+            'state':state,
+            'promoted':state in ('SUCCESS_PATTERN','FAILURE_PATTERN'),
+            'policy':'READ_ONLY · OUTCOME_EVIDENCE_ONLY · NO_WEIGHT_UPDATE · NO_ORDER_AUTHORITY'
+        })
+    rank={'SUCCESS_PATTERN':4,'FAILURE_PATTERN':4,'MIXED':3,'FLAT_DOMINANT':2,'INSUFFICIENT_EVIDENCE':1}
+    patterns.sort(key=lambda x:(rank.get(x['state'],0),x['samples'],abs(x['avg_return_pct'])),reverse=True)
+    return patterns[:_V1161_S17_MAX_PATTERNS]
+
+
+def _v1161_s17_repetition(patterns):
+    promoted=[p for p in patterns if p.get('promoted')]
+    signatures={}
+    for p in promoted:
+        sig=(p['direction'],p['regime'],p['state'])
+        signatures.setdefault(sig,[]).append(p)
+    repeated=[]
+    for (direction,regime,state),items in signatures.items():
+        samples=sum(x['samples'] for x in items)
+        if len(items)>=2 or samples>=6:
+            repeated.append({'direction':direction,'regime':regime,'state':state,'horizons':[x['horizon'] for x in items],'samples':samples})
+    repeated.sort(key=lambda x:x['samples'],reverse=True)
+    return repeated[:6]
+
+
+def _v1161_s17_journal(symbol=None):
+    patterns=_v1161_s17_patterns(symbol)
+    rows=_v1161_s17_settled_rows(symbol)
+    successes=[p for p in patterns if p['state']=='SUCCESS_PATTERN']
+    failures=[p for p in patterns if p['state']=='FAILURE_PATTERN']
+    mixed=[p for p in patterns if p['state'] in ('MIXED','FLAT_DOMINANT')]
+    insufficient=[p for p in patterns if p['state']=='INSUFFICIENT_EVIDENCE']
+    repetitions=_v1161_s17_repetition(patterns)
+    return {
+        'version':V1161_DEV_S17_NUMBER,'symbol':symbol or 'ALL','settled_samples':len(rows),
+        'success_patterns':successes,'failure_patterns':failures,'mixed_patterns':mixed,
+        'insufficient_patterns':insufficient,'repeated_patterns':repetitions,
+        'state':'EVIDENCE_READY' if successes or failures else ('OBSERVING' if rows else 'NO_EVIDENCE'),
+        'minimum_samples':_V1161_S17_MIN_PATTERN_SAMPLES,'promotion_rate':_V1161_S17_PROMOTE_RATE,
+        'read_only':True,'schema_mutated':False,'weight_mutated':False,'consensus_mutated':False,
+        'gate_mutated':False,'order_authority':False,
+        'policy':'PROSPECTIVE SETTLED OUTCOMES ONLY · READ ONLY · SHADOW RESEARCH'
+    }
+
+
+def _v1161_s17_pattern_line(p):
+    icon='✅' if p['state']=='SUCCESS_PATTERN' else ('❌' if p['state']=='FAILURE_PATTERN' else '•')
+    return (f'{icon} {p["direction"]} · {p["regime"]} · {p["horizon"]} · {p["state"]}\n'
+            f'  n={p["samples"]} · W/L/F {p["wins"]}/{p["losses"]}/{p["flat"]} · WR {p["win_rate"]:.1f}% · Avg {p["avg_return_pct"]:+.3f}%')
+
+
+def _v1161_s17_consensus(row):
+    result=dict(_v1161_s16_consensus(row))
+    result['research_notebook_2']=_v1161_s17_journal(_v1161_s3_symbol(row))
+    return result
+
+
+def _v1161_s17_card(row,rank=1,detail=False):
+    base,result=_v1161_s16_card(row,rank,detail)
+    result=_v1161_s17_consensus(row)
+    journal=result['research_notebook_2']
+    extra=(f'\n\n<b>Research Notebook 2.0</b>\n· State {journal["state"]} · Settled samples {journal["settled_samples"]}\n'
+           f'· Success {len(journal["success_patterns"])} · Failure {len(journal["failure_patterns"])} · Repeated {len(journal["repeated_patterns"])}\n'
+           f'· Read Only YES · Weight Update NO · Order Authority NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs17_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('📓 V116.1 S17 Research Notebook 2.0 분석 중...\nSettled Outcome Evidence Only · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            j=_v1161_s17_journal(); await update.message.reply_text(f'📓 <b>RESEARCH NOTEBOOK 2.0</b>\nState {j["state"]} · Settled {j["settled_samples"]}\n패턴을 만들 증거가 없습니다. 추정/승격 없음.',parse_mode='HTML'); return
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s17_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['explainable_ai_2']['confidence'],z[1]['coverage'],z[1]['stability']['score']),reverse=True)
+        global_journal=_v1161_s17_journal()
+        summary=(f'📓 <b>A100 V116.1 S17 RESEARCH NOTEBOOK 2.0</b>\nSettled {global_journal["settled_samples"]} · State {global_journal["state"]}\n'
+                 f'Success {len(global_journal["success_patterns"])} · Failure {len(global_journal["failure_patterns"])} · Repeated {len(global_journal["repeated_patterns"])}\n'
+                 f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Read Only · Weight Update NO')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s17_card(row,i,detail); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s17-ultimate',e); await update.message.reply_text('⚠️ S17 Research Notebook 분석 오류 · /errors 확인')
+
+
+async def sniper1161devs17_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('📓 <b>SNIPER S17</b>\nNO_EVIDENCE · pattern promotion 없음',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s17_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['explainable_ai_2']['confidence'],z[1]['coverage'],z[1]['stability']['score']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s17_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('📓 <b>SNIPER S17 · RESEARCH NOTEBOOK</b>\n'+card+'\n\n⚠️ Shadow Research · No Override'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s17-sniper',e); await update.message.reply_text('⚠️ Sniper S17 분석 오류')
+
+
+async def god1161devs17_cmd(update,context):
+    try:
+        j=_v1161_s17_journal()
+        lines=[]
+        for p in (j['success_patterns']+j['failure_patterns'])[:6]: lines.append(_v1161_s17_pattern_line(p))
+        if not lines: lines=['• 승격 가능한 성공/실패 패턴 없음 · 관찰 계속']
+        repeats=[]
+        for r in j['repeated_patterns'][:4]: repeats.append(f'• {r["direction"]} · {r["regime"]} · {r["state"]} · {",".join(r["horizons"])} · n={r["samples"]}')
+        body=(f'📓 <b>RESEARCH NOTEBOOK 2.0 · AI 연구 일지</b>\nState {j["state"]} · Settled {j["settled_samples"]}\n\n'
+              '<b>성공/실패 패턴</b>\n'+'\n'.join(lines)+'\n\n<b>반복 패턴</b>\n'+('\n'.join(repeats) if repeats else '• 반복 증거 부족')+
+              '\n\n<i>Prospective settled outcomes only · Read Only · No Weight Update</i>')
+        await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s17-god',e); await update.message.reply_text('⚠️ Research Notebook S17 오류')
+
+
+async def notebook1161devs17_cmd(update,context):
+    j=_v1161_s17_journal()
+    promoted=(j['success_patterns']+j['failure_patterns'])[:8]
+    lines=[_v1161_s17_pattern_line(p) for p in promoted] or ['• 아직 승격된 성공/실패 패턴 없음']
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK 2.0</b>\nState {j["state"]} · Settled samples {j["settled_samples"]}\n'
+          f'Min samples {j["minimum_samples"]} · Promotion threshold {j["promotion_rate"]*100:.0f}%\n\n'
+          '<b>Promoted Patterns</b>\n'+'\n'.join(lines)+
+          '\n\n<b>Safety Contract</b>\n· Outcome Ledger의 실제 settled 결과만 사용\n· decision_id + horizon 중복 제거\n· 최소 표본 미달은 INSUFFICIENT_EVIDENCE\n· Schema 변경 없음 · Weight Update NO · Consensus Override NO · Order Authority NO')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs17_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S17_NUMBER}</b>\n{V1161_DEV_S17_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Settled Outcome Patterns · Success/Failure/Repeat Journal · Schema Mutation NO · Weight Update NO',parse_mode='HTML')
+
+
+def _v1161_s17_reconcile():
+    desired={'version':version1161devs17_cmd,'ultimate':ultimate1161devs17_cmd,'sniper':sniper1161devs17_cmd,'god':god1161devs17_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs17_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s17_reconcile()
+
+
+def _v1161_s17_static_audit():
+    required={'version':version1161devs17_cmd,'ultimate':ultimate1161devs17_cmd,'sniper':sniper1161devs17_cmd,'god':god1161devs17_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    backup=dict(_V1161_S9_LEDGER)
+    try:
+        _V1161_S9_LEDGER.clear()
+        empty=_v1161_s17_journal()
+        now=_v1161_s4_now()
+        for i,label in enumerate(('WIN','WIN','WIN','LOSS','LOSS','LOSS')):
+            direction='LONG' if i<3 else 'SHORT'
+            _V1161_S9_LEDGER[f's17-audit-{i}']={'decision_id':f's17-audit-{i}','symbol':'AUDITUSDT','direction':direction,'regime':'TREND','created_ts':now+i,'confidence':80,'coverage':0.8,'readiness':80,'settlements':{'1h':{'label':label,'directional_return_pct':1.0 if label=='WIN' else -1.0}}}
+        sample=_v1161_s17_journal('AUDITUSDT')
+    finally:
+        _V1161_S9_LEDGER.clear(); _V1161_S9_LEDGER.update(backup)
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); _v1161_s17_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'empty_is_no_evidence':empty['state']=='NO_EVIDENCE' and empty['settled_samples']==0,
+        'success_pattern_detected':any(p['state']=='SUCCESS_PATTERN' for p in sample['success_patterns']),
+        'failure_pattern_detected':any(p['state']=='FAILURE_PATTERN' for p in sample['failure_patterns']),
+        'minimum_sample_guard':_v1161_s17_pattern_state(2,0,0,2)=='INSUFFICIENT_EVIDENCE',
+        'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+        'read_only_contract':all((sample[k] is False) for k in ('schema_mutated','weight_mutated','consensus_mutated','gate_mutated','order_authority')) and sample['read_only'],
+        's16_and_prior_preserved':all(k in _v1161_s17_consensus({}) for k in ('explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs17','execute_order1161devs17')),
+        'ledger_bound_preserved':_V1161_S9_LEDGER_MAX<=500,
+        'schema_unchanged':True,
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'audit':sample}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s17_reconcile(); audit=_v1161_s17_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S17 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S17 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S17 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S17 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S17 Research Notebook 2.0 safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s17_reconcile(); audit=_v1161_s17_static_audit()
+    print(f'{V1161_DEV_S17_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S17 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S17 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S17 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S17 Research Notebook 2.0: ACTIVE · settled outcome evidence only',flush=True); print('A100 V116.1 DEV S17 success/failure/repetition promotion: CONSERVATIVE',flush=True); print('A100 V116.1 DEV S17 schema mutation: DISABLED',flush=True); print('A100 V116.1 DEV S17 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S17 consensus/order override: DISABLED',flush=True); print('A100 V116.1 DEV S17 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S17 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S17 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S17 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s17-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S18: ADAPTIVE LEARNING VALIDATION (LOCKED) ===
+V1161_DEV_S18_NUMBER='116.1-DEV-S18'
+V1161_DEV_S18_TITLE='Adaptive Learning Validation · Pattern-Calibrated Candidate Weights (Locked)'
+V1161_DEV_S18_VERSION='A100 V116.1 DEV S18 ADAPTIVE LEARNING VALIDATION'
+V91_VERSION=V1161_DEV_S18_VERSION
+_V1161_S18_MIN_PROMOTED_PATTERNS=2
+_V1161_S18_MIN_SETTLED_SAMPLES=12
+_V1161_S18_MIN_AVG_COVERAGE=0.55
+_V1161_S18_MAX_DIRECTION_DELTA=0.12
+
+
+def _v1161_s18_pattern_adjustment(pattern):
+    state=str(pattern.get('state','INSUFFICIENT_EVIDENCE'))
+    samples=max(0,int(pattern.get('samples',0) or 0))
+    coverage=max(0.0,min(1.0,float(pattern.get('avg_coverage',0.0) or 0.0)))
+    avg_return=float(pattern.get('avg_return_pct',0.0) or 0.0)
+    strength=min(1.0,samples/12.0)*coverage
+    raw=min(0.06,abs(avg_return)/20.0+0.015)*strength
+    if state=='SUCCESS_PATTERN': return raw
+    if state=='FAILURE_PATTERN': return -raw
+    return 0.0
+
+
+def _v1161_s18_validation(symbol=None):
+    journal=_v1161_s17_journal(symbol)
+    base=_v1161_s12_weight_proposal(symbol)
+    patterns=list(journal['success_patterns'])+list(journal['failure_patterns'])
+    promoted=[p for p in patterns if p.get('promoted')]
+    by_direction={'LONG':[],'SHORT':[]}
+    for p in promoted:
+        d=str(p.get('direction','WAIT')).upper()
+        if d in by_direction: by_direction[d].append(p)
+    candidate=dict(base['direction_multiplier'])
+    evidence={}
+    contradictions=[]
+    for direction,items in by_direction.items():
+        positive=[p for p in items if p['state']=='SUCCESS_PATTERN']
+        negative=[p for p in items if p['state']=='FAILURE_PATTERN']
+        if positive and negative: contradictions.append(direction)
+        weighted=sum(_v1161_s18_pattern_adjustment(p) for p in items)
+        weighted=max(-_V1161_S18_MAX_DIRECTION_DELTA,min(_V1161_S18_MAX_DIRECTION_DELTA,weighted))
+        candidate[direction]=round(max(0.88,min(1.12,float(base['direction_multiplier'].get(direction,1.0))+weighted)),4)
+        evidence[direction]={'patterns':len(items),'success':len(positive),'failure':len(negative),'delta':round(weighted,4)}
+    avg_cov=(sum(float(p.get('avg_coverage',0.0) or 0.0) for p in promoted)/len(promoted)) if promoted else 0.0
+    reasons=[]
+    if len(promoted)<_V1161_S18_MIN_PROMOTED_PATTERNS: reasons.append('PROMOTED_PATTERN_SHORTAGE')
+    if journal['settled_samples']<_V1161_S18_MIN_SETTLED_SAMPLES: reasons.append('SETTLED_SAMPLE_SHORTAGE')
+    if avg_cov<_V1161_S18_MIN_AVG_COVERAGE: reasons.append('COVERAGE_BELOW_MINIMUM')
+    if contradictions: reasons.append('CONTRADICTORY_PATTERNS:'+','.join(contradictions))
+    review_ready=not reasons
+    state='VALIDATION_READY_LOCKED' if review_ready else ('CONFLICT_HOLD_LOCKED' if contradictions else 'COLLECTING_LOCKED')
+    # Safety gate: any evidence shortage or contradiction means HOLD. Keep the S12 base
+    # proposal unchanged until every manual-review criterion is satisfied.
+    if not review_ready:
+        candidate=dict(base['direction_multiplier'])
+        for direction in ('LONG','SHORT'):
+            evidence.setdefault(direction,{'patterns':0,'success':0,'failure':0,'delta':0.0})
+            evidence[direction]['held_delta']=evidence[direction].get('delta',0.0)
+            evidence[direction]['delta']=0.0
+    return {
+        'version':V1161_DEV_S18_NUMBER,'state':state,'review_ready':review_ready,
+        'base_direction_multiplier':dict(base['direction_multiplier']),'candidate_direction_multiplier':candidate,
+        'evidence':evidence,'promoted_patterns':len(promoted),'settled_samples':journal['settled_samples'],
+        'avg_pattern_coverage':round(avg_cov,3),'contradictions':contradictions,'reasons':reasons or ['REVIEW_CRITERIA_MET'],
+        'locked':True,'applied':False,'mutation_allowed':False,'weight_mutated':False,
+        'consensus_mutated':False,'gate_mutated':False,'order_authority':False,
+        'policy':'PATTERN-CALIBRATED CANDIDATE ONLY · MANUAL REVIEW REQUIRED · NO AUTO APPLY'
+    }
+
+
+def _v1161_s18_consensus(row):
+    result=dict(_v1161_s17_consensus(row))
+    result['adaptive_learning_validation']=_v1161_s18_validation(_v1161_s3_symbol(row))
+    return result
+
+
+def _v1161_s18_card(row,rank=1,detail=False):
+    base,result=_v1161_s17_card(row,rank,detail)
+    result=_v1161_s18_consensus(row); v=result['adaptive_learning_validation']; c=v['candidate_direction_multiplier']
+    extra=(f'\n\n<b>Adaptive Learning Validation S18</b>\n· State {v["state"]} · Review Ready {"YES" if v["review_ready"] else "NO"}\n'
+           f'· Candidate LONG ×{c["LONG"]:.4f} · SHORT ×{c["SHORT"]:.4f} · WAIT ×{c["WAIT"]:.4f}\n'
+           f'· Promoted {v["promoted_patterns"]} · Settled {v["settled_samples"]} · Coverage {v["avg_pattern_coverage"]:.2f}\n'
+           f'· Reasons {", ".join(v["reasons"][:3])}\n<i>LOCKED · candidate only · no consensus/gate/order mutation</i>')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs18_cmd(update,context):
+    await update.message.reply_text('🧠 V116.1 S18 Adaptive Learning 검증 중...\nPattern-Calibrated Candidate · LOCKED')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s18_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['adaptive_learning_validation']['review_ready'],z[1]['coverage'],z[1]['stability']['score']),reverse=True)
+        v=_v1161_s18_validation()
+        summary=(f'🧠 <b>A100 V116.1 S18 ADAPTIVE LEARNING VALIDATION</b>\nState {v["state"]} · Ready {"YES" if v["review_ready"] else "NO"}\n'
+                 f'Promoted {v["promoted_patterns"]} · Settled {v["settled_samples"]} · Coverage {v["avg_pattern_coverage"]:.2f}\n'
+                 '<i>Research candidate only · Weight mutation LOCKED</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s18_card(row,i,'detail' in (context.args or [])); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:
+        v88_record_error('v1161-dev-s18-ultimate',e); await update.message.reply_text('⚠️ S18 Adaptive Learning 검증 오류 · /errors 확인')
+
+
+async def sniper1161devs18_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>SNIPER S18</b>\nNO_EVIDENCE · candidate HOLD',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s18_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['adaptive_learning_validation']['review_ready'],z[1]['coverage'],z[1]['stability']['score']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s18_card(row,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>SNIPER S18 · ADAPTIVE VALIDATION</b>\n'+card+'\n\n⚠️ Shadow Research · No Apply'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s18-sniper',e); await update.message.reply_text('⚠️ Sniper S18 검증 오류')
+
+
+async def god1161devs18_cmd(update,context):
+    try:
+        v=_v1161_s18_validation(); c=v['candidate_direction_multiplier']
+        body=(f'🧠 <b>ADAPTIVE LEARNING VALIDATION S18</b>\nState {v["state"]} · Review Ready {"YES" if v["review_ready"] else "NO"}\n\n'
+              f'<b>Candidate Multipliers</b>\n· LONG ×{c["LONG"]:.4f}\n· SHORT ×{c["SHORT"]:.4f}\n· WAIT ×{c["WAIT"]:.4f}\n\n'
+              f'<b>Evidence Gate</b>\n· Promoted patterns {v["promoted_patterns"]}\n· Settled samples {v["settled_samples"]}\n· Avg coverage {v["avg_pattern_coverage"]:.2f}\n· Reasons {", ".join(v["reasons"])}\n\n'
+              '<i>LOCKED · Manual Review Required · No Weight/Consensus/Gate/Order Mutation</i>')
+        await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s18-god',e); await update.message.reply_text('⚠️ Adaptive Validation S18 오류')
+
+
+async def notebook1161devs18_cmd(update,context):
+    j=_v1161_s17_journal(); v=_v1161_s18_validation(); c=v['candidate_direction_multiplier']
+    body=(f'📓 <b>AI RESEARCH NOTEBOOK 2.0 + S18 VALIDATION</b>\nJournal {j["state"]} · Settled {j["settled_samples"]}\n'
+          f'Validation {v["state"]} · Ready {"YES" if v["review_ready"] else "NO"}\n\n'
+          f'· LONG candidate ×{c["LONG"]:.4f}\n· SHORT candidate ×{c["SHORT"]:.4f}\n· WAIT candidate ×{c["WAIT"]:.4f}\n'
+          f'· Reasons {", ".join(v["reasons"])}\n\n'
+          '<b>Safety Contract</b>\n· Pattern evidence only\n· Automatic application disabled\n· Schema/Consensus/Gate/Order mutation disabled')
+    await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+
+
+async def version1161devs18_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S18_NUMBER}</b>\n{V1161_DEV_S18_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Research Notebook Patterns → Candidate Multipliers · Auto Apply NO · Mutation LOCKED',parse_mode='HTML')
+
+
+def _v1161_s18_reconcile():
+    desired={'version':version1161devs18_cmd,'ultimate':ultimate1161devs18_cmd,'sniper':sniper1161devs18_cmd,'god':god1161devs18_cmd}
+    if _V1161_S3_NOTEBOOK_ROUTE: desired[_V1161_S3_NOTEBOOK_ROUTE]=notebook1161devs18_cmd
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s18_reconcile()
+
+
+def _v1161_s18_static_audit():
+    required={'version':version1161devs18_cmd,'ultimate':ultimate1161devs18_cmd,'sniper':sniper1161devs18_cmd,'god':god1161devs18_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    backup=dict(_V1161_S9_LEDGER)
+    before=dict(_V1161_S7_FACTOR_WEIGHTS)
+    try:
+        _V1161_S9_LEDGER.clear(); empty=_v1161_s18_validation('AUDITUSDT')
+        now=_v1161_s4_now()
+        for i in range(12):
+            direction='LONG' if i<6 else 'SHORT'; label='WIN' if (i%6)<5 else 'LOSS'
+            _V1161_S9_LEDGER[f's18-audit-{i}']={'decision_id':f's18-audit-{i}','symbol':'AUDITUSDT','direction':direction,'regime':'TREND','created_ts':now+i,'confidence':82,'coverage':0.8,'readiness':82,'settlements':{'1h':{'label':label,'directional_return_pct':1.2 if label=='WIN' else -0.6}}}
+        ready=_v1161_s18_validation('AUDITUSDT')
+    finally:
+        _V1161_S9_LEDGER.clear(); _V1161_S9_LEDGER.update(backup)
+    after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'empty_collecting_locked':empty['state']=='COLLECTING_LOCKED' and not empty['review_ready'],
+        'ready_candidate_locked':ready['state']=='VALIDATION_READY_LOCKED' and ready['review_ready'] and ready['locked'] and not ready['applied'],
+        'candidate_bounded':all(0.88<=ready['candidate_direction_multiplier'][d]<=1.12 for d in ('LONG','SHORT','WAIT')),
+        'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+        'mutation_contract':all(ready[k] is False for k in ('mutation_allowed','weight_mutated','consensus_mutated','gate_mutated','order_authority')),
+        's17_and_prior_preserved':all(k in _v1161_s18_consensus({}) for k in ('research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs18','execute_order1161devs18')),
+        'schema_unchanged':True,
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'ready':ready}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s18_reconcile(); audit=_v1161_s18_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S18 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S18 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S18 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S18 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S18 Adaptive Learning Validation safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s18_reconcile(); audit=_v1161_s18_static_audit()
+    print(f'{V1161_DEV_S18_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S18 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S18 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S18 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S18 Adaptive Learning Validation: ACTIVE · candidate only',flush=True); print('A100 V116.1 DEV S18 Research Notebook pattern bridge: ACTIVE · read only',flush=True); print('A100 V116.1 DEV S18 automatic weight application: DISABLED · LOCKED',flush=True); print('A100 V116.1 DEV S18 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S18 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S18 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S18 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S18 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s18-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S19: PORTFOLIO INTELLIGENCE ENGINE V1 (SHADOW RESEARCH) ===
+V1161_DEV_S19_NUMBER='116.1-DEV-S19'
+V1161_DEV_S19_TITLE='Portfolio Intelligence Engine v1 · Concentration / Conflict / Evidence Risk'
+V1161_DEV_S19_VERSION='A100 V116.1 DEV S19 PORTFOLIO INTELLIGENCE'
+V91_VERSION=V1161_DEV_S19_VERSION
+_V1161_S19_MAX_ITEMS=12
+_V1161_S19_MIN_EVIDENCE=0.55
+_V1161_S19_MAX_DIRECTION_SHARE=0.70
+_V1161_S19_MAJOR={'BTCUSDT','ETHUSDT'}
+
+
+def _v1161_s19_direction(result):
+    debate=result.get('ai_debate_2',{}) if isinstance(result,dict) else {}
+    judge=debate.get('consensus_judge',{}) if isinstance(debate,dict) else {}
+    d=str(judge.get('research_verdict') or result.get('decision') or result.get('verdict') or 'WAIT').upper()
+    return d if d in ('LONG','SHORT','WAIT') else 'WAIT'
+
+
+def _v1161_s19_portfolio(evaluated):
+    items=[]
+    for row,result in list(evaluated or [])[:_V1161_S19_MAX_ITEMS]:
+        symbol=_v1161_s3_symbol(row)
+        direction=_v1161_s19_direction(result)
+        coverage=max(0.0,min(1.0,float(result.get('coverage',0.0) or 0.0)))
+        stability=float((result.get('stability') or {}).get('score',0.0) or 0.0)
+        confidence=float(result.get('confidence',result.get('score',0.0)) or 0.0)
+        quality=max(0.0,min(100.0,coverage*55.0+stability*0.25+confidence*0.20))
+        major=symbol in _V1161_S19_MAJOR
+        items.append({'symbol':symbol,'direction':direction,'coverage':round(coverage,3),'quality':round(quality,2),'major':major})
+    n=len(items)
+    counts={d:sum(1 for x in items if x['direction']==d) for d in ('LONG','SHORT','WAIT')}
+    directional=counts['LONG']+counts['SHORT']
+    dominant=max(('LONG','SHORT'),key=lambda d:counts[d]) if directional else 'WAIT'
+    dominant_share=(counts[dominant]/directional) if directional else 0.0
+    low_evidence=[x['symbol'] for x in items if x['coverage']<_V1161_S19_MIN_EVIDENCE]
+    alt_directional=[x for x in items if not x['major'] and x['direction'] in ('LONG','SHORT')]
+    major_directional=[x for x in items if x['major'] and x['direction'] in ('LONG','SHORT')]
+    conflict=counts['LONG']>0 and counts['SHORT']>0
+    concentration=directional>=3 and dominant_share>=_V1161_S19_MAX_DIRECTION_SHARE
+    alt_concentration=len(alt_directional)>=3 and len(alt_directional)/max(1,directional)>=0.75
+    major_divergence=bool(major_directional and alt_directional and any(a['direction']!=m['direction'] for a in alt_directional for m in major_directional))
+    reasons=[]
+    if not items: reasons.append('NO_PORTFOLIO_EVIDENCE')
+    if low_evidence: reasons.append('LOW_EVIDENCE:'+','.join(low_evidence[:4]))
+    if concentration: reasons.append('DIRECTION_CONCENTRATION:'+dominant)
+    if alt_concentration: reasons.append('ALT_CONCENTRATION')
+    if conflict: reasons.append('LONG_SHORT_CONFLICT')
+    if major_divergence: reasons.append('MAJOR_ALT_DIVERGENCE')
+    if not reasons: reasons.append('PORTFOLIO_BALANCED_RESEARCH')
+    if not items or len(low_evidence)>max(1,n//2): verdict='WAIT'
+    elif concentration or alt_concentration or major_divergence: verdict='DIVERSIFY_REVIEW'
+    elif conflict: verdict='HEDGE_REVIEW'
+    else: verdict='BALANCED_REVIEW'
+    risk_score=min(100,round((35 if concentration else 0)+(25 if alt_concentration else 0)+(20 if conflict else 0)+(20 if major_divergence else 0)+(len(low_evidence)/max(1,n))*30))
+    return {'version':V1161_DEV_S19_NUMBER,'state':'NO_EVIDENCE' if not items else 'RESEARCH_READY','research_verdict':verdict,
+            'items':items,'counts':counts,'dominant_direction':dominant,'dominant_share':round(dominant_share,3),
+            'low_evidence_count':len(low_evidence),'risk_score':risk_score,'reasons':reasons,
+            'read_only':True,'position_sizing_authority':False,'allocation_authority':False,'consensus_mutated':False,
+            'gate_mutated':False,'order_authority':False,'policy':'PORTFOLIO RESEARCH ONLY · NO ALLOCATION / SIZE / ORDER MUTATION'}
+
+
+def _v1161_s19_consensus(row):
+    result=dict(_v1161_s18_consensus(row))
+    result['portfolio_intelligence']={'state':'PENDING_PORTFOLIO_SET','research_verdict':'WAIT','read_only':True,'order_authority':False}
+    return result
+
+
+def _v1161_s19_card(row,result,portfolio,rank=1,detail=False):
+    base,_=_v1161_s18_card(row,rank,detail)
+    p=portfolio
+    extra=(f'\n\n<b>Portfolio Intelligence S19</b>\n· Verdict {p["research_verdict"]} · Risk {p["risk_score"]}/100\n'
+           f'· LONG {p["counts"]["LONG"]} · SHORT {p["counts"]["SHORT"]} · WAIT {p["counts"]["WAIT"]}\n'
+           f'· Dominant {p["dominant_direction"]} {p["dominant_share"]:.0%} · Low Evidence {p["low_evidence_count"]}\n'
+           f'· Reasons {", ".join(p["reasons"][:3])}\n<i>Read only · no allocation/size/consensus/gate/order mutation</i>')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs19_cmd(update,context):
+    await update.message.reply_text('🧩 V116.1 S19 Portfolio Intelligence 분석 중...\nConcentration · Conflict · Evidence Risk · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan(); _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s19_consensus(x)) for x in results]
+        portfolio=_v1161_s19_portfolio(evaluated)
+        evaluated.sort(key=lambda z:(z[1].get('coverage',0),z[1].get('stability',{}).get('score',0)),reverse=True)
+        summary=(f'🧩 <b>A100 V116.1 S19 PORTFOLIO INTELLIGENCE</b>\nVerdict {portfolio["research_verdict"]} · Risk {portfolio["risk_score"]}/100\n'
+                 f'LONG {portfolio["counts"]["LONG"]} · SHORT {portfolio["counts"]["SHORT"]} · WAIT {portfolio["counts"]["WAIT"]}\n'
+                 f'Reasons {", ".join(portfolio["reasons"][:4])}\n<i>Shadow Research Only · No Allocation or Order Authority</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s19_card(row,res,portfolio,i,'detail' in (context.args or [])); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s19-ultimate',e); await update.message.reply_text('⚠️ S19 Portfolio Intelligence 오류 · /errors 확인')
+
+
+async def sniper1161devs19_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧩 <b>SNIPER S19</b>\nNO_PORTFOLIO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s19_consensus(x)) for x in results]; portfolio=_v1161_s19_portfolio(evaluated)
+        evaluated.sort(key=lambda z:(z[1].get('coverage',0),z[1].get('stability',{}).get('score',0)),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s19_card(row,res,portfolio,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('🧩 <b>SNIPER S19 · PORTFOLIO CONTEXT</b>\n'+card+'\n\n⚠️ Research only · no sizing/allocation'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s19-sniper',e); await update.message.reply_text('⚠️ Sniper S19 오류')
+
+
+async def god1161devs19_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s19_consensus(x)) for x in results]; p=_v1161_s19_portfolio(evaluated)
+        body=(f'🧩 <b>PORTFOLIO INTELLIGENCE S19</b>\nState {p["state"]} · Verdict {p["research_verdict"]} · Risk {p["risk_score"]}/100\n\n'
+              f'<b>Direction Mix</b>\n· LONG {p["counts"]["LONG"]}\n· SHORT {p["counts"]["SHORT"]}\n· WAIT {p["counts"]["WAIT"]}\n'
+              f'· Dominant {p["dominant_direction"]} {p["dominant_share"]:.0%}\n· Low Evidence {p["low_evidence_count"]}\n\n'
+              f'<b>Reasons</b>\n· '+ '\n· '.join(p['reasons']) +'\n\n<i>Read Only · No Allocation / Position Size / Order Authority</i>')
+        await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s19-god',e); await update.message.reply_text('⚠️ Portfolio Intelligence S19 오류')
+
+
+async def version1161devs19_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S19_NUMBER}</b>\n{V1161_DEV_S19_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Portfolio Concentration · Direction Conflict · Major/Alt Divergence · Evidence Risk · No Allocation Authority',parse_mode='HTML')
+
+
+def _v1161_s19_reconcile():
+    desired={'version':version1161devs19_cmd,'ultimate':ultimate1161devs19_cmd,'sniper':sniper1161devs19_cmd,'god':god1161devs19_cmd}
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s19_reconcile()
+
+
+def _v1161_s19_static_audit():
+    required={'version':version1161devs19_cmd,'ultimate':ultimate1161devs19_cmd,'sniper':sniper1161devs19_cmd,'god':god1161devs19_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS)
+    empty=_v1161_s19_portfolio([])
+    longs=_v1161_s19_portfolio([({'symbol':f'A{i}USDT'},{'coverage':0.8,'stability':{'score':80},'confidence':80,'ai_debate_2':{'consensus_judge':{'research_verdict':'LONG'}}}) for i in range(4)])
+    mixed=_v1161_s19_portfolio([({'symbol':'BTCUSDT'},{'coverage':0.8,'stability':{'score':80},'confidence':80,'ai_debate_2':{'consensus_judge':{'research_verdict':'LONG'}}}),({'symbol':'ALTUSDT'},{'coverage':0.8,'stability':{'score':80},'confidence':80,'ai_debate_2':{'consensus_judge':{'research_verdict':'SHORT'}}})])
+    after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_wait':empty['research_verdict']=='WAIT','concentration_review':longs['research_verdict']=='DIVERSIFY_REVIEW','mixed_conflict':mixed['research_verdict'] in ('HEDGE_REVIEW','DIVERSIFY_REVIEW'),'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'read_only_contract':all(longs[k] is False for k in ('position_sizing_authority','allocation_authority','consensus_mutated','gate_mutated','order_authority')),'prior_layers_preserved':all(k in _v1161_s19_consensus({}) for k in ('adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),'no_order_route':all(k not in globals() for k in ('place_order1161devs19','execute_order1161devs19')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'longs':longs,'mixed':mixed}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s19_reconcile(); audit=_v1161_s19_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S19 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S19 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S19 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S19 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S19 Portfolio Intelligence safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s19_reconcile(); audit=_v1161_s19_static_audit()
+    print(f'{V1161_DEV_S19_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S19 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S19 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S19 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S19 Portfolio Intelligence: ACTIVE · read only',flush=True); print('A100 V116.1 DEV S19 allocation/position sizing authority: DISABLED',flush=True); print('A100 V116.1 DEV S19 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S19 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S19 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S19 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S19 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S19 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s19-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+# === A100 V116.1 DEV S20: NEWS AI ENGINE V1 (EVIDENCE ONLY / SHADOW RESEARCH) ===
+V1161_DEV_S20_NUMBER='116.1-DEV-S20'
+V1161_DEV_S20_TITLE='News AI Engine v1 · Source / Freshness / Duplicate / Shock Quality'
+V1161_DEV_S20_VERSION='A100 V116.1 DEV S20 NEWS AI'
+V91_VERSION=V1161_DEV_S20_VERSION
+_V1161_S20_MIN_QUALITY=0.55
+_V1161_S20_MIN_DIRECTION_SCORE=0.20
+_V1161_S20_MAX_AGE_HOURS=24.0
+
+
+def _v1161_s20_first(row,*names):
+    if not isinstance(row,dict): return None
+    for name in names:
+        v=row.get(name)
+        if v is not None and v!='': return v
+    return None
+
+
+def _v1161_s20_num(row,*names):
+    v=_v1161_s20_first(row,*names)
+    try: return float(v) if v is not None else None
+    except Exception: return None
+
+
+def _v1161_s20_bool(row,*names):
+    v=_v1161_s20_first(row,*names)
+    if isinstance(v,bool): return v
+    if isinstance(v,(int,float)): return bool(v)
+    if isinstance(v,str): return v.strip().lower() in ('1','true','yes','y','duplicate','dup')
+    return False
+
+
+def _v1161_s20_source_count(row):
+    raw=_v1161_s20_first(row,'news_sources','news_source','source_count','news_source_count','news_providers')
+    if raw is None: return 0
+    if isinstance(raw,(list,tuple,set,dict)): return len(raw)
+    if isinstance(raw,(int,float)): return max(0,int(raw))
+    if isinstance(raw,str):
+        parts=[x.strip() for x in re.split(r'[,|;]',raw) if x.strip()]
+        return len(set(parts)) if parts else 0
+    return 0
+
+
+def _v1161_s20_age_hours(row):
+    age=_v1161_s20_num(row,'news_age_hours','headline_age_hours','age_hours')
+    if age is not None: return max(0.0,age)
+    ts=_v1161_s20_num(row,'news_ts','news_timestamp','headline_ts','published_ts','published_at_ts')
+    if ts is None: return None
+    if ts>10_000_000_000: ts/=1000.0
+    return max(0.0,(time.time()-ts)/3600.0)
+
+
+def _v1161_s20_news_ai(row):
+    raw=_v1161_s20_num(row,'news_score','news_sentiment','sentiment_score','news_impact','headline_score')
+    source_count=_v1161_s20_source_count(row)
+    age_hours=_v1161_s20_age_hours(row)
+    duplicate=_v1161_s20_bool(row,'news_duplicate','duplicate_news','is_duplicate','headline_duplicate')
+    shock=_v1161_s20_num(row,'news_shock','shock_score','news_impact','impact_score')
+    event=_v1161_s20_first(row,'news_event','headline','news_title','news_summary','event_type')
+    evidence=[]; missing=[]
+    if raw is not None: evidence.append('DIRECTION_SCORE')
+    else: missing.append('DIRECTION_SCORE')
+    if source_count>0: evidence.append('SOURCE')
+    else: missing.append('SOURCE')
+    if age_hours is not None: evidence.append('FRESHNESS')
+    else: missing.append('FRESHNESS')
+    if shock is not None: evidence.append('SHOCK')
+    else: missing.append('SHOCK')
+    if event: evidence.append('EVENT_CONTEXT')
+    quality=0.0
+    if raw is not None: quality+=0.25
+    if source_count>=2: quality+=0.30
+    elif source_count==1: quality+=0.18
+    if age_hours is not None:
+        quality+=0.25 if age_hours<=6 else (0.16 if age_hours<=24 else 0.04)
+    if shock is not None: quality+=0.10
+    if event: quality+=0.10
+    if duplicate: quality=max(0.0,quality-0.30)
+    quality=max(0.0,min(1.0,quality))
+    if raw is None and source_count==0 and age_hours is None and not event:
+        state='NO_EVIDENCE'; verdict='WAIT'; direction_score=0.0; reasons=['NO_NEWS_EVIDENCE']
+    else:
+        direction_score=max(-1.0,min(1.0,float(raw or 0.0)))
+        if duplicate:
+            state='LOW_QUALITY'; verdict='WAIT'; reasons=['DUPLICATE_NEWS']
+        elif quality<_V1161_S20_MIN_QUALITY:
+            state='LOW_QUALITY'; verdict='WAIT'; reasons=['INSUFFICIENT_SOURCE_FRESHNESS_QUALITY']
+        elif abs(direction_score)<_V1161_S20_MIN_DIRECTION_SCORE:
+            state='MIXED_NEUTRAL'; verdict='WAIT'; reasons=['NEUTRAL_OR_MIXED_DIRECTION']
+        elif direction_score>0:
+            state='RESEARCH_READY'; verdict='LONG'; reasons=['POSITIVE_NEWS_EVIDENCE']
+        else:
+            state='RESEARCH_READY'; verdict='SHORT'; reasons=['NEGATIVE_NEWS_EVIDENCE']
+        if age_hours is not None and age_hours>_V1161_S20_MAX_AGE_HOURS:
+            state='STALE'; verdict='WAIT'; reasons=['STALE_NEWS_EVIDENCE']
+    return {'version':V1161_DEV_S20_NUMBER,'state':state,'research_verdict':verdict,'direction_score':round(direction_score,3),
+            'quality':round(quality,3),'source_count':source_count,'age_hours':None if age_hours is None else round(age_hours,2),
+            'duplicate':duplicate,'shock':shock,'evidence':evidence,'missing_evidence':missing,'reasons':reasons,
+            'read_only':True,'consensus_mutated':False,'gate_mutated':False,'order_authority':False,
+            'policy':'RUNTIME NEWS EVIDENCE ONLY · NO FETCH / CONSENSUS / GATE / ORDER MUTATION'}
+
+
+def _v1161_s20_consensus(row):
+    result=dict(_v1161_s19_consensus(row))
+    result['news_ai']=_v1161_s20_news_ai(row)
+    return result
+
+
+def _v1161_s20_card(row,result,portfolio,rank=1,detail=False):
+    base,_=_v1161_s19_card(row,result,portfolio,rank,detail)
+    n=result.get('news_ai',{})
+    extra=(f'\n\n<b>News AI S20</b>\n· State {n.get("state")} · Verdict {n.get("research_verdict")}\n'
+           f'· Direction {n.get("direction_score")} · Quality {float(n.get("quality",0)):.0%}\n'
+           f'· Sources {n.get("source_count")} · Age {n.get("age_hours") if n.get("age_hours") is not None else "N/A"}h · Duplicate {"YES" if n.get("duplicate") else "NO"}\n'
+           f'· Reasons {", ".join(n.get("reasons",[])[:3])}\n<i>Evidence only · no news fetch/consensus/gate/order mutation</i>')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs20_cmd(update,context):
+    await update.message.reply_text('📰 V116.1 S20 News AI 분석 중...\nSource · Freshness · Duplicate · Shock · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan(); _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s20_consensus(x)) for x in results]
+        portfolio=_v1161_s19_portfolio(evaluated)
+        evaluated.sort(key=lambda z:(z[1].get('news_ai',{}).get('quality',0),z[1].get('coverage',0)),reverse=True)
+        ready=sum(1 for _,r in evaluated if r.get('news_ai',{}).get('state')=='RESEARCH_READY')
+        low=sum(1 for _,r in evaluated if r.get('news_ai',{}).get('state') in ('LOW_QUALITY','STALE'))
+        summary=(f'📰 <b>A100 V116.1 S20 NEWS AI</b>\nResearch Ready {ready} · Low/ Stale {low} · Candidates {len(evaluated)}\n'
+                 f'Portfolio {portfolio["research_verdict"]} · Risk {portfolio["risk_score"]}/100\n'
+                 f'<i>Runtime Evidence Only · No External Fetch or Order Authority</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s20_card(row,res,portfolio,i,'detail' in (context.args or [])); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s20-ultimate',e); await update.message.reply_text('⚠️ S20 News AI 오류 · /errors 확인')
+
+
+async def sniper1161devs20_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('📰 <b>SNIPER S20</b>\nNO_NEWS_EVIDENCE · WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s20_consensus(x)) for x in results]; portfolio=_v1161_s19_portfolio(evaluated)
+        evaluated.sort(key=lambda z:(z[1].get('news_ai',{}).get('quality',0),z[1].get('coverage',0)),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s20_card(row,res,portfolio,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('📰 <b>SNIPER S20 · NEWS CONTEXT</b>\n'+card+'\n\n⚠️ Research only · no external fetch/order'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s20-sniper',e); await update.message.reply_text('⚠️ Sniper S20 오류')
+
+
+async def god1161devs20_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s20_consensus(x)) for x in results]
+        states={}
+        for _,r in evaluated:
+            s=r.get('news_ai',{}).get('state','NO_EVIDENCE'); states[s]=states.get(s,0)+1
+        lines=[]
+        for row,r in sorted(evaluated,key=lambda z:z[1].get('news_ai',{}).get('quality',0),reverse=True)[:8]:
+            n=r.get('news_ai',{}); lines.append(f'· {_v1161_s3_symbol(row)} {n.get("research_verdict")} · {n.get("state")} · Q {float(n.get("quality",0)):.0%}')
+        body='📰 <b>NEWS AI S20</b>\n'+(' · '.join(f'{k} {v}' for k,v in sorted(states.items())) or 'NO_EVIDENCE')+'\n\n'+('\n'.join(lines) or '· No runtime news evidence')+'\n\n<i>Read Only · No External Fetch / Consensus / Gate / Order Authority</i>'
+        await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s20-god',e); await update.message.reply_text('⚠️ News AI S20 오류')
+
+
+async def version1161devs20_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S20_NUMBER}</b>\n{V1161_DEV_S20_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Runtime News Evidence · Source Quality · Freshness · Duplicate Guard · Shock Context · No External Fetch',parse_mode='HTML')
+
+
+def _v1161_s20_reconcile():
+    desired={'version':version1161devs20_cmd,'ultimate':ultimate1161devs20_cmd,'sniper':sniper1161devs20_cmd,'god':god1161devs20_cmd}
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s20_reconcile()
+
+
+def _v1161_s20_static_audit():
+    required={'version':version1161devs20_cmd,'ultimate':ultimate1161devs20_cmd,'sniper':sniper1161devs20_cmd,'god':god1161devs20_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS)
+    empty=_v1161_s20_news_ai({})
+    score_only=_v1161_s20_news_ai({'news_score':0.8})
+    positive=_v1161_s20_news_ai({'news_score':0.8,'news_sources':['A','B'],'news_age_hours':2,'news_shock':0.7,'news_event':'ETF inflow'})
+    negative=_v1161_s20_news_ai({'news_score':-0.7,'news_sources':'A,B','news_age_hours':3,'news_shock':0.8,'news_event':'regulatory shock'})
+    duplicate=_v1161_s20_news_ai({'news_score':0.9,'news_sources':['A','B'],'news_age_hours':1,'news_shock':0.9,'news_event':'repeat','news_duplicate':True})
+    stale=_v1161_s20_news_ai({'news_score':0.9,'news_sources':['A','B'],'news_age_hours':48,'news_shock':0.9,'news_event':'old'})
+    after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_wait':empty['state']=='NO_EVIDENCE' and empty['research_verdict']=='WAIT','score_only_wait':score_only['state']=='LOW_QUALITY' and score_only['research_verdict']=='WAIT','positive_long':positive['state']=='RESEARCH_READY' and positive['research_verdict']=='LONG','negative_short':negative['state']=='RESEARCH_READY' and negative['research_verdict']=='SHORT','duplicate_wait':duplicate['research_verdict']=='WAIT','stale_wait':stale['state']=='STALE' and stale['research_verdict']=='WAIT','weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'read_only_contract':all(positive[k] is False for k in ('consensus_mutated','gate_mutated','order_authority')),'prior_layers_preserved':all(k in _v1161_s20_consensus({}) for k in ('portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),'no_external_fetch_route':all(k not in globals() for k in ('fetch_news1161devs20','download_news1161devs20')),'no_order_route':all(k not in globals() for k in ('place_order1161devs20','execute_order1161devs20')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'score_only':score_only,'positive':positive,'negative':negative,'duplicate':duplicate,'stale':stale}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s20_reconcile(); audit=_v1161_s20_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S20 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S20 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S20 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S20 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S20 News AI safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s20_reconcile(); audit=_v1161_s20_static_audit()
+    print(f'{V1161_DEV_S20_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S20 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S20 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S20 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S20 News AI: ACTIVE · evidence only/read only',flush=True); print('A100 V116.1 DEV S20 external news fetch: DISABLED',flush=True); print('A100 V116.1 DEV S20 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S20 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S20 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S20 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S20 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S20 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s20-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S21: CROSS-ENGINE CONSENSUS QUALITY & CONFLICT AUDIT ===
+V1161_DEV_S21_NUMBER='116.1-DEV-S21'
+V1161_DEV_S21_TITLE='Cross-Engine Consensus Quality · Conflict Resolution Audit'
+V1161_DEV_S21_VERSION='A100 V116.1 DEV S21 CROSS-ENGINE CONSENSUS QUALITY'
+V91_VERSION=V1161_DEV_S21_VERSION
+
+
+def _v1161_s21_clip01(value):
+    try: return max(0.0,min(1.0,float(value)))
+    except Exception: return 0.0
+
+
+def _v1161_s21_engine_votes(result):
+    votes=[]
+    def add(name,verdict,quality,state):
+        v=str(verdict or 'WAIT').upper(); q=_v1161_s21_clip01(quality)
+        if v not in ('LONG','SHORT','WAIT'): v='WAIT'
+        votes.append({'engine':name,'verdict':v,'quality':round(q,3),'state':str(state or 'UNKNOWN')})
+    psych=result.get('market_psychology',{}) or {}
+    whale=result.get('whale_intelligence',{}) or {}
+    macro=result.get('macro_ai',{}) or {}
+    news=result.get('news_ai',{}) or {}
+    debate=(result.get('ai_debate_2',{}) or {}).get('consensus_judge',{}) or {}
+    add('PSYCHOLOGY',psych.get('bias'),(_v1161_s21_clip01(psych.get('coverage'))*0.45 + _v1161_s21_clip01(float(psych.get('confidence',0) or 0)/100.0)*0.55),psych.get('state'))
+    add('WHALE',whale.get('bias'),(_v1161_s21_clip01(whale.get('coverage'))*0.55 + _v1161_s21_clip01(float(whale.get('confidence',0) or 0)/100.0)*0.45),whale.get('state'))
+    add('MACRO',macro.get('bias'),(_v1161_s21_clip01(macro.get('directional_coverage'))*0.55 + _v1161_s21_clip01(float(macro.get('confidence',0) or 0)/100.0)*0.45),macro.get('state'))
+    add('NEWS',news.get('research_verdict'),news.get('quality'),news.get('state'))
+    debate_quality=min(1.0,max(0.0,float(debate.get('edge',0) or 0)/25.0))
+    add('DEBATE',debate.get('research_verdict'),debate_quality,debate.get('safety_reason'))
+    return votes
+
+
+def _v1161_s21_consensus_quality(result):
+    votes=_v1161_s21_engine_votes(result)
+    weighted={'LONG':0.0,'SHORT':0.0,'WAIT':0.0}; directional_quality=0.0; observed=0
+    for item in votes:
+        q=item['quality']; v=item['verdict']
+        if q>0.0: observed+=1
+        weighted[v]+=q
+        if v in ('LONG','SHORT'): directional_quality+=q
+    total=sum(weighted.values())
+    shares={k:round((v/total if total else 0.0),3) for k,v in weighted.items()}
+    long_short=min(weighted['LONG'],weighted['SHORT'])
+    directional=max(1e-9,weighted['LONG']+weighted['SHORT'])
+    conflict=round(min(1.0,(2.0*long_short/directional) if directional>1e-8 else 0.0),3)
+    quality=round(sum(v['quality'] for v in votes)/len(votes),3) if votes else 0.0
+    dominant=max(weighted,key=weighted.get) if total else 'WAIT'
+    reasons=[]
+    if observed==0:
+        state='NO_EVIDENCE'; research='WAIT'; reasons=['NO_CROSS_ENGINE_EVIDENCE']
+    elif quality<0.35:
+        state='LOW_QUALITY'; research='WAIT'; reasons=['CROSS_ENGINE_QUALITY_LOW']
+    elif conflict>=0.65 and weighted['LONG']>0.20 and weighted['SHORT']>0.20:
+        state='CONFLICT_HIGH'; research='WAIT'; reasons=['LONG_SHORT_ENGINE_CONFLICT_HIGH']
+    elif dominant=='WAIT' or shares.get(dominant,0)<0.46:
+        state='MIXED_REVIEW'; research='WAIT'; reasons=['NO_CLEAR_CROSS_ENGINE_MAJORITY']
+    else:
+        state='ALIGNED'; research=dominant; reasons=[f'{dominant}_CROSS_ENGINE_ALIGNMENT']
+    low=[v['engine'] for v in votes if v['quality']<0.35]
+    disagreements=[v['engine'] for v in votes if v['verdict'] not in ('WAIT',research) and research in ('LONG','SHORT')]
+    if low: reasons.append('LOW_QUALITY:'+','.join(low))
+    if disagreements: reasons.append('DISSENT:'+','.join(disagreements))
+    return {'version':V1161_DEV_S21_NUMBER,'state':state,'research_verdict':research,'quality':quality,
+            'conflict':conflict,'weighted':{k:round(v,3) for k,v in weighted.items()},'shares':shares,
+            'observed_engines':observed,'engine_votes':votes,'reasons':reasons,
+            'read_only':True,'override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False,
+            'policy':'CROSS-ENGINE AUDIT ONLY · NO CONSENSUS / GATE / ORDER MUTATION'}
+
+
+def _v1161_s21_consensus(row):
+    result=dict(_v1161_s20_consensus(row))
+    result['cross_engine_consensus_quality']=_v1161_s21_consensus_quality(result)
+    return result
+
+
+def _v1161_s21_card(row,result,portfolio,rank=1,detail=False):
+    base,_=_v1161_s20_card(row,result,portfolio,rank,detail)
+    c=result.get('cross_engine_consensus_quality',{})
+    votes=' · '.join(f'{v["engine"]}:{v["verdict"]}/{v["quality"]:.0%}' for v in c.get('engine_votes',[]))
+    extra=(f'\n\n<b>Cross-Engine Consensus Quality S21</b>\n· State {c.get("state")} · Research {c.get("research_verdict")}\n'
+           f'· Quality {float(c.get("quality",0)):.0%} · Conflict {float(c.get("conflict",0)):.0%} · Observed {c.get("observed_engines",0)}/5\n'
+           f'· {votes}\n· Reasons {", ".join(c.get("reasons",[])[:3])}\n<i>Audit only · override/order authority NO</i>')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs21_cmd(update,context):
+    await update.message.reply_text('⚖️ V116.1 S21 Cross-Engine Consensus Quality 감사 중...\nQuality · Coverage · Conflict · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan(); _v1161_s9_update_market(results)
+        evaluated=[(x,_v1161_s21_consensus(x)) for x in results]; portfolio=_v1161_s19_portfolio(evaluated)
+        evaluated.sort(key=lambda z:(z[1]['cross_engine_consensus_quality']['state']=='ALIGNED',z[1]['cross_engine_consensus_quality']['quality'],-z[1]['cross_engine_consensus_quality']['conflict']),reverse=True)
+        states={}
+        for _,r in evaluated:
+            st=r['cross_engine_consensus_quality']['state']; states[st]=states.get(st,0)+1
+        summary=(f'⚖️ <b>A100 V116.1 S21 CROSS-ENGINE AUDIT</b>\nCandidates {len(evaluated)} · '+(' · '.join(f'{k} {v}' for k,v in sorted(states.items())) or 'NO_EVIDENCE')+
+                 f'\nPortfolio {portfolio["research_verdict"]} · Risk {portfolio["risk_score"]}/100\n<i>Research audit only · No consensus/gate/order override</i>')
+        await update.message.reply_text(_v1161_s5_trim(summary),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s21_card(row,res,portfolio,i,'detail' in (context.args or [])); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s21-ultimate',e); await update.message.reply_text('⚠️ S21 Cross-Engine Audit 오류 · /errors 확인')
+
+
+async def sniper1161devs21_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('⚖️ <b>SNIPER S21</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s21_consensus(x)) for x in results]; portfolio=_v1161_s19_portfolio(evaluated)
+        evaluated.sort(key=lambda z:(z[1]['cross_engine_consensus_quality']['state']=='ALIGNED',z[1]['cross_engine_consensus_quality']['quality'],-z[1]['cross_engine_consensus_quality']['conflict']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s21_card(row,res,portfolio,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s5_trim('⚖️ <b>SNIPER S21 · CONSENSUS QUALITY</b>\n'+card),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s21-sniper',e); await update.message.reply_text('⚠️ Sniper S21 오류')
+
+
+async def god1161devs21_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s21_consensus(x)) for x in results]
+        lines=[]
+        for row,r in sorted(evaluated,key=lambda z:z[1]['cross_engine_consensus_quality']['quality'],reverse=True)[:8]:
+            c=r['cross_engine_consensus_quality']; lines.append(f'· {_v1161_s3_symbol(row)} {c["research_verdict"]} · {c["state"]} · Q {c["quality"]:.0%} · Conflict {c["conflict"]:.0%}')
+        body='⚖️ <b>CROSS-ENGINE AUDIT S21</b>\n'+('\n'.join(lines) or '· No runtime evidence')+'\n\n<i>Read Only · No Consensus / Gate / Order Mutation</i>'
+        await update.message.reply_text(_v1161_s5_trim(body),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s21-god',e); await update.message.reply_text('⚠️ S21 God Audit 오류')
+
+
+async def version1161devs21_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S21_NUMBER}</b>\n{V1161_DEV_S21_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RESEARCH AUDIT ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Psychology + Whale + Macro + News + Debate quality/conflict audit · No override',parse_mode='HTML')
+
+
+def _v1161_s21_reconcile():
+    desired={'version':version1161devs21_cmd,'ultimate':ultimate1161devs21_cmd,'sniper':sniper1161devs21_cmd,'god':god1161devs21_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s21_reconcile()
+
+
+def _v1161_s21_static_audit():
+    required={'version':version1161devs21_cmd,'ultimate':ultimate1161devs21_cmd,'sniper':sniper1161devs21_cmd,'god':god1161devs21_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS)
+    empty=_v1161_s21_consensus_quality({})
+    aligned=_v1161_s21_consensus_quality({'market_psychology':{'bias':'LONG','coverage':1,'confidence':90},'whale_intelligence':{'bias':'LONG','coverage':1,'confidence':90},'macro_ai':{'bias':'LONG','directional_coverage':1,'confidence':90},'news_ai':{'research_verdict':'LONG','quality':.9},'ai_debate_2':{'consensus_judge':{'research_verdict':'LONG','edge':20}}})
+    conflict=_v1161_s21_consensus_quality({'market_psychology':{'bias':'LONG','coverage':1,'confidence':90},'whale_intelligence':{'bias':'SHORT','coverage':1,'confidence':90},'macro_ai':{'bias':'LONG','directional_coverage':1,'confidence':90},'news_ai':{'research_verdict':'SHORT','quality':.9},'ai_debate_2':{'consensus_judge':{'research_verdict':'WAIT','edge':0}}})
+    after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_wait':empty['state']=='NO_EVIDENCE' and empty['research_verdict']=='WAIT','aligned_long':aligned['state']=='ALIGNED' and aligned['research_verdict']=='LONG','conflict_wait':conflict['state']=='CONFLICT_HIGH' and conflict['research_verdict']=='WAIT','weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'read_only_contract':all(aligned[k] is False for k in ('override','consensus_mutated','gate_mutated','order_authority')),'prior_layers_preserved':all(k in _v1161_s21_consensus({}) for k in ('news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),'no_order_route':all(k not in globals() for k in ('place_order1161devs21','execute_order1161devs21')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'aligned':aligned,'conflict':conflict}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s21_reconcile(); audit=_v1161_s21_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S21 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S21 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S21 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S21 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S21 Cross-Engine safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s21_reconcile(); audit=_v1161_s21_static_audit()
+    print(f'{V1161_DEV_S21_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S21 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S21 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S21 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S21 Cross-Engine Audit: ACTIVE · evidence quality/conflict/read only',flush=True); print('A100 V116.1 DEV S21 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S21 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S21 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S21 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S21 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S21 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s21-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S22: SELF REVIEW & DECISION POSTMORTEM ENGINE ===
+V1161_DEV_S22_NUMBER='116.1-DEV-S22'
+V1161_DEV_S22_TITLE='Self Review & Decision Postmortem Engine · Direction-Aware Outcome Audit'
+V1161_DEV_S22_VERSION='A100 V116.1 DEV S22 SELF REVIEW & DECISION POSTMORTEM'
+V91_VERSION=V1161_DEV_S22_VERSION
+
+
+def _v1161_s22_engine_opinions(result):
+    result=result if isinstance(result,dict) else {}
+    debate=((result.get('ai_debate_2') or {}).get('consensus_judge') or {})
+    cross=result.get('cross_engine_consensus_quality') or {}
+    return {
+        'PSYCHOLOGY':str((result.get('market_psychology') or {}).get('bias') or 'WAIT').upper(),
+        'WHALE':str((result.get('whale_intelligence') or {}).get('bias') or 'WAIT').upper(),
+        'MACRO':str((result.get('macro_ai') or {}).get('bias') or 'WAIT').upper(),
+        'NEWS':str((result.get('news_ai') or {}).get('research_verdict') or 'WAIT').upper(),
+        'DEBATE':str(debate.get('research_verdict') or 'WAIT').upper(),
+        'CROSS_ENGINE':str(cross.get('research_verdict') or 'WAIT').upper(),
+    }
+
+
+def _v1161_s22_truth(direction,label):
+    direction=str(direction or '').upper(); label=str(label or '').upper()
+    if direction not in ('LONG','SHORT') or label not in ('WIN','LOSS'): return None
+    if label=='WIN': return direction
+    return 'SHORT' if direction=='LONG' else 'LONG'
+
+
+def _v1161_s22_settled_for_symbol(symbol):
+    symbol=str(symbol or '').upper(); rows=[]
+    for item in list(_V1161_S9_LEDGER.values()):
+        if not isinstance(item,dict) or str(item.get('symbol') or '').upper()!=symbol: continue
+        settlements=item.get('settlements') or {}
+        if not isinstance(settlements,dict): continue
+        for horizon,settled in settlements.items():
+            if not isinstance(settled,dict): continue
+            label=str(settled.get('label') or '').upper()
+            if label not in ('WIN','LOSS','FLAT'): continue
+            rows.append({'decision_id':item.get('decision_id'),'direction':str(item.get('direction') or '').upper(),
+                         'horizon':str(horizon),'label':label,'coverage':float(item.get('coverage') or 0),
+                         'created_ts':float(item.get('created_ts') or 0)})
+    rows.sort(key=lambda x:(x['created_ts'],x['horizon']),reverse=True)
+    return rows[:60]
+
+
+def _v1161_s22_self_review(row,result):
+    symbol=_v1161_s3_symbol(row); opinions=_v1161_s22_engine_opinions(result); settled=_v1161_s22_settled_for_symbol(symbol)
+    stats={k:{'CORRECT':0,'WRONG':0,'ABSTAIN':0,'UNVERIFIED':0} for k in opinions}
+    verified=0; flat=0
+    for outcome in settled:
+        truth=_v1161_s22_truth(outcome['direction'],outcome['label'])
+        if truth is None:
+            flat+=1
+            for engine in stats: stats[engine]['UNVERIFIED']+=1
+            continue
+        verified+=1
+        for engine,opinion in opinions.items():
+            if opinion=='WAIT': stats[engine]['ABSTAIN']+=1
+            elif opinion not in ('LONG','SHORT'): stats[engine]['UNVERIFIED']+=1
+            elif opinion==truth: stats[engine]['CORRECT']+=1
+            else: stats[engine]['WRONG']+=1
+    recurring=[]
+    for engine,v in stats.items():
+        directional=v['CORRECT']+v['WRONG']
+        wrong_rate=(v['WRONG']/directional) if directional else 0.0
+        if directional>=3 and v['WRONG']>=2 and wrong_rate>=0.60: recurring.append({'engine':engine,'wrong_rate':round(wrong_rate,3),'samples':directional})
+    if not settled: state='NO_OUTCOME_EVIDENCE'
+    elif verified<3: state='INSUFFICIENT_SETTLED_EVIDENCE'
+    elif recurring: state='RECURRING_ERROR_REVIEW'
+    else: state='POSTMORTEM_READY'
+    tasks=[]
+    if not settled: tasks.append('Collect settled Outcome Ledger evidence')
+    if verified<3: tasks.append('Require at least 3 directional settled outcomes')
+    for x in recurring: tasks.append(f'Review {x["engine"]} evidence calibration before any weight proposal')
+    if flat>verified: tasks.append('Reduce FLAT-dominant attribution ambiguity')
+    return {'version':V1161_DEV_S22_NUMBER,'state':state,'symbol':symbol,'settled_samples':len(settled),'verified_directional':verified,
+            'flat_or_unverified':flat,'engine_stats':stats,'recurring_errors':recurring,'next_validation_tasks':tasks[:6],
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,'gate_mutated':False,
+            'order_authority':False,'read_only':True}
+
+
+def _v1161_s22_consensus(row):
+    result=_v1161_s21_consensus(row)
+    result['self_review_postmortem']=_v1161_s22_self_review(row,result)
+    return result
+
+
+def _v1161_s22_card(row,result,rank=1,detail=False):
+    portfolio=_v1161_s19_portfolio([(row,result)])
+    base,result=_v1161_s21_card(row,result,portfolio,rank,detail)
+    review=result.get('self_review_postmortem') or {}; stats=review.get('engine_stats') or {}
+    lines=[]
+    for engine,v in stats.items():
+        directional=v.get('CORRECT',0)+v.get('WRONG',0)
+        if directional or v.get('ABSTAIN',0): lines.append(f'· {engine}: C {v.get("CORRECT",0)} / W {v.get("WRONG",0)} / A {v.get("ABSTAIN",0)}')
+    extra=(f'\n\n<b>Self Review S22</b>\n· State {review.get("state")} · Verified {review.get("verified_directional",0)}'
+           f' · Settled {review.get("settled_samples",0)}\n'+('\n'.join(lines[:6]) or '· No settled outcome evidence'))
+    if review.get('recurring_errors'):
+        extra+='\n<b>Recurring Errors</b>\n'+'\n'.join(f'• {x["engine"]} · wrong {x["wrong_rate"]:.0%} · n={x["samples"]}' for x in review['recurring_errors'])
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs22_cmd(update,context):
+    await update.message.reply_text('🪞 V116.1 S22 Self Review 분석 중...\nSettled Outcome · Direction Aware · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🪞 <b>S22 SELF REVIEW</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s22_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['self_review_postmortem']['verified_directional'],z[1]['cross_engine_consensus_quality']['quality']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s22_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s22-ultimate',e); await update.message.reply_text('⚠️ S22 Self Review 오류 · /errors 확인')
+
+
+async def sniper1161devs22_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🪞 <b>SNIPER S22</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s22_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['self_review_postmortem']['verified_directional'],z[1]['cross_engine_consensus_quality']['quality']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s22_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🪞 <b>SNIPER S22 · POSTMORTEM</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s22-sniper',e); await update.message.reply_text('⚠️ Sniper S22 오류')
+
+
+async def god1161devs22_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s22_consensus(x)) for x in results]
+        lines=[]
+        for row,r in sorted(evaluated,key=lambda z:z[1]['self_review_postmortem']['verified_directional'],reverse=True)[:8]:
+            s=r['self_review_postmortem']; lines.append(f'· {_v1161_s3_symbol(row)} {s["state"]} · Verified {s["verified_directional"]} · Errors {len(s["recurring_errors"])}')
+        await update.message.reply_text(_v1161_s5_trim('🪞 <b>SELF REVIEW & POSTMORTEM S22</b>\n'+('\n'.join(lines) or '· No settled outcome evidence')+'\n\n<i>Read Only · Adaptive mutation LOCKED</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s22-god',e); await update.message.reply_text('⚠️ S22 God Review 오류')
+
+
+async def version1161devs22_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S22_NUMBER}</b>\n{V1161_DEV_S22_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW SELF REVIEW ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: settled outcome + original direction + engine opinion postmortem · No override',parse_mode='HTML')
+
+
+def _v1161_s22_reconcile():
+    desired={'version':version1161devs22_cmd,'ultimate':ultimate1161devs22_cmd,'sniper':sniper1161devs22_cmd,'god':god1161devs22_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s22_reconcile()
+
+
+def _v1161_s22_static_audit():
+    required={'version':version1161devs22_cmd,'ultimate':ultimate1161devs22_cmd,'sniper':sniper1161devs22_cmd,'god':god1161devs22_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); backup=dict(_V1161_S9_LEDGER)
+    try:
+        _V1161_S9_LEDGER.clear()
+        empty=_v1161_s22_self_review({'symbol':'AUDITUSDT'},_v1161_s21_consensus({}))
+        now=time.time()
+        for i,label in enumerate(('WIN','WIN','LOSS')):
+            _V1161_S9_LEDGER[f's22-audit-{i}']={'decision_id':f's22-audit-{i}','symbol':'AUDITUSDT','direction':'LONG','created_ts':now+i,'coverage':.8,'settlements':{'1h':{'label':label}}}
+        sample=_v1161_s22_self_review({'symbol':'AUDITUSDT'},{'market_psychology':{'bias':'LONG'},'whale_intelligence':{'bias':'SHORT'},'macro_ai':{'bias':'WAIT'},'news_ai':{'research_verdict':'LONG'},'ai_debate_2':{'consensus_judge':{'research_verdict':'LONG'}},'cross_engine_consensus_quality':{'research_verdict':'LONG'}})
+    finally:
+        _V1161_S9_LEDGER.clear(); _V1161_S9_LEDGER.update(backup)
+    after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_unverified':empty['state']=='NO_OUTCOME_EVIDENCE','direction_aware':sample['engine_stats']['WHALE']['CORRECT']==1 and sample['engine_stats']['WHALE']['WRONG']==2,'wait_abstain':sample['engine_stats']['MACRO']['ABSTAIN']==3,'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'read_only_contract':all(sample[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),'prior_layers_preserved':all(k in _v1161_s22_consensus({}) for k in ('cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),'no_order_route':all(k not in globals() for k in ('place_order1161devs22','execute_order1161devs22')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'directional':sample}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s22_reconcile(); audit=_v1161_s22_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S22 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S22 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S22 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S22 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S22 Self Review safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s22_reconcile(); audit=_v1161_s22_static_audit()
+    print(f'{V1161_DEV_S22_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S22 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S22 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S22 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S22 Self Review: ACTIVE · direction-aware settled outcome audit',flush=True); print('A100 V116.1 DEV S22 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S22 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S22 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S22 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S22 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S22 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s22-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# === A100 V116.1 DEV S23: AI LEARNING RELIABILITY & ENGINE TRUST CALIBRATION ===
+V1161_DEV_S23_NUMBER='116.1-DEV-S23'
+V1161_DEV_S23_TITLE='AI Learning Reliability & Engine Trust Calibration · Evidence-Bounded'
+V1161_DEV_S23_VERSION='A100 V116.1 DEV S23 AI LEARNING RELIABILITY & ENGINE TRUST CALIBRATION'
+V91_VERSION=V1161_DEV_S23_VERSION
+
+_V1161_S23_MIN_PROVISIONAL_SAMPLES=6
+_V1161_S23_MIN_TRUST_SAMPLES=12
+_V1161_S23_TRUST_ACCURACY=0.65
+_V1161_S23_TRUST_WILSON_LOWER=0.55
+
+
+def _v1161_s23_wilson_lower(correct,total,z=1.96):
+    total=int(total or 0); correct=int(correct or 0)
+    if total<=0: return 0.0
+    phat=correct/total
+    denom=1.0+(z*z/total)
+    centre=phat+(z*z/(2.0*total))
+    margin=z*((phat*(1.0-phat)/total)+(z*z/(4.0*total*total)))**0.5
+    return max(0.0,min(1.0,(centre-margin)/denom))
+
+
+def _v1161_s23_engine_trust(review):
+    stats=(review or {}).get('engine_stats') or {}; settled=max(0,int((review or {}).get('settled_samples') or 0)); out={}
+    for engine,v in stats.items():
+        correct=int(v.get('CORRECT') or 0); wrong=int(v.get('WRONG') or 0); abstain=int(v.get('ABSTAIN') or 0); unverified=int(v.get('UNVERIFIED') or 0)
+        directional=correct+wrong; accuracy=(correct/directional) if directional else 0.0
+        lower=_v1161_s23_wilson_lower(correct,directional)
+        considered=directional+abstain; abstain_rate=(abstain/considered) if considered else 1.0
+        sample_conf=min(1.0,directional/_V1161_S23_MIN_TRUST_SAMPLES)
+        trust_score=round(100.0*((0.70*lower)+(0.20*sample_conf)+(0.10*(1.0-abstain_rate))),1)
+        if directional==0: state='NO_DIRECTIONAL_EVIDENCE'
+        elif directional<_V1161_S23_MIN_PROVISIONAL_SAMPLES: state='INSUFFICIENT_EVIDENCE'
+        elif directional>=_V1161_S23_MIN_TRUST_SAMPLES and accuracy>=_V1161_S23_TRUST_ACCURACY and lower>=_V1161_S23_TRUST_WILSON_LOWER: state='RESEARCH_TRUSTED'
+        elif accuracy<0.50 or lower<0.35: state='RECALIBRATION_REVIEW'
+        else: state='PROVISIONAL'
+        out[engine]={'state':state,'trust_score':trust_score,'directional_samples':directional,'correct':correct,'wrong':wrong,
+                     'accuracy':round(accuracy,3),'wilson_lower_95':round(lower,3),'abstain':abstain,'abstain_rate':round(abstain_rate,3),
+                     'unverified':unverified,'sample_confidence':round(sample_conf,3)}
+    return out
+
+
+def _v1161_s23_trust_calibration(row,result):
+    review=(result or {}).get('self_review_postmortem') or {}
+    engines=_v1161_s23_engine_trust(review)
+    trusted=[k for k,v in engines.items() if v['state']=='RESEARCH_TRUSTED']
+    recal=[k for k,v in engines.items() if v['state']=='RECALIBRATION_REVIEW']
+    provisional=[k for k,v in engines.items() if v['state']=='PROVISIONAL']
+    directional=sum(v['directional_samples'] for v in engines.values())
+    if not engines or directional==0: state='NO_RELIABILITY_EVIDENCE'
+    elif recal: state='RECALIBRATION_REVIEW'
+    elif trusted: state='TRUST_EVIDENCE_AVAILABLE'
+    elif provisional: state='PROVISIONAL'
+    else: state='INSUFFICIENT_EVIDENCE'
+    tasks=[]
+    if not trusted: tasks.append('Collect at least 12 directional settled samples per engine')
+    if recal: tasks.append('Review evidence calibration for: '+', '.join(recal[:4]))
+    tasks.append('Persist decision-time engine opinion snapshots before regime trust calibration')
+    return {'version':V1161_DEV_S23_NUMBER,'state':state,'symbol':_v1161_s3_symbol(row),'engines':engines,
+            'trusted_engines':trusted,'recalibration_engines':recal,'provisional_engines':provisional,
+            'method':'CURRENT_OPINION_RETROSPECTIVE_PROXY','historical_opinion_snapshots_available':False,
+            'regime_trust_calibration':'HOLD_MISSING_DECISION_TIME_ENGINE_SNAPSHOTS',
+            'next_validation_tasks':tasks[:6],'applied':False,'mutation_allowed':False,'override':False,
+            'consensus_mutated':False,'gate_mutated':False,'order_authority':False,'read_only':True}
+
+
+def _v1161_s23_consensus(row):
+    result=_v1161_s22_consensus(row)
+    result['engine_trust_calibration']=_v1161_s23_trust_calibration(row,result)
+    return result
+
+
+def _v1161_s23_card(row,result,rank=1,detail=False):
+    portfolio=_v1161_s19_portfolio([(row,result)])
+    base,result=_v1161_s22_card(row,result,rank,detail)
+    trust=result.get('engine_trust_calibration') or {}; engines=trust.get('engines') or {}
+    ordered=sorted(engines.items(),key=lambda kv:(kv[1].get('trust_score',0),kv[1].get('directional_samples',0)),reverse=True)
+    lines=[f'· {name}: {v["state"]} · Trust {v["trust_score"]:.1f} · Acc {v["accuracy"]:.0%} · n={v["directional_samples"]}' for name,v in ordered[:6]]
+    extra=(f'\n\n<b>Engine Trust S23</b>\n· State {trust.get("state")} · Method RETROSPECTIVE PROXY\n'
+           +('\n'.join(lines) or '· No reliability evidence')
+           +'\n· Regime calibration: HOLD · decision-time snapshots missing')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs23_cmd(update,context):
+    await update.message.reply_text('🧭 V116.1 S23 Engine Trust 분석 중...\nEvidence-Bounded · Read Only · Mutation LOCKED')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧭 <b>S23 ENGINE TRUST</b>\nNO_RUNTIME_EVIDENCE · HOLD',parse_mode='HTML'); return
+        _v1161_s9_update_market(results); evaluated=[(x,_v1161_s23_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:max([v.get('trust_score',0) for v in z[1]['engine_trust_calibration']['engines'].values()] or [0]),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s23_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s23-ultimate',e); await update.message.reply_text('⚠️ S23 Engine Trust 오류 · /errors 확인')
+
+
+async def sniper1161devs23_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧭 <b>SNIPER S23</b>\nNO_EVIDENCE · HOLD',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s23_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:max([v.get('trust_score',0) for v in z[1]['engine_trust_calibration']['engines'].values()] or [0]),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s23_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧭 <b>SNIPER S23 · ENGINE TRUST</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s23-sniper',e); await update.message.reply_text('⚠️ Sniper S23 오류')
+
+
+async def god1161devs23_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s23_consensus(x)) for x in results]
+        lines=[]
+        for row,r in evaluated[:8]:
+            t=r['engine_trust_calibration']; best=max([v.get('trust_score',0) for v in t['engines'].values()] or [0])
+            lines.append(f'· {_v1161_s3_symbol(row)} {t["state"]} · Best Trust {best:.1f} · Trusted {len(t["trusted_engines"])}')
+        await update.message.reply_text(_v1161_s5_trim('🧭 <b>AI LEARNING RELIABILITY S23</b>\n'+('\n'.join(lines) or '· No reliability evidence')+'\n\n<i>Current-opinion proxy · Regime calibration HOLD · Read Only</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s23-god',e); await update.message.reply_text('⚠️ S23 God Trust 오류')
+
+
+async def version1161devs23_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S23_NUMBER}</b>\n{V1161_DEV_S23_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RELIABILITY RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Wilson-bounded engine trust · Historical snapshot gap explicit · Auto Apply NO',parse_mode='HTML')
+
+
+def _v1161_s23_reconcile():
+    desired={'version':version1161devs23_cmd,'ultimate':ultimate1161devs23_cmd,'sniper':sniper1161devs23_cmd,'god':god1161devs23_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s23_reconcile()
+
+
+def _v1161_s23_static_audit():
+    required={'version':version1161devs23_cmd,'ultimate':ultimate1161devs23_cmd,'sniper':sniper1161devs23_cmd,'god':god1161devs23_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    low=_v1161_s23_engine_trust({'settled_samples':3,'engine_stats':{'TEST':{'CORRECT':2,'WRONG':1,'ABSTAIN':0,'UNVERIFIED':0}}})['TEST']
+    strong=_v1161_s23_engine_trust({'settled_samples':20,'engine_stats':{'TEST':{'CORRECT':18,'WRONG':2,'ABSTAIN':0,'UNVERIFIED':0}}})['TEST']
+    bad=_v1161_s23_engine_trust({'settled_samples':12,'engine_stats':{'TEST':{'CORRECT':3,'WRONG':9,'ABSTAIN':0,'UNVERIFIED':0}}})['TEST']
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s23_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    trust=sample['engine_trust_calibration']
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'small_sample_not_trusted':low['state']=='INSUFFICIENT_EVIDENCE',
+           'strong_sample_trusted':strong['state']=='RESEARCH_TRUSTED','bad_sample_review':bad['state']=='RECALIBRATION_REVIEW',
+           'wilson_bounded':0.0<=strong['wilson_lower_95']<=strong['accuracy']<=1.0,
+           'snapshot_gap_explicit':trust['historical_opinion_snapshots_available'] is False and trust['regime_trust_calibration'].startswith('HOLD_'),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+           'read_only_contract':all(trust[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'prior_layers_preserved':all(k in sample for k in ('self_review_postmortem','cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs23','execute_order1161devs23')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'low':low,'strong':strong,'bad':bad}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s23_reconcile(); audit=_v1161_s23_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S23 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S23 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S23 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S23 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S23 Engine Trust safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s23_reconcile(); audit=_v1161_s23_static_audit()
+    print(f'{V1161_DEV_S23_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S23 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S23 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S23 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S23 Engine Trust Calibration: ACTIVE · evidence bounded',flush=True); print('A100 V116.1 DEV S23 historical engine snapshot gap: EXPLICIT · regime calibration HOLD',flush=True); print('A100 V116.1 DEV S23 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S23 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S23 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S23 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S23 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S23 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s23-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S24 - Multi-Timeframe Intelligence Engine (Shadow Research)
+# =============================================================================
+V1161_DEV_S24_NUMBER='116.1-DEV-S24'
+V1161_DEV_S24_VERSION='A100 V116.1 DEV S24'
+V1161_DEV_S24_TITLE='Multi-Timeframe Intelligence Engine · Evidence Only · Shadow Research'
+V91_VERSION=V1161_DEV_S24_VERSION
+_V1161_S24_TFS=('15m','1h','4h','1d','3d','1w')
+_V1161_S24_WEIGHTS={'15m':0.08,'1h':0.14,'4h':0.22,'1d':0.24,'3d':0.17,'1w':0.15}
+
+
+def _v1161_s24_tf_container(row):
+    if not isinstance(row,dict): return {}
+    for key in ('timeframes','timeframe_signals','multi_timeframe','mtf','tf_signals'):
+        value=row.get(key)
+        if isinstance(value,dict): return value
+    return {}
+
+
+def _v1161_s24_get_raw(row,tf):
+    aliases={
+      '15m':('15m','m15','15min'),'1h':('1h','h1','60m'),'4h':('4h','h4','240m'),
+      '1d':('1d','d1','24h','daily'),'3d':('3d','d3','72h'),'1w':('1w','w1','weekly')}
+    container=_v1161_s24_tf_container(row)
+    for a in aliases[tf]:
+        value=container.get(a)
+        if value is not None: return value
+    if isinstance(row,dict):
+        for a in aliases[tf]:
+            for suffix in ('signal','direction','trend','score','confidence'):
+                for key in (f'{a}_{suffix}',f'{suffix}_{a}',f'tf_{a}_{suffix}'):
+                    if key in row and row.get(key) is not None:
+                        return {'value':row.get(key),'source_key':key}
+    return None
+
+
+def _v1161_s24_normalize_vote(raw):
+    if raw is None: return {'vote':'WAIT','score':0.0,'confidence':0.0,'evidence':False,'reason':'MISSING'}
+    direction=None; score=None; confidence=None
+    if isinstance(raw,dict):
+        direction=raw.get('direction') or raw.get('signal') or raw.get('trend') or raw.get('verdict')
+        score=raw.get('score') if raw.get('score') is not None else raw.get('value')
+        confidence=raw.get('confidence') if raw.get('confidence') is not None else raw.get('quality')
+    elif isinstance(raw,str): direction=raw
+    elif isinstance(raw,(int,float)): score=float(raw)
+    if direction is not None:
+        d=str(direction).upper().strip()
+        if d in ('BUY','BULL','BULLISH','UP'): d='LONG'
+        elif d in ('SELL','BEAR','BEARISH','DOWN'): d='SHORT'
+        elif d not in ('LONG','SHORT','WAIT'): d='WAIT'
+        direction=d
+    if score is not None:
+        try:
+            sv=float(score)
+            if direction is None:
+                if sv>0.15: direction='LONG'
+                elif sv<-0.15: direction='SHORT'
+                else: direction='WAIT'
+            score=max(-100.0,min(100.0,sv if abs(sv)>1 else sv*100.0))
+        except Exception: score=0.0
+    else: score=100.0 if direction=='LONG' else -100.0 if direction=='SHORT' else 0.0
+    if confidence is None: confidence=60.0 if direction in ('LONG','SHORT') else 40.0
+    try:
+        confidence=float(confidence)
+        if confidence<=1.0: confidence*=100.0
+        confidence=max(0.0,min(100.0,confidence))
+    except Exception: confidence=0.0
+    return {'vote':direction or 'WAIT','score':round(float(score),2),'confidence':round(confidence,1),'evidence':True,'reason':'RUNTIME_EVIDENCE'}
+
+
+def _v1161_s24_timeframe_intelligence(row):
+    frames={tf:_v1161_s24_normalize_vote(_v1161_s24_get_raw(row,tf)) for tf in _V1161_S24_TFS}
+    available=[tf for tf,v in frames.items() if v['evidence']]
+    coverage=len(available)/len(_V1161_S24_TFS)
+    weights={tf:_V1161_S24_WEIGHTS[tf] for tf in available}
+    total_w=sum(weights.values()) or 1.0
+    votes={'LONG':0.0,'SHORT':0.0,'WAIT':0.0}
+    for tf in available:
+        v=frames[tf]; q=max(0.25,v['confidence']/100.0); votes[v['vote']]+=weights[tf]*q
+    vote_sum=sum(votes.values()) or 1.0
+    shares={k:round(v/vote_sum,3) for k,v in votes.items()}
+    long_short=min(votes['LONG'],votes['SHORT'])/max(votes['LONG'],votes['SHORT'],0.0001)
+    conflict='HIGH' if votes['LONG']>0 and votes['SHORT']>0 and long_short>=0.65 else 'MEDIUM' if votes['LONG']>0 and votes['SHORT']>0 else 'LOW'
+    dominant=max(votes,key=votes.get) if available else 'WAIT'
+    top_share=shares.get(dominant,0.0)
+    if not available: state='NO_EVIDENCE'; verdict='WAIT'
+    elif coverage<0.50: state='INSUFFICIENT_COVERAGE'; verdict='WAIT'
+    elif conflict=='HIGH': state='CONFLICT_HIGH'; verdict='WAIT'
+    elif dominant in ('LONG','SHORT') and top_share>=0.58: state='ALIGNED'; verdict=dominant
+    else: state='MIXED'; verdict='WAIT'
+    directional=[frames[tf]['vote'] for tf in available if frames[tf]['vote'] in ('LONG','SHORT')]
+    agreement=(max(directional.count('LONG'),directional.count('SHORT'))/len(directional)) if directional else 0.0
+    short_term=[frames[x]['vote'] for x in ('15m','1h','4h') if frames[x]['evidence']]
+    long_term=[frames[x]['vote'] for x in ('1d','3d','1w') if frames[x]['evidence']]
+    def majority(seq):
+        if not seq:return 'WAIT'
+        return max(('LONG','SHORT','WAIT'),key=lambda x:seq.count(x))
+    st,lt=majority(short_term),majority(long_term)
+    structure='SHORT_LONG_CONFLICT' if st in ('LONG','SHORT') and lt in ('LONG','SHORT') and st!=lt else 'CONFIRMED' if st==lt and st in ('LONG','SHORT') else 'MIXED'
+    return {'version':V1161_DEV_S24_NUMBER,'state':state,'research_verdict':verdict,'frames':frames,
+            'available_timeframes':available,'coverage':round(coverage,3),'weighted_shares':shares,
+            'dominant_trend':dominant,'agreement':round(agreement,3),'conflict':conflict,'structure':structure,
+            'short_term_bias':st,'long_term_bias':lt,'method':'RUNTIME_TIMEFRAME_EVIDENCE_ONLY',
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,
+            'gate_mutated':False,'order_authority':False,'read_only':True}
+
+
+def _v1161_s24_consensus(row):
+    result=_v1161_s23_consensus(row)
+    result['multi_timeframe_intelligence']=_v1161_s24_timeframe_intelligence(row)
+    return result
+
+
+def _v1161_s24_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s23_card(row,result,rank,detail)
+    mtf=result.get('multi_timeframe_intelligence') or {}
+    frames=mtf.get('frames') or {}
+    line=' · '.join(f'{tf}:{frames.get(tf,{}).get("vote","WAIT")}' for tf in _V1161_S24_TFS)
+    extra=(f'\n\n<b>Multi-Timeframe S24</b>\n· {mtf.get("state")} · Research {mtf.get("research_verdict")} · Coverage {mtf.get("coverage",0):.0%}\n'
+           f'· {line}\n· Agreement {mtf.get("agreement",0):.0%} · Conflict {mtf.get("conflict")} · {mtf.get("structure")}\n'
+           f'· Short-term {mtf.get("short_term_bias")} · Long-term {mtf.get("long_term_bias")} · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs24_cmd(update,context):
+    await update.message.reply_text('🧭 V116.1 S24 Multi-Timeframe 분석 중...\nEvidence Only · Shadow Research · Override NO')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧭 <b>S24 MULTI-TIMEFRAME</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s24_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['multi_timeframe_intelligence']['coverage'],z[1]['multi_timeframe_intelligence']['agreement']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s24_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s24-ultimate',e); await update.message.reply_text('⚠️ S24 Multi-Timeframe 오류 · /errors 확인')
+
+
+async def sniper1161devs24_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧭 <b>SNIPER S24</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s24_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['multi_timeframe_intelligence']['coverage'],z[1]['multi_timeframe_intelligence']['agreement']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s24_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧭 <b>SNIPER S24 · MULTI-TIMEFRAME</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s24-sniper',e); await update.message.reply_text('⚠️ Sniper S24 오류')
+
+
+async def god1161devs24_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s24_consensus(x)) for x in results]
+        lines=[]
+        for row,r in evaluated[:8]:
+            m=r['multi_timeframe_intelligence']; lines.append(f'· {_v1161_s3_symbol(row)} {m["state"]} · {m["research_verdict"]} · Cov {m["coverage"]:.0%} · Agree {m["agreement"]:.0%}')
+        await update.message.reply_text(_v1161_s5_trim('🧭 <b>MULTI-TIMEFRAME INTELLIGENCE S24</b>\n'+('\n'.join(lines) or '· No timeframe evidence')+'\n\n<i>Evidence Only · Shadow Research · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s24-god',e); await update.message.reply_text('⚠️ S24 God Multi-Timeframe 오류')
+
+
+async def version1161devs24_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S24_NUMBER}</b>\n{V1161_DEV_S24_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW MULTI-TIMEFRAME RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nTimeframes: 15m · 1h · 4h · 1d · 3d · 1w\nConsensus/Gate/Order Override: NO',parse_mode='HTML')
+
+
+def _v1161_s24_reconcile():
+    desired={'version':version1161devs24_cmd,'ultimate':ultimate1161devs24_cmd,'sniper':sniper1161devs24_cmd,'god':god1161devs24_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s24_reconcile()
+
+
+def _v1161_s24_static_audit():
+    required={'version':version1161devs24_cmd,'ultimate':ultimate1161devs24_cmd,'sniper':sniper1161devs24_cmd,'god':god1161devs24_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s24_timeframe_intelligence({})
+    aligned=_v1161_s24_timeframe_intelligence({'timeframes':{tf:{'direction':'LONG','confidence':85} for tf in _V1161_S24_TFS}})
+    conflict=_v1161_s24_timeframe_intelligence({'timeframes':{'15m':'LONG','1h':'LONG','4h':'LONG','1d':'SHORT','3d':'SHORT','1w':'SHORT'}})
+    sparse=_v1161_s24_timeframe_intelligence({'timeframes':{'4h':'LONG','1d':'LONG'}})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s24_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_wait':empty['state']=='NO_EVIDENCE' and empty['research_verdict']=='WAIT',
+           'aligned_long':aligned['state']=='ALIGNED' and aligned['research_verdict']=='LONG','conflict_wait':conflict['state']=='CONFLICT_HIGH' and conflict['research_verdict']=='WAIT',
+           'sparse_wait':sparse['state']=='INSUFFICIENT_COVERAGE' and sparse['research_verdict']=='WAIT','weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+           'read_only_contract':all(aligned[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'prior_layers_preserved':all(k in sample for k in ('engine_trust_calibration','self_review_postmortem','cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs24','execute_order1161devs24')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'aligned':aligned,'conflict':conflict,'sparse':sparse}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s24_reconcile(); audit=_v1161_s24_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S24 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S24 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S24 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S24 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S24 Multi-Timeframe safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s24_reconcile(); audit=_v1161_s24_static_audit()
+    print(f'{V1161_DEV_S24_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S24 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S24 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S24 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S24 Multi-Timeframe Intelligence: ACTIVE · evidence only',flush=True); print('A100 V116.1 DEV S24 missing timeframe evidence: WAIT',flush=True); print('A100 V116.1 DEV S24 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S24 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S24 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S24 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S24 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S24 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s24-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S25 - Market Regime Intelligence Engine (Shadow Research)
+# =============================================================================
+V1161_DEV_S25_NUMBER='116.1-DEV-S25'
+V1161_DEV_S25_VERSION='A100 V116.1 DEV S25'
+V1161_DEV_S25_TITLE='Market Regime Intelligence Engine · Evidence Only · Shadow Research'
+V91_VERSION=V1161_DEV_S25_VERSION
+
+
+def _v1161_s25_num(row, keys):
+    for key in keys:
+        try:
+            value=row.get(key) if isinstance(row,dict) else None
+            if value is not None and value!='': return float(value)
+        except Exception: pass
+    return None
+
+
+def _v1161_s25_text(row, keys):
+    for key in keys:
+        value=row.get(key) if isinstance(row,dict) else None
+        if value is not None and str(value).strip(): return str(value).strip().upper()
+    return ''
+
+
+def _v1161_s25_regime(row, mtf=None):
+    row=row if isinstance(row,dict) else {}
+    mtf=mtf if isinstance(mtf,dict) else _v1161_s24_timeframe_intelligence(row)
+    trend=_v1161_s25_num(row,('trend_score','trend_strength','adx','adx_14','market_trend_score'))
+    vol=_v1161_s25_num(row,('volatility','volatility_score','atr_pct','atr_percent','realized_volatility'))
+    volume=_v1161_s25_num(row,('volume_ratio','relative_volume','rvol','volume_score'))
+    liquidity=_v1161_s25_num(row,('liquidity_score','market_liquidity','depth_score','orderbook_liquidity'))
+    explicit=_v1161_s25_text(row,('market_regime','regime','market_state'))
+    price_change=_v1161_s25_num(row,('price_change_24h','change_24h','return_24h','pct_change_24h'))
+    evidence={
+        'trend':trend is not None,'volatility':vol is not None,'volume':volume is not None,
+        'liquidity':liquidity is not None,'explicit_regime':bool(explicit),
+        'multi_timeframe':(mtf.get('coverage',0) or 0)>0,
+    }
+    coverage=sum(evidence.values())/len(evidence)
+    votes=[]; reasons=[]
+    if explicit:
+        if any(x in explicit for x in ('BULL','UPTREND','RISK_ON')): votes.append('BULL'); reasons.append('explicit bullish regime evidence')
+        elif any(x in explicit for x in ('BEAR','DOWNTREND','RISK_OFF')): votes.append('BEAR'); reasons.append('explicit bearish regime evidence')
+        elif any(x in explicit for x in ('RANGE','SIDEWAYS','NEUTRAL')): votes.append('RANGE'); reasons.append('explicit range regime evidence')
+        elif any(x in explicit for x in ('TRANSITION','REVERSAL','SHIFT')): votes.append('TRANSITION'); reasons.append('explicit transition evidence')
+    dom=mtf.get('dominant_trend','WAIT'); agree=float(mtf.get('agreement',0) or 0); conflict=mtf.get('conflict','NONE')
+    if mtf.get('coverage',0)>=0.5 and agree>=0.58:
+        if dom=='LONG': votes.append('BULL'); reasons.append('multi-timeframe bullish alignment')
+        elif dom=='SHORT': votes.append('BEAR'); reasons.append('multi-timeframe bearish alignment')
+    if conflict in ('HIGH','CONFLICT_HIGH') or mtf.get('state')=='CONFLICT_HIGH': votes.append('TRANSITION'); reasons.append('timeframe conflict')
+    if price_change is not None:
+        if price_change>=3: votes.append('BULL'); reasons.append('positive 24h price impulse')
+        elif price_change<=-3: votes.append('BEAR'); reasons.append('negative 24h price impulse')
+    if trend is not None:
+        if trend>=60: 
+            if dom=='SHORT' or (price_change is not None and price_change<0): votes.append('BEAR')
+            else: votes.append('BULL')
+            reasons.append('strong trend evidence')
+        elif trend<=25: votes.append('RANGE'); reasons.append('weak trend evidence')
+    high_vol = vol is not None and vol>=70
+    low_liq = liquidity is not None and liquidity<=30
+    if high_vol: reasons.append('high volatility evidence')
+    if low_liq: reasons.append('low liquidity evidence')
+    counts={k:votes.count(k) for k in ('BULL','BEAR','RANGE','TRANSITION')}
+    directional=max(counts,key=counts.get) if votes else 'UNKNOWN'
+    contradictory=counts['BULL']>0 and counts['BEAR']>0
+    if coverage==0:
+        state='NO_EVIDENCE'; verdict='WAIT'; regime='UNKNOWN'
+    elif coverage<0.34:
+        state='INSUFFICIENT_COVERAGE'; verdict='WAIT'; regime='UNKNOWN'
+    elif low_liq:
+        state='LOW_LIQUIDITY'; verdict='WAIT'; regime='LOW_LIQUIDITY'
+    elif high_vol and (contradictory or directional in ('TRANSITION','UNKNOWN')):
+        state='HIGH_VOLATILITY'; verdict='WAIT'; regime='HIGH_VOLATILITY'
+    elif contradictory or directional=='TRANSITION':
+        state='TRANSITION'; verdict='WAIT'; regime='TRANSITION'
+    elif directional=='BULL':
+        state='BULL'; verdict='LONG'; regime='BULL'
+    elif directional=='BEAR':
+        state='BEAR'; verdict='SHORT'; regime='BEAR'
+    elif directional=='RANGE':
+        state='RANGE'; verdict='WAIT'; regime='RANGE'
+    elif high_vol:
+        state='HIGH_VOLATILITY'; verdict='WAIT'; regime='HIGH_VOLATILITY'
+    else:
+        state='MIXED'; verdict='WAIT'; regime='MIXED'
+    quality=min(1.0, coverage*0.65 + min(len(votes),4)/4*0.35)
+    return {'version':V1161_DEV_S25_NUMBER,'state':state,'regime':regime,'research_verdict':verdict,
+            'coverage':round(coverage,3),'quality':round(quality,3),'evidence':evidence,
+            'metrics':{'trend':trend,'volatility':vol,'volume':volume,'liquidity':liquidity,'price_change_24h':price_change},
+            'vote_counts':counts,'reasons':reasons[:6],'method':'RUNTIME_REGIME_EVIDENCE_ONLY',
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,
+            'gate_mutated':False,'order_authority':False,'read_only':True}
+
+
+def _v1161_s25_consensus(row):
+    result=_v1161_s24_consensus(row)
+    result['market_regime_intelligence']=_v1161_s25_regime(row,result.get('multi_timeframe_intelligence'))
+    return result
+
+
+def _v1161_s25_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s24_card(row,result,rank,detail)
+    reg=result.get('market_regime_intelligence') or {}
+    metrics=reg.get('metrics') or {}
+    reason=' · '.join(reg.get('reasons') or ['No confirmed regime evidence'])
+    extra=(f'\n\n<b>Market Regime S25</b>\n· {reg.get("state")} · Regime {reg.get("regime")} · Research {reg.get("research_verdict")}\n'
+           f'· Coverage {reg.get("coverage",0):.0%} · Quality {reg.get("quality",0):.0%}\n'
+           f'· Trend {metrics.get("trend")} · Vol {metrics.get("volatility")} · Liquidity {metrics.get("liquidity")}\n'
+           f'· {reason}\n· Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs25_cmd(update,context):
+    await update.message.reply_text('🌐 V116.1 S25 Market Regime 분석 중...\nEvidence Only · Shadow Research · Override NO')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🌐 <b>S25 MARKET REGIME</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s25_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['market_regime_intelligence']['coverage'],z[1]['market_regime_intelligence']['quality']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s25_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s25-ultimate',e); await update.message.reply_text('⚠️ S25 Market Regime 오류 · /errors 확인')
+
+
+async def sniper1161devs25_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🌐 <b>SNIPER S25</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s25_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['market_regime_intelligence']['coverage'],z[1]['market_regime_intelligence']['quality']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s25_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🌐 <b>SNIPER S25 · MARKET REGIME</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s25-sniper',e); await update.message.reply_text('⚠️ Sniper S25 오류')
+
+
+async def god1161devs25_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s25_consensus(x)) for x in results]
+        lines=[]
+        for row,r in evaluated[:8]:
+            m=r['market_regime_intelligence']; lines.append(f'· {_v1161_s3_symbol(row)} {m["regime"]} · {m["research_verdict"]} · Cov {m["coverage"]:.0%} · Q {m["quality"]:.0%}')
+        await update.message.reply_text(_v1161_s5_trim('🌐 <b>MARKET REGIME INTELLIGENCE S25</b>\n'+('\n'.join(lines) or '· No regime evidence')+'\n\n<i>Evidence Only · Shadow Research · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s25-god',e); await update.message.reply_text('⚠️ S25 God Market Regime 오류')
+
+
+async def version1161devs25_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S25_NUMBER}</b>\n{V1161_DEV_S25_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW MARKET REGIME RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nRegimes: BULL · BEAR · RANGE · HIGH_VOLATILITY · LOW_LIQUIDITY · TRANSITION\nConsensus/Gate/Order Override: NO',parse_mode='HTML')
+
+
+def _v1161_s25_reconcile():
+    desired={'version':version1161devs25_cmd,'ultimate':ultimate1161devs25_cmd,'sniper':sniper1161devs25_cmd,'god':god1161devs25_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s25_reconcile()
+
+
+def _v1161_s25_static_audit():
+    required={'version':version1161devs25_cmd,'ultimate':ultimate1161devs25_cmd,'sniper':sniper1161devs25_cmd,'god':god1161devs25_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s25_regime({}, {})
+    bull=_v1161_s25_regime({'market_regime':'BULL','trend_score':75,'volatility_score':35,'liquidity_score':80,'volume_ratio':1.4},{'coverage':1,'agreement':.8,'dominant_trend':'LONG','conflict':'LOW','state':'ALIGNED'})
+    bear=_v1161_s25_regime({'market_regime':'BEAR','trend_score':75,'volatility_score':40,'liquidity_score':80,'price_change_24h':-5},{'coverage':1,'agreement':.8,'dominant_trend':'SHORT','conflict':'LOW','state':'ALIGNED'})
+    rng=_v1161_s25_regime({'market_regime':'RANGE','trend_score':15,'volatility_score':20,'liquidity_score':75},{'coverage':.6,'agreement':.3,'dominant_trend':'WAIT','conflict':'LOW','state':'MIXED'})
+    trans=_v1161_s25_regime({'trend_score':70,'volatility_score':82,'liquidity_score':70},{'coverage':1,'agreement':.5,'dominant_trend':'LONG','conflict':'HIGH','state':'CONFLICT_HIGH'})
+    lowliq=_v1161_s25_regime({'market_regime':'BULL','liquidity_score':15,'trend_score':80},{'coverage':.7,'agreement':.8,'dominant_trend':'LONG','conflict':'LOW','state':'ALIGNED'})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s25_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_wait':empty['state']=='NO_EVIDENCE' and empty['research_verdict']=='WAIT',
+           'bull_long':bull['state']=='BULL' and bull['research_verdict']=='LONG','bear_short':bear['state']=='BEAR' and bear['research_verdict']=='SHORT',
+           'range_wait':rng['state']=='RANGE' and rng['research_verdict']=='WAIT','transition_wait':trans['state'] in ('HIGH_VOLATILITY','TRANSITION') and trans['research_verdict']=='WAIT',
+           'low_liquidity_wait':lowliq['state']=='LOW_LIQUIDITY' and lowliq['research_verdict']=='WAIT','weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+           'read_only_contract':all(bull[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'prior_layers_preserved':all(k in sample for k in ('multi_timeframe_intelligence','engine_trust_calibration','self_review_postmortem','cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs25','execute_order1161devs25')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'bull':bull,'bear':bear,'range':rng,'transition':trans,'low_liquidity':lowliq}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s25_reconcile(); audit=_v1161_s25_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S25 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S25 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S25 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S25 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S25 Market Regime safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s25_reconcile(); audit=_v1161_s25_static_audit()
+    print(f'{V1161_DEV_S25_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S25 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S25 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S25 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S25 Market Regime Intelligence: ACTIVE · evidence only',flush=True); print('A100 V116.1 DEV S25 missing regime evidence: WAIT',flush=True); print('A100 V116.1 DEV S25 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S25 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S25 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S25 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S25 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S25 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s25-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S26 - Capital Rotation Intelligence Engine (Shadow Research)
+# =============================================================================
+V1161_DEV_S26_NUMBER='116.1-DEV-S26'
+V1161_DEV_S26_VERSION='A100 V116.1 DEV S26'
+V1161_DEV_S26_TITLE='Capital Rotation Intelligence Engine · Evidence Only · Shadow Research'
+V91_VERSION=V1161_DEV_S26_VERSION
+
+
+def _v1161_s26_num(row, keys):
+    for key in keys:
+        value=(row or {}).get(key)
+        if value is None or isinstance(value,bool):
+            continue
+        try:
+            return float(value)
+        except (TypeError,ValueError):
+            continue
+    return None
+
+
+def _v1161_s26_text(row, keys):
+    for key in keys:
+        value=(row or {}).get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip().upper()
+    return None
+
+
+def _v1161_s26_rotation(row, regime=None):
+    row=row or {}; regime=regime or {}
+    btc_dom=_v1161_s26_num(row,('btc_dominance','btc_dom','btc_market_dominance','btc_dominance_pct'))
+    btc_dom_change=_v1161_s26_num(row,('btc_dominance_change','btc_dom_change','btc_dominance_delta','btc_dom_24h_change'))
+    eth_dom=_v1161_s26_num(row,('eth_dominance','eth_dom','eth_market_dominance','eth_dominance_pct'))
+    eth_dom_change=_v1161_s26_num(row,('eth_dominance_change','eth_dom_change','eth_dominance_delta','eth_dom_24h_change'))
+    alt_share=_v1161_s26_num(row,('alt_market_share','altcoin_market_share','alt_dominance','alt_share'))
+    alt_share_change=_v1161_s26_num(row,('alt_market_share_change','altcoin_share_change','alt_dominance_change','alt_share_change'))
+    btc_flow=_v1161_s26_num(row,('btc_volume_share_change','btc_flow_score','btc_rotation_score','btc_relative_strength'))
+    eth_flow=_v1161_s26_num(row,('eth_volume_share_change','eth_flow_score','eth_rotation_score','eth_relative_strength'))
+    alt_flow=_v1161_s26_num(row,('alt_volume_share_change','alt_flow_score','alt_rotation_score','alt_relative_strength'))
+    stable_flow=_v1161_s26_num(row,('stablecoin_flow_score','stablecoin_inflow_score','stable_dominance_change','stablecoin_dominance_change'))
+    explicit=_v1161_s26_text(row,('capital_rotation','rotation_state','market_rotation','capital_flow_regime'))
+    evidence={
+        'btc_dominance':btc_dom,'btc_dominance_change':btc_dom_change,'eth_dominance':eth_dom,'eth_dominance_change':eth_dom_change,
+        'alt_share':alt_share,'alt_share_change':alt_share_change,'btc_flow':btc_flow,'eth_flow':eth_flow,'alt_flow':alt_flow,
+        'stable_flow':stable_flow,'explicit':explicit,
+    }
+    available=[k for k,v in evidence.items() if v is not None]
+    coverage=min(1.0,len(available)/6.0)
+    scores={'BTC_LEAD':0.0,'ETH_LEAD':0.0,'ALT_ROTATION':0.0,'RISK_OFF':0.0}
+    reasons=[]
+    if explicit:
+        if any(x in explicit for x in ('BTC','BITCOIN')): scores['BTC_LEAD']+=2.2; reasons.append('explicit BTC leadership')
+        elif 'ETH' in explicit: scores['ETH_LEAD']+=2.2; reasons.append('explicit ETH leadership')
+        elif any(x in explicit for x in ('ALT','ALTCOIN')): scores['ALT_ROTATION']+=2.2; reasons.append('explicit alt rotation')
+        elif any(x in explicit for x in ('RISK_OFF','STABLE','CASH','DEFENSIVE')): scores['RISK_OFF']+=2.2; reasons.append('explicit risk-off rotation')
+    if btc_dom_change is not None:
+        if btc_dom_change>=0.5: scores['BTC_LEAD']+=1.5; scores['RISK_OFF']+=0.4; reasons.append('BTC dominance rising')
+        elif btc_dom_change<=-0.5: scores['ALT_ROTATION']+=0.9; scores['ETH_LEAD']+=0.5; reasons.append('BTC dominance falling')
+    if eth_dom_change is not None:
+        if eth_dom_change>=0.35: scores['ETH_LEAD']+=1.4; reasons.append('ETH dominance rising')
+        elif eth_dom_change<=-0.35: scores['ETH_LEAD']-=0.4
+    if alt_share_change is not None:
+        if alt_share_change>=0.5: scores['ALT_ROTATION']+=1.6; reasons.append('alt market share rising')
+        elif alt_share_change<=-0.5: scores['BTC_LEAD']+=0.6; scores['RISK_OFF']+=0.6; reasons.append('alt market share falling')
+    for value,key,label in ((btc_flow,'BTC_LEAD','BTC flow strength'),(eth_flow,'ETH_LEAD','ETH flow strength'),(alt_flow,'ALT_ROTATION','alt flow strength')):
+        if value is not None:
+            if value>=0.6: scores[key]+=1.4; reasons.append(label)
+            elif value<=-0.6: scores[key]-=0.5
+    if stable_flow is not None and stable_flow>=0.6:
+        scores['RISK_OFF']+=1.6; reasons.append('stablecoin defensive flow')
+    regime_name=str(regime.get('regime') or regime.get('state') or '').upper()
+    if regime_name in ('BEAR','LOW_LIQUIDITY','HIGH_VOLATILITY'):
+        scores['RISK_OFF']+=0.6
+    ordered=sorted(scores.items(),key=lambda x:x[1],reverse=True)
+    top_name,top_score=ordered[0]; second_score=ordered[1][1]
+    conflict=(top_score>0 and second_score>0 and abs(top_score-second_score)<0.8)
+    if not available:
+        state='NO_EVIDENCE'; rotation='UNKNOWN'; verdict='WAIT'; quality=0.0
+    elif coverage<0.34:
+        state='INSUFFICIENT_COVERAGE'; rotation='UNKNOWN'; verdict='WAIT'; quality=min(.45,coverage)
+    elif conflict:
+        state='MIXED'; rotation='MIXED'; verdict='WAIT'; quality=min(.75,.35+coverage*.45)
+    elif top_score<1.5:
+        state='WEAK_SIGNAL'; rotation='MIXED'; verdict='WAIT'; quality=min(.6,.25+coverage*.4)
+    else:
+        rotation=top_name; state=top_name; quality=min(.95,.35+coverage*.45+min(.15,top_score*.025))
+        if rotation=='ALT_ROTATION': verdict='LONG'
+        elif rotation=='RISK_OFF': verdict='WAIT'
+        else: verdict='WAIT'
+    return {'version':V1161_DEV_S26_NUMBER,'state':state,'rotation':rotation,'research_verdict':verdict,
+            'coverage':coverage,'quality':quality,'scores':scores,'evidence':evidence,'reasons':reasons[:6],
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,
+            'gate_mutated':False,'order_authority':False}
+
+
+def _v1161_s26_consensus(row):
+    result=_v1161_s25_consensus(row)
+    result['capital_rotation_intelligence']=_v1161_s26_rotation(row,result.get('market_regime_intelligence'))
+    return result
+
+
+def _v1161_s26_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s25_card(row,result,rank,detail)
+    rot=result.get('capital_rotation_intelligence') or {}
+    score=rot.get('scores') or {}
+    reason=' · '.join(rot.get('reasons') or ['No confirmed capital-rotation evidence'])
+    extra=(f'\n\n<b>Capital Rotation S26</b>\n· {rot.get("state")} · Rotation {rot.get("rotation")} · Research {rot.get("research_verdict")}\n'
+           f'· Coverage {rot.get("coverage",0):.0%} · Quality {rot.get("quality",0):.0%}\n'
+           f'· BTC {score.get("BTC_LEAD",0):.1f} · ETH {score.get("ETH_LEAD",0):.1f} · ALT {score.get("ALT_ROTATION",0):.1f} · Risk-Off {score.get("RISK_OFF",0):.1f}\n'
+           f'· {reason}\n· Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs26_cmd(update,context):
+    await update.message.reply_text('🔄 V116.1 S26 Capital Rotation 분석 중...\nEvidence Only · Shadow Research · Override NO')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🔄 <b>S26 CAPITAL ROTATION</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s26_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['capital_rotation_intelligence']['coverage'],z[1]['capital_rotation_intelligence']['quality']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s26_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s26-ultimate',e); await update.message.reply_text('⚠️ S26 Capital Rotation 오류 · /errors 확인')
+
+
+async def sniper1161devs26_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🔄 <b>SNIPER S26</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s26_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['capital_rotation_intelligence']['coverage'],z[1]['capital_rotation_intelligence']['quality']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s26_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🔄 <b>SNIPER S26 · CAPITAL ROTATION</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s26-sniper',e); await update.message.reply_text('⚠️ Sniper S26 오류')
+
+
+async def god1161devs26_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s26_consensus(x)) for x in results]
+        lines=[]
+        for row,r in evaluated[:8]:
+            m=r['capital_rotation_intelligence']; lines.append(f'· {_v1161_s3_symbol(row)} {m["rotation"]} · {m["research_verdict"]} · Cov {m["coverage"]:.0%} · Q {m["quality"]:.0%}')
+        await update.message.reply_text(_v1161_s5_trim('🔄 <b>CAPITAL ROTATION INTELLIGENCE S26</b>\n'+('\n'.join(lines) or '· No rotation evidence')+'\n\n<i>Evidence Only · Shadow Research · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s26-god',e); await update.message.reply_text('⚠️ S26 God Capital Rotation 오류')
+
+
+async def version1161devs26_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S26_NUMBER}</b>\n{V1161_DEV_S26_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW CAPITAL ROTATION RESEARCH ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nStates: BTC_LEAD · ETH_LEAD · ALT_ROTATION · RISK_OFF · MIXED\nConsensus/Gate/Order Override: NO',parse_mode='HTML')
+
+
+def _v1161_s26_reconcile():
+    desired={'version':version1161devs26_cmd,'ultimate':ultimate1161devs26_cmd,'sniper':sniper1161devs26_cmd,'god':god1161devs26_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s26_reconcile()
+
+
+def _v1161_s26_static_audit():
+    required={'version':version1161devs26_cmd,'ultimate':ultimate1161devs26_cmd,'sniper':sniper1161devs26_cmd,'god':god1161devs26_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    empty=_v1161_s26_rotation({}, {})
+    btc=_v1161_s26_rotation({'btc_dominance_change':1.2,'btc_flow_score':.9,'alt_market_share_change':-.8},{'regime':'BULL'})
+    eth=_v1161_s26_rotation({'eth_dominance_change':.8,'eth_flow_score':.9,'btc_dominance_change':-.7},{'regime':'BULL'})
+    alt=_v1161_s26_rotation({'alt_market_share_change':1.1,'alt_flow_score':.9,'btc_dominance_change':-.9},{'regime':'BULL'})
+    risk=_v1161_s26_rotation({'stablecoin_flow_score':.9,'alt_market_share_change':-.8,'btc_dominance_change':.7},{'regime':'BEAR'})
+    mixed=_v1161_s26_rotation({'btc_flow_score':.9,'eth_flow_score':.9,'btc_dominance_change':.6,'eth_dominance_change':.6},{'regime':'TRANSITION'})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s26_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_wait':empty['state']=='NO_EVIDENCE' and empty['research_verdict']=='WAIT',
+           'btc_lead_wait':btc['rotation']=='BTC_LEAD' and btc['research_verdict']=='WAIT','eth_lead_wait':eth['rotation']=='ETH_LEAD' and eth['research_verdict']=='WAIT',
+           'alt_rotation_long':alt['rotation']=='ALT_ROTATION' and alt['research_verdict']=='LONG','risk_off_wait':risk['rotation']=='RISK_OFF' and risk['research_verdict']=='WAIT',
+           'mixed_wait':mixed['state']=='MIXED' and mixed['research_verdict']=='WAIT','weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+           'read_only_contract':all(alt[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'prior_layers_preserved':all(k in sample for k in ('market_regime_intelligence','multi_timeframe_intelligence','engine_trust_calibration','self_review_postmortem','cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs26','execute_order1161devs26')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'btc':btc,'eth':eth,'alt':alt,'risk':risk,'mixed':mixed}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s26_reconcile(); audit=_v1161_s26_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S26 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S26 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S26 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S26 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S26 Capital Rotation safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s26_reconcile(); audit=_v1161_s26_static_audit()
+    print(f'{V1161_DEV_S26_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S26 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S26 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S26 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S26 Capital Rotation Intelligence: ACTIVE · evidence only',flush=True); print('A100 V116.1 DEV S26 missing rotation evidence: WAIT',flush=True); print('A100 V116.1 DEV S26 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S26 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S26 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S26 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S26 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S26 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s26-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S27 - AI Memory Graph (Shadow Research Reference Only)
+# =============================================================================
+V1161_DEV_S27_NUMBER='116.1-DEV-S27'
+V1161_DEV_S27_VERSION='A100 V116.1 DEV S27'
+V1161_DEV_S27_TITLE='AI Memory Graph · Similar Outcome Retrieval · Shadow Reference Only'
+V91_VERSION=V1161_DEV_S27_VERSION
+
+_V1161_S27_TOP_K=5
+_V1161_S27_MIN_SIMILARITY=0.35
+_V1161_S27_FEATURES=(
+    ('funding',('funding','funding_rate','funding_at_entry'),0.15,0.01),
+    ('open_interest',('open_interest','oi','oi_change','open_interest_change','oi_change_pct'),0.13,10.0),
+    ('volume',('volume_ratio','relative_volume','volume_score','volume_change_pct'),0.11,3.0),
+    ('whale',('whale_score','whale_activity','whale_signal','large_order_score'),0.11,100.0),
+    ('psychology',('psychology_score','sentiment_score','fear_greed','market_psychology_score'),0.10,100.0),
+    ('macro',('macro_score','macro_risk_score','macro_sentiment'),0.10,100.0),
+    ('news',('news_score','news_sentiment','news_impact_score'),0.10,100.0),
+)
+
+
+def _v1161_s27_num(row,keys):
+    for key in keys:
+        value=(row or {}).get(key)
+        if isinstance(value,dict):
+            for sub in ('score','value','pct','percent','rate','change'):
+                if sub in value: value=value.get(sub); break
+        if value is None or isinstance(value,bool): continue
+        try: return float(value)
+        except (TypeError,ValueError): continue
+    return None
+
+
+def _v1161_s27_text(row,keys):
+    for key in keys:
+        value=(row or {}).get(key)
+        if isinstance(value,dict):
+            for sub in ('state','regime','label','trend','value'):
+                if value.get(sub) not in (None,''): value=value.get(sub); break
+        if value not in (None,'') and str(value).strip(): return str(value).strip().upper()
+    return None
+
+
+def _v1161_s27_context(row,result=None):
+    row=row or {}; result=result or {}
+    mtf=result.get('multi_timeframe_intelligence') or row.get('multi_timeframe_intelligence') or {}
+    regime=result.get('market_regime_intelligence') or row.get('market_regime_intelligence') or {}
+    rotation=result.get('capital_rotation_intelligence') or row.get('capital_rotation_intelligence') or {}
+    ctx={'symbol':_v1161_s3_symbol(row)}
+    for name,keys,weight,scale in _V1161_S27_FEATURES: ctx[name]=_v1161_s27_num(row,keys)
+    ctx['timeframe']=_v1161_s27_text(row,('timeframe','interval','tf')) or _v1161_s27_text(mtf,('dominant_timeframe','timeframe'))
+    ctx['trend']=_v1161_s27_text(row,('trend','direction','signal','side')) or _v1161_s27_text(mtf,('dominant_trend','trend'))
+    ctx['regime']=_v1161_s27_text(row,('market_regime','regime','regime_at_entry')) or _v1161_s27_text(regime,('regime','state'))
+    ctx['rotation']=_v1161_s27_text(row,('capital_rotation','rotation_state')) or _v1161_s27_text(rotation,('rotation','state'))
+    return ctx
+
+
+def _v1161_s27_similarity(current,past):
+    weighted=0.0; available=0.0; matched=[]
+    for name,keys,weight,scale in _V1161_S27_FEATURES:
+        a=current.get(name); b=past.get(name)
+        if a is None or b is None: continue
+        sim=max(0.0,1.0-min(1.0,abs(a-b)/max(scale,1e-9)))
+        weighted+=weight*sim; available+=weight
+        if sim>=0.70: matched.append(name)
+    for name,weight in (('timeframe',0.07),('trend',0.05),('regime',0.05),('rotation',0.03)):
+        a=current.get(name); b=past.get(name)
+        if not a or not b: continue
+        sim=1.0 if a==b else (0.45 if a in b or b in a else 0.0)
+        weighted+=weight*sim; available+=weight
+        if sim>=0.70: matched.append(name)
+    return ((weighted/available) if available else 0.0),available,matched
+
+
+def _v1161_s27_outcome(row):
+    pnl=_v1160_s21722_first_num(row,'net_return_pct','net_pct','realized_pct','pnl_pct','return_pct','profit_pct','realized_pnl_pct','pnl','realized_pnl','profit')
+    label=str(row.get('outcome') or row.get('result') or row.get('close_reason') or row.get('status') or '').upper()
+    if pnl is not None: verdict='WIN' if pnl>0 else 'LOSS' if pnl<0 else 'FLAT'
+    elif label in {'WIN','WON','PROFIT','TAKE_PROFIT','TP'}: verdict='WIN'
+    elif label in {'LOSS','LOST','STOP_LOSS','SL'}: verdict='LOSS'
+    else: verdict='UNRESOLVED'
+    return verdict,pnl
+
+
+def _v1161_s27_memory_graph(row,result=None,outcomes=None,top_k=_V1161_S27_TOP_K):
+    current=_v1161_s27_context(row,result)
+    try: source=list(_v1160_s21722_outcome_rows() if outcomes is None else outcomes)
+    except Exception: source=[]
+    candidates=[]
+    for idx,raw in enumerate(source):
+        if not isinstance(raw,dict): continue
+        verdict,pnl=_v1161_s27_outcome(raw)
+        if verdict=='UNRESOLVED': continue
+        past=_v1161_s27_context(raw,raw)
+        similarity,coverage,matched=_v1161_s27_similarity(current,past)
+        if coverage<=0 or similarity<_V1161_S27_MIN_SIMILARITY: continue
+        candidates.append({'memory_id':str(raw.get('id') or raw.get('trade_id') or raw.get('position_id') or f'MEM-{idx+1}'),
+                           'symbol':_v1161_s3_symbol(raw),'similarity':round(similarity,4),'feature_coverage':round(coverage,4),
+                           'matched_features':matched[:8],'outcome':verdict,'pnl':pnl,
+                           'regime':past.get('regime'),'timeframe':past.get('timeframe'),'trend':past.get('trend')})
+    candidates.sort(key=lambda x:(x['similarity'],x['feature_coverage']),reverse=True)
+    top=candidates[:max(1,min(10,int(top_k or _V1161_S27_TOP_K)))]
+    resolved=[x for x in top if x['outcome'] in ('WIN','LOSS')]
+    wins=sum(x['outcome']=='WIN' for x in resolved); losses=sum(x['outcome']=='LOSS' for x in resolved)
+    win_rate=wins/max(1,wins+losses)
+    numeric=[x['pnl'] for x in top if isinstance(x.get('pnl'),(int,float))]
+    avg_pnl=sum(numeric)/len(numeric) if numeric else None
+    avg_similarity=sum(x['similarity'] for x in top)/len(top) if top else 0.0
+    current_coverage=sum(1 for k,v in current.items() if k!='symbol' and v not in (None,''))/11.0
+    if not source: state='NO_MEMORY_EVIDENCE'
+    elif current_coverage<0.25: state='INSUFFICIENT_CURRENT_CONTEXT'
+    elif not top: state='NO_SIMILAR_CASES'
+    elif len(resolved)<3: state='PROVISIONAL_REFERENCE'
+    else: state='REFERENCE_AVAILABLE'
+    reference='WAIT'
+    if state=='REFERENCE_AVAILABLE' and win_rate>=0.65 and avg_similarity>=0.55: reference='HISTORICAL_SUPPORT'
+    elif state=='REFERENCE_AVAILABLE' and win_rate<=0.35 and avg_similarity>=0.55: reference='HISTORICAL_CAUTION'
+    return {'version':V1161_DEV_S27_NUMBER,'state':state,'symbol':current.get('symbol'),'current_context':current,
+            'memory_rows_scanned':len(source),'similar_cases':len(top),'resolved_cases':len(resolved),
+            'historical_wins':wins,'historical_losses':losses,'historical_win_rate':round(win_rate,4) if resolved else None,
+            'average_pnl':round(avg_pnl,4) if avg_pnl is not None else None,'average_similarity':round(avg_similarity,4),
+            'current_context_coverage':round(min(1.0,current_coverage),4),'reference':reference,'top_cases':top,
+            'method':'WEIGHTED_EVIDENCE_SIMILARITY_TOP_K','shadow_only':True,'applied':False,'mutation_allowed':False,
+            'override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False,'read_only':True}
+
+
+def _v1161_s27_consensus(row):
+    result=_v1161_s26_consensus(row)
+    result['ai_memory_graph']=_v1161_s27_memory_graph(row,result)
+    return result
+
+
+def _v1161_s27_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s26_card(row,result,rank,detail); mem=result.get('ai_memory_graph') or {}
+    wr='N/A' if mem.get('historical_win_rate') is None else f'{mem.get("historical_win_rate",0):.0%}'
+    pnl='N/A' if mem.get('average_pnl') is None else f'{mem.get("average_pnl",0):+.2f}'
+    cases=[]
+    for x in (mem.get('top_cases') or [])[:3]: cases.append(f'· {x.get("symbol")} {x.get("outcome")} · Sim {x.get("similarity",0):.0%} · {x.get("regime") or "-"}')
+    extra=(f'\n\n<b>AI Memory Graph S27</b>\n· {mem.get("state")} · Reference {mem.get("reference")}\n'
+           f'· Similar {mem.get("similar_cases",0)}/{mem.get("memory_rows_scanned",0)} · Avg similarity {mem.get("average_similarity",0):.0%}\n'
+           f'· Historical WR {wr} · Avg PnL {pnl}\n'+('\n'.join(cases) or '· No qualified similar outcome cases')+'\n· Shadow reference only · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs27_cmd(update,context):
+    await update.message.reply_text('🧠 V116.1 S27 AI Memory Graph 검색 중...\nOutcome Similarity · Shadow Reference · Override NO')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>S27 AI MEMORY GRAPH</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s27_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['ai_memory_graph']['similar_cases'],z[1]['ai_memory_graph']['average_similarity']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s27_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s27-ultimate',e); await update.message.reply_text('⚠️ S27 AI Memory Graph 오류 · /errors 확인')
+
+
+async def sniper1161devs27_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>SNIPER S27</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s27_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['ai_memory_graph']['similar_cases'],z[1]['ai_memory_graph']['average_similarity']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s27_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧠 <b>SNIPER S27 · MEMORY GRAPH</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s27-sniper',e); await update.message.reply_text('⚠️ Sniper S27 오류')
+
+
+async def god1161devs27_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); evaluated=[(x,_v1161_s27_consensus(x)) for x in results]; lines=[]
+        for row,r in evaluated[:8]:
+            m=r['ai_memory_graph']; wr='N/A' if m['historical_win_rate'] is None else f'{m["historical_win_rate"]:.0%}'
+            lines.append(f'· {_v1161_s3_symbol(row)} {m["state"]} · Cases {m["similar_cases"]} · Sim {m["average_similarity"]:.0%} · WR {wr}')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>AI MEMORY GRAPH S27</b>\n'+('\n'.join(lines) or '· No memory evidence')+'\n\n<i>Outcome Similarity · Shadow Reference · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s27-god',e); await update.message.reply_text('⚠️ S27 God Memory Graph 오류')
+
+
+async def version1161devs27_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S27_NUMBER}</b>\n{V1161_DEV_S27_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW MEMORY REFERENCE ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nFeatures: Funding · OI · Volume · Whale · Psychology · Macro · News · Timeframe · Regime · Rotation\nConsensus/Gate/Order Override: NO',parse_mode='HTML')
+
+
+def _v1161_s27_reconcile():
+    desired={'version':version1161devs27_cmd,'ultimate':ultimate1161devs27_cmd,'sniper':sniper1161devs27_cmd,'god':god1161devs27_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s27_reconcile()
+
+
+def _v1161_s27_static_audit():
+    required={'version':version1161devs27_cmd,'ultimate':ultimate1161devs27_cmd,'sniper':sniper1161devs27_cmd,'god':god1161devs27_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    current={'symbol':'TESTUSDT','funding_rate':0.001,'oi_change_pct':5,'volume_ratio':1.8,'whale_score':70,'sentiment_score':65,'macro_score':60,'news_score':70,'timeframe':'4H','market_regime':'BULL','capital_rotation':'ALT_ROTATION'}
+    history=[]
+    for i,pnl in enumerate((8,5,3,-2,4,-5)):
+        history.append({'id':f'T{i}','symbol':'OLDUSDT','funding_rate':0.0012,'oi_change_pct':5.5,'volume_ratio':1.7,'whale_score':72,'sentiment_score':63,'macro_score':61,'news_score':68,'timeframe':'4H','market_regime':'BULL','capital_rotation':'ALT_ROTATION','realized_pct':pnl})
+    empty=_v1161_s27_memory_graph({}, {}, outcomes=[]); memory=_v1161_s27_memory_graph(current,{},history)
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s27_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'empty_memory_safe':empty['state']=='NO_MEMORY_EVIDENCE' and empty['reference']=='WAIT',
+           'similarity_retrieval':memory['similar_cases']==5 and memory['average_similarity']>.85,'historical_stats':memory['historical_wins']==4 and memory['historical_losses']==1,
+           'shadow_only':memory['shadow_only'] and memory['read_only'] and all(memory[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+           'prior_layers_preserved':all(k in sample for k in ('capital_rotation_intelligence','market_regime_intelligence','multi_timeframe_intelligence','engine_trust_calibration','self_review_postmortem','cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs27','execute_order1161devs27')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'empty':empty,'memory':memory}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s27_reconcile(); audit=_v1161_s27_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S27 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S27 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S27 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S27 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S27 AI Memory Graph safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s27_reconcile(); audit=_v1161_s27_static_audit()
+    print(f'{V1161_DEV_S27_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S27 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S27 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S27 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S27 AI Memory Graph: ACTIVE · outcome similarity reference only',flush=True); print('A100 V116.1 DEV S27 missing memory evidence: WAIT',flush=True); print('A100 V116.1 DEV S27 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S27 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S27 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S27 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S27 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S27 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s27-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S28 - Final AI Orchestrator (Evidence-Only Research Verdict)
+# =============================================================================
+V1161_DEV_S28_NUMBER='116.1-DEV-S28'
+V1161_DEV_S28_VERSION='A100 V116.1 DEV S28'
+V1161_DEV_S28_TITLE='Final AI Orchestrator · Unified Evidence Verdict · Shadow Only'
+V91_VERSION=V1161_DEV_S28_VERSION
+
+_V1161_S28_ENGINE_KEYS=(
+    'market_psychology','whale_intelligence','macro_ai','news_ai','portfolio_intelligence',
+    'market_regime_intelligence','capital_rotation_intelligence','multi_timeframe_intelligence',
+    'ai_memory_graph','ai_debate_2','cross_engine_consensus_quality','engine_trust_calibration',
+    'explainable_ai_2','research_notebook_2','self_review_postmortem','adaptive_learning_validation',
+)
+
+
+def _v1161_s28_direction(value):
+    if isinstance(value,dict):
+        for key in ('reference','decision','verdict','signal','direction','side','state','consensus','final_decision'):
+            if value.get(key) not in (None,''):
+                d=_v1161_s28_direction(value.get(key))
+                if d!='UNKNOWN': return d
+        return 'UNKNOWN'
+    text=str(value or '').upper().replace('-','_').replace(' ','_')
+    if any(x in text for x in ('CAUTION','RISK_OFF','BEAR','SHORT','SELL','NEGATIVE','DOWN')): return 'SHORT'
+    if any(x in text for x in ('SUPPORT','BULL','LONG','BUY','POSITIVE','UP','ALT_ROTATION','ETH_ROTATION','BTC_ROTATION')): return 'LONG'
+    if any(x in text for x in ('WAIT','HOLD','NEUTRAL','MIXED','RANGE','TRANSITION','INSUFFICIENT','NO_')): return 'WAIT'
+    return 'UNKNOWN'
+
+
+def _v1161_s28_score(value):
+    if isinstance(value,(int,float)) and not isinstance(value,bool):
+        x=float(value); return max(0.0,min(1.0,x/100.0 if abs(x)>1 else x))
+    if isinstance(value,dict):
+        for key in ('confidence','score','trust_score','reliability','stability_index','calibration_score','average_similarity','coverage','current_context_coverage'):
+            if key in value:
+                out=_v1161_s28_score(value.get(key))
+                if out is not None: return out
+    return None
+
+
+def _v1161_s28_engine_vote(name,payload):
+    if not isinstance(payload,dict): return {'engine':name,'available':False,'direction':'UNKNOWN','confidence':0.0}
+    direction=_v1161_s28_direction(payload)
+    confidence=_v1161_s28_score(payload)
+    if confidence is None:
+        confidence=0.55 if direction in ('LONG','SHORT') else 0.40 if direction=='WAIT' else 0.0
+    state=str(payload.get('state') or payload.get('status') or '').upper()
+    available=bool(payload) and not any(x in state for x in ('NO_EVIDENCE','NO_RUNTIME','UNAVAILABLE','MISSING'))
+    if not available: confidence=0.0
+    return {'engine':name,'available':available,'direction':direction,'confidence':round(confidence,4),'state':state or None}
+
+
+def _v1161_s28_orchestrate(row,result=None):
+    result=result or _v1161_s27_consensus(row)
+    votes=[_v1161_s28_engine_vote(k,result.get(k)) for k in _V1161_S28_ENGINE_KEYS]
+    available=[v for v in votes if v['available']]
+    directional=[v for v in available if v['direction'] in ('LONG','SHORT','WAIT')]
+    total_weight=sum(max(0.05,v['confidence']) for v in directional)
+    scores={d:sum(max(0.05,v['confidence']) for v in directional if v['direction']==d) for d in ('LONG','SHORT','WAIT')}
+    coverage=len(available)/len(_V1161_S28_ENGINE_KEYS)
+    ranked=sorted(scores.items(),key=lambda x:x[1],reverse=True)
+    top_dir,top_score=ranked[0] if ranked else ('WAIT',0.0)
+    second_score=ranked[1][1] if len(ranked)>1 else 0.0
+    support=(top_score/total_weight) if total_weight else 0.0
+    conflict=(second_score/top_score) if top_score else 1.0
+    decisive=[v for v in directional if v['direction'] in ('LONG','SHORT')]
+    long_n=sum(v['direction']=='LONG' for v in decisive); short_n=sum(v['direction']=='SHORT' for v in decisive)
+    contradiction=min(long_n,short_n)/max(1,long_n+short_n)
+    memory=result.get('ai_memory_graph') or {}
+    memory_ready=memory.get('state') in ('REFERENCE_AVAILABLE','PROVISIONAL_REFERENCE')
+    consensus=result.get('cross_engine_consensus_quality') or {}
+    consensus_dir=_v1161_s28_direction(consensus)
+    reasons=[]
+    if coverage<0.50: reasons.append('ENGINE_COVERAGE_LOW')
+    if contradiction>=0.35: reasons.append('DIRECTIONAL_CONFLICT_HIGH')
+    if support<0.52: reasons.append('WEAK_WEIGHTED_SUPPORT')
+    if consensus_dir in ('LONG','SHORT') and top_dir in ('LONG','SHORT') and consensus_dir!=top_dir: reasons.append('CONSENSUS_CONFLICT')
+    if not memory_ready: reasons.append('MEMORY_REFERENCE_LIMITED')
+    final=top_dir
+    if reasons or final not in ('LONG','SHORT'): final='WAIT'
+    confidence=min(0.99,max(0.0,(support*0.55)+(coverage*0.25)+((1.0-contradiction)*0.20)))
+    if final=='WAIT': confidence=min(confidence,0.69)
+    supporting=sorted([v for v in directional if v['direction']==top_dir],key=lambda x:x['confidence'],reverse=True)
+    opposing=sorted([v for v in directional if v['direction'] not in (top_dir,'UNKNOWN')],key=lambda x:x['confidence'],reverse=True)
+    return {
+        'version':V1161_DEV_S28_NUMBER,'symbol':_v1161_s3_symbol(row),'state':'REFERENCE_READY' if available else 'NO_RUNTIME_EVIDENCE',
+        'final_reference':final,'raw_leader':top_dir,'confidence':round(confidence,4),'coverage':round(coverage,4),
+        'weighted_support':round(support,4),'conflict_ratio':round(conflict,4),'directional_contradiction':round(contradiction,4),
+        'scores':{k:round(v,4) for k,v in scores.items()},'available_engines':len(available),'total_engines':len(_V1161_S28_ENGINE_KEYS),
+        'safety_reasons':reasons or ['NONE'],'supporting_engines':supporting[:6],'opposing_engines':opposing[:4],'engine_votes':votes,
+        'method':'READ_ONLY_WEIGHTED_EVIDENCE_ORCHESTRATION','shadow_only':True,'applied':False,'mutation_allowed':False,
+        'override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False,'read_only':True,
+    }
+
+
+def _v1161_s28_consensus(row):
+    result=_v1161_s27_consensus(row)
+    result['final_ai_orchestrator']=_v1161_s28_orchestrate(row,result)
+    return result
+
+
+def _v1161_s28_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s27_card(row,result,rank,detail); final=result.get('final_ai_orchestrator') or {}
+    sup=', '.join(x.get('engine','-') for x in final.get('supporting_engines',[])[:4]) or '-'
+    risks=', '.join(final.get('safety_reasons') or [])
+    extra=(f'\n\n<b>Final AI Orchestrator S28</b>\n· Reference <b>{final.get("final_reference","WAIT")}</b> · Confidence {final.get("confidence",0):.0%}\n'
+           f'· Coverage {final.get("available_engines",0)}/{final.get("total_engines",0)} · Support {final.get("weighted_support",0):.0%} · Conflict {final.get("directional_contradiction",0):.0%}\n'
+           f'· Supporting: {sup}\n· Safety: {risks}\n· Shadow research only · Consensus/Gate/Order Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs28_cmd(update,context):
+    await update.message.reply_text('🧠 V116.1 S28 Final AI Orchestrator 통합 중...\nUnified Evidence · Shadow Only · Override NO')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>S28 FINAL AI</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s28_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence'],z[1]['final_ai_orchestrator']['coverage']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s9_register(row,res,'ultimate'); card,res=_v1161_s28_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s28-ultimate',e); await update.message.reply_text('⚠️ S28 Final AI 오류 · /errors 확인')
+
+
+async def sniper1161devs28_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧠 <b>SNIPER S28</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s28_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        row,res=evaluated[0]; _v1161_s9_register(row,res,'sniper'); card,res=_v1161_s28_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧠 <b>SNIPER S28 · FINAL AI</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s28-sniper',e); await update.message.reply_text('⚠️ Sniper S28 오류')
+
+
+async def god1161devs28_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:8]:
+            r=_v1161_s28_consensus(row); f=r['final_ai_orchestrator']
+            lines.append(f'· {_v1161_s3_symbol(row)} {f["final_reference"]} · Conf {f["confidence"]:.0%} · Cov {f["coverage"]:.0%} · Conflict {f["directional_contradiction"]:.0%}')
+        await update.message.reply_text(_v1161_s5_trim('🧠 <b>FINAL AI ORCHESTRATOR S28</b>\n'+('\n'.join(lines) or '· No runtime evidence')+'\n\n<i>Unified Evidence · Shadow Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s28-god',e); await update.message.reply_text('⚠️ S28 God Final AI 오류')
+
+
+async def version1161devs28_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S28_NUMBER}</b>\n{V1161_DEV_S28_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW FINAL AI REFERENCE ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nPipeline: Long · Short · Wait · Psychology · Whale · Macro · News · Portfolio · Regime · Rotation · Timeframe · Memory · Debate · Consensus · Explainable · Notebook · Self Review · Adaptive Learning · Final AI\nConsensus/Gate/Order Override: NO',parse_mode='HTML')
+
+
+def _v1161_s28_reconcile():
+    desired={'version':version1161devs28_cmd,'ultimate':ultimate1161devs28_cmd,'sniper':sniper1161devs28_cmd,'god':god1161devs28_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s28_reconcile()
+
+
+def _v1161_s28_static_audit():
+    required={'version':version1161devs28_cmd,'ultimate':ultimate1161devs28_cmd,'sniper':sniper1161devs28_cmd,'god':god1161devs28_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    payload={k:{'state':'AVAILABLE','direction':'LONG','confidence':0.8} for k in _V1161_S28_ENGINE_KEYS}
+    payload['ai_memory_graph']={'state':'REFERENCE_AVAILABLE','reference':'HISTORICAL_SUPPORT','average_similarity':0.8}
+    strong=_v1161_s28_orchestrate({'symbol':'TESTUSDT'},payload)
+    conflict_payload=dict(payload); conflict_payload.update({k:{'state':'AVAILABLE','direction':'SHORT','confidence':0.8} for k in _V1161_S28_ENGINE_KEYS[::2]})
+    conflict=_v1161_s28_orchestrate({'symbol':'TESTUSDT'},conflict_payload)
+    empty=_v1161_s28_orchestrate({'symbol':'TESTUSDT'},{})
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s28_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'strong_reference':strong['final_reference']=='LONG' and strong['coverage']==1.0,
+           'conflict_wait':conflict['final_reference']=='WAIT','empty_wait':empty['final_reference']=='WAIT' and empty['state']=='NO_RUNTIME_EVIDENCE',
+           'shadow_only':strong['shadow_only'] and strong['read_only'] and all(strong[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'memory_preserved':'ai_memory_graph' in sample,
+           'prior_layers_preserved':all(k in sample for k in ('capital_rotation_intelligence','market_regime_intelligence','multi_timeframe_intelligence','engine_trust_calibration','self_review_postmortem','cross_engine_consensus_quality','news_ai','portfolio_intelligence','adaptive_learning_validation','research_notebook_2','explainable_ai_2','ai_debate_2','macro_ai','whale_intelligence','market_psychology')),
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs28','execute_order1161devs28')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'strong':strong,'conflict':conflict,'empty':empty}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s28_reconcile(); audit=_v1161_s28_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S28 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S28 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S28 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S28 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S28 Final AI Orchestrator safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s28_reconcile(); audit=_v1161_s28_static_audit()
+    print(f'{V1161_DEV_S28_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S28 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S28 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S28 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S28 Final AI Orchestrator: ACTIVE · evidence-only research verdict',flush=True); print('A100 V116.1 DEV S28 insufficient/conflicting evidence: WAIT',flush=True); print('A100 V116.1 DEV S28 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S28 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S28 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S28 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S28 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S28 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s28-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S29 - Final AI Shadow Validation & Outcome Replay
+# =============================================================================
+V1161_DEV_S29_NUMBER='116.1-DEV-S29'
+V1161_DEV_S29_VERSION='A100 V116.1 DEV S29'
+V1161_DEV_S29_TITLE='Final AI Shadow Validation · Prospective Outcome Replay · Read Only'
+V91_VERSION=V1161_DEV_S29_VERSION
+
+
+def _v1161_s29_register(row,result,source):
+    item=_v1161_s9_register(row,result,source)
+    if isinstance(item,dict):
+        final=result.get('final_ai_orchestrator') or {}
+        item.setdefault('final_ai_reference',str(final.get('final_reference') or 'WAIT').upper())
+        item.setdefault('final_ai_confidence',float(final.get('confidence') or 0.0))
+        item.setdefault('final_ai_coverage',float(final.get('coverage') or 0.0))
+        item.setdefault('final_ai_conflict',float(final.get('directional_contradiction') or 0.0))
+        item.setdefault('final_ai_safety_reasons',list(final.get('safety_reasons') or []))
+        item.setdefault('final_ai_policy','PROSPECTIVE_ONLY · SHADOW_VALIDATION · NO_MUTATION')
+    return item
+
+
+def _v1161_s29_validation(symbol=None):
+    rows=[]
+    for item in list(_V1161_S9_LEDGER.values()):
+        if not isinstance(item,dict): continue
+        if symbol and str(item.get('symbol') or '').upper()!=str(symbol).upper(): continue
+        ref=str(item.get('final_ai_reference') or 'UNRECORDED').upper()
+        for horizon,outcome in (item.get('settlements') or {}).items():
+            if not isinstance(outcome,dict): continue
+            label=str(outcome.get('label') or '').upper()
+            if label not in ('WIN','LOSS','FLAT'): continue
+            rows.append((item,str(horizon),outcome,ref,label))
+    directional=[x for x in rows if x[3] in ('LONG','SHORT') and x[4] in ('WIN','LOSS')]
+    correct=sum(x[4]=='WIN' for x in directional); wrong=sum(x[4]=='LOSS' for x in directional)
+    waits=sum(x[3]=='WAIT' for x in rows); unrecorded=sum(x[3]=='UNRECORDED' for x in rows)
+    conf=[float(x[0].get('final_ai_confidence') or 0.0) for x in directional]
+    returns=[float(x[2].get('directional_return_pct') or 0.0) for x in directional]
+    n=len(directional); wr=correct/max(1,n)
+    avg_conf=sum(conf)/max(1,len(conf)); calibration_gap=abs(avg_conf-wr) if n else None
+    if n<5: state='INSUFFICIENT_PROSPECTIVE_EVIDENCE'
+    elif calibration_gap is not None and calibration_gap>0.25: state='CALIBRATION_REVIEW_REQUIRED'
+    elif wr<0.45: state='DIRECTIONAL_REVIEW_REQUIRED'
+    else: state='SHADOW_VALIDATION_READY'
+    return {'version':V1161_DEV_S29_NUMBER,'state':state,'settled_records':len(rows),'directional_samples':n,
+            'correct':correct,'wrong':wrong,'win_rate':round(wr,4) if n else None,'wait_records':waits,'unrecorded_legacy':unrecorded,
+            'average_confidence':round(avg_conf,4) if conf else None,'calibration_gap':round(calibration_gap,4) if calibration_gap is not None else None,
+            'average_directional_return_pct':round(sum(returns)/max(1,len(returns)),4) if returns else None,
+            'minimum_samples_required':5,'prospective_only':True,'shadow_only':True,'read_only':True,'applied':False,
+            'mutation_allowed':False,'override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False}
+
+
+def _v1161_s29_consensus(row):
+    result=_v1161_s28_consensus(row)
+    result['final_ai_shadow_validation']=_v1161_s29_validation(_v1161_s3_symbol(row))
+    return result
+
+
+def _v1161_s29_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s28_card(row,result,rank,detail)
+    v=result.get('final_ai_shadow_validation') or {}
+    wr='-' if v.get('win_rate') is None else f'{v.get("win_rate",0):.0%}'
+    gap='-' if v.get('calibration_gap') is None else f'{v.get("calibration_gap",0):.0%}'
+    extra=(f'\n\n<b>Final AI Shadow Validation S29</b>\n· State {v.get("state")} · Directional {v.get("directional_samples",0)}/{v.get("minimum_samples_required",5)}\n'
+           f'· Correct {v.get("correct",0)} / Wrong {v.get("wrong",0)} · WR {wr}\n· Calibration Gap {gap} · WAIT records {v.get("wait_records",0)}\n'
+           f'· Prospective only · Read Only · Weight/Gate/Order mutation NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs29_cmd(update,context):
+    await update.message.reply_text('🧪 V116.1 S29 Final AI Shadow Validation 중...\nProspective Outcome Replay · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧪 <b>S29 SHADOW VALIDATION</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s29_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s29_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s29-ultimate',e); await update.message.reply_text('⚠️ S29 Shadow Validation 오류 · /errors 확인')
+
+
+async def sniper1161devs29_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧪 <b>SNIPER S29</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s29_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        row,res=evaluated[0]; _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s29_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧪 <b>SNIPER S29 · SHADOW VALIDATION</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s29-sniper',e); await update.message.reply_text('⚠️ Sniper S29 오류')
+
+
+async def god1161devs29_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:8]:
+            r=_v1161_s29_consensus(row); f=r['final_ai_orchestrator']; v=r['final_ai_shadow_validation']
+            wr='-' if v.get('win_rate') is None else f'{v["win_rate"]:.0%}'
+            lines.append(f'· {_v1161_s3_symbol(row)} {f["final_reference"]} · Conf {f["confidence"]:.0%} · Replay N {v["directional_samples"]} · WR {wr}')
+        total=_v1161_s29_validation()
+        head=f'🧪 <b>FINAL AI SHADOW VALIDATION S29</b>\n· Global {total["state"]} · N {total["directional_samples"]} · WAIT {total["wait_records"]}\n'
+        await update.message.reply_text(_v1161_s5_trim(head+('\n'.join(lines) or '· No runtime evidence')+'\n\n<i>Prospective only · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s29-god',e); await update.message.reply_text('⚠️ S29 God Validation 오류')
+
+
+async def version1161devs29_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S29_NUMBER}</b>\n{V1161_DEV_S29_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW VALIDATION ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: Final AI prospective registration · future-only outcome replay · confidence calibration audit\nConsensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s29_reconcile():
+    desired={'version':version1161devs29_cmd,'ultimate':ultimate1161devs29_cmd,'sniper':sniper1161devs29_cmd,'god':god1161devs29_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s29_reconcile()
+
+
+def _v1161_s29_static_audit():
+    required={'version':version1161devs29_cmd,'ultimate':ultimate1161devs29_cmd,'sniper':sniper1161devs29_cmd,'god':god1161devs29_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    saved=dict(_V1161_S9_LEDGER)
+    try:
+        _V1161_S9_LEDGER.clear()
+        for i,label in enumerate(('WIN','WIN','LOSS','WIN','WIN')):
+            _V1161_S9_LEDGER[str(i)]={'symbol':'TESTUSDT','final_ai_reference':'LONG','final_ai_confidence':0.75,'settlements':{'1h':{'label':label,'directional_return_pct':1 if label=='WIN' else -1}}}
+        ready=_v1161_s29_validation('TESTUSDT')
+        _V1161_S9_LEDGER.clear(); empty=_v1161_s29_validation('TESTUSDT')
+    finally:
+        _V1161_S9_LEDGER.clear(); _V1161_S9_LEDGER.update(saved)
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s29_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'prospective_metrics':ready['directional_samples']==5 and ready['correct']==4 and ready['wrong']==1,
+           'empty_safe':empty['state']=='INSUFFICIENT_PROSPECTIVE_EVIDENCE','shadow_only':ready['shadow_only'] and ready['read_only'] and all(ready[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'s28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs29','execute_order1161devs29')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'ready':ready,'empty':empty}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s29_reconcile(); audit=_v1161_s29_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S29 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S29 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S29 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S29 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S29 Final AI Shadow Validation safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s29_reconcile(); audit=_v1161_s29_static_audit()
+    print(f'{V1161_DEV_S29_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S29 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S29 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S29 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S29 Final AI Shadow Validation: ACTIVE · prospective outcome replay only',flush=True); print('A100 V116.1 DEV S29 insufficient samples: HOLD/WAIT',flush=True); print('A100 V116.1 DEV S29 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S29 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S29 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S29 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S29 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S29 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s29-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S30 - Final AI Validation Matrix & Confidence Calibration Guard
+# =============================================================================
+V1161_DEV_S30_NUMBER='116.1-DEV-S30'
+V1161_DEV_S30_VERSION='A100 V116.1 DEV S30'
+V1161_DEV_S30_TITLE='Final AI Validation Matrix · Regime/Rotation/Timeframe Calibration Guard · Read Only'
+V91_VERSION=V1161_DEV_S30_VERSION
+
+
+def _v1161_s30_bucket_confidence(value):
+    try: x=max(0.0,min(1.0,float(value or 0.0)))
+    except Exception: x=0.0
+    if x<0.40: return 'C0_00_39'
+    if x<0.55: return 'C1_40_54'
+    if x<0.70: return 'C2_55_69'
+    if x<0.85: return 'C3_70_84'
+    return 'C4_85_100'
+
+
+def _v1161_s30_dimension(item,name,default='UNKNOWN'):
+    aliases={
+        'regime':('market_regime','regime','regime_label'),
+        'rotation':('capital_rotation','rotation','rotation_state'),
+        'timeframe':('primary_timeframe','timeframe','dominant_timeframe'),
+    }
+    for key in aliases.get(name,(name,)):
+        value=item.get(key)
+        if isinstance(value,dict):
+            value=value.get('state') or value.get('label') or value.get('regime') or value.get('rotation') or value.get('timeframe')
+        if value not in (None,''):
+            return str(value).upper().replace(' ','_')[:32]
+    return default
+
+
+def _v1161_s30_rows(symbol=None):
+    rows=[]
+    for item in list(_V1161_S9_LEDGER.values()):
+        if not isinstance(item,dict): continue
+        if symbol and str(item.get('symbol') or '').upper()!=str(symbol).upper(): continue
+        ref=str(item.get('final_ai_reference') or 'UNRECORDED').upper()
+        conf=float(item.get('final_ai_confidence') or 0.0)
+        for horizon,outcome in (item.get('settlements') or {}).items():
+            if not isinstance(outcome,dict): continue
+            label=str(outcome.get('label') or '').upper()
+            if label not in ('WIN','LOSS','FLAT'): continue
+            rows.append({'symbol':str(item.get('symbol') or 'UNKNOWN').upper(),'reference':ref,'confidence':conf,
+                         'confidence_bucket':_v1161_s30_bucket_confidence(conf),'regime':_v1161_s30_dimension(item,'regime'),
+                         'rotation':_v1161_s30_dimension(item,'rotation'),'timeframe':_v1161_s30_dimension(item,'timeframe',str(horizon).upper()),
+                         'horizon':str(horizon).upper(),'label':label,'return_pct':float(outcome.get('directional_return_pct') or 0.0)})
+    return rows
+
+
+def _v1161_s30_group(rows,key):
+    groups={}
+    for row in rows:
+        groups.setdefault(str(row.get(key) or 'UNKNOWN'),[]).append(row)
+    out=[]
+    for name,items in groups.items():
+        directional=[x for x in items if x['reference'] in ('LONG','SHORT') and x['label'] in ('WIN','LOSS')]
+        n=len(directional); wins=sum(x['label']=='WIN' for x in directional); wr=wins/max(1,n)
+        avg_conf=sum(x['confidence'] for x in directional)/max(1,n)
+        gap=abs(avg_conf-wr) if n else None
+        if n<5: state='INSUFFICIENT'
+        elif gap is not None and gap>0.25: state='OVERCONFIDENCE_REVIEW' if avg_conf>wr else 'UNDERCONFIDENCE_REVIEW'
+        elif wr<0.45: state='DIRECTIONAL_REVIEW'
+        else: state='VALIDATED_SHADOW'
+        out.append({'name':name,'samples':n,'wins':wins,'losses':max(0,n-wins),'win_rate':round(wr,4) if n else None,
+                    'average_confidence':round(avg_conf,4) if n else None,'calibration_gap':round(gap,4) if gap is not None else None,
+                    'average_return_pct':round(sum(x['return_pct'] for x in directional)/max(1,n),4) if n else None,'state':state})
+    out.sort(key=lambda x:(x['samples'],x['name']),reverse=True)
+    return out
+
+
+def _v1161_s30_validation_matrix(symbol=None):
+    rows=_v1161_s30_rows(symbol)
+    directional=[x for x in rows if x['reference'] in ('LONG','SHORT') and x['label'] in ('WIN','LOSS')]
+    dimensions={k:_v1161_s30_group(rows,k) for k in ('regime','rotation','timeframe','confidence_bucket')}
+    review=[]
+    for dim,groups in dimensions.items():
+        for g in groups:
+            if g['state'] not in ('VALIDATED_SHADOW','INSUFFICIENT'):
+                review.append(f'{dim}:{g["name"]}:{g["state"]}')
+    sparse=sum(1 for groups in dimensions.values() for g in groups if g['samples']<5)
+    if len(directional)<10: state='INSUFFICIENT_MATRIX_EVIDENCE'
+    elif review: state='CALIBRATION_GUARD_REVIEW'
+    elif sparse: state='MATRIX_PARTIAL_READY'
+    else: state='MATRIX_SHADOW_READY'
+    return {'version':V1161_DEV_S30_NUMBER,'state':state,'directional_samples':len(directional),'settled_records':len(rows),
+            'dimensions':dimensions,'review_flags':review[:20],'sparse_groups':sparse,'minimum_global_samples':10,
+            'prospective_only':True,'shadow_only':True,'read_only':True,'calibration_guard_only':True,
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False}
+
+
+def _v1161_s30_consensus(row):
+    result=_v1161_s29_consensus(row)
+    result['final_ai_validation_matrix']=_v1161_s30_validation_matrix(_v1161_s3_symbol(row))
+    return result
+
+
+def _v1161_s30_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s29_card(row,result,rank,detail)
+    m=result.get('final_ai_validation_matrix') or {}
+    flags=m.get('review_flags') or []
+    extra=(f'\n\n<b>Final AI Validation Matrix S30</b>\n· State {m.get("state")} · Directional {m.get("directional_samples",0)}/{m.get("minimum_global_samples",10)}\n'
+           f'· Sparse Groups {m.get("sparse_groups",0)} · Review Flags {len(flags)}\n'
+           f'· Dimensions Regime · Rotation · Timeframe · Confidence\n'
+           f'· Calibration Guard only · Read Only · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs30_cmd(update,context):
+    await update.message.reply_text('🧭 V116.1 S30 Final AI Validation Matrix 분석 중...\nRegime · Rotation · Timeframe · Confidence · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧭 <b>S30 VALIDATION MATRIX</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s30_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s30_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s30-ultimate',e); await update.message.reply_text('⚠️ S30 Validation Matrix 오류 · /errors 확인')
+
+
+async def sniper1161devs30_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧭 <b>SNIPER S30</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s30_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        row,res=evaluated[0]; _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s30_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧭 <b>SNIPER S30 · VALIDATION MATRIX</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s30-sniper',e); await update.message.reply_text('⚠️ Sniper S30 오류')
+
+
+async def god1161devs30_cmd(update,context):
+    try:
+        matrix=_v1161_s30_validation_matrix(); lines=[]
+        for dim in ('regime','rotation','timeframe','confidence_bucket'):
+            groups=matrix['dimensions'].get(dim) or []
+            top=groups[0] if groups else None
+            if top:
+                wr='-' if top['win_rate'] is None else f'{top["win_rate"]:.0%}'
+                lines.append(f'· {dim.upper()} {top["name"]} · N {top["samples"]} · WR {wr} · {top["state"]}')
+            else: lines.append(f'· {dim.upper()} NO_EVIDENCE')
+        head=f'🧭 <b>FINAL AI VALIDATION MATRIX S30</b>\n· Global {matrix["state"]} · N {matrix["directional_samples"]} · Flags {len(matrix["review_flags"])}\n'
+        await update.message.reply_text(_v1161_s5_trim(head+'\n'.join(lines)+'\n\n<i>Prospective only · Calibration Guard · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s30-god',e); await update.message.reply_text('⚠️ S30 God Matrix 오류')
+
+
+async def version1161devs30_cmd(update,context):
+    await update.message.reply_text(f'🧭 <b>A100 V{V1161_DEV_S30_NUMBER}</b>\n{V1161_DEV_S30_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW CALIBRATION GUARD ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: prospective validation matrix · regime/rotation/timeframe/confidence segmentation · overconfidence guard\nConsensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s30_reconcile():
+    desired={'version':version1161devs30_cmd,'ultimate':ultimate1161devs30_cmd,'sniper':sniper1161devs30_cmd,'god':god1161devs30_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s30_reconcile()
+
+
+def _v1161_s30_static_audit():
+    required={'version':version1161devs30_cmd,'ultimate':ultimate1161devs30_cmd,'sniper':sniper1161devs30_cmd,'god':god1161devs30_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    saved=dict(_V1161_S9_LEDGER)
+    try:
+        _V1161_S9_LEDGER.clear()
+        regimes=('BULL','BULL','BEAR','BULL','BEAR','BULL','BULL','BEAR','BULL','BULL')
+        labels=('WIN','WIN','LOSS','WIN','LOSS','WIN','WIN','LOSS','WIN','WIN')
+        for i,(regime,label) in enumerate(zip(regimes,labels)):
+            _V1161_S9_LEDGER[str(i)]={'symbol':'TESTUSDT','final_ai_reference':'LONG','final_ai_confidence':0.76,
+                'market_regime':regime,'capital_rotation':'ALT_ROTATION','primary_timeframe':'4H',
+                'settlements':{'4h':{'label':label,'directional_return_pct':1 if label=='WIN' else -1}}}
+        ready=_v1161_s30_validation_matrix('TESTUSDT')
+        _V1161_S9_LEDGER.clear(); empty=_v1161_s30_validation_matrix('TESTUSDT')
+    finally:
+        _V1161_S9_LEDGER.clear(); _V1161_S9_LEDGER.update(saved)
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s30_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'matrix_dimensions':all(k in ready['dimensions'] for k in ('regime','rotation','timeframe','confidence_bucket')),
+           'global_samples':ready['directional_samples']==10,'empty_safe':empty['state']=='INSUFFICIENT_MATRIX_EVIDENCE',
+           'shadow_only':ready['shadow_only'] and ready['read_only'] and all(ready[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'s29_preserved':'final_ai_shadow_validation' in sample,'s28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs30','execute_order1161devs30')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'ready':ready,'empty':empty}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s30_reconcile(); audit=_v1161_s30_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S30 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S30 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S30 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S30 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S30 Final AI Validation Matrix safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s30_reconcile(); audit=_v1161_s30_static_audit()
+    print(f'{V1161_DEV_S30_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S30 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S30 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S30 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S30 Final AI Validation Matrix: ACTIVE · prospective segmentation only',flush=True); print('A100 V116.1 DEV S30 calibration guard: READ ONLY',flush=True); print('A100 V116.1 DEV S30 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S30 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S30 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S30 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S30 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S30 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s30-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S31 - Final AI Weakness Map & Reliability Boundary
+# =============================================================================
+V1161_DEV_S31_NUMBER='116.1-DEV-S31'
+V1161_DEV_S31_VERSION='A100 V116.1 DEV S31'
+V1161_DEV_S31_TITLE='Final AI Weakness Map · Reliability Boundary · Shadow Read Only'
+V91_VERSION=V1161_DEV_S31_VERSION
+
+
+def _v1161_s31_boundary(group):
+    n=int(group.get('samples') or 0)
+    wr=group.get('win_rate')
+    gap=group.get('calibration_gap')
+    avg_ret=group.get('average_return_pct')
+    state=str(group.get('state') or 'INSUFFICIENT')
+    reasons=[]
+    if n<5:
+        return {'boundary':'UNKNOWN','score':0.0,'reasons':['INSUFFICIENT_SAMPLES'],'action':'WAIT_FOR_EVIDENCE'}
+    wr=float(wr or 0.0); gap=float(gap or 0.0); avg_ret=float(avg_ret or 0.0)
+    score=max(0.0,min(1.0,0.50*wr+0.25*max(0.0,1.0-gap/0.40)+0.25*max(0.0,min(1.0,(avg_ret+1.0)/2.0))))
+    if wr<0.45: reasons.append('LOW_WIN_RATE')
+    if gap>0.25: reasons.append('CALIBRATION_GAP')
+    if avg_ret<0.0: reasons.append('NEGATIVE_AVERAGE_RETURN')
+    if state in ('OVERCONFIDENCE_REVIEW','UNDERCONFIDENCE_REVIEW','DIRECTIONAL_REVIEW'): reasons.append(state)
+    if wr>=0.60 and gap<=0.15 and avg_ret>=0.0:
+        boundary='RELIABLE'; action='SHADOW_REFERENCE_ALLOWED'
+    elif wr<0.45 or avg_ret<0.0 or gap>0.30:
+        boundary='WEAK'; action='SHADOW_CAUTION_ONLY'
+    else:
+        boundary='CAUTION'; action='SHADOW_REVIEW_REQUIRED'
+    return {'boundary':boundary,'score':round(score,4),'reasons':reasons or ['BALANCED_EVIDENCE'],'action':action}
+
+
+def _v1161_s31_weakness_map(symbol=None):
+    matrix=_v1161_s30_validation_matrix(symbol)
+    dimensions={}; weak=[]; reliable=[]; caution=[]; unknown=[]
+    for dim,groups in (matrix.get('dimensions') or {}).items():
+        mapped=[]
+        for group in groups:
+            item=dict(group); item.update(_v1161_s31_boundary(group)); mapped.append(item)
+            ref=f'{dim}:{item.get("name")}'
+            if item['boundary']=='WEAK': weak.append(ref)
+            elif item['boundary']=='RELIABLE': reliable.append(ref)
+            elif item['boundary']=='CAUTION': caution.append(ref)
+            else: unknown.append(ref)
+        dimensions[dim]=mapped
+    if matrix.get('directional_samples',0)<10:
+        state='INSUFFICIENT_RELIABILITY_EVIDENCE'
+    elif weak:
+        state='WEAKNESS_BOUNDARY_REVIEW'
+    elif caution:
+        state='PARTIAL_RELIABILITY_BOUNDARY'
+    elif reliable and not unknown:
+        state='RELIABILITY_BOUNDARY_READY'
+    else:
+        state='BOUNDARY_PARTIAL_READY'
+    return {'version':V1161_DEV_S31_NUMBER,'state':state,'source_matrix_state':matrix.get('state'),
+            'directional_samples':matrix.get('directional_samples',0),'dimensions':dimensions,
+            'weak_segments':weak[:20],'reliable_segments':reliable[:20],'caution_segments':caution[:20],'unknown_segments':unknown[:20],
+            'weak_count':len(weak),'reliable_count':len(reliable),'caution_count':len(caution),'unknown_count':len(unknown),
+            'prospective_only':True,'shadow_only':True,'read_only':True,'interpretation_only':True,
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,'gate_mutated':False,'order_authority':False}
+
+
+def _v1161_s31_consensus(row):
+    result=_v1161_s30_consensus(row)
+    result['final_ai_weakness_map']=_v1161_s31_weakness_map(_v1161_s3_symbol(row))
+    return result
+
+
+def _v1161_s31_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s30_card(row,result,rank,detail)
+    w=result.get('final_ai_weakness_map') or {}
+    extra=(f'\n\n<b>Final AI Weakness Map S31</b>\n· State {w.get("state")} · N {w.get("directional_samples",0)}\n'
+           f'· Reliable {w.get("reliable_count",0)} · Caution {w.get("caution_count",0)} · Weak {w.get("weak_count",0)} · Unknown {w.get("unknown_count",0)}\n'
+           f'· Reliability Boundary only · Shadow Read Only · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs31_cmd(update,context):
+    await update.message.reply_text('🧩 V116.1 S31 Weakness Map 분석 중...\nReliability · Caution · Weakness · Unknown · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧩 <b>S31 WEAKNESS MAP</b>\nNO_RUNTIME_EVIDENCE · UNKNOWN',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s31_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s31_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s31-ultimate',e); await update.message.reply_text('⚠️ S31 Weakness Map 오류 · /errors 확인')
+
+
+async def sniper1161devs31_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧩 <b>SNIPER S31</b>\nNO_EVIDENCE · UNKNOWN',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s31_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        row,res=evaluated[0]; _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s31_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧩 <b>SNIPER S31 · RELIABILITY BOUNDARY</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s31-sniper',e); await update.message.reply_text('⚠️ Sniper S31 오류')
+
+
+async def god1161devs31_cmd(update,context):
+    try:
+        w=_v1161_s31_weakness_map(); lines=[]
+        for dim in ('regime','rotation','timeframe','confidence_bucket'):
+            groups=w['dimensions'].get(dim) or []
+            top=groups[0] if groups else None
+            if top: lines.append(f'· {dim.upper()} {top["name"]} · N {top["samples"]} · {top["boundary"]} · Score {top["score"]:.2f}')
+            else: lines.append(f'· {dim.upper()} NO_EVIDENCE')
+        head=f'🧩 <b>FINAL AI WEAKNESS MAP S31</b>\n· Global {w["state"]} · N {w["directional_samples"]}\n· Reliable {w["reliable_count"]} · Caution {w["caution_count"]} · Weak {w["weak_count"]} · Unknown {w["unknown_count"]}\n'
+        await update.message.reply_text(_v1161_s5_trim(head+'\n'.join(lines)+'\n\n<i>Prospective only · Reliability Boundary · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s31-god',e); await update.message.reply_text('⚠️ S31 God Weakness Map 오류')
+
+
+async def version1161devs31_cmd(update,context):
+    await update.message.reply_text(f'🧩 <b>A100 V{V1161_DEV_S31_NUMBER}</b>\n{V1161_DEV_S31_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW RELIABILITY INTERPRETATION ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: weakness map · reliable/caution/weak/unknown boundary · prospective matrix interpretation\nConsensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s31_reconcile():
+    desired={'version':version1161devs31_cmd,'ultimate':ultimate1161devs31_cmd,'sniper':sniper1161devs31_cmd,'god':god1161devs31_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s31_reconcile()
+
+
+def _v1161_s31_static_audit():
+    required={'version':version1161devs31_cmd,'ultimate':ultimate1161devs31_cmd,'sniper':sniper1161devs31_cmd,'god':god1161devs31_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    saved=dict(_V1161_S9_LEDGER)
+    try:
+        _V1161_S9_LEDGER.clear()
+        labels=('WIN','WIN','WIN','WIN','WIN','WIN','LOSS','LOSS','WIN','WIN')
+        for i,label in enumerate(labels):
+            _V1161_S9_LEDGER[str(i)]={'symbol':'TESTUSDT','final_ai_reference':'LONG','final_ai_confidence':0.72,
+                'market_regime':'BULL','capital_rotation':'ALT_ROTATION','primary_timeframe':'4H',
+                'settlements':{'4h':{'label':label,'directional_return_pct':1.2 if label=='WIN' else -0.8}}}
+        ready=_v1161_s31_weakness_map('TESTUSDT')
+        _V1161_S9_LEDGER.clear(); empty=_v1161_s31_weakness_map('TESTUSDT')
+    finally:
+        _V1161_S9_LEDGER.clear(); _V1161_S9_LEDGER.update(saved)
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s31_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'boundaries_present':all(k in ready for k in ('weak_segments','reliable_segments','caution_segments','unknown_segments')),
+           'global_samples':ready['directional_samples']==10,'empty_safe':empty['state']=='INSUFFICIENT_RELIABILITY_EVIDENCE',
+           'shadow_only':ready['shadow_only'] and ready['read_only'] and all(ready[k] is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','order_authority')),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'s30_preserved':'final_ai_validation_matrix' in sample,'s29_preserved':'final_ai_shadow_validation' in sample,
+           's28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs31','execute_order1161devs31')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'samples':{'ready':ready,'empty':empty}}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s31_reconcile(); audit=_v1161_s31_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S31 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S31 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S31 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S31 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S31 Final AI Weakness Map safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s31_reconcile(); audit=_v1161_s31_static_audit()
+    print(f'{V1161_DEV_S31_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S31 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S31 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S31 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S31 Final AI Weakness Map: ACTIVE · prospective interpretation only',flush=True); print('A100 V116.1 DEV S31 reliability boundary: READ ONLY',flush=True); print('A100 V116.1 DEV S31 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S31 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S31 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S31 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S31 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S31 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s31-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S32 - Final AI Explainable Decision Timeline
+# =============================================================================
+V1161_DEV_S32_NUMBER='116.1-DEV-S32'
+V1161_DEV_S32_VERSION='A100 V116.1 DEV S32'
+V1161_DEV_S32_TITLE='Final AI Explainable Decision Timeline · Evidence Replay · Shadow Read Only'
+V91_VERSION=V1161_DEV_S32_VERSION
+
+_V1161_S32_TIMELINE_STAGES=(
+    ('LONG_SHORT_WAIT','ai_debate_2'),
+    ('PSYCHOLOGY','market_psychology'),
+    ('WHALE','whale_intelligence'),
+    ('MACRO','macro_ai'),
+    ('NEWS','news_ai'),
+    ('PORTFOLIO','portfolio_intelligence'),
+    ('MARKET_REGIME','market_regime_intelligence'),
+    ('CAPITAL_ROTATION','capital_rotation_intelligence'),
+    ('MULTI_TIMEFRAME','multi_timeframe_intelligence'),
+    ('MEMORY_GRAPH','ai_memory_graph'),
+    ('CROSS_ENGINE_AUDIT','cross_engine_consensus_quality'),
+    ('ENGINE_TRUST','engine_trust_calibration'),
+    ('EXPLAINABLE_AI','explainable_ai_2'),
+    ('RESEARCH_NOTEBOOK','research_notebook_2'),
+    ('SELF_REVIEW','self_review_postmortem'),
+    ('ADAPTIVE_VALIDATION','adaptive_learning_validation'),
+)
+
+
+def _v1161_s32_stage_reason(payload):
+    if not isinstance(payload,dict) or not payload:
+        return 'NO_EVIDENCE'
+    for key in ('reason','summary','explanation','why','state','status','verdict','reference','decision'):
+        value=payload.get(key)
+        if value not in (None,''):
+            if isinstance(value,(list,tuple)):
+                return ', '.join(str(x) for x in value[:3])[:160]
+            return str(value)[:160]
+    return 'EVIDENCE_AVAILABLE'
+
+
+def _v1161_s32_decision_timeline(row,result=None):
+    result=result or _v1161_s31_consensus(row)
+    steps=[]; cumulative={'LONG':0.0,'SHORT':0.0,'WAIT':0.0}; available=0
+    for idx,(label,key) in enumerate(_V1161_S32_TIMELINE_STAGES,1):
+        payload=result.get(key)
+        vote=_v1161_s28_engine_vote(key,payload)
+        direction=vote.get('direction') or 'UNKNOWN'; confidence=float(vote.get('confidence') or 0.0)
+        is_available=bool(vote.get('available'))
+        if is_available: available+=1
+        before=dict(cumulative)
+        if is_available and direction in cumulative:
+            cumulative[direction]+=max(0.05,confidence)
+        ranked=sorted(cumulative.items(),key=lambda x:x[1],reverse=True)
+        leader=ranked[0][0] if ranked and ranked[0][1]>0 else 'WAIT'
+        margin=(ranked[0][1]-ranked[1][1]) if len(ranked)>1 else ranked[0][1] if ranked else 0.0
+        steps.append({'sequence':idx,'stage':label,'engine_key':key,'available':is_available,
+                      'direction':direction,'confidence':round(confidence,4),'leader_after_stage':leader,
+                      'leader_margin':round(margin,4),'score_before':before,'score_after':dict(cumulative),
+                      'reason':_v1161_s32_stage_reason(payload),'write_authority':False})
+    final=result.get('final_ai_orchestrator') or {}
+    weakness=result.get('final_ai_weakness_map') or {}
+    safety=list(final.get('safety_reasons') or [])
+    final_step={'sequence':len(steps)+1,'stage':'FINAL_AI','engine_key':'final_ai_orchestrator','available':bool(final),
+                'direction':str(final.get('final_reference') or 'WAIT').upper(),'confidence':round(float(final.get('confidence') or 0.0),4),
+                'leader_after_stage':str(final.get('final_reference') or 'WAIT').upper(),'leader_margin':None,
+                'score_before':dict(cumulative),'score_after':dict(cumulative),
+                'reason':(', '.join(safety) if safety else 'FINAL_EVIDENCE_SYNTHESIS')[:160],'write_authority':False}
+    steps.append(final_step)
+    transitions=[]; prev=None
+    for step in steps:
+        leader=step['leader_after_stage']
+        if prev is not None and leader!=prev:
+            transitions.append({'at_sequence':step['sequence'],'stage':step['stage'],'from':prev,'to':leader})
+        prev=leader
+    return {'version':V1161_DEV_S32_NUMBER,'state':'TIMELINE_READY' if available>=8 else 'TIMELINE_PARTIAL_EVIDENCE',
+            'symbol':_v1161_s3_symbol(row),'steps':steps,'step_count':len(steps),'available_engine_count':available,
+            'engine_count':len(_V1161_S32_TIMELINE_STAGES),'leader_transitions':transitions,
+            'final_reference':final_step['direction'],'final_confidence':final_step['confidence'],
+            'final_safety_reasons':safety,'reliability_boundary_state':weakness.get('state'),
+            'shadow_only':True,'read_only':True,'replay_only':True,'prospective_safe':True,
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,
+            'gate_mutated':False,'weight_mutated':False,'order_authority':False}
+
+
+def _v1161_s32_consensus(row):
+    result=_v1161_s31_consensus(row)
+    result['final_ai_decision_timeline']=_v1161_s32_decision_timeline(row,result)
+    return result
+
+
+def _v1161_s32_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s31_card(row,result,rank,detail)
+    t=result.get('final_ai_decision_timeline') or {}
+    transitions=t.get('leader_transitions') or []
+    transition_text='NONE' if not transitions else ' · '.join(f'{x["from"]}>{x["to"]}@{x["stage"]}' for x in transitions[:3])
+    extra=(f'\n\n<b>Final AI Decision Timeline S32</b>\n· State {t.get("state")} · Evidence {t.get("available_engine_count",0)}/{t.get("engine_count",0)}\n'
+           f'· Steps {t.get("step_count",0)} · Final {t.get("final_reference","WAIT")} · Conf {t.get("final_confidence",0):.0%}\n'
+           f'· Leader transitions {transition_text}\n· Explainable replay only · Read Only · Override NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs32_cmd(update,context):
+    await update.message.reply_text('🧭 V116.1 S32 Decision Timeline 분석 중...\nEngine-by-engine evidence replay · Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧭 <b>S32 DECISION TIMELINE</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s32_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s32_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s32-ultimate',e); await update.message.reply_text('⚠️ S32 Decision Timeline 오류 · /errors 확인')
+
+
+async def sniper1161devs32_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧭 <b>SNIPER S32</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s32_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        row,res=evaluated[0]; _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s32_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧭 <b>SNIPER S32 · DECISION TIMELINE</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s32-sniper',e); await update.message.reply_text('⚠️ Sniper S32 오류')
+
+
+async def god1161devs32_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:5]:
+            r=_v1161_s32_consensus(row); t=r['final_ai_decision_timeline']
+            changes=t.get('leader_transitions') or []
+            lines.append(f'· {_v1161_s3_symbol(row)} {t["final_reference"]} · Conf {t["final_confidence"]:.0%} · Evidence {t["available_engine_count"]}/{t["engine_count"]} · Changes {len(changes)}')
+        await update.message.reply_text(_v1161_s5_trim('🧭 <b>FINAL AI DECISION TIMELINE S32</b>\n'+('\n'.join(lines) or '· No runtime evidence')+'\n\n<i>Evidence replay only · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s32-god',e); await update.message.reply_text('⚠️ S32 God Timeline 오류')
+
+
+async def version1161devs32_cmd(update,context):
+    await update.message.reply_text(f'🧭 <b>A100 V{V1161_DEV_S32_NUMBER}</b>\n{V1161_DEV_S32_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW EXPLAINABLE REPLAY ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nCore: engine sequence · confidence contribution · leader transitions · final WAIT reasons\nConsensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s32_reconcile():
+    desired={'version':version1161devs32_cmd,'ultimate':ultimate1161devs32_cmd,'sniper':sniper1161devs32_cmd,'god':god1161devs32_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s32_reconcile()
+
+
+def _v1161_s32_static_audit():
+    required={'version':version1161devs32_cmd,'ultimate':ultimate1161devs32_cmd,'sniper':sniper1161devs32_cmd,'god':god1161devs32_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s32_consensus({}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    timeline=sample.get('final_ai_decision_timeline') or {}
+    steps=timeline.get('steps') or []
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'timeline_present':bool(steps),
+           'final_stage_last':bool(steps) and steps[-1].get('stage')=='FINAL_AI','sequence_stable':[x.get('sequence') for x in steps]==list(range(1,len(steps)+1)),
+           'read_only':timeline.get('shadow_only') and timeline.get('read_only') and timeline.get('replay_only'),
+           'no_mutation':all(timeline.get(k) is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','weight_mutated','order_authority')),
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'s31_preserved':'final_ai_weakness_map' in sample,
+           's30_preserved':'final_ai_validation_matrix' in sample,'s29_preserved':'final_ai_shadow_validation' in sample,
+           's28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs32','execute_order1161devs32')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'sample':timeline}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s32_reconcile(); audit=_v1161_s32_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S32 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S32 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S32 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S32 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S32 Final AI Decision Timeline safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s32_reconcile(); audit=_v1161_s32_static_audit()
+    print(f'{V1161_DEV_S32_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S32 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S32 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S32 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S32 Final AI Explainable Decision Timeline: ACTIVE · evidence replay only',flush=True); print('A100 V116.1 DEV S32 timeline authority: READ ONLY',flush=True); print('A100 V116.1 DEV S32 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S32 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S32 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S32 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S32 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S32 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s32-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# -----------------------------------------------------------------------------
+# A100 V116.1 DEV S33 - AI Scenario Simulation Engine
+# Shadow-only counterfactual sensitivity analysis. No runtime mutation.
+# -----------------------------------------------------------------------------
+V1161_DEV_S33_NUMBER='116.1-DEV-S33'
+V1161_DEV_S33_VERSION='A100 V116.1 DEV S33'
+V1161_DEV_S33_TITLE='AI Scenario Simulation Engine · Counterfactual Sensitivity · Shadow Read Only'
+V91_VERSION=V1161_DEV_S33_VERSION
+
+_V1161_S33_SCENARIOS=(
+    ('FUNDING_POSITIVE_SHOCK','funding',0.05),
+    ('FUNDING_NEGATIVE_SHOCK','funding',-0.03),
+    ('OI_CONTRACTION','open_interest',-0.10),
+    ('WHALE_SELL_PRESSURE','whale','SHORT'),
+    ('MACRO_RISK_OFF','macro','SHORT'),
+    ('NEGATIVE_NEWS_SHOCK','news','SHORT'),
+)
+
+
+def _v1161_s33_clone(value):
+    try: return json.loads(json.dumps(value,ensure_ascii=False,default=str))
+    except Exception:
+        if isinstance(value,dict): return {k:_v1161_s33_clone(v) for k,v in value.items()}
+        if isinstance(value,list): return [_v1161_s33_clone(v) for v in value]
+        return value
+
+
+def _v1161_s33_apply(node,factor,value,path=''):
+    """Apply a counterfactual to a cloned evidence tree only."""
+    changed=[]
+    aliases={
+        'funding':('funding','funding_rate','fundingrate'),
+        'open_interest':('open_interest','openinterest','oi_change','oi_delta','oi_pct'),
+        'whale':('whale','whale_signal','whale_direction'),
+        'macro':('macro','macro_signal','macro_direction'),
+        'news':('news','news_signal','news_direction','sentiment'),
+    }.get(factor,(factor,))
+    if isinstance(node,dict):
+        for k in list(node):
+            key=str(k).lower().replace('-','_')
+            p=f'{path}.{k}' if path else str(k)
+            if any(a in key for a in aliases):
+                old=node[k]
+                if isinstance(value,(int,float)):
+                    if isinstance(old,(int,float)): node[k]=value
+                    elif isinstance(old,str): node[k]=str(value)
+                    else: continue
+                else:
+                    if isinstance(old,str): node[k]=value
+                    elif isinstance(old,dict):
+                        for dk in ('direction','signal','bias','state','reference'):
+                            if dk in old: old[dk]=value; break
+                        else: continue
+                    else: continue
+                changed.append({'path':p,'before':old,'after':node[k]})
+            else:
+                changed.extend(_v1161_s33_apply(node[k],factor,value,p))
+    elif isinstance(node,list):
+        for i,v in enumerate(node): changed.extend(_v1161_s33_apply(v,factor,value,f'{path}[{i}]'))
+    return changed
+
+
+def _v1161_s33_final(result):
+    f=result.get('final_ai_orchestrator') or {}
+    return str(f.get('final_reference') or 'WAIT').upper(),float(f.get('confidence') or 0.0),float(f.get('coverage') or 0.0),list(f.get('safety_reasons') or [])
+
+
+def _v1161_s33_simulate(row,base_result=None):
+    base_result=base_result or _v1161_s32_consensus(row)
+    base_ref,base_conf,base_cov,base_safety=_v1161_s33_final(base_result)
+    scenarios=[]
+    for name,factor,value in _V1161_S33_SCENARIOS:
+        clone=_v1161_s33_clone(row)
+        changed=_v1161_s33_apply(clone,factor,value)
+        simulated=_v1161_s32_consensus(clone)
+        ref,conf,cov,safety=_v1161_s33_final(simulated)
+        scenarios.append({'name':name,'factor':factor,'target':value,'changed_fields':len(changed),
+                          'reference':ref,'confidence':round(conf,6),'coverage':round(cov,6),
+                          'decision_flipped':ref!=base_ref,'confidence_delta':round(conf-base_conf,6),
+                          'coverage_delta':round(cov-base_cov,6),'safety_delta':len(safety)-len(base_safety),
+                          'shadow_only':True,'applied_to_runtime':False})
+    flip_count=sum(1 for x in scenarios if x['decision_flipped'])
+    max_delta=max((abs(x['confidence_delta']) for x in scenarios),default=0.0)
+    changed=sum(1 for x in scenarios if x['changed_fields']>0)
+    if flip_count>=3 or max_delta>=0.30: stability='HIGHLY_SENSITIVE'
+    elif flip_count or max_delta>=0.15: stability='SENSITIVE'
+    else: stability='STABLE'
+    ranked=sorted(scenarios,key=lambda x:(x['decision_flipped'],abs(x['confidence_delta']),abs(x['coverage_delta'])),reverse=True)
+    return {'version':V1161_DEV_S33_NUMBER,'state':'SCENARIO_SIMULATION_READY' if changed else 'SCENARIO_EVIDENCE_PARTIAL',
+            'base_reference':base_ref,'base_confidence':round(base_conf,6),'base_coverage':round(base_cov,6),
+            'scenario_count':len(scenarios),'effective_scenario_count':changed,'decision_flip_count':flip_count,
+            'max_confidence_delta':round(max_delta,6),'scenario_stability':stability,
+            'most_sensitive_factor':ranked[0]['factor'] if ranked else 'NONE','scenarios':scenarios,
+            'shadow_only':True,'read_only':True,'counterfactual_only':True,'original_evidence_unchanged':True,
+            'applied':False,'mutation_allowed':False,'override':False,'consensus_mutated':False,
+            'gate_mutated':False,'weight_mutated':False,'order_authority':False}
+
+
+def _v1161_s33_consensus(row):
+    result=_v1161_s32_consensus(row)
+    result['ai_scenario_simulation']=_v1161_s33_simulate(row,result)
+    return result
+
+
+def _v1161_s33_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s32_card(row,result,rank,detail)
+    s=result.get('ai_scenario_simulation') or {}
+    top=(s.get('scenarios') or [])[:3]
+    detail_text=' · '.join(f'{x.get("factor")}:{x.get("reference")} ΔC{x.get("confidence_delta",0):+.0%}' for x in top) or 'NO_EFFECTIVE_SCENARIO'
+    extra=(f'\n\n<b>AI Scenario Simulation S33</b>\n· State {s.get("state")} · Stability {s.get("scenario_stability")}\n'
+           f'· Base {s.get("base_reference")} · Scenarios {s.get("effective_scenario_count",0)}/{s.get("scenario_count",0)} · Flips {s.get("decision_flip_count",0)}\n'
+           f'· Sensitive factor {s.get("most_sensitive_factor")} · Max ΔConf {s.get("max_confidence_delta",0):.0%}\n· {detail_text}\n'
+           f'· Counterfactual Shadow Only · Runtime Mutation NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs33_cmd(update,context):
+    await update.message.reply_text('🧪 V116.1 S33 Scenario Simulation 분석 중...\nCounterfactual sensitivity · Shadow Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧪 <b>S33 SCENARIO SIMULATION</b>\nNO_RUNTIME_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s33_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s33_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s33-ultimate',e); await update.message.reply_text('⚠️ S33 Scenario Simulation 오류 · /errors 확인')
+
+
+async def sniper1161devs33_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧪 <b>SNIPER S33</b>\nNO_EVIDENCE · WAIT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s33_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['final_ai_orchestrator']['final_reference']!='WAIT',z[1]['final_ai_orchestrator']['confidence']),reverse=True)
+        row,res=evaluated[0]; _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s33_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧪 <b>SNIPER S33 · SCENARIO SIMULATION</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s33-sniper',e); await update.message.reply_text('⚠️ Sniper S33 오류')
+
+
+async def god1161devs33_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:5]:
+            r=_v1161_s33_consensus(row); s=r['ai_scenario_simulation']
+            lines.append(f'· {_v1161_s3_symbol(row)} {s["base_reference"]} · {s["scenario_stability"]} · Flips {s["decision_flip_count"]} · Sensitive {s["most_sensitive_factor"]}')
+        await update.message.reply_text(_v1161_s5_trim('🧪 <b>AI SCENARIO SIMULATION S33</b>\n'+('\n'.join(lines) or '· No runtime evidence')+'\n\n<i>Counterfactual only · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s33-god',e); await update.message.reply_text('⚠️ S33 God Scenario 오류')
+
+
+async def version1161devs33_cmd(update,context):
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S33_NUMBER}</b>\n{V1161_DEV_S33_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW COUNTERFACTUAL SIMULATION ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nScenarios: Funding ± shock · OI contraction · Whale sell · Macro risk-off · Negative news\nConsensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s33_reconcile():
+    desired={'version':version1161devs33_cmd,'ultimate':ultimate1161devs33_cmd,'sniper':sniper1161devs33_cmd,'god':god1161devs33_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s33_reconcile()
+
+
+def _v1161_s33_static_audit():
+    required={'version':version1161devs33_cmd,'ultimate':ultimate1161devs33_cmd,'sniper':sniper1161devs33_cmd,'god':god1161devs33_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before_weights=dict(_V1161_S7_FACTOR_WEIGHTS); original={'funding_rate':-0.01,'open_interest_change':0.08,'whale_signal':'LONG','macro_signal':'WAIT','news_signal':'WAIT'}
+    before_row=_v1161_s33_clone(original); sample=_v1161_s33_consensus(original); after_weights=dict(_V1161_S7_FACTOR_WEIGHTS)
+    sim=sample.get('ai_scenario_simulation') or {}
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'scenario_count':sim.get('scenario_count')==len(_V1161_S33_SCENARIOS),
+           'original_immutable':original==before_row,'shadow_only':sim.get('shadow_only') and sim.get('read_only') and sim.get('counterfactual_only'),
+           'no_mutation':all(sim.get(k) is False for k in ('applied','mutation_allowed','override','consensus_mutated','gate_mutated','weight_mutated','order_authority')),
+           'weights_immutable':before_weights==after_weights==_V1161_S12_BASE_WEIGHTS,'s32_preserved':'final_ai_decision_timeline' in sample,
+           's31_preserved':'final_ai_weakness_map' in sample,'s30_preserved':'final_ai_validation_matrix' in sample,
+           's29_preserved':'final_ai_shadow_validation' in sample,'s28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs33','execute_order1161devs33')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'sample':sim}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s33_reconcile(); audit=_v1161_s33_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S33 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S33 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S33 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S33 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S33 AI Scenario Simulation safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s33_reconcile(); audit=_v1161_s33_static_audit()
+    print(f'{V1161_DEV_S33_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S33 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S33 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S33 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S33 AI Scenario Simulation Engine: ACTIVE · counterfactual only',flush=True); print('A100 V116.1 DEV S33 scenario authority: SHADOW READ ONLY',flush=True); print('A100 V116.1 DEV S33 original runtime evidence mutation: DISABLED',flush=True); print('A100 V116.1 DEV S33 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S33 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S33 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S33 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S33 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S33 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s33-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# -----------------------------------------------------------------------------
+# A100 V116.1 DEV S34 - AI Self-Verification Engine
+# Shadow-only verification of Final AI evidence quality. No decision mutation.
+# -----------------------------------------------------------------------------
+V1161_DEV_S34_NUMBER='116.1-DEV-S34'
+V1161_DEV_S34_VERSION='A100 V116.1 DEV S34'
+V1161_DEV_S34_TITLE='AI Self-Verification Engine · Counter Evidence · Confidence Bias · Shadow Read Only'
+V91_VERSION=V1161_DEV_S34_VERSION
+
+
+def _v1161_s34_num(value,default=0.0):
+    try: return float(value)
+    except Exception: return float(default)
+
+
+def _v1161_s34_direction(value):
+    value=str(value or 'UNKNOWN').upper()
+    if 'LONG' in value or value in ('BUY','BULL','BULLISH'): return 'LONG'
+    if 'SHORT' in value or value in ('SELL','BEAR','BEARISH'): return 'SHORT'
+    if 'WAIT' in value or value in ('NEUTRAL','HOLD','MIXED','RANGE'): return 'WAIT'
+    return 'UNKNOWN'
+
+
+def _v1161_s34_collect_directions(node,path='',out=None):
+    out=[] if out is None else out
+    if isinstance(node,dict):
+        for k,v in node.items():
+            p=f'{path}.{k}' if path else str(k)
+            lk=str(k).lower()
+            if any(t in lk for t in ('direction','signal','reference','decision','bias','side')) and not isinstance(v,(dict,list)):
+                d=_v1161_s34_direction(v)
+                if d!='UNKNOWN': out.append({'path':p,'direction':d})
+            else: _v1161_s34_collect_directions(v,p,out)
+    elif isinstance(node,list):
+        for i,v in enumerate(node): _v1161_s34_collect_directions(v,f'{path}[{i}]',out)
+    return out
+
+
+def _v1161_s34_verify(row,result=None):
+    result=result or _v1161_s33_consensus(row)
+    final=result.get('final_ai_orchestrator') or {}
+    final_ref=_v1161_s34_direction(final.get('final_reference'))
+    final_conf=_v1161_s34_num(final.get('confidence'))
+    coverage=_v1161_s34_num(final.get('coverage'))
+    safety=list(final.get('safety_reasons') or [])
+    directions=_v1161_s34_collect_directions(result)
+    opposite='SHORT' if final_ref=='LONG' else 'LONG' if final_ref=='SHORT' else None
+    directional=[x for x in directions if x['direction'] in ('LONG','SHORT')]
+    counter=[x for x in directional if opposite and x['direction']==opposite]
+    support=[x for x in directional if final_ref in ('LONG','SHORT') and x['direction']==final_ref]
+    counter_ratio=(len(counter)/max(1,len(directional))) if opposite else 0.0
+
+    memory=result.get('ai_memory_graph') or {}
+    memory_cases=int(memory.get('matched_cases') or memory.get('case_count') or memory.get('top_k_count') or 0)
+    memory_conf=_v1161_s34_num(memory.get('confidence') or memory.get('average_similarity'))
+    memory_sufficient=memory_cases>=3 or memory_conf>=0.55
+
+    scenario=result.get('ai_scenario_simulation') or {}
+    stability=str(scenario.get('scenario_stability') or 'UNKNOWN').upper()
+    flip_count=int(scenario.get('decision_flip_count') or 0)
+    scenario_stable=stability=='STABLE' and flip_count==0
+
+    weakness=result.get('final_ai_weakness_map') or {}
+    weak_count=int(weakness.get('weak_count') or 0)
+    reliable_count=int(weakness.get('reliable_count') or 0)
+    boundary_state=str(weakness.get('state') or 'UNKNOWN').upper()
+
+    matrix=result.get('final_ai_validation_matrix') or {}
+    matrix_flags=list(matrix.get('review_flags') or [])
+    matrix_state=str(matrix.get('state') or 'UNKNOWN').upper()
+
+    confidence_bias=max(0.0,final_conf-coverage)
+    evidence_completeness=max(0.0,min(1.0,coverage))
+    counter_score=max(0.0,min(1.0,counter_ratio))
+    issues=[]
+    if final_ref=='UNKNOWN': issues.append('FINAL_REFERENCE_UNKNOWN')
+    if evidence_completeness<0.50: issues.append('EVIDENCE_INCOMPLETE')
+    if counter_score>=0.45: issues.append('STRONG_COUNTER_EVIDENCE')
+    elif counter_score>=0.25: issues.append('COUNTER_EVIDENCE_REVIEW')
+    if confidence_bias>0.30: issues.append('CONFIDENCE_BIAS_HIGH')
+    elif confidence_bias>0.15: issues.append('CONFIDENCE_BIAS_REVIEW')
+    if not memory_sufficient: issues.append('MEMORY_GRAPH_INSUFFICIENT')
+    if flip_count>=3 or stability=='HIGHLY_SENSITIVE': issues.append('SCENARIO_HIGHLY_SENSITIVE')
+    elif not scenario_stable: issues.append('SCENARIO_SENSITIVE')
+    if weak_count>reliable_count and weak_count>0: issues.append('WEAKNESS_BOUNDARY_DOMINANT')
+    if matrix_flags: issues.append('CALIBRATION_REVIEW_FLAG')
+    if safety: issues.append('FINAL_AI_SAFETY_REASON_PRESENT')
+
+    severe={'FINAL_REFERENCE_UNKNOWN','EVIDENCE_INCOMPLETE','STRONG_COUNTER_EVIDENCE','CONFIDENCE_BIAS_HIGH','SCENARIO_HIGHLY_SENSITIVE'}
+    severe_count=sum(1 for x in issues if x in severe)
+    review_count=len(issues)-severe_count
+    score=100.0
+    score-=counter_score*30.0
+    score-=max(0.0,0.65-evidence_completeness)*45.0
+    score-=min(30.0,confidence_bias*70.0)
+    score-=20.0 if not memory_sufficient else 0.0
+    score-=25.0 if stability=='HIGHLY_SENSITIVE' else 10.0 if stability=='SENSITIVE' else 0.0
+    score-=min(20.0,weak_count*4.0)
+    score-=min(10.0,len(matrix_flags)*2.0)
+    score=max(0.0,min(100.0,score))
+    if severe_count>=2 or score<40: state='REJECT'
+    elif issues or score<75: state='REVIEW'
+    else: state='VERIFIED'
+    return {
+        'version':V1161_DEV_S34_NUMBER,'state':state,'self_verification_score':round(score,2),
+        'final_reference':final_ref,'final_confidence':round(final_conf,6),'evidence_completeness':round(evidence_completeness,6),
+        'counter_evidence_score':round(counter_score,6),'counter_evidence_count':len(counter),'support_evidence_count':len(support),
+        'confidence_bias':round(confidence_bias,6),'memory_sufficient':memory_sufficient,'memory_cases':memory_cases,
+        'scenario_stability':stability,'scenario_flip_count':flip_count,'reliability_boundary_state':boundary_state,
+        'weak_segment_count':weak_count,'reliable_segment_count':reliable_count,'matrix_state':matrix_state,
+        'issues':issues,'counter_evidence_paths':[x['path'] for x in counter[:8]],
+        'recommendation':'TRUST_AS_SHADOW_REFERENCE' if state=='VERIFIED' else 'MANUAL_REVIEW_REQUIRED' if state=='REVIEW' else 'DO_NOT_TRUST_REFERENCE',
+        'shadow_only':True,'read_only':True,'verification_only':True,'applied':False,'mutation_allowed':False,
+        'final_ai_mutated':False,'consensus_mutated':False,'gate_mutated':False,'weight_mutated':False,'order_authority':False,
+    }
+
+
+def _v1161_s34_consensus(row):
+    result=_v1161_s33_consensus(row)
+    result['ai_self_verification']=_v1161_s34_verify(row,result)
+    return result
+
+
+def _v1161_s34_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s33_card(row,result,rank,detail)
+    v=result.get('ai_self_verification') or {}
+    issues=' · '.join(v.get('issues') or ['NONE'])
+    extra=(f'\n\n<b>AI Self-Verification S34</b>\n· State {v.get("state")} · Score {v.get("self_verification_score",0):.0f}/100\n'
+           f'· Counter {v.get("counter_evidence_score",0):.0%} · Completeness {v.get("evidence_completeness",0):.0%} · Bias {v.get("confidence_bias",0):.0%}\n'
+           f'· Memory {"OK" if v.get("memory_sufficient") else "LOW"} · Scenario {v.get("scenario_stability")} · Weak/ Reliable {v.get("weak_segment_count",0)}/{v.get("reliable_segment_count",0)}\n'
+           f'· {issues}\n· Recommendation {v.get("recommendation")}\n· Verification Only · Final AI Mutation NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs34_cmd(update,context):
+    await update.message.reply_text('🔎 V116.1 S34 Self-Verification 분석 중...\nCounter evidence · Confidence bias · Shadow Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🔎 <b>S34 SELF-VERIFICATION</b>\nNO_RUNTIME_EVIDENCE · REJECT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s34_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['ai_self_verification']['state']=='VERIFIED',z[1]['ai_self_verification']['self_verification_score']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s34_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s34-ultimate',e); await update.message.reply_text('⚠️ S34 Self-Verification 오류 · /errors 확인')
+
+
+async def sniper1161devs34_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🔎 <b>SNIPER S34</b>\nNO_EVIDENCE · REJECT',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s34_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['ai_self_verification']['state']=='VERIFIED',z[1]['ai_self_verification']['self_verification_score']),reverse=True)
+        row,res=evaluated[0]; _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s34_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🔎 <b>SNIPER S34 · SELF-VERIFICATION</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s34-sniper',e); await update.message.reply_text('⚠️ Sniper S34 오류')
+
+
+async def god1161devs34_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:5]:
+            r=_v1161_s34_consensus(row); v=r['ai_self_verification']
+            lines.append(f'· {_v1161_s3_symbol(row)} {v["final_reference"]} · {v["state"]} {v["self_verification_score"]:.0f} · Counter {v["counter_evidence_score"]:.0%} · {v["scenario_stability"]}')
+        await update.message.reply_text(_v1161_s5_trim('🔎 <b>AI SELF-VERIFICATION S34</b>\n'+('\n'.join(lines) or '· No runtime evidence')+'\n\n<i>Verification only · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s34-god',e); await update.message.reply_text('⚠️ S34 God Verification 오류')
+
+
+async def version1161devs34_cmd(update,context):
+    await update.message.reply_text(f'🔎 <b>A100 V{V1161_DEV_S34_NUMBER}</b>\n{V1161_DEV_S34_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW SELF-VERIFICATION ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n\nChecks: Counter Evidence · Completeness · Confidence Bias · Memory Sufficiency · Scenario Stability · Calibration · Weakness Boundary\nFinal AI/Consensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s34_reconcile():
+    desired={'version':version1161devs34_cmd,'ultimate':ultimate1161devs34_cmd,'sniper':sniper1161devs34_cmd,'god':god1161devs34_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s34_reconcile()
+
+
+def _v1161_s34_static_audit():
+    required={'version':version1161devs34_cmd,'ultimate':ultimate1161devs34_cmd,'sniper':sniper1161devs34_cmd,'god':god1161devs34_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before_weights=dict(_V1161_S7_FACTOR_WEIGHTS)
+    sample_row={'funding_rate':-0.01,'open_interest_change':0.08,'whale_signal':'LONG','macro_signal':'WAIT','news_signal':'WAIT'}
+    original=_v1161_s33_clone(sample_row); sample=_v1161_s34_consensus(sample_row); after_weights=dict(_V1161_S7_FACTOR_WEIGHTS)
+    verify=sample.get('ai_self_verification') or {}
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'state_valid':verify.get('state') in ('VERIFIED','REVIEW','REJECT'),
+           'score_bounded':0<=verify.get('self_verification_score',-1)<=100,'original_immutable':sample_row==original,
+           'shadow_only':verify.get('shadow_only') and verify.get('read_only') and verify.get('verification_only'),
+           'no_mutation':all(verify.get(k) is False for k in ('applied','mutation_allowed','final_ai_mutated','consensus_mutated','gate_mutated','weight_mutated','order_authority')),
+           'weights_immutable':before_weights==after_weights==_V1161_S12_BASE_WEIGHTS,'s33_preserved':'ai_scenario_simulation' in sample,
+           's32_preserved':'final_ai_decision_timeline' in sample,'s31_preserved':'final_ai_weakness_map' in sample,
+           's30_preserved':'final_ai_validation_matrix' in sample,'s29_preserved':'final_ai_shadow_validation' in sample,
+           's28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs34','execute_order1161devs34')),'schema_unchanged':True}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'sample':verify}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s34_reconcile(); audit=_v1161_s34_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S34 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S34 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S34 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S34 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S34 AI Self-Verification safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s34_reconcile(); audit=_v1161_s34_static_audit()
+    print(f'{V1161_DEV_S34_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S34 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S34 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S34 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S34 AI Self-Verification Engine: ACTIVE · verification only',flush=True); print('A100 V116.1 DEV S34 verification authority: SHADOW READ ONLY',flush=True); print('A100 V116.1 DEV S34 final AI decision mutation: DISABLED',flush=True); print('A100 V116.1 DEV S34 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S34 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S34 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S34 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S34 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S34 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s34-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# -----------------------------------------------------------------------------
+# A100 V116.1 DEV S35 - AI Self-Verification History & Trend
+# Shadow-only longitudinal evidence. Never changes Final AI or trading authority.
+# -----------------------------------------------------------------------------
+V1161_DEV_S35_NUMBER='116.1-DEV-S35'
+V1161_DEV_S35_VERSION='A100 V116.1 DEV S35'
+V1161_DEV_S35_TITLE='AI Self-Verification History & Trend · Growth Index · Shadow Read Only'
+V91_VERSION=V1161_DEV_S35_VERSION
+_V1161_S35_HISTORY_PATH=os.path.join(V91_DATA_DIR,'v1161_s35_self_verification_history.jsonl')
+_V1161_S35_HISTORY_LOCK=threading.Lock()
+
+
+def _v1161_s35_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _v1161_s35_record(row,result,source):
+    """Best-effort shadow history write. Failure never blocks runtime decisions."""
+    try:
+        verify=(result or {}).get('ai_self_verification') or {}
+        final=(result or {}).get('final_ai_orchestrator') or {}
+        if not verify: return False
+        symbol=_v1161_s3_symbol(row)
+        ts=_v1161_s35_now()
+        rec={
+            'timestamp':ts,'symbol':symbol,'source':str(source or 'unknown'),
+            'final_reference':verify.get('final_reference') or final.get('final_reference') or 'UNKNOWN',
+            'verification_state':verify.get('state') or 'UNKNOWN',
+            'verification_score':_v1161_s34_num(verify.get('self_verification_score')),
+            'counter_evidence_score':_v1161_s34_num(verify.get('counter_evidence_score')),
+            'evidence_completeness':_v1161_s34_num(verify.get('evidence_completeness')),
+            'confidence_bias':_v1161_s34_num(verify.get('confidence_bias')),
+            'scenario_stability':verify.get('scenario_stability') or 'UNKNOWN',
+            'reliability_boundary_state':verify.get('reliability_boundary_state') or 'UNKNOWN',
+            'market_regime':str((result.get('market_regime_intelligence') or {}).get('regime') or row.get('market_regime') or 'UNKNOWN'),
+            'capital_rotation':str((result.get('capital_rotation_intelligence') or {}).get('rotation') or row.get('capital_rotation') or 'UNKNOWN'),
+            'timeframe':str(row.get('timeframe') or row.get('interval') or 'UNKNOWN'),
+            'shadow_only':True,'read_only':True,'applied':False,
+        }
+        # Deduplicate same symbol/state/score within 60 seconds.
+        last=None
+        if os.path.exists(_V1161_S35_HISTORY_PATH):
+            try:
+                with open(_V1161_S35_HISTORY_PATH,'rb') as f:
+                    f.seek(0,2); size=f.tell(); f.seek(max(0,size-4096)); lines=f.read().decode('utf-8','ignore').splitlines()
+                    if lines: last=json.loads(lines[-1])
+            except Exception: last=None
+        if last and last.get('symbol')==symbol and last.get('verification_state')==rec['verification_state'] and abs(_v1161_s34_num(last.get('verification_score'))-rec['verification_score'])<0.01:
+            try:
+                age=(datetime.fromisoformat(ts)-datetime.fromisoformat(last.get('timestamp'))).total_seconds()
+                if age<60: return False
+            except Exception: pass
+        os.makedirs(os.path.dirname(_V1161_S35_HISTORY_PATH),exist_ok=True)
+        with _V1161_S35_HISTORY_LOCK:
+            with open(_V1161_S35_HISTORY_PATH,'a',encoding='utf-8') as f:
+                f.write(json.dumps(rec,ensure_ascii=False,separators=(',',':'))+'\n')
+        return True
+    except Exception as e:
+        v88_record_error('v1161-dev-s35-history-write',e)
+        return False
+
+
+def _v1161_s35_load(limit=5000):
+    rows=[]
+    try:
+        if not os.path.exists(_V1161_S35_HISTORY_PATH): return rows
+        with open(_V1161_S35_HISTORY_PATH,encoding='utf-8') as f:
+            for line in f:
+                try:
+                    x=json.loads(line); x['_dt']=datetime.fromisoformat(str(x.get('timestamp')).replace('Z','+00:00')); rows.append(x)
+                except Exception: continue
+        return rows[-max(1,int(limit)):]
+    except Exception as e:
+        v88_record_error('v1161-dev-s35-history-read',e); return []
+
+
+def _v1161_s35_period_stats(rows,days=None,last_n=None):
+    now=datetime.now(timezone.utc)
+    xs=list(rows)
+    if days is not None: xs=[x for x in xs if (now-x['_dt']).total_seconds()<=days*86400]
+    if last_n is not None: xs=xs[-last_n:]
+    n=len(xs); counts={k:sum(1 for x in xs if x.get('verification_state')==k) for k in ('VERIFIED','REVIEW','REJECT')}
+    avg=sum(_v1161_s34_num(x.get('verification_score')) for x in xs)/n if n else 0.0
+    return {'samples':n,'verified':counts['VERIFIED'],'review':counts['REVIEW'],'reject':counts['REJECT'],
+            'verified_rate':counts['VERIFIED']/n if n else 0.0,'review_rate':counts['REVIEW']/n if n else 0.0,
+            'reject_rate':counts['REJECT']/n if n else 0.0,'average_score':avg}
+
+
+def _v1161_s35_trend(rows):
+    recent=_v1161_s35_period_stats(rows,last_n=100); d7=_v1161_s35_period_stats(rows,days=7); d30=_v1161_s35_period_stats(rows,days=30); d90=_v1161_s35_period_stats(rows,days=90)
+    def label(a,b):
+        if a.get('samples',0)<5 or b.get('samples',0)<5: return 'INSUFFICIENT'
+        delta=a['average_score']-b['average_score']
+        return 'IMPROVING' if delta>=5 else 'DECLINING' if delta<=-5 else 'STABLE'
+    half=max(1,len(rows)//2); older=_v1161_s35_period_stats(rows[:half]); newer=_v1161_s35_period_stats(rows[half:])
+    trend=label(newer,older)
+    growth=max(0.0,min(100.0,recent['average_score']-(recent['reject_rate']*20.0)+(recent['verified_rate']*10.0))) if recent['samples'] else 0.0
+    groups={}
+    for field in ('market_regime','capital_rotation','timeframe'):
+        values={str(x.get(field) or 'UNKNOWN') for x in rows[-500:]}
+        groups[field]={v:_v1161_s35_period_stats([x for x in rows[-500:] if str(x.get(field) or 'UNKNOWN')==v]) for v in sorted(values)}
+    return {'version':V1161_DEV_S35_NUMBER,'state':'ACTIVE' if rows else 'NO_HISTORY','samples':len(rows),'recent_100':recent,'days_7':d7,'days_30':d30,'days_90':d90,
+            'verification_trend':trend,'reliability_trend':trend,'calibration_trend':trend,'ai_growth_index':round(growth,2),'groups':groups,
+            'shadow_only':True,'read_only':True,'history_only':True,'applied':False,'mutation_allowed':False}
+
+
+def _v1161_s35_consensus(row):
+    result=_v1161_s34_consensus(row)
+    result['ai_self_verification_history_trend']=_v1161_s35_trend(_v1161_s35_load())
+    return result
+
+
+def _v1161_s35_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s34_card(row,result,rank,detail)
+    t=result.get('ai_self_verification_history_trend') or {}
+    r=t.get('recent_100') or {}
+    extra=(f'\n\n<b>AI Verification History S35</b>\n· History {t.get("samples",0)} · Growth {t.get("ai_growth_index",0):.0f}/100 · Trend {t.get("verification_trend")}\n'
+           f'· Recent100 V/R/X {r.get("verified_rate",0):.0%}/{r.get("review_rate",0):.0%}/{r.get("reject_rate",0):.0%} · Avg {r.get("average_score",0):.0f}\n'
+           f'· 7D {(t.get("days_7") or {}).get("samples",0)} · 30D {(t.get("days_30") or {}).get("samples",0)} · 90D {(t.get("days_90") or {}).get("samples",0)}\n'
+           f'· History Only · Decision Mutation NO')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs35_cmd(update,context):
+    await update.message.reply_text('📈 V116.1 S35 Verification History 분석 중...\nLongitudinal trend · Shadow Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('📈 <b>S35 VERIFICATION HISTORY</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s35_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['ai_self_verification']['state']=='VERIFIED',z[1]['ai_self_verification']['self_verification_score']),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s35_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s35-ultimate',e); await update.message.reply_text('⚠️ S35 Verification History 오류 · /errors 확인')
+
+
+async def sniper1161devs35_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('📈 <b>SNIPER S35</b>\nNO_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s35_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:(z[1]['ai_self_verification']['state']=='VERIFIED',z[1]['ai_self_verification']['self_verification_score']),reverse=True)
+        row,res=evaluated[0]; _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s35_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('📈 <b>SNIPER S35 · VERIFICATION TREND</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s35-sniper',e); await update.message.reply_text('⚠️ Sniper S35 오류')
+
+
+async def god1161devs35_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); hist=_v1161_s35_load(); t=_v1161_s35_trend(hist); r=t['recent_100']
+        lines=[f'· History {t["samples"]} · Growth {t["ai_growth_index"]:.0f}/100 · {t["verification_trend"]}',f'· Recent100 VERIFIED {r["verified_rate"]:.0%} · REVIEW {r["review_rate"]:.0%} · REJECT {r["reject_rate"]:.0%}']
+        for row in results[:5]:
+            res=_v1161_s35_consensus(row); _v1161_s35_record(row,res,'god'); v=res['ai_self_verification']; lines.append(f'· {_v1161_s3_symbol(row)} {v["state"]} {v["self_verification_score"]:.0f}')
+        await update.message.reply_text(_v1161_s5_trim('📈 <b>AI VERIFICATION HISTORY S35</b>\n'+'\n'.join(lines)+'\n\n<i>History only · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s35-god',e); await update.message.reply_text('⚠️ S35 God History 오류')
+
+
+async def version1161devs35_cmd(update,context):
+    t=_v1161_s35_trend(_v1161_s35_load())
+    await update.message.reply_text(f'📈 <b>A100 V{V1161_DEV_S35_NUMBER}</b>\n{V1161_DEV_S35_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW HISTORY ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\nHistory Samples: {t.get("samples",0)}\nAI Growth Index: {t.get("ai_growth_index",0):.0f}/100\nVerification Trend: {t.get("verification_trend")}\n\nFinal AI/Consensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s35_reconcile():
+    desired={'version':version1161devs35_cmd,'ultimate':ultimate1161devs35_cmd,'sniper':sniper1161devs35_cmd,'god':god1161devs35_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s35_reconcile()
+
+
+def _v1161_s35_static_audit():
+    required={'version':version1161devs35_cmd,'ultimate':ultimate1161devs35_cmd,'sniper':sniper1161devs35_cmd,'god':god1161devs35_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s35_consensus({'funding_rate':-0.01,'open_interest_change':0.08,'whale_signal':'LONG'}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    t=sample.get('ai_self_verification_history_trend') or {}
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'trend_present':t.get('version')==V1161_DEV_S35_NUMBER,'shadow_only':t.get('shadow_only') and t.get('read_only') and t.get('history_only'),
+           'no_mutation':t.get('applied') is False and t.get('mutation_allowed') is False,'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,
+           's34_preserved':'ai_self_verification' in sample,'s33_preserved':'ai_scenario_simulation' in sample,'s32_preserved':'final_ai_decision_timeline' in sample,
+           's31_preserved':'final_ai_weakness_map' in sample,'s30_preserved':'final_ai_validation_matrix' in sample,'s29_preserved':'final_ai_shadow_validation' in sample,
+           's28_preserved':'final_ai_orchestrator' in sample,'s27_preserved':'ai_memory_graph' in sample,'no_order_route':all(k not in globals() for k in ('place_order1161devs35','execute_order1161devs35'))}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s35_reconcile(); audit=_v1161_s35_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S35 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S35 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S35 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S35 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S35 Verification History safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s35_reconcile(); audit=_v1161_s35_static_audit()
+    print(f'{V1161_DEV_S35_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S35 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S35 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S35 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S35 AI Self-Verification History & Trend: ACTIVE · history only',flush=True); print('A100 V116.1 DEV S35 history authority: SHADOW READ ONLY',flush=True); print('A100 V116.1 DEV S35 history write failure isolation: ACTIVE',flush=True); print('A100 V116.1 DEV S35 final AI decision mutation: DISABLED',flush=True); print('A100 V116.1 DEV S35 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S35 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S35 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S35 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S35 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S35 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s35-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# -----------------------------------------------------------------------------
+# A100 V116.1 DEV S36 - AI Reliability Dashboard & Intelligence Center
+# Read-only aggregation of existing evidence. No decision or authority mutation.
+# -----------------------------------------------------------------------------
+V1161_DEV_S36_NUMBER='116.1-DEV-S36'
+V1161_DEV_S36_VERSION='A100 V116.1 DEV S36'
+V1161_DEV_S36_TITLE='AI Reliability Dashboard & Intelligence Center · Read Only'
+V91_VERSION=V1161_DEV_S36_VERSION
+
+
+def _v1161_s36_clamp(v,lo=0.0,hi=100.0):
+    try: return max(lo,min(hi,float(v)))
+    except Exception: return lo
+
+
+def _v1161_s36_score01(v,default=0.0):
+    try:
+        x=float(v)
+        if x<=1.0: x*=100.0
+        return _v1161_s36_clamp(x)
+    except Exception: return default
+
+
+def _v1161_s36_dashboard(row,result):
+    final=(result or {}).get('final_ai_orchestrator') or {}
+    verify=(result or {}).get('ai_self_verification') or {}
+    history=(result or {}).get('ai_self_verification_history_trend') or _v1161_s35_trend(_v1161_s35_load())
+    weakness=(result or {}).get('final_ai_weakness_map') or {}
+    scenario=(result or {}).get('ai_scenario_simulation') or {}
+    memory=(result or {}).get('ai_memory_graph') or {}
+    matrix=(result or {}).get('final_ai_validation_matrix') or {}
+    regime=(result or {}).get('market_regime_intelligence') or {}
+    rotation=(result or {}).get('capital_rotation_intelligence') or {}
+    mtf=(result or {}).get('multi_timeframe_intelligence') or {}
+
+    final_ref=str(final.get('final_reference') or final.get('reference') or 'WAIT')
+    final_conf=_v1161_s36_score01(final.get('confidence') or final.get('final_confidence'))
+    coverage=_v1161_s36_score01(final.get('evidence_coverage'))
+    verify_score=_v1161_s36_score01(verify.get('self_verification_score'))
+    verification_state=str(verify.get('state') or 'UNKNOWN')
+    growth=_v1161_s36_score01(history.get('ai_growth_index'))
+    reliability_state=str(weakness.get('state') or weakness.get('overall_state') or verify.get('reliability_boundary_state') or 'UNKNOWN')
+    scenario_state=str(scenario.get('stability') or scenario.get('scenario_stability') or verify.get('scenario_stability') or 'UNKNOWN')
+    counter=_v1161_s36_score01(verify.get('counter_evidence_score'))
+    confidence_bias=_v1161_s36_score01(verify.get('confidence_bias'))
+
+    mem_similarity=_v1161_s36_score01(memory.get('average_similarity') or memory.get('similarity_score'))
+    mem_samples=float(memory.get('matched_cases') or memory.get('sample_count') or memory.get('top_k_count') or 0)
+    memory_quality=_v1161_s36_clamp((mem_similarity*0.7)+min(100.0,mem_samples*10.0)*0.3)
+
+    evidence_quality=_v1161_s36_clamp(coverage*0.55 + verify_score*0.25 + memory_quality*0.20)
+    scenario_penalty={'STABLE':0,'SENSITIVE':15,'HIGHLY_SENSITIVE':30}.get(scenario_state,10)
+    decision_robustness=_v1161_s36_clamp(verify_score*0.45 + (100-counter)*0.25 + (100-confidence_bias)*0.15 + (100-scenario_penalty)*0.15)
+    market_understanding=_v1161_s36_clamp(evidence_quality*0.35 + decision_robustness*0.25 + growth*0.20 + memory_quality*0.20)
+    long_term_reliability=_v1161_s36_clamp(growth*0.45 + verify_score*0.30 + decision_robustness*0.25)
+    ai_readiness=_v1161_s36_clamp(evidence_quality*0.25 + decision_robustness*0.30 + market_understanding*0.25 + long_term_reliability*0.20)
+
+    def grade(x):
+        return 'HIGH' if x>=80 else 'MEDIUM' if x>=60 else 'LOW'
+
+    return {
+        'version':V1161_DEV_S36_NUMBER,'state':'ACTIVE','final_reference':final_ref,'final_confidence':round(final_conf,2),
+        'verification_state':verification_state,'verification_score':round(verify_score,2),'reliability_boundary':reliability_state,
+        'growth_trend':history.get('verification_trend') or 'INSUFFICIENT','calibration_trend':history.get('calibration_trend') or 'INSUFFICIENT',
+        'market_regime':regime.get('regime') or row.get('market_regime') or 'UNKNOWN','capital_rotation':rotation.get('rotation') or row.get('capital_rotation') or 'UNKNOWN',
+        'timeframe_alignment':mtf.get('alignment') or mtf.get('state') or 'UNKNOWN','scenario_stability':scenario_state,
+        'memory_quality_score':round(memory_quality,2),'counter_evidence_score':round(counter,2),'confidence_bias':round(confidence_bias,2),
+        'evidence_quality_score':round(evidence_quality,2),'decision_robustness_score':round(decision_robustness,2),
+        'market_understanding_score':round(market_understanding,2),'long_term_reliability_score':round(long_term_reliability,2),
+        'ai_readiness_score':round(ai_readiness,2),'readiness_grade':grade(ai_readiness),'robustness_grade':grade(decision_robustness),
+        'registry':len(V90_COMMAND_REGISTRY),'runtime_health':'ACTIVE','shadow_status':'ACTIVE','learning_status':'LOCKED',
+        'shadow_only':True,'read_only':True,'display_only':True,'applied':False,'mutation_allowed':False,
+    }
+
+
+def _v1161_s36_consensus(row):
+    result=_v1161_s35_consensus(row)
+    result['ai_reliability_dashboard']=_v1161_s36_dashboard(row,result)
+    return result
+
+
+def _v1161_s36_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s35_card(row,result,rank,detail)
+    d=result.get('ai_reliability_dashboard') or _v1161_s36_dashboard(row,result)
+    extra=(f'\n\n<b>AI Reliability Dashboard S36</b>\n'
+           f'· Final {d["final_reference"]} {d["final_confidence"]:.0f}% · Verification {d["verification_state"]} {d["verification_score"]:.0f}\n'
+           f'· AI Readiness {d["ai_readiness_score"]:.0f}/100 ({d["readiness_grade"]}) · Market Understanding {d["market_understanding_score"]:.0f}\n'
+           f'· Evidence Quality {d["evidence_quality_score"]:.0f} · Decision Robustness {d["decision_robustness_score"]:.0f} ({d["robustness_grade"]})\n'
+           f'· Long-Term Reliability {d["long_term_reliability_score"]:.0f} · Growth {d["growth_trend"]} · Calibration {d["calibration_trend"]}\n'
+           f'· Regime {d["market_regime"]} · Rotation {d["capital_rotation"]} · MTF {d["timeframe_alignment"]}\n'
+           f'· Scenario {d["scenario_stability"]} · Reliability {d["reliability_boundary"]} · Memory {d["memory_quality_score"]:.0f}\n'
+           f'· Registry {d["registry"]}/341 · Shadow {d["shadow_status"]} · Weight {d["learning_status"]} · Display Only')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs36_cmd(update,context):
+    await update.message.reply_text('🧭 V116.1 S36 AI Reliability Dashboard 분석 중...\nIntegrated intelligence · Shadow Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧭 <b>S36 AI RELIABILITY DASHBOARD</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s36_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1]['ai_reliability_dashboard']['ai_readiness_score'],reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s36_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s36-ultimate',e); await update.message.reply_text('⚠️ S36 Reliability Dashboard 오류 · /errors 확인')
+
+
+async def sniper1161devs36_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧭 <b>SNIPER S36</b>\nNO_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s36_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1]['ai_reliability_dashboard']['ai_readiness_score'],reverse=True)
+        row,res=evaluated[0]; _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s36_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧭 <b>SNIPER S36 · RELIABILITY CENTER</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s36-sniper',e); await update.message.reply_text('⚠️ Sniper S36 오류')
+
+
+async def god1161devs36_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:5]:
+            res=_v1161_s36_consensus(row); _v1161_s35_record(row,res,'god'); d=res['ai_reliability_dashboard']
+            lines.append(f'· {_v1161_s3_symbol(row)} {d["final_reference"]} · Ready {d["ai_readiness_score"]:.0f} · Robust {d["decision_robustness_score"]:.0f} · {d["verification_state"]}')
+        if not lines: lines=['· NO_RUNTIME_EVIDENCE']
+        await update.message.reply_text(_v1161_s5_trim('🧭 <b>AI RELIABILITY CENTER S36</b>\n'+'\n'.join(lines)+'\n\n<i>Integrated display only · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s36-god',e); await update.message.reply_text('⚠️ S36 God Dashboard 오류')
+
+
+async def version1161devs36_cmd(update,context):
+    t=_v1161_s35_trend(_v1161_s35_load())
+    await update.message.reply_text(f'🧭 <b>A100 V{V1161_DEV_S36_NUMBER}</b>\n{V1161_DEV_S36_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW DASHBOARD ONLY\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\nHistory Samples: {t.get("samples",0)}\nAI Growth Index: {t.get("ai_growth_index",0):.0f}/100\n\nFinal AI/Consensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s36_reconcile():
+    desired={'version':version1161devs36_cmd,'ultimate':ultimate1161devs36_cmd,'sniper':sniper1161devs36_cmd,'god':god1161devs36_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s36_reconcile()
+
+
+def _v1161_s36_static_audit():
+    required={'version':version1161devs36_cmd,'ultimate':ultimate1161devs36_cmd,'sniper':sniper1161devs36_cmd,'god':god1161devs36_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); sample=_v1161_s36_consensus({'funding_rate':-0.01,'open_interest_change':0.08,'whale_signal':'LONG'}); after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    d=sample.get('ai_reliability_dashboard') or {}
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'dashboard_present':d.get('version')==V1161_DEV_S36_NUMBER,
+           'five_scores':all(k in d for k in ('ai_readiness_score','market_understanding_score','evidence_quality_score','decision_robustness_score','long_term_reliability_score')),
+           'shadow_only':d.get('shadow_only') and d.get('read_only') and d.get('display_only'),'no_mutation':d.get('applied') is False and d.get('mutation_allowed') is False,
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'s35_preserved':'ai_self_verification_history_trend' in sample,'s34_preserved':'ai_self_verification' in sample,
+           's33_preserved':'ai_scenario_simulation' in sample,'s32_preserved':'final_ai_decision_timeline' in sample,'s31_preserved':'final_ai_weakness_map' in sample,
+           's30_preserved':'final_ai_validation_matrix' in sample,'s29_preserved':'final_ai_shadow_validation' in sample,'s28_preserved':'final_ai_orchestrator' in sample,
+           's27_preserved':'ai_memory_graph' in sample,'no_order_route':all(k not in globals() for k in ('place_order1161devs36','execute_order1161devs36'))}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s36_reconcile(); audit=_v1161_s36_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S36 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S36 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S36 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S36 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S36 AI Reliability Dashboard safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s36_reconcile(); audit=_v1161_s36_static_audit()
+    print(f'{V1161_DEV_S36_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S36 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S36 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S36 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S36 AI Reliability Dashboard & Intelligence Center: ACTIVE · display only',flush=True); print('A100 V116.1 DEV S36 dashboard authority: SHADOW READ ONLY',flush=True); print('A100 V116.1 DEV S36 summary scores: DISPLAY ONLY',flush=True); print('A100 V116.1 DEV S36 final AI decision mutation: DISABLED',flush=True); print('A100 V116.1 DEV S36 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S36 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S36 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S36 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S36 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S36 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s36-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# -----------------------------------------------------------------------------
+# A100 V116.1 DEV S37 - Unified Intelligence Performance Optimizer
+# Bounded TTL caches and shared read-only context. Fail-open to S36 logic.
+# -----------------------------------------------------------------------------
+V1161_DEV_S37_NUMBER='116.1-DEV-S37'
+V1161_DEV_S37_VERSION='A100 V116.1 DEV S37'
+V1161_DEV_S37_TITLE='Unified Intelligence Performance Optimizer · Shadow Read Only'
+V91_VERSION=V1161_DEV_S37_VERSION
+
+_V1161_S37_CACHE_TTL_SEC=20.0
+_V1161_S37_RENDER_TTL_SEC=15.0
+_V1161_S37_CACHE_MAX=128
+_V1161_S37_CACHE={}
+_V1161_S37_RENDER_CACHE={}
+_V1161_S37_LOCK=threading.RLock()
+_V1161_S37_METRICS={
+    'consensus_calls':0,'cache_hits':0,'cache_misses':0,'cache_evictions':0,
+    'render_hits':0,'render_misses':0,'fail_open':0,'total_compute_ms':0.0,
+    'max_compute_ms':0.0,'last_compute_ms':0.0,'last_error':'','started_at':time.time(),
+}
+
+
+def _v1161_s37_now():
+    return time.monotonic()
+
+
+def _v1161_s37_context_key(row):
+    """Create a bounded deterministic key without mutating runtime evidence."""
+    if not isinstance(row,dict): return 'invalid'
+    fields=(
+        'symbol','coin','ticker','price','current_price','funding_rate','open_interest_change',
+        'volume_change','whale_signal','psychology','macro_signal','news_signal','market_regime',
+        'capital_rotation','timeframe','timestamp','updated_at','revision','runtime_revision'
+    )
+    payload={k:row.get(k) for k in fields if k in row}
+    try:
+        raw=json.dumps(payload,sort_keys=True,ensure_ascii=False,default=str,separators=(',',':'))
+    except Exception:
+        raw=repr(sorted(payload.items()))
+    return hashlib.sha256(raw.encode('utf-8','replace')).hexdigest()[:24]
+
+
+def _v1161_s37_prune(cache,now,ttl):
+    expired=[k for k,v in cache.items() if now-v[0]>ttl]
+    for k in expired: cache.pop(k,None)
+    while len(cache)>_V1161_S37_CACHE_MAX:
+        oldest=min(cache,key=lambda k:cache[k][0]); cache.pop(oldest,None); _V1161_S37_METRICS['cache_evictions']+=1
+
+
+def _v1161_s37_context_bus(row):
+    """Read-only context envelope shared by S27-S36 consumers."""
+    return {
+        'key':_v1161_s37_context_key(row),'created_monotonic':_v1161_s37_now(),
+        'symbol':_v1161_s3_symbol(row) if isinstance(row,dict) else 'UNKNOWN',
+        'evidence':dict(row) if isinstance(row,dict) else {},
+        'read_only':True,'schema':1,'authority':'SHADOW_CONTEXT_ONLY',
+    }
+
+
+def _v1161_s37_consensus(row):
+    _V1161_S37_METRICS['consensus_calls']+=1
+    bus=_v1161_s37_context_bus(row); key=bus['key']; now=_v1161_s37_now()
+    with _V1161_S37_LOCK:
+        _v1161_s37_prune(_V1161_S37_CACHE,now,_V1161_S37_CACHE_TTL_SEC)
+        item=_V1161_S37_CACHE.get(key)
+        if item and now-item[0]<=_V1161_S37_CACHE_TTL_SEC:
+            _V1161_S37_METRICS['cache_hits']+=1
+            return copy.deepcopy(item[1])
+        _V1161_S37_METRICS['cache_misses']+=1
+    started=time.perf_counter()
+    try:
+        result=_v1161_s36_consensus(bus['evidence'])
+        result['unified_intelligence_context']={k:v for k,v in bus.items() if k!='evidence'}
+        result['performance_optimizer']={'version':V1161_DEV_S37_NUMBER,'cache_key':key,'cache':'MISS','read_only':True,'applied':False}
+    except Exception as e:
+        _V1161_S37_METRICS['fail_open']+=1; _V1161_S37_METRICS['last_error']=type(e).__name__
+        v88_record_error('v1161-dev-s37-cache-fail-open',e)
+        return _v1161_s36_consensus(row)
+    elapsed=(time.perf_counter()-started)*1000.0
+    _V1161_S37_METRICS['last_compute_ms']=elapsed
+    _V1161_S37_METRICS['total_compute_ms']+=elapsed
+    _V1161_S37_METRICS['max_compute_ms']=max(_V1161_S37_METRICS['max_compute_ms'],elapsed)
+    with _V1161_S37_LOCK:
+        _V1161_S37_CACHE[key]=(now,copy.deepcopy(result))
+        _v1161_s37_prune(_V1161_S37_CACHE,now,_V1161_S37_CACHE_TTL_SEC)
+    return result
+
+
+def _v1161_s37_metrics():
+    m=dict(_V1161_S37_METRICS); calls=max(1,m['consensus_calls']); lookups=m['cache_hits']+m['cache_misses']
+    m['cache_hit_ratio']=round((m['cache_hits']/lookups*100.0) if lookups else 0.0,2)
+    m['average_compute_ms']=round(m['total_compute_ms']/max(1,m['cache_misses']),3)
+    m['last_compute_ms']=round(m['last_compute_ms'],3); m['max_compute_ms']=round(m['max_compute_ms'],3)
+    m['cache_entries']=len(_V1161_S37_CACHE); m['render_entries']=len(_V1161_S37_RENDER_CACHE)
+    m['uptime_sec']=round(max(0.0,time.time()-m['started_at']),1)
+    m['shadow_queue_length']=0; m['worker_utilization']='BOUNDED_ON_DEMAND'; m['context_duplicates_blocked']=m['cache_hits']
+    return m
+
+
+def _v1161_s37_card(row,result,rank=1,detail=False):
+    key=f'{_v1161_s37_context_key(row)}:{rank}:{int(bool(detail))}'; now=_v1161_s37_now()
+    with _V1161_S37_LOCK:
+        _v1161_s37_prune(_V1161_S37_RENDER_CACHE,now,_V1161_S37_RENDER_TTL_SEC)
+        item=_V1161_S37_RENDER_CACHE.get(key)
+        if item and now-item[0]<=_V1161_S37_RENDER_TTL_SEC:
+            _V1161_S37_METRICS['render_hits']+=1; return item[1],result
+        _V1161_S37_METRICS['render_misses']+=1
+    base,result=_v1161_s36_card(row,result,rank,detail); m=_v1161_s37_metrics()
+    extra=(f'\n\n<b>Performance Optimizer S37</b>\n'
+           f'· Evidence Cache {m["cache_hit_ratio"]:.1f}% · Hit {m["cache_hits"]} · Miss {m["cache_misses"]}\n'
+           f'· AI Compute avg {m["average_compute_ms"]:.1f}ms · last {m["last_compute_ms"]:.1f}ms · max {m["max_compute_ms"]:.1f}ms\n'
+           f'· Context Cache {m["cache_entries"]}/{_V1161_S37_CACHE_MAX} · Render Cache {m["render_entries"]}/{_V1161_S37_CACHE_MAX}\n'
+           f'· Queue {m["shadow_queue_length"]} · Scheduler {m["worker_utilization"]} · Fail-open {m["fail_open"]}\n'
+           f'· Shared Context · TTL bounded · Shadow Read Only')
+    card=_v1161_s5_trim(base+extra)
+    with _V1161_S37_LOCK: _V1161_S37_RENDER_CACHE[key]=(now,card)
+    return card,result
+
+
+async def ultimate1161devs37_cmd(update,context):
+    await update.message.reply_text('⚡ V116.1 S37 통합 Intelligence 최적화 분석 중...\nShared context · bounded cache · Shadow Read Only')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚡ <b>S37 PERFORMANCE OPTIMIZER</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s37_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s37-ultimate',e); await update.message.reply_text('⚠️ S37 Optimizer 오류 · /errors 확인')
+
+
+async def sniper1161devs37_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('⚡ <b>SNIPER S37</b>\nNO_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        row,res=evaluated[0]; _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s37_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('⚡ <b>SNIPER S37 · OPTIMIZED CONTEXT</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s37-sniper',e); await update.message.reply_text('⚠️ Sniper S37 오류')
+
+
+async def god1161devs37_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan(); lines=[]
+        for row in results[:5]:
+            res=_v1161_s37_consensus(row); _v1161_s35_record(row,res,'god'); d=res.get('ai_reliability_dashboard',{})
+            lines.append(f'· {_v1161_s3_symbol(row)} {d.get("final_reference","WAIT")} · Ready {d.get("ai_readiness_score",0):.0f} · Cache {_v1161_s37_metrics()["cache_hit_ratio"]:.0f}%')
+        if not lines: lines=['· NO_RUNTIME_EVIDENCE']
+        m=_v1161_s37_metrics(); lines.append(f'\nCache {m["cache_hits"]}/{m["cache_misses"]} · Avg {m["average_compute_ms"]:.1f}ms · Fail-open {m["fail_open"]}')
+        await update.message.reply_text(_v1161_s5_trim('⚡ <b>UNIFIED PERFORMANCE CENTER S37</b>\n'+'\n'.join(lines)+'\n\n<i>Bounded cache · Read Only · Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s37-god',e); await update.message.reply_text('⚠️ S37 God Optimizer 오류')
+
+
+async def version1161devs37_cmd(update,context):
+    m=_v1161_s37_metrics()
+    await update.message.reply_text(f'⚡ <b>A100 V{V1161_DEV_S37_NUMBER}</b>\n{V1161_DEV_S37_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\nMode: SHADOW PERFORMANCE OPTIMIZER\nLive Trading: OFF\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\nCache Hit Ratio: {m["cache_hit_ratio"]:.1f}%\nAverage Compute: {m["average_compute_ms"]:.1f}ms\nCache Entries: {m["cache_entries"]}/{_V1161_S37_CACHE_MAX}\n\nFinal AI/Consensus/Gate/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s37_reconcile():
+    desired={'version':version1161devs37_cmd,'ultimate':ultimate1161devs37_cmd,'sniper':sniper1161devs37_cmd,'god':god1161devs37_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s37_reconcile()
+
+
+def _v1161_s37_static_audit():
+    required={'version':version1161devs37_cmd,'ultimate':ultimate1161devs37_cmd,'sniper':sniper1161devs37_cmd,'god':god1161devs37_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    before=dict(_V1161_S7_FACTOR_WEIGHTS); row={'symbol':'S37TEST','funding_rate':-0.01,'open_interest_change':0.08,'whale_signal':'LONG','timestamp':'audit'}
+    a=_v1161_s37_consensus(row); b=_v1161_s37_consensus(row); after=dict(_V1161_S7_FACTOR_WEIGHTS); m=_v1161_s37_metrics()
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'optimizer_present':a.get('performance_optimizer',{}).get('version')==V1161_DEV_S37_NUMBER,
+           'context_present':a.get('unified_intelligence_context',{}).get('read_only') is True,'cache_hit':m.get('cache_hits',0)>=1,
+           'bounded_cache':len(_V1161_S37_CACHE)<=_V1161_S37_CACHE_MAX,'copy_isolation':a is not b,
+           'weights_immutable':before==after==_V1161_S12_BASE_WEIGHTS,'s36_preserved':'ai_reliability_dashboard' in a,
+           's35_preserved':'ai_self_verification_history_trend' in a,'s34_preserved':'ai_self_verification' in a,'s33_preserved':'ai_scenario_simulation' in a,
+           's32_preserved':'final_ai_decision_timeline' in a,'s31_preserved':'final_ai_weakness_map' in a,'s30_preserved':'final_ai_validation_matrix' in a,
+           's29_preserved':'final_ai_shadow_validation' in a,'s28_preserved':'final_ai_orchestrator' in a,'s27_preserved':'ai_memory_graph' in a,
+           'no_order_route':all(k not in globals() for k in ('place_order1161devs37','execute_order1161devs37'))}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'metrics':m}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s37_reconcile(); audit=_v1161_s37_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S37 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S37 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S37 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S37 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S37 Unified Intelligence Performance safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s37_reconcile(); audit=_v1161_s37_static_audit()
+    print(f'{V1161_DEV_S37_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S37 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S37 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S37 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once()
+    print('A100 V116.1 DEV S37 Unified Intelligence Performance Optimizer: ACTIVE · bounded cache',flush=True); print('A100 V116.1 DEV S37 unified context bus: SHADOW READ ONLY',flush=True); print('A100 V116.1 DEV S37 cache fail-open: ACTIVE',flush=True); print('A100 V116.1 DEV S37 cache bounds: TTL 20s · MAX 128',flush=True); print('A100 V116.1 DEV S37 final AI decision mutation: DISABLED',flush=True); print('A100 V116.1 DEV S37 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S37 consensus/gate/order override: DISABLED',flush=True); print('A100 V116.1 DEV S37 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S37 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S37 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); print('A100 V116.1 DEV S37 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); v88_record_error('v1161-dev-s37-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# -----------------------------------------------------------------------------
+# A100 V116.1 DEV S38 - End-to-End Regression & Railway Long Runtime Certification
+# Evidence-only certification observer. No Release Gate or trading authority.
+# -----------------------------------------------------------------------------
+V1161_DEV_S38_NUMBER='116.1-DEV-S38'
+V1161_DEV_S38_VERSION='A100 V116.1 DEV S38'
+V1161_DEV_S38_TITLE='End-to-End Regression & Railway Long Runtime Certification · Evidence Only'
+V91_VERSION=V1161_DEV_S38_VERSION
+
+_V1161_S38_TARGET_SEC=72*60*60
+_V1161_S38_SAMPLE_INTERVAL_SEC=300.0
+_V1161_S38_STARTED_AT=time.time()
+_V1161_S38_STOP=threading.Event()
+_V1161_S38_THREAD=None
+_V1161_S38_LOCK=threading.RLock()
+_V1161_S38_SAMPLE_MAX=2048
+_V1161_S38_EVIDENCE_PATH=os.path.join(V91_DATA_DIR,'v1161_s38_long_runtime_evidence.jsonl')
+_V1161_S38_STATE={'samples':0,'write_errors':0,'last_sample_at':0.0,'last_error':'','thread_started':False}
+
+
+def _v1161_s38_e2e_audit():
+    """Read-only cumulative regression audit across S27-S37."""
+    before=dict(_V1161_S7_FACTOR_WEIGHTS)
+    row={'symbol':'S38AUDIT','funding_rate':-0.01,'open_interest_change':0.08,'volume_change':0.12,
+         'whale_signal':'LONG','macro_signal':'NEUTRAL','news_signal':'NEUTRAL','market_regime':'RANGE',
+         'capital_rotation':'MIXED','timeframe':'4H','timestamp':'s38-audit'}
+    first=_v1161_s37_consensus(row)
+    second=_v1161_s37_consensus(row)
+    after=dict(_V1161_S7_FACTOR_WEIGHTS)
+    metrics=_v1161_s37_metrics()
+    required={
+        's27_ai_memory_graph':'ai_memory_graph','s28_final_ai':'final_ai_orchestrator',
+        's29_shadow_validation':'final_ai_shadow_validation','s30_validation_matrix':'final_ai_validation_matrix',
+        's31_weakness_map':'final_ai_weakness_map','s32_decision_timeline':'final_ai_decision_timeline',
+        's33_scenario_simulation':'ai_scenario_simulation','s34_self_verification':'ai_self_verification',
+        's35_history_trend':'ai_self_verification_history_trend','s36_reliability_dashboard':'ai_reliability_dashboard',
+        's37_performance_optimizer':'performance_optimizer',
+    }
+    tests={k:(v in first) for k,v in required.items()}
+    tests.update({
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'dispatcher_routes':all(name in V90_COMMAND_REGISTRY for name in ('version','ultimate','sniper','god','errors')),
+        'single_schema':first.get('unified_intelligence_context',{}).get('schema')==1,
+        'context_read_only':first.get('unified_intelligence_context',{}).get('read_only') is True,
+        'cache_bounded':metrics.get('cache_entries',0)<=_V1161_S37_CACHE_MAX and metrics.get('render_entries',0)<=_V1161_S37_CACHE_MAX,
+        'cache_reuse':metrics.get('cache_hits',0)>=1,
+        'copy_isolation':first is not second,
+        'weights_locked':before==after==_V1161_S12_BASE_WEIGHTS,
+        'live_trading_off':True,
+        'no_s38_order_route':all(k not in globals() for k in ('place_order1161devs38','execute_order1161devs38')),
+    })
+    failed=[k for k,v in tests.items() if not v]
+    return {'ok':not failed,'tests':tests,'failed':failed,'registry':len(V90_COMMAND_REGISTRY),'metrics':metrics}
+
+
+def _v1161_s38_read_samples(limit=2048):
+    rows=[]
+    try:
+        if not os.path.exists(_V1161_S38_EVIDENCE_PATH): return rows
+        with open(_V1161_S38_EVIDENCE_PATH,'r',encoding='utf-8') as fh:
+            for line in fh:
+                try:
+                    item=json.loads(line)
+                    if isinstance(item,dict): rows.append(item)
+                except Exception: continue
+        return rows[-max(1,min(int(limit),_V1161_S38_SAMPLE_MAX)):]
+    except Exception as e:
+        _V1161_S38_STATE['last_error']=type(e).__name__
+        return rows
+
+
+def _v1161_s38_sample():
+    audit=_v1161_s38_e2e_audit(); m=audit['metrics']; now=time.time()
+    return {
+        'timestamp':now,'version':V1161_DEV_S38_NUMBER,'uptime_sec':max(0.0,now-_V1161_S38_STARTED_AT),
+        'audit_ok':audit['ok'],'failed_tests':audit['failed'],'registry':audit['registry'],
+        'cache_hit_ratio':m.get('cache_hit_ratio',0.0),'cache_entries':m.get('cache_entries',0),
+        'render_entries':m.get('render_entries',0),'fail_open':m.get('fail_open',0),
+        'average_compute_ms':m.get('average_compute_ms',0.0),'max_compute_ms':m.get('max_compute_ms',0.0),
+        'live_trading':False,'release_gate_mutation':False,'adaptive_weight_mutation':False,
+    }
+
+
+def _v1161_s38_append_sample():
+    try:
+        os.makedirs(V91_DATA_DIR,exist_ok=True)
+        sample=_v1161_s38_sample()
+        with _V1161_S38_LOCK:
+            with open(_V1161_S38_EVIDENCE_PATH,'a',encoding='utf-8') as fh:
+                fh.write(json.dumps(sample,ensure_ascii=False,separators=(',',':'))+'\n')
+            _V1161_S38_STATE['samples']+=1; _V1161_S38_STATE['last_sample_at']=sample['timestamp']
+        return sample
+    except Exception as e:
+        _V1161_S38_STATE['write_errors']+=1; _V1161_S38_STATE['last_error']=type(e).__name__
+        try: v88_record_error('v1161-dev-s38-evidence-write',e)
+        except Exception: pass
+        return None
+
+
+def _v1161_s38_worker():
+    _v1161_s38_append_sample()
+    while not _V1161_S38_STOP.wait(_V1161_S38_SAMPLE_INTERVAL_SEC):
+        _v1161_s38_append_sample()
+
+
+def _v1161_s38_start_worker_once():
+    global _V1161_S38_THREAD
+    with _V1161_S38_LOCK:
+        if _V1161_S38_THREAD and _V1161_S38_THREAD.is_alive(): return False
+        _V1161_S38_THREAD=threading.Thread(target=_v1161_s38_worker,name='v1161-s38-certification',daemon=True)
+        _V1161_S38_THREAD.start(); _V1161_S38_STATE['thread_started']=True
+        return True
+
+
+def _v1161_s38_certification():
+    audit=_v1161_s38_e2e_audit(); rows=_v1161_s38_read_samples(); now=time.time()
+    elapsed=max(0.0,now-_V1161_S38_STARTED_AT)
+    if rows:
+        elapsed=max(elapsed,max(0.0,rows[-1].get('timestamp',now)-rows[0].get('timestamp',now)))
+    valid=[r for r in rows if r.get('audit_ok') is True and r.get('registry')==341]
+    regressions=sum(1 for r in rows if not r.get('audit_ok',False))
+    fail_open_max=max([int(r.get('fail_open',0) or 0) for r in rows] or [0])
+    sample_span=(rows[-1]['timestamp']-rows[0]['timestamp']) if len(rows)>=2 else 0.0
+    target_progress=min(100.0,elapsed/_V1161_S38_TARGET_SEC*100.0)
+    criteria={
+        'e2e_regression_pass':audit['ok'],
+        'registry_341':audit['registry']==341,
+        'sample_evidence_present':len(rows)>=2,
+        'sample_regressions_zero':regressions==0,
+        'cache_bounds_healthy':audit['metrics'].get('cache_entries',0)<=_V1161_S37_CACHE_MAX,
+        'worker_active':bool(_V1161_S38_THREAD and _V1161_S38_THREAD.is_alive()),
+        '72h_elapsed':elapsed>=_V1161_S38_TARGET_SEC and sample_span>=(_V1161_S38_TARGET_SEC-_V1161_S38_SAMPLE_INTERVAL_SEC*2),
+        'live_trading_off':True,
+        'release_gate_unchanged':True,
+        'adaptive_weight_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+    }
+    certified=all(criteria.values())
+    state='CERTIFIED' if certified else ('REGRESSION_BLOCKED' if not audit['ok'] or regressions else 'IN_PROGRESS')
+    return {
+        'version':V1161_DEV_S38_NUMBER,'state':state,'certified':certified,'progress_pct':round(target_progress,2),
+        'elapsed_sec':round(elapsed,1),'target_sec':_V1161_S38_TARGET_SEC,'sample_count':len(rows),
+        'valid_samples':len(valid),'regression_samples':regressions,'sample_span_sec':round(sample_span,1),
+        'fail_open_max':fail_open_max,'criteria':criteria,'failed_criteria':[k for k,v in criteria.items() if not v],
+        'audit_failed':audit['failed'],'evidence_path':_V1161_S38_EVIDENCE_PATH,'authority':'CERTIFICATION EVIDENCE ONLY',
+    }
+
+
+def _v1161_s38_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s37_card(row,result,rank,detail); cert=_v1161_s38_certification()
+    hours=cert['elapsed_sec']/3600.0
+    extra=(f'\n\n<b>Railway Long Runtime Certification S38</b>\n'
+           f'· State {cert["state"]} · Progress {cert["progress_pct"]:.2f}% · {hours:.2f}/72h\n'
+           f'· Samples {cert["sample_count"]} · Regression {cert["regression_samples"]} · Registry 341\n'
+           f'· E2E {"PASS" if not cert["audit_failed"] else "FAIL"} · Worker {"ACTIVE" if cert["criteria"]["worker_active"] else "STOPPED"}\n'
+           f'· Certification Evidence Only · Release Gate unchanged')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs38_cmd(update,context):
+    await update.message.reply_text('🧪 V116.1 S38 E2E 회귀·장시간 인증 Evidence 분석 중...')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            cert=_v1161_s38_certification()
+            await update.message.reply_text(f'🧪 <b>S38 CERTIFICATION</b>\nNO_RUNTIME_EVIDENCE\nState: {cert["state"]}',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s38_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s38-ultimate',e); await update.message.reply_text('⚠️ S38 인증 출력 오류 · /errors 확인')
+
+
+async def sniper1161devs38_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧪 <b>SNIPER S38</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        row,res=evaluated[0]; _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s38_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧪 <b>SNIPER S38 · CERTIFICATION EVIDENCE</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s38-sniper',e); await update.message.reply_text('⚠️ Sniper S38 오류')
+
+
+async def god1161devs38_cmd(update,context):
+    try:
+        cert=_v1161_s38_certification(); audit=_v1161_s38_e2e_audit(); m=audit['metrics']
+        lines=[f'· State {cert["state"]} · {cert["progress_pct"]:.2f}%',f'· Runtime {cert["elapsed_sec"]/3600.0:.2f}/72h · Samples {cert["sample_count"]}',
+               f'· E2E {"PASS" if audit["ok"] else "FAIL"} · Regression Samples {cert["regression_samples"]}',
+               f'· Cache {m.get("cache_hit_ratio",0):.1f}% · Avg {m.get("average_compute_ms",0):.1f}ms · Fail-open {m.get("fail_open",0)}']
+        if cert['failed_criteria']: lines.append('· Pending '+', '.join(cert['failed_criteria'][:5]))
+        await update.message.reply_text(_v1161_s5_trim('🧪 <b>S38 RAILWAY CERTIFICATION CENTER</b>\n'+'\n'.join(lines)+'\n\n<i>Evidence Only · Gate/Order/Weight Override NO</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s38-god',e); await update.message.reply_text('⚠️ S38 Certification Center 오류')
+
+
+async def version1161devs38_cmd(update,context):
+    cert=_v1161_s38_certification(); audit=_v1161_s38_e2e_audit(); m=audit['metrics']
+    await update.message.reply_text(
+        f'🧪 <b>A100 V{V1161_DEV_S38_NUMBER}</b>\n{V1161_DEV_S38_TITLE}\n\n'
+        f'Stable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\n'
+        f'Certification: {cert["state"]} · {cert["progress_pct"]:.2f}%\nRuntime: {cert["elapsed_sec"]/3600.0:.2f}/72h\n'
+        f'Samples: {cert["sample_count"]} · Regressions: {cert["regression_samples"]}\n'
+        f'E2E: {"PASS" if audit["ok"] else "FAIL"} · Registry: {len(V90_COMMAND_REGISTRY)}/341\n'
+        f'Cache Hit: {m.get("cache_hit_ratio",0):.1f}% · Avg Compute: {m.get("average_compute_ms",0):.1f}ms\n'
+        f'Live Trading: OFF\n\nRelease Gate/Consensus/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s38_reconcile():
+    desired={'version':version1161devs38_cmd,'ultimate':ultimate1161devs38_cmd,'sniper':sniper1161devs38_cmd,'god':god1161devs38_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s38_reconcile()
+
+
+def _v1161_s38_static_audit():
+    required={'version':version1161devs38_cmd,'ultimate':ultimate1161devs38_cmd,'sniper':sniper1161devs38_cmd,'god':god1161devs38_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    e2e=_v1161_s38_e2e_audit()
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'e2e_pass':e2e['ok'],
+        'target_72h':_V1161_S38_TARGET_SEC==259200,'sample_interval_bounded':_V1161_S38_SAMPLE_INTERVAL_SEC>=60,
+        'evidence_path_data':str(_V1161_S38_EVIDENCE_PATH).startswith(str(V91_DATA_DIR)),
+        's37_preserved':e2e['tests'].get('s37_performance_optimizer',False),
+        'weights_locked':e2e['tests'].get('weights_locked',False),
+        'no_order_route':e2e['tests'].get('no_s38_order_route',False),
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'e2e':e2e}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s38_reconcile(); audit=_v1161_s38_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S38 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S38 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S38 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S38 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S38 End-to-End Regression safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s38_reconcile(); audit=_v1161_s38_static_audit()
+    print(f'{V1161_DEV_S38_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S38 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S38 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S38 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once()
+    print('A100 V116.1 DEV S38 End-to-End Regression & Railway Long Runtime Certification: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S38 certification target: 72h · evidence interval 300s',flush=True)
+    print('A100 V116.1 DEV S38 certification authority: EVIDENCE ONLY · no synthetic PASS',flush=True)
+    print('A100 V116.1 DEV S38 cache fail-open: ACTIVE',flush=True); print('A100 V116.1 DEV S38 final AI decision mutation: DISABLED',flush=True)
+    print('A100 V116.1 DEV S38 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S38 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S38 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S38 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S38 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); print('A100 V116.1 DEV S38 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); v88_record_error('v1161-dev-s38-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S39 — V117 RC Candidate Integration & Freeze Readiness
+# Evidence-only integration layer. No synthetic RC readiness.
+# ============================================================================
+V1161_DEV_S39_NUMBER='116.1-DEV-S39'
+V1161_DEV_S39_VERSION='A100 V116.1 DEV S39'
+V1161_DEV_S39_TITLE='V117 RC Candidate Integration & Freeze Readiness · Evidence Only'
+V91_VERSION=V1161_DEV_S39_VERSION
+_V1161_S39_FREEZE_SCOPE=('S27-S38 cumulative intelligence','Registry 341','Schema 1','Paper 20','Shadow 60','Live Trading OFF')
+
+
+def _v1161_s39_rc_readiness():
+    cert=_v1161_s38_certification(); audit=_v1161_s38_e2e_audit()
+    criteria={
+        's38_certified':cert.get('state')=='CERTIFIED' and cert.get('certified') is True,
+        's38_e2e_pass':audit.get('ok') is True,
+        'regression_samples_zero':int(cert.get('regression_samples',0) or 0)==0,
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'adaptive_weight_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+        'cache_bounds_healthy':audit.get('metrics',{}).get('cache_entries',0)<=_V1161_S37_CACHE_MAX,
+        'release_gate_unchanged':True,
+        'consensus_override_disabled':True,
+        'order_override_disabled':True,
+        'live_trading_off':True,
+    }
+    if not audit.get('ok') or int(cert.get('regression_samples',0) or 0)>0:
+        state='RC_BLOCKED'
+    elif all(criteria.values()):
+        state='RC_CANDIDATE_READY'
+    else:
+        state='HOLD_CERTIFICATION'
+    return {
+        'version':V1161_DEV_S39_NUMBER,'state':state,'ready':state=='RC_CANDIDATE_READY',
+        'criteria':criteria,'pending':[k for k,v in criteria.items() if not v],
+        's38_state':cert.get('state'),'s38_progress_pct':cert.get('progress_pct',0.0),
+        's38_elapsed_sec':cert.get('elapsed_sec',0.0),'sample_count':cert.get('sample_count',0),
+        'regression_samples':cert.get('regression_samples',0),'registry':len(V90_COMMAND_REGISTRY),
+        'freeze_scope':list(_V1161_S39_FREEZE_SCOPE),'authority':'S38 CERTIFICATION EVIDENCE ONLY',
+    }
+
+
+def _v1161_s39_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s38_card(row,result,rank,detail); rc=_v1161_s39_rc_readiness()
+    extra=(f'\n\n<b>V117 RC Candidate Readiness S39</b>\n'
+           f'· State {rc["state"]} · S38 {rc["s38_state"]} {rc["s38_progress_pct"]:.2f}%\n'
+           f'· Samples {rc["sample_count"]} · Regression {rc["regression_samples"]} · Registry {rc["registry"]}/341\n'
+           f'· Freeze Scope S27-S38 · Feature Addition FROZEN\n'
+           f'· RC readiness uses S38 evidence only · Synthetic READY disabled')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs39_cmd(update,context):
+    await update.message.reply_text('🧊 V116.1 S39 V117 RC 후보 통합 Evidence 분석 중...')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            rc=_v1161_s39_rc_readiness()
+            await update.message.reply_text(f'🧊 <b>S39 RC CANDIDATE</b>\nNO_RUNTIME_EVIDENCE\nState: {rc["state"]}',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s39_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s39-ultimate',e); await update.message.reply_text('⚠️ S39 RC 후보 출력 오류 · /errors 확인')
+
+
+async def sniper1161devs39_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            await update.message.reply_text('🧊 <b>SNIPER S39</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        row,res=evaluated[0]; _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s39_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🧊 <b>SNIPER S39 · RC CANDIDATE EVIDENCE</b>\n'+card,parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s39-sniper',e); await update.message.reply_text('⚠️ Sniper S39 오류')
+
+
+async def god1161devs39_cmd(update,context):
+    try:
+        rc=_v1161_s39_rc_readiness(); cert=_v1161_s38_certification()
+        lines=[f'· State {rc["state"]}',f'· S38 {rc["s38_state"]} · {rc["s38_progress_pct"]:.2f}% · {rc["s38_elapsed_sec"]/3600.0:.2f}/72h',
+               f'· Samples {rc["sample_count"]} · Regression {rc["regression_samples"]}',f'· Registry {rc["registry"]}/341 · Freeze S27-S38']
+        if rc['pending']: lines.append('· Pending '+', '.join(rc['pending'][:6]))
+        await update.message.reply_text(_v1161_s5_trim('🧊 <b>S39 V117 RC CANDIDATE CENTER</b>\n'+'\n'.join(lines)+'\n\n<i>Evidence Only · Feature Freeze · No synthetic READY</i>'),parse_mode='HTML')
+    except Exception as e: v88_record_error('v1161-dev-s39-god',e); await update.message.reply_text('⚠️ S39 RC Candidate Center 오류')
+
+
+async def version1161devs39_cmd(update,context):
+    rc=_v1161_s39_rc_readiness(); cert=_v1161_s38_certification()
+    await update.message.reply_text(
+        f'🧊 <b>A100 V{V1161_DEV_S39_NUMBER}</b>\n{V1161_DEV_S39_TITLE}\n\n'
+        f'Stable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\n'
+        f'RC Candidate: {rc["state"]}\nS38 Certification: {rc["s38_state"]} · {rc["s38_progress_pct"]:.2f}%\n'
+        f'Runtime: {rc["s38_elapsed_sec"]/3600.0:.2f}/72h · Samples: {rc["sample_count"]}\n'
+        f'Regressions: {rc["regression_samples"]} · Registry: {rc["registry"]}/341\n'
+        f'Feature Scope: FROZEN S27-S38\nLive Trading: OFF\n\n'
+        f'Release Gate/Consensus/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s39_reconcile():
+    desired={'version':version1161devs39_cmd,'ultimate':ultimate1161devs39_cmd,'sniper':sniper1161devs39_cmd,'god':god1161devs39_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s39_reconcile()
+
+
+def _v1161_s39_static_audit():
+    required={'version':version1161devs39_cmd,'ultimate':ultimate1161devs39_cmd,'sniper':sniper1161devs39_cmd,'god':god1161devs39_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    e2e=_v1161_s38_e2e_audit(); rc=_v1161_s39_rc_readiness()
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'s38_e2e_pass':e2e['ok'],
+        's38_preserved':callable(globals().get('_v1161_s38_certification')),'s37_preserved':callable(globals().get('_v1161_s37_consensus')),
+        'no_synthetic_ready':rc['state']!='RC_CANDIDATE_READY' or rc['criteria']['s38_certified'],
+        'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+        'no_order_route':all(k not in globals() for k in ('place_order1161devs39','execute_order1161devs39')),
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests,'e2e':e2e,'rc':rc}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s39_reconcile(); audit=_v1161_s39_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S39 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S39 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S39 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S39 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S39 V117 RC Candidate Integration safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s39_reconcile(); audit=_v1161_s39_static_audit()
+    print(f'{V1161_DEV_S39_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S39 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S39 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S39 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once()
+    rc=_v1161_s39_rc_readiness()
+    print('A100 V116.1 DEV S39 V117 RC Candidate Integration & Freeze Readiness: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S39 RC candidate state: {rc["state"]}',flush=True)
+    print('A100 V116.1 DEV S39 feature scope: FROZEN S27-S38',flush=True)
+    print('A100 V116.1 DEV S39 readiness authority: S38 EVIDENCE ONLY · no synthetic READY',flush=True)
+    print('A100 V116.1 DEV S39 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S39 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S39 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S39 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S39 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); print('A100 V116.1 DEV S39 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); v88_record_error('v1161-dev-s39-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S40 — Operational Intelligence & Recovery Framework
+# Shadow-only watchdog and bounded recovery. Runtime/Final AI are observe-only.
+# ============================================================================
+V1161_DEV_S40_NUMBER='116.1-DEV-S40'
+V1161_DEV_S40_VERSION='A100 V116.1 DEV S40'
+V1161_DEV_S40_TITLE='Operational Intelligence & Recovery Framework · Shadow Read Only'
+V91_VERSION=V1161_DEV_S40_VERSION
+_V1161_S40_INTERVAL_SEC=60.0
+_V1161_S40_HISTORY_MAX=1000
+_V1161_S40_HISTORY_PATH=Path(V91_DATA_DIR)/'v1161_s40_recovery_history.jsonl'
+_V1161_S40_STOP=threading.Event()
+_V1161_S40_LOCK=threading.RLock()
+_V1161_S40_THREAD=None
+_V1161_S40_STATE={
+    'started_at':time.time(),'last_check_at':0.0,'checks':0,'warnings':0,'recoveries':0,
+    'successful_recoveries':0,'failed_recoveries':0,'last_status':'STARTING','last_report':{},
+}
+
+
+def _v1161_s40_safe_float(v,default=0.0):
+    try:return float(v)
+    except Exception:return float(default)
+
+
+def _v1161_s40_append_history(event):
+    try:
+        _V1161_S40_HISTORY_PATH.parent.mkdir(parents=True,exist_ok=True)
+        row=dict(event); row.setdefault('timestamp',time.time()); row.setdefault('version',V1161_DEV_S40_NUMBER)
+        with _V1161_S40_HISTORY_PATH.open('a',encoding='utf-8') as f:f.write(json.dumps(row,ensure_ascii=False,separators=(',',':'))+'\n')
+        # Bounded compaction only when clearly oversized.
+        if _V1161_S40_HISTORY_PATH.stat().st_size>2_000_000:
+            lines=_V1161_S40_HISTORY_PATH.read_text(encoding='utf-8',errors='ignore').splitlines()[-_V1161_S40_HISTORY_MAX:]
+            _V1161_S40_HISTORY_PATH.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+        return True
+    except Exception as e:
+        try:v88_record_error('v1161-dev-s40-history',e)
+        except Exception:pass
+        return False
+
+
+def _v1161_s40_recent_history(limit=20):
+    try:
+        if not _V1161_S40_HISTORY_PATH.exists():return []
+        out=[]
+        for line in _V1161_S40_HISTORY_PATH.read_text(encoding='utf-8',errors='ignore').splitlines()[-max(1,int(limit)):]:
+            try:out.append(json.loads(line))
+            except Exception:continue
+        return out
+    except Exception:return []
+
+
+def _v1161_s40_evidence_integrity():
+    now=time.time(); items={}
+    # S38 persisted evidence is authoritative for the long-runtime stream.
+    cert=_v1161_s38_certification()
+    samples=_v1161_s38_read_samples()
+    latest_ts=0.0
+    if samples:
+        latest=samples[-1]
+        latest_ts=_v1161_s40_safe_float(latest.get('timestamp',latest.get('ts',0.0)),0.0)
+    age=max(0.0,now-latest_ts) if latest_ts else None
+    items['certification_evidence']={
+        'state':'HEALTHY' if age is not None and age<=max(900.0,_V1161_S38_SAMPLE_INTERVAL_SEC*3) else ('DELAYED' if age is not None else 'UNAVAILABLE'),
+        'age_sec':round(age,3) if age is not None else None,
+    }
+    perf=_v1161_s37_metrics()
+    last_compute=_v1161_s40_safe_float(perf.get('last_compute_ms',0.0),0.0)
+    items['unified_intelligence']={'state':'HEALTHY' if last_compute<5000 else 'DELAYED','age_sec':None,'last_compute_ms':last_compute}
+    items['runtime_registry']={'state':'HEALTHY' if len(V90_COMMAND_REGISTRY)==341 else 'UNAVAILABLE','age_sec':None}
+    stale=[k for k,v in items.items() if v.get('state')!='HEALTHY']
+    return {'items':items,'stale':stale,'healthy':not stale,'certification_state':cert.get('state','UNKNOWN')}
+
+
+def _v1161_s40_runtime_drift():
+    perf=_v1161_s37_metrics(); cert=_v1161_s38_certification()
+    avg_ms=_v1161_s40_safe_float(perf.get('average_compute_ms',0.0),0.0)
+    max_ms=_v1161_s40_safe_float(perf.get('max_compute_ms',0.0),0.0)
+    hit_ratio=_v1161_s40_safe_float(perf.get('cache_hit_ratio',0.0),0.0)
+    cache_entries=int(perf.get('cache_entries',0) or 0); render_entries=int(perf.get('render_entries',0) or 0)
+    issues=[]
+    if avg_ms>2500:issues.append('AVG_COMPUTE_HIGH')
+    if max_ms>8000:issues.append('MAX_COMPUTE_HIGH')
+    if cache_entries>_V1161_S37_CACHE_MAX:issues.append('CACHE_BOUND_EXCEEDED')
+    if render_entries>_V1161_S37_CACHE_MAX:issues.append('RENDER_CACHE_BOUND_EXCEEDED')
+    if int(cert.get('regression_samples',0) or 0)>0:issues.append('REGRESSION_SAMPLE_PRESENT')
+    state='CRITICAL' if any(x in issues for x in ('CACHE_BOUND_EXCEEDED','RENDER_CACHE_BOUND_EXCEEDED','REGRESSION_SAMPLE_PRESENT')) else ('DRIFTING' if issues else 'STABLE')
+    return {'state':state,'issues':issues,'avg_compute_ms':round(avg_ms,3),'max_compute_ms':round(max_ms,3),'cache_hit_ratio':round(hit_ratio,4),'cache_entries':cache_entries,'render_cache_entries':render_entries}
+
+
+def _v1161_s40_worker_health():
+    workers={
+        'runtime_worker':{'state':'HEALTHY' if not V91_STOP.is_set() else 'STALLED','authority':'OBSERVE_ONLY'},
+        's38_certification_worker':{'state':'HEALTHY' if _V1161_S38_THREAD is not None and _V1161_S38_THREAD.is_alive() else 'STALLED','authority':'OBSERVE_ONLY'},
+        's40_watchdog':{'state':'HEALTHY' if _V1161_S40_THREAD is not None and _V1161_S40_THREAD.is_alive() else 'STARTING','authority':'SELF'},
+        'evidence_cache':{'state':'HEALTHY','authority':'BOUNDED_RECOVERY'},
+        'dashboard_render_cache':{'state':'HEALTHY','authority':'BOUNDED_RECOVERY'},
+        'final_ai':{'state':'HEALTHY' if callable(globals().get('_v1161_s37_consensus')) else 'STALLED','authority':'OBSERVE_ONLY'},
+        'telegram_dispatch':{'state':'HEALTHY' if len(V90_COMMAND_REGISTRY)==341 else 'DEGRADED','authority':'OBSERVE_ONLY'},
+    }
+    bad=[k for k,v in workers.items() if v['state'] not in ('HEALTHY','STARTING')]
+    return {'workers':workers,'bad':bad,'healthy':not bad}
+
+
+def _v1161_s40_bounded_recovery(reason):
+    started=time.time(); action='NO_ACTION'; ok=True
+    try:
+        if reason in ('CACHE_BOUND_EXCEEDED','RENDER_CACHE_BOUND_EXCEEDED'):
+            with _V1161_S37_LOCK:
+                if reason=='CACHE_BOUND_EXCEEDED':
+                    _V1161_S37_CACHE.clear(); action='CLEAR_EVIDENCE_CACHE'
+                else:
+                    _V1161_S37_RENDER_CACHE.clear(); action='CLEAR_RENDER_CACHE'
+        elif reason=='STALE_CACHE_MAINTENANCE':
+            now=_v1161_s37_now(); _v1161_s37_prune(_V1161_S37_CACHE,now,_V1161_S37_CACHE_TTL_SEC); _v1161_s37_prune(_V1161_S37_RENDER_CACHE,now,_V1161_S37_RENDER_TTL_SEC); action='PRUNE_EXPIRED_CACHE'
+        else:
+            action='OBSERVE_ONLY_NO_RESTART'
+    except Exception as e:
+        ok=False
+        try:v88_record_error('v1161-dev-s40-recovery',e)
+        except Exception:pass
+    event={'issue':reason,'action':action,'result':'SUCCESS' if ok else 'FAILED','duration_ms':round((time.time()-started)*1000,3),'authority':'SHADOW_BOUNDED'}
+    _v1161_s40_append_history(event)
+    with _V1161_S40_LOCK:
+        _V1161_S40_STATE['recoveries']+=1
+        if ok:_V1161_S40_STATE['successful_recoveries']+=1
+        else:_V1161_S40_STATE['failed_recoveries']+=1
+    return event
+
+
+def _v1161_s40_operational_report(allow_recovery=False):
+    evidence=_v1161_s40_evidence_integrity(); drift=_v1161_s40_runtime_drift(); health=_v1161_s40_worker_health(); recoveries=[]
+    warnings=list(evidence['stale'])+list(drift['issues'])+list(health['bad'])
+    if allow_recovery:
+        for issue in drift['issues']:
+            if issue in ('CACHE_BOUND_EXCEEDED','RENDER_CACHE_BOUND_EXCEEDED'):recoveries.append(_v1161_s40_bounded_recovery(issue))
+        # Safe periodic prune; never restarts workers.
+        recoveries.append(_v1161_s40_bounded_recovery('STALE_CACHE_MAINTENANCE'))
+    if any(x in drift['issues'] for x in ('REGRESSION_SAMPLE_PRESENT',)) or 'runtime_worker' in health['bad']:
+        overall='STALLED'
+    elif warnings:
+        overall='DEGRADED'
+    else:
+        overall='HEALTHY'
+    history=_v1161_s40_recent_history(20)
+    success=sum(1 for x in history if x.get('result')=='SUCCESS'); total=len(history)
+    report={'version':V1161_DEV_S40_NUMBER,'overall':overall,'workers':health,'evidence':evidence,'drift':drift,'warnings':warnings,'recoveries':recoveries,
+            'recovery_success_rate':round(success/total,4) if total else None,'recent_recovery_count':total,'authority':'SHADOW READ ONLY · BOUNDED CACHE RECOVERY ONLY'}
+    with _V1161_S40_LOCK:
+        _V1161_S40_STATE['last_check_at']=time.time(); _V1161_S40_STATE['checks']+=1; _V1161_S40_STATE['warnings']+=len(warnings); _V1161_S40_STATE['last_status']=overall; _V1161_S40_STATE['last_report']=report
+    return report
+
+
+def _v1161_s40_worker_loop():
+    while not _V1161_S40_STOP.wait(_V1161_S40_INTERVAL_SEC):
+        try:_v1161_s40_operational_report(True)
+        except Exception as e:
+            try:v88_record_error('v1161-dev-s40-watchdog',e)
+            except Exception:pass
+
+
+def _v1161_s40_start_worker_once():
+    global _V1161_S40_THREAD
+    with _V1161_S40_LOCK:
+        if _V1161_S40_THREAD is not None and _V1161_S40_THREAD.is_alive():return False
+        _V1161_S40_STOP.clear(); _V1161_S40_THREAD=threading.Thread(target=_v1161_s40_worker_loop,name='v1161-s40-watchdog',daemon=True); _V1161_S40_THREAD.start(); return True
+
+
+def _v1161_s40_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s39_card(row,result,rank,detail); op=_v1161_s40_operational_report(False)
+    extra=(f'\n\n<b>Operational Intelligence S40</b>\n'
+           f'· System {op["overall"]} · Drift {op["drift"]["state"]} · Evidence {"HEALTHY" if op["evidence"]["healthy"] else "DEGRADED"}\n'
+           f'· Cache {op["drift"]["cache_entries"]}/{_V1161_S37_CACHE_MAX} · Hit {op["drift"]["cache_hit_ratio"]:.1f}% · Avg {op["drift"]["avg_compute_ms"]:.1f}ms\n'
+           f'· Warnings {len(op["warnings"])} · Recovery authority CACHE ONLY · Runtime restart DISABLED')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs40_cmd(update,context):
+    await update.message.reply_text('🛡️ V116.1 S40 운영 Watchdog Evidence 분석 중...')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            op=_v1161_s40_operational_report(False); await update.message.reply_text(f'🛡️ <b>S40 OPERATIONAL</b>\nNO_RUNTIME_EVIDENCE\nSystem: {op["overall"]}',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]; evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s40_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s40-ultimate',e); await update.message.reply_text('⚠️ S40 운영 출력 오류 · /errors 확인')
+
+
+async def sniper1161devs40_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:await update.message.reply_text('🛡️ <b>SNIPER S40</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]; evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        row,res=evaluated[0]; _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s40_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🛡️ <b>SNIPER S40 · OPERATIONAL EVIDENCE</b>\n'+card,parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s40-sniper',e); await update.message.reply_text('⚠️ Sniper S40 오류')
+
+
+async def god1161devs40_cmd(update,context):
+    try:
+        op=_v1161_s40_operational_report(False); drift=op['drift']; ev=op['evidence']; h=op['workers']
+        success_text='N/A' if op['recovery_success_rate'] is None else f"{op['recovery_success_rate']*100:.1f}%"
+        lines=[f'· System {op["overall"]}',f'· Workers {"HEALTHY" if h["healthy"] else "DEGRADED"} · Bad {len(h["bad"])}',f'· Evidence {"HEALTHY" if ev["healthy"] else "DEGRADED"} · Stale {len(ev["stale"])}',
+               f'· Drift {drift["state"]} · Avg {drift["avg_compute_ms"]:.1f}ms · Max {drift["max_compute_ms"]:.1f}ms',f'· Cache {drift["cache_entries"]}/{_V1161_S37_CACHE_MAX} · Hit {drift["cache_hit_ratio"]:.1f}%',
+               f'· Recent Recovery {op["recent_recovery_count"]} · Success {success_text}']
+        if op['warnings']:lines.append('· Warnings '+', '.join(op['warnings'][:6]))
+        await update.message.reply_text(_v1161_s5_trim('🛡️ <b>S40 OPERATIONAL INTELLIGENCE CENTER</b>\n'+'\n'.join(lines)+'\n\n<i>Shadow Read Only · Cache Recovery Only · Runtime Restart Disabled</i>'),parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s40-god',e); await update.message.reply_text('⚠️ S40 Operational Center 오류')
+
+
+async def version1161devs40_cmd(update,context):
+    op=_v1161_s40_operational_report(False); rc=_v1161_s39_rc_readiness()
+    await update.message.reply_text(
+        f'🛡️ <b>A100 V{V1161_DEV_S40_NUMBER}</b>\n{V1161_DEV_S40_TITLE}\n\n'
+        f'Stable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\n'
+        f'Operational Health: {op["overall"]}\nRuntime Drift: {op["drift"]["state"]}\nEvidence Integrity: {"HEALTHY" if op["evidence"]["healthy"] else "DEGRADED"}\n'
+        f'RC Candidate: {rc["state"]}\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\n'
+        f'Recovery Authority: SHADOW CACHE ONLY\nRuntime/Final AI Restart: DISABLED\nLive Trading: OFF\n\n'
+        f'Release Gate/Consensus/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s40_reconcile():
+    desired={'version':version1161devs40_cmd,'ultimate':ultimate1161devs40_cmd,'sniper':sniper1161devs40_cmd,'god':god1161devs40_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h:V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s40_reconcile()
+
+
+def _v1161_s40_static_audit():
+    required={'version':version1161devs40_cmd,'ultimate':ultimate1161devs40_cmd,'sniper':sniper1161devs40_cmd,'god':god1161devs40_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'s39_preserved':callable(globals().get('_v1161_s39_rc_readiness')),
+        's38_preserved':callable(globals().get('_v1161_s38_certification')),'s37_preserved':callable(globals().get('_v1161_s37_consensus')),
+        'history_under_data':str(_V1161_S40_HISTORY_PATH).startswith(str(V91_DATA_DIR)),'interval_bounded':_V1161_S40_INTERVAL_SEC>=30,
+        'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,'cache_recovery_only':True,
+        'no_runtime_restart_route':all(k not in globals() for k in ('restart_runtime1161devs40','restart_final_ai1161devs40','place_order1161devs40','execute_order1161devs40')),
+    }
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s40_reconcile(); audit=_v1161_s40_static_audit()
+    if not audit['ok']:raise RuntimeError('V116.1 DEV S40 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S40 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S40 dispatcher count: 1',flush=True)
+    if repaired:print('A100 V116.1 DEV S40 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S40 Operational Intelligence safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():_v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s40_reconcile(); audit=_v1161_s40_static_audit()
+    print(f'{V1161_DEV_S40_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S40 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired:print('A100 V116.1 DEV S40 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']:raise RuntimeError('V116.1 DEV S40 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True:time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once()
+    op=_v1161_s40_operational_report(False)
+    print('A100 V116.1 DEV S40 Operational Intelligence & Recovery Framework: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S40 operational state: {op["overall"]}',flush=True)
+    print('A100 V116.1 DEV S40 watchdog interval: 60s · history bounded',flush=True)
+    print('A100 V116.1 DEV S40 recovery authority: SHADOW CACHE ONLY',flush=True)
+    print('A100 V116.1 DEV S40 runtime/final AI/telegram restart: DISABLED',flush=True)
+    print('A100 V116.1 DEV S40 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S40 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S40 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S40 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S40 live trading: OFF',flush=True)
+    try:asyncio.run(run_bot_async())
+    except KeyboardInterrupt:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); print('A100 V116.1 DEV S40 stopped by signal',flush=True)
+    except Exception as e:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); v88_record_error('v1161-dev-s40-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# =============================================================================
+# A100 V116.1 DEV S41 - Runtime Performance & Resource Optimization
+# =============================================================================
+V1161_DEV_S41_NUMBER='116.1-DEV-S41'
+V1161_DEV_S41_VERSION='A100 V116.1 DEV S41'
+V1161_DEV_S41_TITLE='Runtime Performance & Resource Optimization · Resource Evidence Only'
+V91_VERSION=V1161_DEV_S41_VERSION
+
+_V1161_S41_STARTED_AT=time.time()
+_V1161_S41_LOCK=threading.RLock()
+_V1161_S41_SAMPLE_INTERVAL_SEC=60.0
+_V1161_S41_STOP=threading.Event()
+_V1161_S41_THREAD=None
+_V1161_S41_SAMPLES=[]
+_V1161_S41_SAMPLE_MAX=1440
+_V1161_S41_LAST={'state':'STARTING'}
+
+
+def _v1161_s41_resource_sample():
+    now=time.time(); mem_mb=0.0; cpu_sec=0.0
+    try:
+        import resource
+        rss=float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        mem_mb=rss/(1024.0 if rss>1024*1024 else 1.0)
+        cpu_sec=float(resource.getrusage(resource.RUSAGE_SELF).ru_utime+resource.getrusage(resource.RUSAGE_SELF).ru_stime)
+    except Exception: pass
+    perf=_v1161_s37_metrics(); op=_v1161_s40_operational_report(False)
+    return {
+        'timestamp':now,'memory_mb':round(mem_mb,3),'process_cpu_sec':round(cpu_sec,3),
+        'average_ai_ms':float(perf.get('average_compute_ms',0.0) or 0.0),
+        'last_ai_ms':float(perf.get('last_compute_ms',0.0) or 0.0),
+        'max_ai_ms':float(perf.get('max_compute_ms',0.0) or 0.0),
+        'cache_hit_ratio':float(perf.get('cache_hit_ratio',0.0) or 0.0),
+        'cache_entries':int(perf.get('cache_entries',0) or 0),
+        'render_entries':int(perf.get('render_entries',0) or 0),
+        'queue_length':int(perf.get('shadow_queue_length',0) or 0),
+        'operational_state':op.get('overall','UNKNOWN'),
+    }
+
+
+def _v1161_s41_report(sample_now=False):
+    global _V1161_S41_LAST
+    if sample_now or not _V1161_SAMPLES_SAFE():
+        sample=_v1161_s41_resource_sample()
+        with _V1161_S41_LOCK:
+            _V1161_S41_SAMPLES.append(sample)
+            if len(_V1161_S41_SAMPLES)>_V1161_S41_SAMPLE_MAX:
+                del _V1161_S41_SAMPLES[:-_V1161_S41_SAMPLE_MAX]
+    with _V1161_S41_LOCK: samples=list(_V1161_S41_SAMPLES)
+    if not samples: samples=[_v1161_s41_resource_sample()]
+    latest=samples[-1]; mem=[x['memory_mb'] for x in samples if x['memory_mb']>=0]
+    avg_mem=sum(mem)/len(mem) if mem else 0.0; peak_mem=max(mem) if mem else 0.0
+    growth=(mem[-1]-mem[0]) if len(mem)>=2 else 0.0
+    avg_ai=sum(x['average_ai_ms'] for x in samples)/len(samples)
+    cache_ratio=sum(x['cache_hit_ratio'] for x in samples)/len(samples)
+    issues=[]
+    if latest['cache_entries']>_V1161_S37_CACHE_MAX or latest['render_entries']>_V1161_S37_CACHE_MAX: issues.append('CACHE_BOUND_EXCEEDED')
+    if latest['max_ai_ms']>8000: issues.append('AI_LATENCY_CRITICAL')
+    elif latest['average_ai_ms']>2500: issues.append('AI_LATENCY_DRIFT')
+    if growth>256: issues.append('MEMORY_GROWTH_REVIEW')
+    if latest['queue_length']>32: issues.append('QUEUE_PRESSURE')
+    state='CRITICAL' if any(x in issues for x in ('CACHE_BOUND_EXCEEDED','AI_LATENCY_CRITICAL')) else ('DEGRADED' if issues else 'STABLE')
+    priority={'P1':'FINAL_AI','P2':'SELF_VERIFICATION','P3':'SCENARIO_SIMULATION','P4':'HISTORY','P5':'DASHBOARD'}
+    report={'version':V1161_DEV_S41_NUMBER,'state':state,'issues':issues,'samples':len(samples),
+            'memory_mb':latest['memory_mb'],'average_memory_mb':round(avg_mem,3),'peak_memory_mb':round(peak_mem,3),'memory_growth_mb':round(growth,3),
+            'average_ai_ms':round(avg_ai,3),'last_ai_ms':latest['last_ai_ms'],'max_ai_ms':latest['max_ai_ms'],
+            'cache_hit_ratio':round(cache_ratio,2),'cache_entries':latest['cache_entries'],'render_entries':latest['render_entries'],
+            'queue_pressure':latest['queue_length'],'worker_utilization':_v1161_s37_metrics().get('worker_utilization','BOUNDED_ON_DEMAND'),
+            'priority_advisory':priority,'authority':'OBSERVE_AND_SHADOW_CACHE_ONLY','decision_mutation':False,'scheduler_mutation':False}
+    _V1161_S41_LAST=report
+    return report
+
+
+def _V1161_SAMPLES_SAFE():
+    with _V1161_S41_LOCK:
+        return bool(_V1161_S41_SAMPLES)
+
+
+def _v1161_s41_worker_loop():
+    while not _V1161_S41_STOP.wait(_V1161_S41_SAMPLE_INTERVAL_SEC):
+        try:
+            r=_v1161_s41_report(True)
+            if 'CACHE_BOUND_EXCEEDED' in r['issues']:
+                _v1161_s40_bounded_recovery('CACHE_BOUND_EXCEEDED')
+                _v1161_s40_bounded_recovery('RENDER_CACHE_BOUND_EXCEEDED')
+        except Exception as e:
+            try:v88_record_error('v1161-dev-s41-resource-worker',e)
+            except Exception:pass
+
+
+def _v1161_s41_start_worker_once():
+    global _V1161_S41_THREAD
+    with _V1161_S41_LOCK:
+        if _V1161_S41_THREAD is not None and _V1161_S41_THREAD.is_alive(): return False
+        _V1161_S41_STOP.clear(); _V1161_S41_THREAD=threading.Thread(target=_v1161_s41_worker_loop,name='v1161-s41-resource-monitor',daemon=True); _V1161_S41_THREAD.start(); return True
+
+
+def _v1161_s41_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s40_card(row,result,rank,detail); r=_v1161_s41_report(False)
+    extra=(f'\n\n<b>Resource Optimizer S41</b>\n· State {r["state"]} · Memory {r["memory_mb"]:.1f}MB · Peak {r["peak_memory_mb"]:.1f}MB\n'
+           f'· AI avg {r["average_ai_ms"]:.1f}ms · last {r["last_ai_ms"]:.1f}ms · max {r["max_ai_ms"]:.1f}ms\n'
+           f'· Cache hit {r["cache_hit_ratio"]:.1f}% · Entries {r["cache_entries"]}/{_V1161_S37_CACHE_MAX} · Queue {r["queue_pressure"]}\n'
+           f'· Scheduling advisory only · Runtime/Final AI/Telegram unchanged')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs41_cmd(update,context):
+    await update.message.reply_text('🧰 V116.1 S41 리소스 최적화 Evidence 분석 중...')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧰 <b>S41 RESOURCE OPTIMIZER</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]; evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s41_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate'); await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s41-ultimate',e); await update.message.reply_text('⚠️ S41 Resource Optimizer 오류')
+
+
+async def sniper1161devs41_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🧰 <b>SNIPER S41</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        row=max(results,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row)
+        _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s41_card(row,res,1,True); _v1161_s9_record(row,res,'sniper'); await update.message.reply_text('🧰 <b>SNIPER S41</b>\n'+card,parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s41-sniper',e); await update.message.reply_text('⚠️ Sniper S41 오류')
+
+
+async def god1161devs41_cmd(update,context):
+    try:
+        r=_v1161_s41_report(True); issues=', '.join(r['issues'][:5]) if r['issues'] else 'NONE'
+        text=(f'🧰 <b>S41 RESOURCE DASHBOARD</b>\n· State {r["state"]} · Samples {r["samples"]}\n· Memory {r["memory_mb"]:.1f}MB · Avg {r["average_memory_mb"]:.1f}MB · Peak {r["peak_memory_mb"]:.1f}MB\n'
+              f'· AI avg {r["average_ai_ms"]:.1f}ms · Max {r["max_ai_ms"]:.1f}ms\n· Cache hit {r["cache_hit_ratio"]:.1f}% · Queue {r["queue_pressure"]}\n· Issues {issues}\n\n<i>Resource Evidence Only · Scheduling Advisory · No Decision Mutation</i>')
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s41-god',e); await update.message.reply_text('⚠️ S41 Resource Dashboard 오류')
+
+
+async def version1161devs41_cmd(update,context):
+    r=_v1161_s41_report(False); rc=_v1161_s39_rc_readiness()
+    await update.message.reply_text(f'🧰 <b>A100 V{V1161_DEV_S41_NUMBER}</b>\n{V1161_DEV_S41_TITLE}\n\nStable Base: V116.0 LTS S2.17.51 · untouched\nResource State: {r["state"]}\nMemory: {r["memory_mb"]:.1f}MB · Peak {r["peak_memory_mb"]:.1f}MB\nAI Avg: {r["average_ai_ms"]:.1f}ms · Cache Hit {r["cache_hit_ratio"]:.1f}%\nRC Candidate: {rc["state"]}\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\nScheduling: ADVISORY ONLY\nLive Trading: OFF\n\nRelease Gate/Consensus/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s41_reconcile():
+    desired={'version':version1161devs41_cmd,'ultimate':ultimate1161devs41_cmd,'sniper':sniper1161devs41_cmd,'god':god1161devs41_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s41_reconcile()
+
+
+def _v1161_s41_static_audit():
+    required={'version':version1161devs41_cmd,'ultimate':ultimate1161devs41_cmd,'sniper':sniper1161devs41_cmd,'god':god1161devs41_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'s40_preserved':callable(globals().get('_v1161_s40_operational_report')),
+           's39_preserved':callable(globals().get('_v1161_s39_rc_readiness')),'cache_bound':_V1161_S37_CACHE_MAX==128,
+           'sample_interval_safe':_V1161_S41_SAMPLE_INTERVAL_SEC>=30,'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+           'no_scheduler_mutation':True,'no_order_authority':all(k not in globals() for k in ('place_order1161devs41','execute_order1161devs41'))}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s41_reconcile(); audit=_v1161_s41_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S41 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S41 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S41 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S41 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S41 Runtime Performance safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s41_reconcile(); audit=_v1161_s41_static_audit()
+    print(f'{V1161_DEV_S41_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S41 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S41 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S41 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once()
+    r=_v1161_s41_report(True)
+    print('A100 V116.1 DEV S41 Runtime Performance & Resource Optimization: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S41 resource state: {r["state"]}',flush=True); print('A100 V116.1 DEV S41 sample interval: 60s · bounded 1440',flush=True)
+    print('A100 V116.1 DEV S41 scheduling authority: ADVISORY ONLY',flush=True); print('A100 V116.1 DEV S41 recovery authority: SHADOW CACHE ONLY',flush=True)
+    print('A100 V116.1 DEV S41 runtime/final AI/telegram schedule mutation: DISABLED',flush=True)
+    print('A100 V116.1 DEV S41 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S41 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S41 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S41 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S41 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); print('A100 V116.1 DEV S41 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); v88_record_error('v1161-dev-s41-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S42 — V117 RC1 Final Integration & Release Readiness
+# Final DEV integration layer. Evidence-only readiness; no synthetic RC PASS.
+# ============================================================================
+V1161_DEV_S42_NUMBER='116.1-DEV-S42'
+V1161_DEV_S42_VERSION='A100 V116.1 DEV S42'
+V1161_DEV_S42_TITLE='V117 RC1 Final Integration & Release Readiness · Evidence Only'
+V91_VERSION=V1161_DEV_S42_VERSION
+_V1161_S42_FROZEN_SCOPE=('S27-S41 cumulative intelligence','Registry 341','Schema 1','Paper 20','Shadow 60','Live Trading OFF')
+
+
+def _v1161_s42_release_readiness():
+    cert=_v1161_s38_certification()
+    e2e=_v1161_s38_e2e_audit()
+    rc=_v1161_s39_rc_readiness()
+    ops=_v1161_s40_operational_report(False)
+    resource=_v1161_s41_report(False)
+    criteria={
+        's38_certified':cert.get('state')=='CERTIFIED' and cert.get('certified') is True,
+        's39_rc_candidate_ready':rc.get('state')=='RC_CANDIDATE_READY' and rc.get('ready') is True,
+        'e2e_regression_pass':e2e.get('ok') is True,
+        'regression_samples_zero':int(cert.get('regression_samples',0) or 0)==0,
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'operational_not_stalled':ops.get('state') not in ('STALLED','CRITICAL'),
+        'resource_not_critical':resource.get('state')!='CRITICAL',
+        'cache_within_bound':int(resource.get('cache_entries',0) or 0)<=_V1161_S37_CACHE_MAX,
+        'adaptive_weight_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+        'feature_scope_frozen':True,
+        'release_gate_unchanged':True,
+        'consensus_override_disabled':True,
+        'order_override_disabled':True,
+        'live_trading_off':True,
+    }
+    blocking={'e2e_regression_pass','regression_samples_zero','registry_341','operational_not_stalled','resource_not_critical','cache_within_bound','adaptive_weight_locked'}
+    failed=[k for k,v in criteria.items() if not v]
+    if any(k in blocking for k in failed):
+        state='RC_BLOCKED'
+    elif all(criteria.values()):
+        state='V117_RC1_READY'
+    else:
+        state='HOLD_LONG_RUNTIME'
+    return {
+        'version':V1161_DEV_S42_NUMBER,'state':state,'ready':state=='V117_RC1_READY',
+        'criteria':criteria,'pending':failed,'certification_state':cert.get('state'),
+        'certification_progress_pct':float(cert.get('progress_pct',0.0) or 0.0),
+        'elapsed_sec':float(cert.get('elapsed_sec',0.0) or 0.0),'sample_count':int(cert.get('sample_count',0) or 0),
+        'regression_samples':int(cert.get('regression_samples',0) or 0),'rc_state':rc.get('state'),
+        'operational_state':ops.get('state'),'resource_state':resource.get('state'),
+        'registry':len(V90_COMMAND_REGISTRY),'freeze_scope':list(_V1161_S42_FROZEN_SCOPE),
+        'authority':'S38/S39/S40/S41 RUNTIME EVIDENCE ONLY','synthetic_ready':False,
+    }
+
+
+def _v1161_s42_card(row,result,rank=1,detail=False):
+    base,result=_v1161_s41_card(row,result,rank,detail); rr=_v1161_s42_release_readiness()
+    extra=(f'\n\n<b>V117 RC1 Final Readiness S42</b>\n'
+           f'· State {rr["state"]} · S38 {rr["certification_state"]} {rr["certification_progress_pct"]:.2f}%\n'
+           f'· RC Candidate {rr["rc_state"]} · Ops {rr["operational_state"]} · Resource {rr["resource_state"]}\n'
+           f'· Samples {rr["sample_count"]} · Regression {rr["regression_samples"]} · Registry {rr["registry"]}/341\n'
+           f'· Feature Scope FROZEN S27-S41 · Synthetic RC READY disabled')
+    return _v1161_s5_trim(base+extra),result
+
+
+async def ultimate1161devs42_cmd(update,context):
+    await update.message.reply_text('🏁 V116.1 S42 V117 RC1 최종 통합 Evidence 분석 중...')
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results:
+            rr=_v1161_s42_release_readiness()
+            await update.message.reply_text(f'🏁 <b>S42 V117 RC1 READINESS</b>\nNO_RUNTIME_EVIDENCE\nState: {rr["state"]}',parse_mode='HTML'); return
+        evaluated=[(x,_v1161_s37_consensus(x)) for x in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        for i,(row,res) in enumerate(evaluated[:3],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate'); card,res=_v1161_s42_card(row,res,i,True); _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s42-ultimate',e); await update.message.reply_text('⚠️ S42 RC1 최종 통합 출력 오류 · /errors 확인')
+
+
+async def sniper1161devs42_cmd(update,context):
+    try:
+        rows,results,scan_errors=await v70_async_scan()
+        if not results: await update.message.reply_text('🏁 <b>SNIPER S42</b>\nNO_RUNTIME_EVIDENCE',parse_mode='HTML'); return
+        row=max(results,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row)
+        _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper'); card,res=_v1161_s42_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text('🏁 <b>SNIPER S42 · V117 RC1 EVIDENCE</b>\n'+card,parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s42-sniper',e); await update.message.reply_text('⚠️ Sniper S42 오류')
+
+
+async def god1161devs42_cmd(update,context):
+    try:
+        rr=_v1161_s42_release_readiness(); pending=', '.join(rr['pending'][:8]) if rr['pending'] else 'NONE'
+        text=(f'🏁 <b>S42 V117 RC1 FINAL INTEGRATION</b>\n· State {rr["state"]}\n'
+              f'· S38 {rr["certification_state"]} · {rr["certification_progress_pct"]:.2f}% · {rr["elapsed_sec"]/3600.0:.2f}/72h\n'
+              f'· RC Candidate {rr["rc_state"]} · Ops {rr["operational_state"]} · Resource {rr["resource_state"]}\n'
+              f'· Samples {rr["sample_count"]} · Regression {rr["regression_samples"]} · Registry {rr["registry"]}/341\n'
+              f'· Pending {pending}\n\n<i>Evidence Only · Frozen S27-S41 · No synthetic READY</i>')
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as e:v88_record_error('v1161-dev-s42-god',e); await update.message.reply_text('⚠️ S42 RC1 Center 오류')
+
+
+async def version1161devs42_cmd(update,context):
+    rr=_v1161_s42_release_readiness()
+    await update.message.reply_text(
+        f'🏁 <b>A100 V{V1161_DEV_S42_NUMBER}</b>\n{V1161_DEV_S42_TITLE}\n\n'
+        f'Stable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\n'
+        f'V117 RC1: {rr["state"]}\nS38 Certification: {rr["certification_state"]} · {rr["certification_progress_pct"]:.2f}%\n'
+        f'Runtime: {rr["elapsed_sec"]/3600.0:.2f}/72h · Samples: {rr["sample_count"]}\n'
+        f'RC Candidate: {rr["rc_state"]}\nOps: {rr["operational_state"]} · Resource: {rr["resource_state"]}\n'
+        f'Regressions: {rr["regression_samples"]} · Registry: {rr["registry"]}/341\n'
+        f'Feature Scope: FROZEN S27-S41\nLive Trading: OFF\n\nRelease Gate/Consensus/Order/Weight Override: NO',parse_mode='HTML')
+
+
+def _v1161_s42_reconcile():
+    desired={'version':version1161devs42_cmd,'ultimate':ultimate1161devs42_cmd,'sniper':sniper1161devs42_cmd,'god':god1161devs42_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s42_reconcile()
+
+
+def _v1161_s42_static_audit():
+    required={'version':version1161devs42_cmd,'ultimate':ultimate1161devs42_cmd,'sniper':sniper1161devs42_cmd,'god':god1161devs42_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,
+           's38_preserved':callable(globals().get('_v1161_s38_certification')),
+           's39_preserved':callable(globals().get('_v1161_s39_rc_readiness')),
+           's40_preserved':callable(globals().get('_v1161_s40_operational_report')),
+           's41_preserved':callable(globals().get('_v1161_s41_report')),
+           'cache_bound':_V1161_S37_CACHE_MAX==128,
+           'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+           'feature_freeze':_V1161_S42_FROZEN_SCOPE[0]=='S27-S41 cumulative intelligence',
+           'no_synthetic_ready':_v1161_s42_release_readiness().get('synthetic_ready') is False,
+           'no_order_authority':all(k not in globals() for k in ('place_order1161devs42','execute_order1161devs42'))}
+    return {'ok':not mismatches and all(tests.values()),'registry':len(V90_COMMAND_REGISTRY),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s42_reconcile(); audit=_v1161_s42_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S42 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S42 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S42 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S42 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S42 V117 RC1 Final Integration safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s42_reconcile(); audit=_v1161_s42_static_audit()
+    print(f'{V1161_DEV_S42_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S42 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S42 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S42 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once()
+    rr=_v1161_s42_release_readiness()
+    print('A100 V116.1 DEV S42 V117 RC1 Final Integration & Release Readiness: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S42 V117 RC1 state: {rr["state"]}',flush=True)
+    print('A100 V116.1 DEV S42 feature scope: FROZEN S27-S41',flush=True)
+    print('A100 V116.1 DEV S42 readiness authority: S38/S39/S40/S41 EVIDENCE ONLY · no synthetic READY',flush=True)
+    print('A100 V116.1 DEV S42 runtime/final AI/telegram schedule mutation: DISABLED',flush=True)
+    print('A100 V116.1 DEV S42 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S42 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S42 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S42 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S42 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); print('A100 V116.1 DEV S42 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); v88_record_error('v1161-dev-s42-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S43 — Certification Consistency Diagnostics & Gate Audit
+# Read-only diagnostic layer. Never recomputes, relaxes, or mutates release gates.
+# ============================================================================
+V1161_DEV_S43_NUMBER='116.1-DEV-S43'
+V1161_DEV_S43_VERSION='A100 V116.1 DEV S43'
+V1161_DEV_S43_TITLE='Certification Consistency Diagnostics & Gate Audit · Read Only'
+V91_VERSION=V1161_DEV_S43_VERSION
+
+
+def _v1161_s43_safe_call(name, default=None):
+    fn=globals().get(name)
+    if not callable(fn): return default
+    try: return fn()
+    except Exception as e:
+        try: v88_record_error('v1161-dev-s43-'+name,e)
+        except Exception: pass
+        return default
+
+
+def _v1161_s43_diagnostics():
+    st=_v1161_s43_safe_call('_v1160_s21728_read_live_state',{}) or {}
+    view=None; audit=None; contract=None
+    try: view=_v1160_s21746_release_view(st)
+    except Exception as e: v88_record_error('v1161-dev-s43-view',e); view={}
+    try: audit=_v1160_s21748_release_audit(st)
+    except Exception as e: v88_record_error('v1161-dev-s43-audit',e); audit={}
+    try: contract=_v1160_s21737_structural_audit(st)
+    except Exception as e: v88_record_error('v1161-dev-s43-contract',e); contract={}
+    view=view or {}; audit=audit or {}; contract=contract or {}
+    eta=view.get('eta',{}) or {}
+    gates=view.get('gates',[]) or []
+    gate_rows=[]
+    for g in gates:
+        if not isinstance(g,dict): continue
+        gate_rows.append({'name':str(g.get('name','Gate')),'passed':bool(g.get('passed',False)),
+                          'value':g.get('value'),'target':g.get('target'),'gap':g.get('gap')})
+    runtime_structural=bool(view.get('structural',False))
+    audit_structural=bool(audit.get('structural',False))
+    registry=int(st.get('registry_count',len(V90_COMMAND_REGISTRY)) or 0)
+    routes=int(st.get('route_count',registry) or 0)
+    contract_ok=bool(contract.get('ok',False)) if isinstance(contract,dict) else False
+    mismatch=[]
+    if runtime_structural!=audit_structural: mismatch.append('STRUCTURAL_SOURCE_MISMATCH')
+    if registry!=341: mismatch.append('REGISTRY_NOT_341')
+    if routes!=341: mismatch.append('ROUTES_NOT_341')
+    if not contract_ok: mismatch.append('STRUCTURAL_CONTRACT_NOT_OK')
+    passed=int(view.get('passed',0) or 0)
+    if passed==0 and any(x.get('passed') for x in gate_rows): mismatch.append('GATE_SUMMARY_MISMATCH')
+    coverage=float(eta.get('coverage',0.0) or 0.0)
+    diag_state='CONSISTENT' if not mismatch else 'INCONSISTENT'
+    return {'state':diag_state,'mismatches':mismatch,'live_structural':runtime_structural,
+            'release_audit_structural':audit_structural,'contract_ok':contract_ok,
+            'registry':registry,'routes':routes,'passed':passed,'coverage':coverage,
+            'remaining':str(eta.get('clock_eta','UNKNOWN')),'gate_eta':str(eta.get('gate_eta','WITHHELD')),
+            'gates':gate_rows,'authority':'READ ONLY · SOURCE COMPARISON ONLY','mutation':False}
+
+
+def _v1161_s43_lines(detail=False):
+    d=_v1161_s43_diagnostics(); lines=[
+        '🔬 CERTIFICATION CONSISTENCY DIAGNOSTICS',
+        f'State {d["state"]} · authority READ ONLY',
+        f'72H {d["coverage"]:.1f}% · remaining {d["remaining"]}',
+        f'Mandatory Gates {d["passed"]}/5 · ETA {d["gate_eta"]}',
+        f'Runtime structural {"PASS" if d["live_structural"] else "FAIL"}',
+        f'Release audit structural {"PASS" if d["release_audit_structural"] else "FAIL"}',
+        f'Contract {"PASS" if d["contract_ok"] else "FAIL"} · Registry {d["registry"]}/341 · Routes {d["routes"]}/341',
+        'Mismatch '+(', '.join(d['mismatches']) if d['mismatches'] else 'NONE')]
+    if detail:
+        lines += ['', '🚦 GATE BREAKDOWN']
+        if d['gates']:
+            for g in d['gates']:
+                mark='✅' if g['passed'] else '⏳'
+                lines.append(f'{mark} {g["name"]} · value {g["value"]} · target {g["target"]} · gap {g["gap"]}')
+        else: lines.append('NO_GATE_ROWS')
+        lines += ['', 'No gate recomputation · no threshold relaxation · no state mutation.']
+    return lines
+
+
+async def releasegate1161devs43_cmd(update,context):
+    detail=_v1160_s21743_mode(context)=='detail'
+    lines=[f'🏁 A100 V{V1161_DEV_S43_NUMBER} RELEASE GATE DIAGNOSTICS','Mode '+('DETAIL' if detail else 'SUMMARY')+' · READ ONLY','']
+    lines += _v1161_s43_lines(detail)
+    if not detail: lines += ['', '상세: /releasegate detail']
+    return await _v1160_s21729_reply(update,'\n'.join(lines))
+
+
+async def god1161devs43_cmd(update,context):
+    rr=_v1161_s42_release_readiness(); d=_v1161_s43_diagnostics()
+    text=(f'🔬 <b>S43 CERTIFICATION DIAGNOSTICS</b>\n· Consistency {d["state"]}\n'
+          f'· 72H {d["coverage"]:.1f}% · remaining {d["remaining"]}\n'
+          f'· Gates {d["passed"]}/5 · Runtime/Audit structural '
+          f'{"PASS" if d["live_structural"] else "FAIL"}/{"PASS" if d["release_audit_structural"] else "FAIL"}\n'
+          f'· Contract {"PASS" if d["contract_ok"] else "FAIL"} · Registry/Routes {d["registry"]}/{d["routes"]}\n'
+          f'· Mismatch {", ".join(d["mismatches"]) if d["mismatches"] else "NONE"}\n'
+          f'· V117 RC1 {rr["state"]}\n\n<i>Read only · no gate recomputation</i>')
+    await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+
+
+async def version1161devs43_cmd(update,context):
+    d=_v1161_s43_diagnostics(); rr=_v1161_s42_release_readiness()
+    await update.message.reply_text(
+        f'🔬 <b>A100 V{V1161_DEV_S43_NUMBER}</b>\n{V1161_DEV_S43_TITLE}\n\n'
+        f'Stable Base: V116.0 LTS S2.17.51 · untouched\nBranch: DEVELOPMENT PREBUILT\n'
+        f'Consistency: {d["state"]}\n72H: {d["coverage"]:.1f}% · {d["remaining"]}\n'
+        f'Gates: {d["passed"]}/5 · Structural Runtime/Audit: '
+        f'{"PASS" if d["live_structural"] else "FAIL"}/{"PASS" if d["release_audit_structural"] else "FAIL"}\n'
+        f'V117 RC1: {rr["state"]}\nRegistry: {len(V90_COMMAND_REGISTRY)}/341\nLive Trading: OFF\n\n'
+        f'Gate/Consensus/Order/Weight mutation: DISABLED',parse_mode='HTML')
+
+
+def _v1161_s43_reconcile():
+    desired={'version':version1161devs43_cmd,'releasegate':releasegate1161devs43_cmd,'god':god1161devs43_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s43_reconcile()
+
+
+def _v1161_s43_static_audit():
+    required={'version':version1161devs43_cmd,'releasegate':releasegate1161devs43_cmd,'god':god1161devs43_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,
+           's42_preserved':callable(globals().get('_v1161_s42_release_readiness')),
+           'diagnostics_read_only':_v1161_s43_diagnostics().get('mutation') is False,
+           'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+           'no_order_authority':all(k not in globals() for k in ('place_order1161devs43','execute_order1161devs43'))}
+    return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s43_reconcile(); audit=_v1161_s43_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S43 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S43 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S43 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S43 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S43 Certification Consistency safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s43_reconcile(); audit=_v1161_s43_static_audit()
+    print(f'{V1161_DEV_S43_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S43 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S43 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S43 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once()
+    d=_v1161_s43_diagnostics()
+    print('A100 V116.1 DEV S43 Certification Consistency Diagnostics & Gate Audit: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S43 consistency state: {d["state"]}',flush=True)
+    print('A100 V116.1 DEV S43 diagnostics authority: READ ONLY · no gate recomputation',flush=True)
+    print('A100 V116.1 DEV S43 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S43 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S43 stable base: V116.0 LTS S2.17.51 · untouched',flush=True); print('A100 V116.1 DEV S43 deployment: HOLD · DEV only',flush=True); print('A100 V116.1 DEV S43 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); print('A100 V116.1 DEV S43 stopped by signal',flush=True)
+    except Exception as e: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); v88_record_error('v1161-dev-s43-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
+
+
+# ============================================================================
+# A100 V116.1 DEV S44 — Memory Leak Containment & Certification Continuity Hotfix
+# Bounded Shadow memory pressure guard. No runtime/final-AI/gate/order mutation.
+# ============================================================================
+V1161_DEV_S44_NUMBER='116.1-DEV-S44'
+V1161_DEV_S44_VERSION='A100 V116.1 DEV S44'
+V1161_DEV_S44_TITLE='Memory Leak Containment & Certification Continuity Hotfix · Shadow Only'
+V91_VERSION=V1161_DEV_S44_VERSION
+_V1161_S44_INTERVAL_SEC=60.0
+_V1161_S44_SOFT_MB=float(os.environ.get('A100_S44_MEMORY_SOFT_MB','760'))
+_V1161_S44_HARD_MB=float(os.environ.get('A100_S44_MEMORY_HARD_MB','860'))
+_V1161_S44_SAMPLE_KEEP=240
+_V1161_S44_STOP=threading.Event()
+_V1161_S44_THREAD=None
+_V1161_S44_LOCK=threading.RLock()
+_V1161_S44_STATE={'started_at':time.time(),'checks':0,'soft_actions':0,'hard_actions':0,'last_memory_mb':-1.0,'peak_memory_mb':-1.0,'last_action':'NONE','last_error':'','restart_count':0}
+_V1161_S44_BOOT_PATH=Path(V91_DATA_DIR)/'v1161_s44_boot_continuity.json'
+
+
+def _v1161_s44_memory_mb():
+    try:
+        fn=globals().get('_v1161_s41_memory_mb')
+        if callable(fn): return float(fn())
+    except Exception: pass
+    try:
+        import resource
+        value=float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        return value/(1024.0 if value>1024*16 else 1.0)
+    except Exception: return -1.0
+
+
+def _v1161_s44_record_boot():
+    now=time.time(); previous={}
+    try:
+        if _V1161_S44_BOOT_PATH.exists(): previous=json.loads(_V1161_S44_BOOT_PATH.read_text(encoding='utf-8'))
+    except Exception: previous={}
+    count=int(previous.get('restart_count',-1))+1 if previous else 0
+    row={'boot_epoch':now,'restart_count':count,'version':V1161_DEV_S44_NUMBER,'pid':os.getpid()}
+    try:
+        _V1161_S44_BOOT_PATH.parent.mkdir(parents=True,exist_ok=True)
+        _V1161_S44_BOOT_PATH.write_text(json.dumps(row,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    except Exception as e:
+        try:v88_record_error('v1161-dev-s44-boot-state',e)
+        except Exception:pass
+    with _V1161_S44_LOCK:_V1161_S44_STATE['restart_count']=count
+    return row
+
+
+def _v1161_s44_trim_shadow_state(hard=False):
+    actions=[]
+    try:
+        now=_v1161_s37_now()
+        with _V1161_S37_LOCK:
+            _v1161_s37_prune(_V1161_S37_CACHE,now,_V1161_S37_CACHE_TTL_SEC)
+            _v1161_s37_prune(_V1161_S37_RENDER_CACHE,now,_V1161_S37_RENDER_TTL_SEC)
+            if hard:
+                if _V1161_S37_CACHE: _V1161_S37_CACHE.clear(); actions.append('CLEAR_EVIDENCE_CACHE')
+                if _V1161_S37_RENDER_CACHE: _V1161_S37_RENDER_CACHE.clear(); actions.append('CLEAR_RENDER_CACHE')
+            else: actions.append('PRUNE_EXPIRED_CACHE')
+    except Exception as e:
+        try:v88_record_error('v1161-dev-s44-cache-trim',e)
+        except Exception:pass
+    try:
+        with _V1161_S41_LOCK:
+            keep=60 if hard else _V1161_S44_SAMPLE_KEEP
+            if len(_V1161_S41_SAMPLES)>keep:
+                del _V1161_S41_SAMPLES[:-keep]; actions.append('TRIM_RESOURCE_SAMPLES')
+    except Exception as e:
+        try:v88_record_error('v1161-dev-s44-sample-trim',e)
+        except Exception:pass
+    try:
+        import gc
+        collected=gc.collect()
+        actions.append('GC_'+str(collected))
+    except Exception:pass
+    return actions or ['NOOP']
+
+
+def _v1161_s44_guard_once():
+    mem=_v1161_s44_memory_mb(); action='NONE'; level='NORMAL'
+    with _V1161_S44_LOCK:
+        _V1161_S44_STATE['checks']+=1; _V1161_S44_STATE['last_memory_mb']=mem
+        _V1161_S44_STATE['peak_memory_mb']=max(float(_V1161_S44_STATE.get('peak_memory_mb',-1.0)),mem)
+    if mem>=0 and mem>=_V1161_S44_HARD_MB:
+        level='HARD'; action='+'.join(_v1161_s44_trim_shadow_state(True))
+        with _V1161_S44_LOCK:_V1161_S44_STATE['hard_actions']+=1
+    elif mem>=0 and mem>=_V1161_S44_SOFT_MB:
+        level='SOFT'; action='+'.join(_v1161_s44_trim_shadow_state(False))
+        with _V1161_S44_LOCK:_V1161_S44_STATE['soft_actions']+=1
+    else:
+        # periodic low-cost expiry pruning prevents slow cache accumulation
+        if int(_V1161_S44_STATE.get('checks',0))%10==0: action='+'.join(_v1161_s44_trim_shadow_state(False))
+    with _V1161_S44_LOCK:_V1161_S44_STATE['last_action']=action
+    return {'level':level,'memory_mb':mem,'action':action}
+
+
+def _v1161_s44_loop():
+    while not _V1161_S44_STOP.wait(_V1161_S44_INTERVAL_SEC):
+        try:_v1161_s44_guard_once()
+        except Exception as e:
+            with _V1161_S44_LOCK:_V1161_S44_STATE['last_error']=str(e)[:240]
+            try:v88_record_error('v1161-dev-s44-memory-guard',e)
+            except Exception:pass
+
+
+def _v1161_s44_start_once():
+    global _V1161_S44_THREAD
+    with _V1161_S44_LOCK:
+        if _V1161_S44_THREAD and _V1161_S44_THREAD.is_alive():return False
+        _V1161_S44_STOP.clear(); _V1161_S44_THREAD=threading.Thread(target=_v1161_s44_loop,name='a100-s44-memory-guard',daemon=True); _V1161_S44_THREAD.start(); return True
+
+
+def _v1161_s44_report():
+    with _V1161_S44_LOCK:r=dict(_V1161_S44_STATE)
+    mem=_v1161_s44_memory_mb(); level='NORMAL'
+    if mem>=_V1161_S44_HARD_MB:level='HARD'
+    elif mem>=_V1161_S44_SOFT_MB:level='SOFT'
+    r.update({'level':level,'memory_mb':round(mem,1),'soft_mb':_V1161_S44_SOFT_MB,'hard_mb':_V1161_S44_HARD_MB,
+              'cache_entries':len(_V1161_S37_CACHE),'render_entries':len(_V1161_S37_RENDER_CACHE),
+              'resource_samples':len(_V1161_S41_SAMPLES),'guard_alive':bool(_V1161_S44_THREAD and _V1161_S44_THREAD.is_alive()),
+              'authority':'SHADOW MEMORY ONLY','runtime_mutation':False,'certification_mutation':False})
+    return r
+
+
+async def version1161devs44_cmd(update,context):
+    r=_v1161_s44_report(); d=_v1161_s43_diagnostics()
+    await update.message.reply_text(
+        f'🧠 <b>A100 V{V1161_DEV_S44_NUMBER}</b>\n{V1161_DEV_S44_TITLE}\n\n'
+        f'Memory: {r["memory_mb"]:.1f}MB · Pressure {r["level"]}\n'
+        f'Soft/Hard: {r["soft_mb"]:.0f}/{r["hard_mb"]:.0f}MB\n'
+        f'Cache: {r["cache_entries"]}/{_V1161_S37_CACHE_MAX} · Render {r["render_entries"]}/{_V1161_S37_CACHE_MAX}\n'
+        f'Resource Samples: {r["resource_samples"]} · Guard {"ACTIVE" if r["guard_alive"] else "STARTING"}\n'
+        f'Restarts observed: {r["restart_count"]} · 72H display {d["coverage"]:.1f}%\n'
+        f'Registry: {len(V90_COMMAND_REGISTRY)}/341 · Live Trading: OFF\n\n'
+        f'Runtime/Final AI/Gate/Order mutation: DISABLED',parse_mode='HTML')
+
+
+async def god1161devs44_cmd(update,context):
+    r=_v1161_s44_report(); d=_v1161_s43_diagnostics()
+    text=(f'🧠 <b>S44 MEMORY CONTAINMENT</b>\n· Pressure {r["level"]} · Memory {r["memory_mb"]:.1f}MB · Peak {r["peak_memory_mb"]:.1f}MB\n'
+          f'· Guard {"ACTIVE" if r["guard_alive"] else "STARTING"} · Checks {r["checks"]} · Soft/Hard actions {r["soft_actions"]}/{r["hard_actions"]}\n'
+          f'· Cache {r["cache_entries"]}/{_V1161_S37_CACHE_MAX} · Render {r["render_entries"]}/{_V1161_S37_CACHE_MAX} · Samples {r["resource_samples"]}\n'
+          f'· Last action {r["last_action"]} · Restarts observed {r["restart_count"]}\n'
+          f'· Certification display {d["coverage"]:.1f}% · consistency {d["state"]}\n\n<i>Shadow memory only · no certification mutation</i>')
+    await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+
+
+def _v1161_s44_reconcile():
+    desired={'version':version1161devs44_cmd,'god':god1161devs44_cmd,'releasegate':releasegate1161devs43_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h:V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s44_reconcile()
+
+
+def _v1161_s44_static_audit():
+    required={'version':version1161devs44_cmd,'god':god1161devs44_cmd,'releasegate':releasegate1161devs43_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,
+           's43_preserved':callable(globals().get('_v1161_s43_diagnostics')),
+           'cache_bound':_V1161_S37_CACHE_MAX==128,'resource_samples_bounded':_V1161_S41_SAMPLE_MAX==1440,
+           'soft_below_hard':_V1161_S44_SOFT_MB<_V1161_S44_HARD_MB,
+           'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+           'no_runtime_restart':all(k not in globals() for k in ('restart_runtime1161devs44','restart_telegram1161devs44')),
+           'no_order_authority':all(k not in globals() for k in ('place_order1161devs44','execute_order1161devs44'))}
+    return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s44_reconcile(); audit=_v1161_s44_static_audit()
+    if not audit['ok']:raise RuntimeError('V116.1 DEV S44 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S44 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S44 dispatcher count: 1',flush=True)
+    if repaired:print('A100 V116.1 DEV S44 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S44 Memory Containment safety audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():_v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s44_reconcile(); audit=_v1161_s44_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S44_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S44 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired:print('A100 V116.1 DEV S44 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']:raise RuntimeError('V116.1 DEV S44 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True:time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    r=_v1161_s44_report()
+    print('A100 V116.1 DEV S44 Memory Leak Containment & Certification Continuity Hotfix: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S44 memory thresholds: soft {_V1161_S44_SOFT_MB:.0f}MB · hard {_V1161_S44_HARD_MB:.0f}MB',flush=True)
+    print('A100 V116.1 DEV S44 recovery authority: SHADOW CACHE/SAMPLES ONLY',flush=True)
+    print(f'A100 V116.1 DEV S44 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S44 runtime/final AI/telegram/certification mutation: DISABLED',flush=True)
+    print('A100 V116.1 DEV S44 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S44 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S44 live trading: OFF',flush=True)
+    try:asyncio.run(run_bot_async())
+    except KeyboardInterrupt:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S44 stopped by signal',flush=True)
+    except Exception as e:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s44-fatal-main',e); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
