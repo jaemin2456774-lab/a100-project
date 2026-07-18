@@ -1,22 +1,15 @@
-# S54 Railway 설치 안내
+# S55 Railway 증분 패치 설치
 
-1. 기존 S53 저장소를 백업합니다.
-2. 패치의 main.py만 기존 main.py에 덮어씁니다.
-3. 기존 /data, 환경변수, 설정 파일은 변경하지 않습니다.
-4. Railway에 배포하고 Startup 로그에서 S54 connectivity audit PASS 및 registered commands 341을 확인합니다.
+1. 기존 S54 저장소에 이 ZIP의 파일을 덮어씁니다.
+2. `/data` 볼륨과 기존 환경변수는 그대로 유지합니다.
+3. Railway에서 재배포 또는 재시작합니다.
+4. Telegram에서 아래만 실행합니다.
 
-## 배포 후 캡처 명령
-
+```text
 /version
-/status
-/runtimehealth
-/sniper
-/sniper detail
-/ultimate
-/ultimate detail
-/evidence
-/releasegate
-/releasegate detail
-/errors
+/verifyall
+/verifyall detail
+```
 
-핵심 확인값은 Runtime Connectivity의 Connected N/16, Coverage, Nested recovery, Missing입니다.
+`/verifyall detail`은 `/data/a100_verify_S55_*.json`과 `.txt`를 생성합니다.
+캡처 대신 텍스트 결과를 복사하거나 리포트 파일 하나를 첨부하면 됩니다.

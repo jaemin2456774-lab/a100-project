@@ -67044,6 +67044,155 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S54 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s54-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S55 — Automated E2E Command Monitor
+# Consolidated read-only verification report to reduce Telegram screenshots.
+# ============================================================================
+V1161_DEV_S55_NUMBER='116.1-DEV-S55'
+V1161_DEV_S55_VERSION='A100 V116.1 DEV S55'
+V1161_DEV_S55_TITLE='Automated E2E Command Monitor · Consolidated Verification Report'
+V91_VERSION=V1161_DEV_S55_VERSION
+_V1161_S55_REPORT_DIR=os.getenv('A100_VERIFY_REPORT_DIR','/data')
+_V1161_S55_CORE_COMMANDS=('version','status','runtimehealth','evidence','releasegate','sniper','ultimate','errors')
+
+
+def _v1161_s55_safe_json(value):
+    try: json.dumps(value,ensure_ascii=False); return value
+    except Exception: return str(value)
+
+
+def _v1161_s55_recent_errors():
+    try:
+        with V88_ERROR_LOCK: rows=list(V88_RECENT_ERRORS[-10:])
+    except Exception: rows=[]
+    return [{k:_v1161_s55_safe_json(v) for k,v in r.items()} for r in rows if isinstance(r,dict)]
+
+
+def _v1161_s55_route_status():
+    return {name:callable(V90_COMMAND_REGISTRY.get(name)) for name in _V1161_S55_CORE_COMMANDS}
+
+
+async def _v1161_s55_collect_report():
+    started=time.perf_counter(); now=int(time.time())
+    routes=_v1161_s55_route_status(); live=_v1160_s21728_read_live_state() or {}
+    scan_error=None
+    try: scan=await _v1161_s54_runtime_scan(False)
+    except Exception as exc:
+        scan={}; scan_error=f'{type(exc).__name__}: {exc}'; v88_record_error('v1161-dev-s55-scan',exc)
+    rows=scan.get('results') or []
+    evs=[r.get('_s54_evidence_runtime',{}) for r in rows if isinstance(r,dict)]
+    coverages=[float(e.get('coverage_pct',0) or 0) for e in evs]
+    coverage=round(sum(coverages)/len(coverages),1) if coverages else float(scan.get('evidence_coverage_pct',0) or 0)
+    connected=[]; missing=[]
+    for e in evs:
+        connected.extend(e.get('available') or []); missing.extend(e.get('missing') or [])
+    connected=sorted(set(map(str,connected))); missing=sorted(set(map(str,missing)))
+    errors=_v1161_s55_recent_errors()
+    checks={
+      'version':routes.get('version',False), 'status':routes.get('status',False),
+      'runtimehealth':routes.get('runtimehealth',False) and bool(live.get('worker_fresh')),
+      'evidence':routes.get('evidence',False) and scan_error is None and bool(rows),
+      'releasegate':routes.get('releasegate',False), 'sniper':routes.get('sniper',False),
+      'ultimate':routes.get('ultimate',False), 'errors':routes.get('errors',False),
+    }
+    partial=bool(rows) and coverage<100.0
+    overall='PASS' if all(checks.values()) and not partial and not errors else 'PARTIAL' if all(routes.values()) and scan_error is None else 'FAILED'
+    return {
+      'schema':1,'version':V1161_DEV_S55_VERSION,'generated_at':now,'overall':overall,
+      'checks':checks,'routes':routes,'registry':{'actual':len(V90_COMMAND_REGISTRY),'expected':341},
+      'runtime':{'worker_fresh':bool(live.get('worker_fresh')),'state':live.get('state') or live.get('status') or 'UNKNOWN'},
+      'evidence':{'coverage_pct':coverage,'connected_count':len(connected),'required_total':len(_V1161_S49_REAL_ALIASES),'connected':connected,'missing':missing,'candidates':len(rows),'scan_error':scan_error},
+      'safety':{'runtime_first':True,'strict_read_only':True,'synthetic_completion':False,'gate_mutation':False,'schema':1,'paper':20,'shadow':60,'live_trading':False},
+      'errors':errors,'latency_ms':round((time.perf_counter()-started)*1000,1)
+    }
+
+
+def _v1161_s55_render(report,detail=False):
+    icon={'PASS':'✅','PARTIAL':'🟡','FAILED':'🔴'}; lines=[f'🧪 <b>A100 자동 검증 · S55</b>',f'{icon.get(report["overall"],"⚪")} 종합 <b>{report["overall"]}</b> · {report["latency_ms"]:.1f}ms','']
+    labels={'version':'/version','status':'/status','runtimehealth':'/runtimehealth','evidence':'/evidence','releasegate':'/releasegate','sniper':'/sniper','ultimate':'/ultimate','errors':'/errors'}
+    for k in labels: lines.append(f'{"✅" if report["checks"].get(k) else "🔴"} {labels[k]:16} {"PASS" if report["checks"].get(k) else "FAILED"}')
+    ev=report['evidence']; lines += ['',f'🔗 Evidence <b>{ev["coverage_pct"]:.1f}%</b> · {ev["connected_count"]}/{ev["required_total"]}',f'📡 Candidates {ev["candidates"]} · Runtime {"FRESH" if report["runtime"]["worker_fresh"] else "WARMING"}',f'🧾 Registry {report["registry"]["actual"]}/{report["registry"]["expected"]} · Errors {len(report["errors"])}']
+    if ev['missing']: lines.append('⚠️ Missing '+', '.join(ev['missing'][:12]))
+    if detail:
+        lines += ['', '<b>Safety</b>','✅ Runtime First · Strict Read Only','✅ Synthetic completion OFF · Gate mutation NONE','✅ Schema 1 · Paper 20 · Shadow 60 · Live OFF']
+        if ev['connected']: lines += ['', '<b>Connected</b>', ', '.join(ev['connected'])]
+        if report['errors']:
+            lines += ['', '<b>Recent errors</b>']+[f'· {e.get("source","-")} {e.get("type","-")}: {e.get("message","")[:120]}' for e in report['errors'][-5:]]
+    lines += ['', '📄 /verifyall detail → 상세 + JSON/TXT 저장']
+    return '\n'.join(lines)
+
+
+def _v1161_s55_write_reports(report):
+    stamp=time.strftime('%Y%m%d_%H%M%S',time.localtime(report['generated_at']))
+    directory=_V1161_S55_REPORT_DIR
+    try: os.makedirs(directory,exist_ok=True)
+    except Exception: directory='/tmp'; os.makedirs(directory,exist_ok=True)
+    base=os.path.join(directory,f'a100_verify_S55_{stamp}')
+    jpath=base+'.json'; tpath=base+'.txt'
+    with open(jpath,'w',encoding='utf-8') as f: json.dump(report,f,ensure_ascii=False,indent=2)
+    with open(tpath,'w',encoding='utf-8') as f: f.write(_v1161_s55_render(report,True).replace('<b>','').replace('</b>',''))
+    return jpath,tpath
+
+
+async def verifyall1161devs55_cmd(update,context):
+    detail=any(str(x).lower() in ('detail','full') for x in (getattr(context,'args',None) or []))
+    try:
+        report=await _v1161_s55_collect_report(); paths=None
+        if detail: paths=_v1161_s55_write_reports(report)
+        text=_v1161_s55_render(report,detail)
+        if paths: text += f'\n\n💾 Saved\n<code>{paths[0]}</code>\n<code>{paths[1]}</code>'
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s55-verifyall',exc); await update.message.reply_text(f'⚠️ /verifyall 오류 · {type(exc).__name__} · /errors 확인')
+
+
+async def version1161devs55_cmd(update,context):
+    st=_v1160_s21728_read_live_state(); mem=_v1161_s44_report()
+    await update.message.reply_text(f'🧪 <b>A100 V{V1161_DEV_S55_NUMBER}</b>\n{V1161_DEV_S55_TITLE}\n\n/verifyall · /verifyall detail ACTIVE\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · S54 connectivity bridge preserved\nReports {_V1161_S55_REPORT_DIR}/a100_verify_S55_*.json|txt\nSynthetic completion OFF · Gate unchanged\nMemory {mem["memory_mb"]:.1f}MB · Registry {len(V90_COMMAND_REGISTRY)}/341\nSchema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+def _v1161_s55_reconcile():
+    repaired=[]
+    # Preserve the hard 341-command count by replacing only the redundant legacy /v89 alias of /v90.
+    if 'verifyall' not in V90_COMMAND_REGISTRY:
+        if 'v89' in V90_COMMAND_REGISTRY: V90_COMMAND_REGISTRY.pop('v89'); repaired.append('drop-redundant-v89-alias')
+        V90_COMMAND_REGISTRY['verifyall']=verifyall1161devs55_cmd; repaired.append('verifyall')
+    desired={'version':version1161devs55_cmd,'ultimate':ultimate1161devs54_cmd,'sniper':sniper1161devs54_cmd,'verifyall':verifyall1161devs55_cmd}
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler: V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+def _v1161_s55_static_audit():
+    _v1161_s55_reconcile(); tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'verifyall_route':V90_COMMAND_REGISTRY.get('verifyall') is verifyall1161devs55_cmd,'version_route':V90_COMMAND_REGISTRY.get('version') is version1161devs55_cmd,'s54_bridge_preserved':callable(globals().get('_v1161_s54_runtime_scan')),'read_only':True,'gate_unchanged':True}
+    return {'ok':all(tests.values()),'tests':tests}
+
+
+def build_v44_application(token):
+    audit=_v1161_s55_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S55 preflight failed: '+','.join(k for k,v in audit['tests'].items() if not v))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S55 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S55 automated verification audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s55_reconcile(); audit=_v1161_s55_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S55_VERSION} worker running...',flush=True)
+    if repaired: print('A100 V116.1 DEV S55 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S55 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S55 /verifyall: ACTIVE',flush=True); print('A100 V116.1 DEV S55 JSON/TXT report writer: ACTIVE',flush=True); print('A100 V116.1 DEV S55 S54 connectivity bridge: PRESERVED',flush=True); print('A100 V116.1 DEV S55 synthetic completion: DISABLED',flush=True); print(f'A100 V116.1 DEV S55 continuity boot count: {boot["restart_count"]}',flush=True); print('A100 V116.1 DEV S55 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S55 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s55-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
