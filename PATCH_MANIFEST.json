@@ -1,35 +1,36 @@
 {
-  "version": "A100 V116.1 DEV S52",
-  "baseline": "A100 V116.1 DEV S51",
+  "version": "A100 V116.1 DEV S53",
+  "baseline": "A100 V116.1 DEV S52",
   "package_type": "incremental_prebuilt_patch",
-  "runtime_mutation": false,
-  "gate_formula_changed": false,
+  "title": "Visual Dashboard 3.0 · Compact Evidence UX",
   "data_migration": false,
+  "gate_formula_changed": false,
+  "registry_target": 341,
   "files": [
     {
       "path": "main.py",
-      "size": 3724653,
-      "sha256": "e5b94e1f6d722bc1e03c3f11aa032545baffa759d26a142a9bba6e097c2b1741"
+      "size": 3725042,
+      "sha256": "d53c4c48bd501f941f8839d8dd2e6362aea875983d213a9cf3f300129b151b00"
     },
     {
-      "path": "CHANGELOG_V116.1_DEV_S52.md",
-      "size": 654,
-      "sha256": "e9d9e441f958fc9fe3bac436b500b0ccc35e0b90c57fbb95ecb5835d8b2f87cc"
+      "path": "CHANGELOG_V116.1_DEV_S53.md",
+      "size": 632,
+      "sha256": "d64c864e1b55182651743c4e0b29d01bd980dd4651fc55d70b0cf4b6c2ba6380"
     },
     {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S52.md",
-      "size": 532,
-      "sha256": "a94b3b36174e2d007edd0004fef3cde35794ee03f59b79102d59d604fd953c8b"
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S53.md",
+      "size": 620,
+      "sha256": "4943d7c954a44a9adb6b874fc89bb7dd976f3fd5f843f077f61b51fcd16af6d5"
     },
     {
       "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 479,
-      "sha256": "7910fc60e6258bcbdb2b902ca01ee9d187a5233d265ceade5701564db590f493"
+      "size": 637,
+      "sha256": "429405d7db681ca2352dc2a8d2dec5a95a6d5a7b8f07abca8be038a1e2a7023c"
     },
     {
       "path": "changed_files.manifest",
       "size": 160,
-      "sha256": "d3a5e327201c7c80ff1094fa82a3391a6420fc2db35e77ae6a8612caad414376"
+      "sha256": "0b51895f29c9163402dc64c26ff7536abb185ad369a892e33339e23a40b5bcf7"
     }
   ]
 }
