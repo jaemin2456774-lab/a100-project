@@ -65940,9 +65940,9 @@ def main():
 # producer health diagnostics and structural gate diagnostics. No synthetic evidence,
 # threshold relaxation, gate mutation or order authority.
 # ============================================================================
-V1161_DEV_S49_NUMBER='116.1-DEV-S49.2'
-V1161_DEV_S49_VERSION='A100 V116.1 DEV S49.2'
-V1161_DEV_S49_TITLE='Explainable AI Consensus Score Linkage & Compact Runtime Explanation Hotfix'
+V1161_DEV_S49_NUMBER='116.1-DEV-S50'
+V1161_DEV_S49_VERSION='A100 V116.1 DEV S50'
+V1161_DEV_S49_TITLE='Decision Clarity, Symbol Recovery & Compact Consensus Runtime Integration'
 V91_VERSION=V1161_DEV_S49_VERSION
 
 _V1161_S49_REAL_ALIASES=dict(_V1161_S48_REAL_ALIASES)
@@ -66218,8 +66218,8 @@ def build_v44_application(token):
     if not _v1161_s49_1_critical_preflight_ok(audit):
         raise RuntimeError('V116.1 DEV S49.2 critical preflight failed: '+','.join(audit.get('mismatches') or []))
     app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
-    print(f'A100 V116.1 DEV S49.2 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
-    print('A100 V116.1 DEV S49.2 Explainable AI schema compatibility audit: '+('PASS' if audit.get('ok') else 'WARN/ISOLATED'),flush=True)
+    print(f'A100 V116.1 DEV S50 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S50 Explainable AI schema compatibility audit: '+('PASS' if audit.get('ok') else 'WARN/ISOLATED'),flush=True)
     return app
 
 
@@ -66229,25 +66229,25 @@ def main():
     v90_3_start_background_once(); v91_start_background_once(); _v1161_s49_reconcile(); audit=_v1161_s49_1_safe_static_audit(); boot=_v1161_s44_record_boot()
     print(f'{V1161_DEV_S49_VERSION} worker running...',flush=True)
     if not _v1161_s49_1_critical_preflight_ok(audit): raise RuntimeError('V116.1 DEV S49.2 critical preflight failed')
-    if not audit.get('ok'): print('A100 V116.1 DEV S49.2 non-critical static audit: WARN/ISOLATED · runtime continues',flush=True)
+    if not audit.get('ok'): print('A100 V116.1 DEV S50 non-critical static audit: WARN/ISOLATED · runtime continues',flush=True)
     if not acquire_v44_process_lock():
         print('A100 V116.1 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
-    print('A100 V116.1 DEV S49.2 real runtime evidence expansion: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S49.2 Explainable AI 2.1 schema compatibility: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S49.2 Research Notebook 2.1 bounded cache: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S49.2 producer/gate diagnostics: READ ONLY',flush=True)
-    print('A100 V116.1 DEV S49.2 synthetic evidence/pass: DISABLED',flush=True)
-    print(f'A100 V116.1 DEV S49.2 continuity boot count: {boot["restart_count"]}',flush=True)
-    print('A100 V116.1 DEV S49.2 live trading: OFF',flush=True)
+    print('A100 V116.1 DEV S50 real runtime evidence expansion: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S50 Explainable AI 2.1 schema compatibility: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S50 Research Notebook 2.1 bounded cache: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S50 producer/gate diagnostics: READ ONLY',flush=True)
+    print('A100 V116.1 DEV S50 synthetic evidence/pass: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S50 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S50 live trading: OFF',flush=True)
     try: asyncio.run(run_bot_async())
-    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S49.2 stopped by signal',flush=True)
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S50 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s49-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 
 
-# === A100 V116.1 DEV S49.2: EXPLAINABLE AI CONSENSUS SCORE LINKAGE ===
+# === A100 V116.1 DEV S50: EXPLAINABLE AI CONSENSUS SCORE LINKAGE ===
 def _v1161_s49_2_direction_scores(row, res):
     """Use the same AI Debate/Judge payload as Consensus; bounded real-runtime fallbacks only."""
     debate=(res.get('ai_debate_2') or {}) if isinstance(res,dict) else {}
@@ -66348,7 +66348,7 @@ def _v1161_s49_2_explain_block(exp, compact=False):
 
 async def ultimate1161devs49_cmd(update,context):
     detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
-    await update.message.reply_text('🧠 V116.1 S49.2 Final AI 분석 중...\nConsensus-linked scores · Real runtime evidence · Read only')
+    await update.message.reply_text('🧠 V116.1 S50 Final AI 분석 중...\nConsensus-linked scores · Real runtime evidence · Read only')
     try:
         scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
         if not rows:
@@ -66360,14 +66360,14 @@ async def ultimate1161devs49_cmd(update,context):
             # Keep the established candidate card, but avoid the full legacy detail flood.
             card,res=_v1161_s42_card(row,res,i,False)
             ev=row.get('_s49_evidence_runtime',{}); exp=_v1161_s49_explain(row,res); note=_v1161_s49_notebook(row,res)
-            extra=(f'\n\n<b>Evidence Runtime S49.2</b>\n· Coverage {ev.get("coverage_pct",0):.1f}% · Connected {len(ev.get("available",[]))}/{len(_V1161_S49_REAL_ALIASES)}'
+            extra=(f'\n\n<b>Evidence Runtime S50</b>\n· Coverage {ev.get("coverage_pct",0):.1f}% · Connected {len(ev.get("available",[]))}/{len(_V1161_S49_REAL_ALIASES)}'
                    f'\n· Missing {", ".join(ev.get("missing",[])[:6]) or "NONE"}'
                    f'\n\n{_v1161_s49_2_explain_block(exp,compact=not detail)}'
                    f'\n\n<b>Research Notebook 2.1</b>\n· {note["state"]} · Coverage Δ {note["coverage_change"]:+.1f}% · Verdict {note["verdict_change"]}'
                    '\n· Read only · consensus/gate/order mutation NO')
             await update.message.reply_text(_v1161_s5_trim(card+extra),parse_mode='HTML')
     except Exception as exc:
-        v88_record_error('v1161-dev-s49-2-ultimate',exc); await update.message.reply_text('⚠️ S49.2 Ultimate 오류 · /errors 확인')
+        v88_record_error('v1161-dev-s49-2-ultimate',exc); await update.message.reply_text('⚠️ S50 Ultimate 오류 · /errors 확인')
 
 
 async def sniper1161devs49_cmd(update,context):
@@ -66376,16 +66376,175 @@ async def sniper1161devs49_cmd(update,context):
         if not rows: await update.message.reply_text(_v1161_s49_banner(scan)+'\n\n🎯 NO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
         row=max(rows,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row); exp=_v1161_s49_explain(row,res)
         sym=str(row.get('symbol') or row.get('coin') or 'UNKNOWN')
-        text=(_v1161_s49_banner(scan)+f'\n\n🎯 <b>SNIPER S49.2 · {sym}</b>\n'+_v1161_s49_2_explain_block(exp,compact=False))
+        text=(_v1161_s49_banner(scan)+f'\n\n🎯 <b>SNIPER S50 · {sym}</b>\n'+_v1161_s49_2_explain_block(exp,compact=False))
         await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
     except Exception as exc:
-        v88_record_error('v1161-dev-s49-2-sniper',exc); await update.message.reply_text('⚠️ Sniper S49.2 오류')
+        v88_record_error('v1161-dev-s49-2-sniper',exc); await update.message.reply_text('⚠️ Sniper S50 오류')
 
 
 async def version1161devs49_cmd(update,context):
     mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
     await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S49_NUMBER}</b>\n{V1161_DEV_S49_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Real evidence only\nExplain scores linked to AI Debate 2 Consensus Judge\nCompact Telegram output · Research Notebook bounded\nSynthetic evidence/pass OFF · Gate thresholds unchanged\nMemory {mem["memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\nCertification {diag["state"]} {diag["coverage"]:.1f}% · Structural diagnostics read only\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
 
+
+
+# === A100 V116.1 DEV S50: DECISION CLARITY / SYMBOL RECOVERY / COMPACT CONSENSUS ===
+_V1161_S50_FRIENDLY_EVIDENCE={
+    'funding_rate':'Funding','open_interest_change':'Open Interest','liquidation_signal':'Liquidation',
+    'whale_signal':'Whale','macro_signal':'Macro','news_signal':'News','market_regime':'Market Regime',
+    'capital_rotation':'Capital Rotation','timeframe_alignment':'Multi-Timeframe','volume_activity':'Volume',
+    'volatility_state':'Volatility','momentum_state':'Momentum','market_breadth':'Market Breadth',
+    'btc_correlation':'BTC Correlation','btc_dominance':'BTC Dominance','cross_market_state':'Cross Market',
+}
+
+def _v1161_s50_symbol(row):
+    """Recover a candidate identity from cumulative real-runtime schemas without inventing a ticker."""
+    def pick(obj):
+        if isinstance(obj,dict):
+            for key in ('symbol','sym','coin','ticker','market','asset','pair'):
+                val=obj.get(key)
+                if val not in (None,''):
+                    text=str(val).strip().upper()
+                    if text and text not in ('UNKNOWN','NONE','N/A'):
+                        return text
+            for key in ('raw','source','result','candidate','payload'):
+                got=pick(obj.get(key))
+                if got: return got
+        else:
+            for key in ('symbol','sym','coin','ticker','market','asset','pair'):
+                val=getattr(obj,key,None)
+                if val not in (None,''):
+                    text=str(val).strip().upper()
+                    if text and text not in ('UNKNOWN','NONE','N/A'):
+                        return text
+        return None
+    return pick(row) or 'CANDIDATE'
+
+def _v1161_s50_friendly_missing(items, limit=5):
+    vals=[]
+    for item in items or []:
+        name=_V1161_S50_FRIENDLY_EVIDENCE.get(str(item),str(item).replace('_',' ').title())
+        if name not in vals: vals.append(name)
+    if len(vals)>limit:
+        return vals[:limit],len(vals)-limit
+    return vals,0
+
+def _v1161_s50_engine_summary(res):
+    """Expose only engine verdicts/scores already present in the shared consensus payload."""
+    if not isinstance(res,dict): return []
+    specs=(
+      ('AI Debate','ai_debate_2',('research_verdict','verdict','state')),
+      ('Cross Engine','cross_engine_consensus_quality',('verdict','state','research_verdict')),
+      ('Psychology','market_psychology',('bias','verdict','state')),
+      ('Whale','whale_intelligence',('bias','verdict','state')),
+      ('Macro','macro_ai',('bias','verdict','state')),
+      ('News','news_ai',('verdict','bias','state')),
+      ('Portfolio','portfolio_intelligence',('verdict','state')),
+    )
+    out=[]
+    for label,key,fields in specs:
+        obj=res.get(key)
+        if not isinstance(obj,dict): continue
+        val=None
+        for f in fields:
+            if obj.get(f) not in (None,''):
+                val=str(obj.get(f)).upper(); break
+        if val: out.append(f'{label} {val}')
+    return out[:6]
+
+def _v1161_s50_confidence(res,row):
+    vals=[]
+    if isinstance(res,dict):
+        dash=res.get('ai_reliability_dashboard') or {}
+        if isinstance(dash,dict):
+            for k in ('ai_readiness_score','reliability_score','confidence'):
+                v=_v1161_s49_1_numeric_score(dash.get(k),None)
+                if v is not None: vals.append(v)
+    if isinstance(row,dict):
+        for k in ('confidence','score'):
+            v=_v1161_s49_1_numeric_score(row.get(k),None)
+            if v is not None: vals.append(v)
+    return max(0.0,min(100.0,vals[0])) if vals else 0.0
+
+def _v1161_s49_2_explain_block(exp, compact=False):
+    scores=exp.get('brain_scores') or {}
+    long_p=float(exp.get('long_probability',0) or 0); short_p=float(exp.get('short_probability',0) or 0)
+    direction='LONG' if long_p>short_p else 'SHORT' if short_p>long_p else 'NEUTRAL'
+    missing,extra=_v1161_s50_friendly_missing(exp.get('missing'),5)
+    missing_text=', '.join(missing) if missing else 'NONE'
+    if extra: missing_text+=f' +{extra}'
+    lines=[
+        '<b>Explainable AI 2.2 · Decision Clarity</b>',
+        f'· Direction <b>{direction}</b> · LONG {long_p:.1f}% / SHORT {short_p:.1f}%',
+        f'· Decision <b>{exp.get("final","WAIT")}</b> · Brain L/S/W {scores.get("LONG",0):.1f}/{scores.get("SHORT",0):.1f}/{scores.get("WAIT",0):.1f}',
+        f'· WAIT/Decision reason {exp.get("why","Evidence confirmation incomplete")}',
+        f'· Missing ({len(exp.get("missing") or [])}) {missing_text}',
+    ]
+    if not compact:
+        lines += [
+            '· Positive '+ '; '.join((exp.get('positive') or [])[:2]),
+            '· Negative '+ '; '.join((exp.get('negative') or [])[:2]),
+            '· LONG trigger '+str(exp.get('long_trigger','N/A')),
+            '· SHORT trigger '+str(exp.get('short_trigger','N/A')),
+        ]
+    return '\n'.join(lines)
+
+def _v1161_s50_candidate_card(row,res,index,detail=False):
+    exp=_v1161_s49_explain(row,res)
+    ev=(row.get('_s49_evidence_runtime') or {}) if isinstance(row,dict) else {}
+    symbol=_v1161_s50_symbol(row)
+    scores=exp.get('brain_scores') or {}
+    conf=_v1161_s50_confidence(res,row)
+    missing,extra=_v1161_s50_friendly_missing(ev.get('missing'),4)
+    miss=', '.join(missing) if missing else 'NONE'
+    if extra: miss+=f' +{extra}'
+    lines=[
+      f'<b>{index}. {symbol}</b>',
+      f'· Decision <b>{exp.get("final","WAIT")}</b> · L/S/W {scores.get("LONG",0):.1f}/{scores.get("SHORT",0):.1f}/{scores.get("WAIT",0):.1f}',
+      f'· Direction LONG {exp.get("long_probability",0):.1f}% / SHORT {exp.get("short_probability",0):.1f}% · Confidence {conf:.1f}%',
+      f'· Evidence {ev.get("coverage_pct",0):.1f}% · Connected {len(ev.get("available",[]))}/{len(_V1161_S49_REAL_ALIASES)} · Missing {miss}',
+      f'· Why {exp.get("why","Evidence confirmation incomplete")}',
+    ]
+    engines=_v1161_s50_engine_summary(res)
+    if engines: lines.append('· Engine consensus '+ ' | '.join(engines))
+    if detail:
+        lines.append(_v1161_s49_2_explain_block(exp,compact=False))
+    return '\n'.join(lines),exp
+
+async def ultimate1161devs49_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S50 Final AI 분석 중...\nDecision clarity · Symbol recovery · Real runtime evidence')
+    try:
+        scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
+        if not rows:
+            await update.message.reply_text(_v1161_s49_banner(scan)+'\n\nNO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in rows]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        await update.message.reply_text(_v1161_s49_banner(scan),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3 if detail else 2],1):
+            card,exp=_v1161_s50_candidate_card(row,res,i,detail)
+            note=_v1161_s49_notebook(row,res)
+            tail=(f'\n\n<b>Research Notebook 2.1</b> · {note["state"]} · Coverage Δ {note["coverage_change"]:+.1f}% · Verdict {note["verdict_change"]}'
+                  '\nRead only · synthetic evidence/pass OFF · gate/order mutation NO')
+            await update.message.reply_text(_v1161_s5_trim(card+tail),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s50-ultimate',exc); await update.message.reply_text('⚠️ S50 Ultimate 오류 · /errors 확인')
+
+async def sniper1161devs49_cmd(update,context):
+    try:
+        scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
+        if not rows:
+            await update.message.reply_text(_v1161_s49_banner(scan)+'\n\n🎯 NO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
+        row=max(rows,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0))
+        res=_v1161_s37_consensus(row); card,_=_v1161_s50_candidate_card(row,res,1,True)
+        text=_v1161_s49_banner(scan)+f'\n\n🎯 <b>SNIPER S50 · {_v1161_s50_symbol(row)}</b>\n'+card.split('\n',1)[1]
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s50-sniper',exc); await update.message.reply_text('⚠️ Sniper S50 오류')
+
+async def version1161devs49_cmd(update,context):
+    mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
+    await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S49_NUMBER}</b>\n{V1161_DEV_S49_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Real evidence only\nDirection and final decision separated\nCandidate symbol recovery · Compact consensus output\nSynthetic evidence/pass OFF · Gate thresholds unchanged\nMemory {mem["memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\nCertification {diag["state"]} {diag["coverage"]:.1f}% · Structural diagnostics read only\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
 
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":

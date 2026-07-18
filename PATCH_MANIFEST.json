@@ -1,24 +1,20 @@
 {
-  "version": "A100 V116.1 DEV S49.2",
+  "version": "A100 V116.1 DEV S50",
   "type": "incremental_prebuilt_patch",
-  "baseline": "A100 V116.1 DEV S49.1",
-  "runtime_first": true,
-  "strict_read_only": true,
-  "synthetic_evidence": false,
-  "synthetic_pass": false,
-  "gate_formulas_changed": false,
-  "schema": 1,
-  "registry": 341,
-  "paper": 20,
-  "shadow": 60,
-  "live": false,
+  "baseline": "A100 V116.1 DEV S49.2",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S49_2.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S49_2.md",
+    "CHANGELOG_V116.1_DEV_S50.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S50.md",
     "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest",
-    "PATCH_MANIFEST.json",
-    "SHA256SUMS"
-  ]
+    "changed_files.manifest"
+  ],
+  "safety": {
+    "runtime_first": true,
+    "strict_read_only": true,
+    "synthetic_evidence": false,
+    "synthetic_pass": false,
+    "live_trading": false,
+    "gate_thresholds_changed": false
+  }
 }
