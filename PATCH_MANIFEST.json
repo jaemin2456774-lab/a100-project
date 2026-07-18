@@ -1,36 +1,45 @@
 {
-  "version": "A100 V116.1 DEV S53",
-  "baseline": "A100 V116.1 DEV S52",
-  "package_type": "incremental_prebuilt_patch",
-  "title": "Visual Dashboard 3.0 · Compact Evidence UX",
-  "data_migration": false,
-  "gate_formula_changed": false,
-  "registry_target": 341,
+  "version": "A100 V116.1 DEV S54",
+  "baseline": "A100 V116.1 DEV S53",
+  "type": "incremental_patch",
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S54.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S54.md",
+    "PATCH_INSTALL_GUIDE_KR.md"
+  ],
+  "invariants": {
+    "runtime_first": true,
+    "strict_read_only": true,
+    "evidence_only": true,
+    "registry": 341,
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "gate_calculation_changed": false,
+    "synthetic_completion": false
+  },
   "files": [
     {
       "path": "main.py",
-      "size": 3725042,
-      "sha256": "d53c4c48bd501f941f8839d8dd2e6362aea875983d213a9cf3f300129b151b00"
+      "size": 3739142,
+      "sha256": "ba0b5c3d84726325d018d36ccbc742c7dd6bdd4218ff7fcae64d85dabc6794f7"
     },
     {
-      "path": "CHANGELOG_V116.1_DEV_S53.md",
-      "size": 632,
-      "sha256": "d64c864e1b55182651743c4e0b29d01bd980dd4651fc55d70b0cf4b6c2ba6380"
+      "path": "CHANGELOG_V116.1_DEV_S54.md",
+      "size": 886,
+      "sha256": "0827bf7c222492ae7f1d0ccd6c1ab3c4cd15c2be569137c89107dc6945395294"
     },
     {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S53.md",
-      "size": 620,
-      "sha256": "4943d7c954a44a9adb6b874fc89bb7dd976f3fd5f843f077f61b51fcd16af6d5"
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S54.md",
+      "size": 771,
+      "sha256": "2e4ee8809c078b547904b2e48babf7ce7c37441084c8c519d0e6442a88db4f34"
     },
     {
       "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 637,
-      "sha256": "429405d7db681ca2352dc2a8d2dec5a95a6d5a7b8f07abca8be038a1e2a7023c"
-    },
-    {
-      "path": "changed_files.manifest",
-      "size": 160,
-      "sha256": "0b51895f29c9163402dc64c26ff7536abb185ad369a892e33339e23a40b5bcf7"
+      "size": 600,
+      "sha256": "548c03d3d5eae4c3dcd7052e9074cbbf170d729cb3114234c8020fdf8639c295"
     }
   ]
 }

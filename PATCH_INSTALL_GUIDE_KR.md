@@ -1,9 +1,11 @@
-# S53 증분 패치 설치 안내
+# S54 Railway 설치 안내
 
-1. Railway에 연결된 GitHub 저장소에서 ZIP의 파일을 기존 프로젝트 루트에 덮어씁니다.
-2. 기존 `/data`, 환경변수, 설정 및 학습 데이터는 삭제하지 않습니다.
-3. Railway 배포 완료 후 Startup 로그에서 S53 preflight PASS와 Registry 341을 확인합니다.
-4. 아래 명령을 순서대로 실행합니다.
+1. 기존 S53 저장소를 백업합니다.
+2. 패치의 main.py만 기존 main.py에 덮어씁니다.
+3. 기존 /data, 환경변수, 설정 파일은 변경하지 않습니다.
+4. Railway에 배포하고 Startup 로그에서 S54 connectivity audit PASS 및 registered commands 341을 확인합니다.
+
+## 배포 후 캡처 명령
 
 /version
 /status
@@ -17,4 +19,4 @@
 /releasegate detail
 /errors
 
-확인 핵심: 16칸 그래프, Decision Quality `/100` 게이지, Compact Evidence, Missing Evidence 요약.
+핵심 확인값은 Runtime Connectivity의 Connected N/16, Coverage, Nested recovery, Missing입니다.

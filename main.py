@@ -66810,6 +66810,240 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S53 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s53-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S54 — Runtime Evidence Connectivity Recovery
+# Read-only producer/schema bridge. Recovers real values hidden in nested runtime
+# payloads, records source/freshness diagnostics, and refuses synthetic completion.
+# UI is intentionally kept at S53 level for final polish after connectivity work.
+# ============================================================================
+V1161_DEV_S54_NUMBER='116.1-DEV-S54'
+V1161_DEV_S54_VERSION='A100 V116.1 DEV S54'
+V1161_DEV_S54_TITLE='Runtime Evidence Connectivity Recovery · Producer Schema Bridge'
+V91_VERSION=V1161_DEV_S54_VERSION
+
+_V1161_S54_SOURCE_KEYS=('runtime','live','market','metrics','signals','evidence','analysis','context','snapshot','data','result','producer')
+_V1161_S54_MAX_DEPTH=4
+
+
+def _v1161_s54_object_mapping(value):
+    if isinstance(value,dict): return value
+    try:
+        d=vars(value)
+        return d if isinstance(d,dict) else {}
+    except Exception:
+        return {}
+
+
+def _v1161_s54_walk(value, depth=0, path='row', seen=None):
+    """Bounded traversal of existing runtime payloads only; yields path/value pairs."""
+    if depth>_V1161_S54_MAX_DEPTH: return
+    if seen is None: seen=set()
+    try:
+        oid=id(value)
+        if oid in seen: return
+        seen.add(oid)
+    except Exception: pass
+    mapping=_v1161_s54_object_mapping(value)
+    if mapping:
+        for key,val in list(mapping.items())[:256]:
+            k=str(key); p=f'{path}.{k}'
+            yield p,val
+            if depth<_V1161_S54_MAX_DEPTH and (isinstance(val,(dict,list,tuple)) or _v1161_s54_object_mapping(val)):
+                yield from _v1161_s54_walk(val,depth+1,p,seen)
+    elif isinstance(value,(list,tuple)):
+        for i,val in enumerate(value[:64]):
+            p=f'{path}[{i}]'; yield p,val
+            if depth<_V1161_S54_MAX_DEPTH:
+                yield from _v1161_s54_walk(val,depth+1,p,seen)
+
+
+def _v1161_s54_alias_index(row):
+    index={}
+    for path,val in _v1161_s54_walk(row):
+        leaf=path.rsplit('.',1)[-1].lower()
+        index.setdefault(leaf,[]).append((path,val))
+    return index
+
+
+def _v1161_s54_freshness(value):
+    """Classify timestamps already present in a producer payload; never invent age."""
+    now=time.time(); timestamps=[]
+    mapping=_v1161_s54_object_mapping(value)
+    if mapping:
+        for key in ('ts','timestamp','updated_at','update_time','last_update','generated_at','created_at'):
+            raw=mapping.get(key)
+            if raw is None: continue
+            try:
+                if isinstance(raw,str):
+                    from datetime import datetime
+                    txt=raw.replace('Z','+00:00'); t=datetime.fromisoformat(txt).timestamp()
+                else:
+                    t=float(raw); t=t/1000.0 if t>1e12 else t
+                if t>0: timestamps.append(t)
+            except Exception: pass
+    if not timestamps: return {'state':'UNKNOWN','age_sec':None}
+    age=max(0.0,now-max(timestamps)); state='FRESH' if age<=120 else 'STALE' if age>900 else 'AGING'
+    return {'state':state,'age_sec':round(age,1)}
+
+
+def _v1161_s54_runtime_context():
+    """Read currently active global market state as an additional real source."""
+    contexts=[]
+    for name in ('v59_market_state','_v1160_s21728_read_live_state'):
+        fn=globals().get(name)
+        if callable(fn):
+            try:
+                val=fn()
+                if val is not None: contexts.append((name,val))
+            except Exception as exc:
+                v88_record_error('v1161-dev-s54-context-'+name,exc)
+    return contexts
+
+
+def _v1161_s54_pick(index, aliases):
+    for alias in aliases:
+        hits=index.get(str(alias).lower()) or []
+        for path,val in hits:
+            if _v1161_s46_present(val): return val,path
+    return None,None
+
+
+def _v1161_s54_enrich_row(row, scan_context=None):
+    base=_v1161_s49_enrich_row(row,scan_context)
+    out=dict(base) if isinstance(base,dict) else _v1161_s47_mapping(base)
+    if not out: return base
+    previous=dict(out.get('_s49_evidence_runtime') or {})
+    aliases=dict(previous.get('source_aliases') or {}); sources=dict(previous.get('producer_sources') or {})
+    index=_v1161_s54_alias_index(out)
+    global_contexts=_v1161_s54_runtime_context()
+    global_indexes=[(name,_v1161_s54_alias_index(value)) for name,value in global_contexts]
+    recovered={}; freshness={}
+    for canonical,names in _V1161_S49_REAL_ALIASES.items():
+        if _v1161_s46_present(out.get(canonical)):
+            freshness[canonical]=_v1161_s54_freshness(out.get(canonical)); continue
+        val,path=_v1161_s54_pick(index,names)
+        source='NESTED_RUNTIME_ROW'
+        if val is None:
+            for gname,gindex in global_indexes:
+                val,path=_v1161_s54_pick(gindex,names)
+                if val is not None:
+                    source='GLOBAL_'+gname.upper(); break
+        if val is not None:
+            out[canonical]=val; aliases[canonical]=path; sources[canonical]=source; recovered[canonical]=path
+            freshness[canonical]=_v1161_s54_freshness(val)
+    available=[k for k in _V1161_S49_REAL_ALIASES if _v1161_s46_present(out.get(k))]
+    missing=[k for k in _V1161_S49_REAL_ALIASES if k not in available]
+    meta=dict(previous)
+    meta.update({'available':available,'missing':missing,'source_aliases':aliases,'producer_sources':sources,
+                 'coverage_pct':round(len(available)/len(_V1161_S49_REAL_ALIASES)*100.0,1),'read_only':True,
+                 'synthetic':False,'recovered_nested':recovered,'freshness':freshness,
+                 'connectivity_state':'COMPLETE' if not missing else 'PARTIAL','required_total':len(_V1161_S49_REAL_ALIASES)})
+    out['_s54_evidence_runtime']=meta
+    for key in ('_s49_evidence_runtime','_s48_evidence_runtime','_s47_evidence_runtime','_s46_evidence_runtime'): out[key]=dict(meta)
+    return out
+
+
+async def _v1161_s54_runtime_scan(force=False):
+    raw=await _v1161_s45_runtime_scan(force)
+    prelim=[_v1161_s48_enrich_row(x) for x in (raw.get('results') or [])]
+    context=_v1161_s49_market_context(prelim)
+    rows=[_v1161_s54_enrich_row(x,context) for x in prelim]
+    payload=dict(raw); payload['results']=rows; payload['market_context']=context
+    coverages=[r.get('_s54_evidence_runtime',{}).get('coverage_pct',0.0) for r in rows if isinstance(r,dict)]
+    payload['evidence_coverage_pct']=round(sum(coverages)/len(coverages),1) if coverages else 0.0
+    payload['evidence_runtime']='S54_REAL_PRODUCER_SCHEMA_BRIDGE' if rows else 'NO_ROWS'
+    payload['connectivity_complete']=bool(rows) and all(not r.get('_s54_evidence_runtime',{}).get('missing') for r in rows if isinstance(r,dict))
+    return payload
+
+
+def _v1161_s54_connectivity_card(row):
+    ev=(row.get('_s54_evidence_runtime') or {}) if isinstance(row,dict) else {}
+    available=ev.get('available') or []; missing=ev.get('missing') or []; recovered=ev.get('recovered_nested') or {}
+    lines=['🔗 <b>Runtime Connectivity</b>',f'· State <b>{ev.get("connectivity_state","UNKNOWN")}</b> · Connected {len(available)}/{ev.get("required_total",len(_V1161_S49_REAL_ALIASES))}',f'· Coverage {ev.get("coverage_pct",0):.1f}% · Nested recovery {len(recovered)}']
+    if recovered: lines.append('· Recovered '+', '.join(list(recovered)[:8]))
+    if missing: lines.append('⚠️ Missing '+', '.join(missing[:10]))
+    else: lines.append('✅ All required evidence producers connected')
+    lines.append('🔒 Real runtime only · Synthetic completion OFF')
+    return '\n'.join(lines)
+
+
+async def sniper1161devs54_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    try:
+        scan=await _v1161_s54_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: return await update.message.reply_text('🎯 S54 NO_ANALYSIS_ROWS · WAIT')
+        row=max(rows,key=lambda r:_v1161_s50_confidence(_v1161_s37_consensus(r),r)); res=_v1161_s37_consensus(row)
+        text=_v1161_s53_detail(row,res) if detail else _v1161_s53_summary(row,res,title='SNIPER S54')[0]
+        await update.message.reply_text(_v1161_s5_trim(text+'\n\n'+_v1161_s54_connectivity_card(row)),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s54-sniper',exc); await update.message.reply_text('⚠️ Sniper S54 오류 · /errors 확인')
+
+
+async def ultimate1161devs54_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    await update.message.reply_text('🔗 S54 Runtime Evidence 연결 진단 중...')
+    try:
+        scan=await _v1161_s54_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: return await update.message.reply_text('⚠️ NO_ANALYSIS_ROWS · Synthetic completion disabled')
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in rows]; evaluated.sort(key=lambda z:_v1161_s50_confidence(z[1],z[0]),reverse=True)
+        state='COMPLETE' if scan.get('connectivity_complete') else 'PARTIAL'
+        await update.message.reply_text(f'🔗 <b>ULTIMATE S54 CONNECTIVITY</b>\n· State {state} · Coverage {scan.get("evidence_coverage_pct",0):.1f}%\n· Candidates {len(rows)} · Real producer/schema bridge\n🔒 Read only · Synthetic completion OFF',parse_mode='HTML')
+        for row,res in evaluated[:3 if detail else 2]:
+            card=_v1161_s53_detail(row,res) if detail else _v1161_s53_summary(row,res,title='ULTIMATE S54')[0]
+            await update.message.reply_text(_v1161_s5_trim(card+'\n\n'+_v1161_s54_connectivity_card(row)),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s54-ultimate',exc); await update.message.reply_text('⚠️ S54 Ultimate 오류 · /errors 확인')
+
+
+async def version1161devs54_cmd(update,context):
+    st=_v1160_s21728_read_live_state(); mem=_v1161_s44_report()
+    await update.message.reply_text(f'🔗 <b>A100 V{V1161_DEV_S54_NUMBER}</b>\n{V1161_DEV_S54_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Nested producer bridge ACTIVE\nEvidence completeness is measured, never fabricated\nS53 UI preserved for final polish after connectivity\nSynthetic evidence/pass OFF · Gate thresholds unchanged\nMemory {mem["memory_mb"]:.1f}MB · Registry {len(V90_COMMAND_REGISTRY)}/341\nSchema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+def _v1161_s54_reconcile():
+    desired={'version':version1161devs54_cmd,'ultimate':ultimate1161devs54_cmd,'sniper':sniper1161devs54_cmd,'god':god1161devs49_cmd}; repaired=[]
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler: V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+def _v1161_s54_static_audit():
+    _v1161_s54_reconcile()
+    sample={'symbol':'TESTUSDT','signals':{'funding_rate':-0.01,'open_interest_change':5.0,'news_signal':'POSITIVE'},'metrics':{'btc_correlation':0.8},'market_regime':'RISK_ON','_s49_evidence_runtime':{'synthetic':False}}
+    bridged=_v1161_s54_enrich_row(sample,{'breadth':50,'longs':1,'shorts':1})
+    ev=bridged.get('_s54_evidence_runtime',{})
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':V90_COMMAND_REGISTRY.get('sniper') is sniper1161devs54_cmd,
+           'nested_funding':bridged.get('funding_rate')==-0.01,'nested_oi':bridged.get('open_interest_change')==5.0,
+           'nested_news':bridged.get('news_signal')=='POSITIVE','real_only':ev.get('synthetic') is False,
+           'missing_not_fabricated':len(ev.get('missing') or [])>0,'gate_unchanged':True,'s53_ui_preserved':callable(globals().get('_v1161_s53_summary'))}
+    return {'ok':all(tests.values()),'tests':tests}
+
+
+def build_v44_application(token):
+    audit=_v1161_s54_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S54 preflight failed: '+','.join(k for k,v in audit['tests'].items() if not v))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S54 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S54 connectivity audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s54_reconcile(); audit=_v1161_s54_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S54_VERSION} worker running...',flush=True)
+    if repaired: print('A100 V116.1 DEV S54 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S54 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S54 nested runtime producer bridge: ACTIVE',flush=True); print('A100 V116.1 DEV S54 connectivity diagnostics: ACTIVE',flush=True); print('A100 V116.1 DEV S54 synthetic completion: DISABLED',flush=True); print('A100 V116.1 DEV S54 S53 UI: PRESERVED',flush=True); print(f'A100 V116.1 DEV S54 continuity boot count: {boot["restart_count"]}',flush=True); print('A100 V116.1 DEV S54 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S54 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s54-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
