@@ -1,19 +1,19 @@
 {
-  "version": "A100 V116.1 DEV S57.5",
-  "build_id": "S57.5-20260719-TYPE-SAFE-RENDERER-IDENTITY-01",
-  "type": "incremental_patch",
+  "version": "A100 V116.1 DEV S57.6",
+  "build_id": "S57.6-20260719-ENGINE-LINK-VERSION-AUDIT-01",
+  "patch_type": "incremental",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S57.5.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.5.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+    "CHANGELOG_V116.1_DEV_S57.6.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.6.md",
+    "PATCH_INSTALL_GUIDE_KR.md"
   ],
   "preserves": {
     "schema": 1,
     "paper": 20,
     "shadow": 60,
-    "live_trading": "OFF",
-    "registry_expected": 341
+    "live_trading": false,
+    "registry": 341,
+    "gate_formulas": "unchanged"
   }
 }
