@@ -1,21 +1,19 @@
 {
-  "version": "A100 V116.1 DEV S57.4",
-  "build_id": "S57.4-20260719-VERIFYALL-PAYLOAD-FINAL-01",
-  "patch_type": "incremental",
+  "version": "A100 V116.1 DEV S57.5",
+  "build_id": "S57.5-20260719-TYPE-SAFE-RENDERER-IDENTITY-01",
+  "type": "incremental_patch",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S57.4.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.4.md",
+    "CHANGELOG_V116.1_DEV_S57.5.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.5.md",
     "PATCH_INSTALL_GUIDE_KR.md",
     "changed_files.manifest"
   ],
-  "preserves": [
-    "data",
-    "settings",
-    "gate formulas",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF"
-  ]
+  "preserves": {
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": "OFF",
+    "registry_expected": 341
+  }
 }
