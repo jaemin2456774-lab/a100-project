@@ -1,23 +1,35 @@
 {
-  "version": "A100 V116.1 DEV S51",
-  "baseline": "A100 V116.1 DEV S50.1",
+  "version": "A100 V116.1 DEV S52",
+  "baseline": "A100 V116.1 DEV S51",
   "package_type": "incremental_prebuilt_patch",
-  "runtime_first": true,
-  "strict_read_only": true,
-  "evidence_only": true,
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
-  "registry_expected": 341,
+  "runtime_mutation": false,
   "gate_formula_changed": false,
-  "synthetic_pass": false,
-  "features": [
-    "Explainable AI 2.2",
-    "Consensus Tree",
-    "Evidence Coverage Heatmap",
-    "Runtime Compression foundation",
-    "Symbol Recovery 2.0",
-    "Decision Quality Score"
+  "data_migration": false,
+  "files": [
+    {
+      "path": "main.py",
+      "size": 3724653,
+      "sha256": "e5b94e1f6d722bc1e03c3f11aa032545baffa759d26a142a9bba6e097c2b1741"
+    },
+    {
+      "path": "CHANGELOG_V116.1_DEV_S52.md",
+      "size": 654,
+      "sha256": "e9d9e441f958fc9fe3bac436b500b0ccc35e0b90c57fbb95ecb5835d8b2f87cc"
+    },
+    {
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S52.md",
+      "size": 532,
+      "sha256": "a94b3b36174e2d007edd0004fef3cde35794ee03f59b79102d59d604fd953c8b"
+    },
+    {
+      "path": "PATCH_INSTALL_GUIDE_KR.md",
+      "size": 479,
+      "sha256": "7910fc60e6258bcbdb2b902ca01ee9d187a5233d265ceade5701564db590f493"
+    },
+    {
+      "path": "changed_files.manifest",
+      "size": 160,
+      "sha256": "d3a5e327201c7c80ff1094fa82a3391a6420fc2db35e77ae6a8612caad414376"
+    }
   ]
 }
