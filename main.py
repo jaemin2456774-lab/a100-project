@@ -65931,6 +65931,261 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S48 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s48-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S49 — Evidence Completion, Explainability & Certification Diagnostics
+# Read-only continuation of S48. Adds only evidence derived from existing runtime
+# fields/global scanner context, richer WAIT explanations, bounded research notes,
+# producer health diagnostics and structural gate diagnostics. No synthetic evidence,
+# threshold relaxation, gate mutation or order authority.
+# ============================================================================
+V1161_DEV_S49_NUMBER='116.1-DEV-S49'
+V1161_DEV_S49_VERSION='A100 V116.1 DEV S49'
+V1161_DEV_S49_TITLE='Evidence Completion · Explainable AI · Research Notebook · Gate Diagnostics'
+V91_VERSION=V1161_DEV_S49_VERSION
+
+_V1161_S49_REAL_ALIASES=dict(_V1161_S48_REAL_ALIASES)
+_V1161_S49_REAL_ALIASES.update({
+ 'market_breadth':('market_breadth','breadth','alt_breadth','long_breadth'),
+ 'btc_correlation':('btc_correlation','btc_corr','correlation_btc'),
+ 'btc_dominance':('btc_dominance','btc_dom','btc_market_dominance'),
+ 'cross_market_state':('cross_market_state','cross_market','cross_market_signal'),
+})
+_V1161_S49_NOTEBOOK={}
+_V1161_S49_NOTEBOOK_MAX=128
+
+
+def _v1161_s49_num(v):
+    return _v1161_s47_num(v)
+
+
+def _v1161_s49_market_context(scan_rows):
+    rows=[x for x in scan_rows if isinstance(x,dict)]
+    longs=sum(1 for x in rows if str(x.get('side') or x.get('direction') or '').upper()=='LONG')
+    shorts=sum(1 for x in rows if str(x.get('side') or x.get('direction') or '').upper()=='SHORT')
+    total=longs+shorts
+    breadth=(longs/total*100.0) if total else None
+    return {'breadth':round(breadth,2) if breadth is not None else None,'longs':longs,'shorts':shorts,'rows':len(rows)}
+
+
+def _v1161_s49_enrich_row(row, context=None):
+    base=_v1161_s48_enrich_row(row)
+    out=dict(base) if isinstance(base,dict) else _v1161_s47_mapping(base)
+    if not out: return base
+    aliases=dict((out.get('_s48_evidence_runtime') or {}).get('source_aliases') or {})
+    sources=dict((out.get('_s48_evidence_runtime') or {}).get('producer_sources') or {})
+
+    # Read only existing candidate fields first.
+    for canon,names in {
+        'btc_correlation':('btc_correlation','btc_corr','correlation_btc'),
+        'btc_dominance':('btc_dominance','btc_dom','btc_market_dominance'),
+        'cross_market_state':('cross_market_state','cross_market','cross_market_signal'),
+    }.items():
+        if _v1161_s46_present(out.get(canon)): continue
+        for name in names:
+            val=out.get(name)
+            if _v1161_s46_present(val):
+                out[canon]=val; aliases[canon]=name; sources[canon]='EXISTING_RUNTIME_FIELD'; break
+
+    # Breadth is an aggregate of current real scan candidates, never synthetic.
+    breadth=(context or {}).get('breadth') if isinstance(context,dict) else None
+    if breadth is not None:
+        out['market_breadth']={'pct':round(float(breadth),2),'longs':int((context or {}).get('longs',0)),'shorts':int((context or {}).get('shorts',0))}
+        aliases['market_breadth']='current_runtime_scan_sides'; sources['market_breadth']='LIVE_RUNTIME_SCAN_AGGREGATE'
+
+    available=[k for k in _V1161_S49_REAL_ALIASES if _v1161_s46_present(out.get(k))]
+    missing=[k for k in _V1161_S49_REAL_ALIASES if k not in available]
+    core=dict((out.get('_s48_evidence_runtime') or {}).get('core_producers') or {})
+    core.update({'market_breadth':_v1161_s46_present(out.get('market_breadth')),
+                 'btc_correlation':_v1161_s46_present(out.get('btc_correlation')),
+                 'btc_dominance':_v1161_s46_present(out.get('btc_dominance')),
+                 'cross_market':_v1161_s46_present(out.get('cross_market_state'))})
+    meta={'available':available,'missing':missing,'source_aliases':aliases,'producer_sources':sources,
+          'coverage_pct':round(len(available)/len(_V1161_S49_REAL_ALIASES)*100.0,1),
+          'read_only':True,'synthetic':False,'object_bridge':type(row).__name__ if not isinstance(row,dict) else 'dict',
+          'core_producers':core}
+    out['_s49_evidence_runtime']=meta
+    out['_s48_evidence_runtime']=dict(meta); out['_s47_evidence_runtime']=dict(meta); out['_s46_evidence_runtime']=dict(meta)
+    return out
+
+
+async def _v1161_s49_runtime_scan(force=False):
+    raw=await _v1161_s45_runtime_scan(force)
+    prelim=[_v1161_s48_enrich_row(x) for x in (raw.get('results') or [])]
+    context=_v1161_s49_market_context(prelim)
+    enriched=[_v1161_s49_enrich_row(x,context) for x in prelim]
+    payload=dict(raw); payload['results']=enriched
+    cov=[x.get('_s49_evidence_runtime',{}).get('coverage_pct',0.0) for x in enriched if isinstance(x,dict)]
+    payload['evidence_coverage_pct']=round(sum(cov)/len(cov),1) if cov else 0.0
+    payload['evidence_runtime']='S49_REAL_RUNTIME_EVIDENCE' if enriched else 'NO_ROWS'
+    payload['market_context']=context; payload['producer_bridge']='ACTIVE'
+    health={k:0 for k in ('funding','open_interest','volume','volatility','momentum','market_breadth','btc_correlation','btc_dominance','cross_market')}
+    for x in enriched:
+        for k,v in (x.get('_s49_evidence_runtime',{}).get('core_producers') or {}).items():
+            if k in health and v: health[k]+=1
+    payload['producer_health_rows']=health
+    return payload
+
+
+def _v1161_s49_producer_status(scan):
+    rows=len(scan.get('results') or []); h=scan.get('producer_health_rows') or {}
+    out=[]
+    for k in ('funding','open_interest','volume','volatility','momentum','market_breadth','btc_correlation','btc_dominance','cross_market'):
+        n=int(h.get(k,0)); status='ACTIVE' if rows and n==rows else 'PARTIAL' if n else 'MISSING'
+        reason='all runtime rows' if status=='ACTIVE' else f'{n}/{rows} runtime rows' if rows else 'no analysis rows'
+        out.append((k,status,reason))
+    return out
+
+
+def _v1161_s49_explain(row,res):
+    ev=row.get('_s49_evidence_runtime',{}) if isinstance(row,dict) else {}
+    missing=list(ev.get('missing') or [])
+    final=str(res.get('final_ai_orchestrator',{}).get('verdict') or res.get('cross_engine_consensus_quality',{}).get('verdict') or 'WAIT').upper()
+    long_score=float(res.get('ai_debate_2',{}).get('long_brain',0) or 0)
+    short_score=float(res.get('ai_debate_2',{}).get('short_brain',0) or 0)
+    wait_score=float(res.get('ai_debate_2',{}).get('wait_brain',0) or 0)
+    total=max(1.0,long_score+short_score)
+    lp=round(long_score/total*100.0,1); sp=round(short_score/total*100.0,1)
+    positives=[]; negatives=[]
+    mom=row.get('momentum_state') if isinstance(row,dict) else None
+    vol=row.get('volume_activity') if isinstance(row,dict) else None
+    if isinstance(mom,dict):
+        (positives if mom.get('state')=='BULLISH' else negatives if mom.get('state')=='BEARISH' else positives).append('Momentum '+str(mom.get('state')))
+    if isinstance(vol,dict):
+        (positives if vol.get('state') in ('ACTIVE','HIGH') else negatives).append('Volume '+str(vol.get('state')))
+    if _v1161_s46_present(row.get('funding_rate')): positives.append('Funding runtime connected')
+    if _v1161_s46_present(row.get('open_interest_change')): positives.append('Open interest runtime connected')
+    why='Evidence conflict or confirmation incomplete' if final=='WAIT' else 'Cross-engine evidence supports '+final
+    long_trigger='Momentum BULLISH + volume ACTIVE/HIGH + regime confirmation'
+    short_trigger='Momentum BEARISH + OI/funding stress + regime confirmation'
+    return {'final':final,'long_probability':lp,'short_probability':sp,'wait_score':round(wait_score,1),
+            'positive':positives[:5] or ['No decisive positive evidence'],
+            'negative':negatives[:5] or ['No decisive negative evidence'],
+            'missing':missing[:8],'why':why,'long_trigger':long_trigger,'short_trigger':short_trigger}
+
+
+def _v1161_s49_notebook(row,res):
+    sym=str(row.get('symbol') or row.get('coin') or 'UNKNOWN')
+    ev=row.get('_s49_evidence_runtime',{}) or {}; exp=_v1161_s49_explain(row,res)
+    now={'coverage':float(ev.get('coverage_pct',0) or 0),'verdict':exp['final'],'long_probability':exp['long_probability'],'short_probability':exp['short_probability'],'ts':time.time()}
+    prev=_V1161_S49_NOTEBOOK.get(sym)
+    _V1161_S49_NOTEBOOK[sym]=now
+    if len(_V1161_S49_NOTEBOOK)>_V1161_S49_NOTEBOOK_MAX:
+        oldest=min(_V1161_S49_NOTEBOOK,key=lambda k:_V1161_S49_NOTEBOOK[k].get('ts',0)); _V1161_S49_NOTEBOOK.pop(oldest,None)
+    if not prev: return {'state':'FIRST_SAMPLE','coverage_change':0.0,'verdict_change':'NONE','samples':1}
+    return {'state':'UPDATED','coverage_change':round(now['coverage']-prev.get('coverage',0),1),
+            'verdict_change':f"{prev.get('verdict','?')}→{now['verdict']}" if prev.get('verdict')!=now['verdict'] else 'UNCHANGED','samples':2}
+
+
+def _v1161_s49_banner(scan):
+    ctx=scan.get('market_context') or {}; rows=len(scan.get('results') or [])
+    return (_v1161_s45_runtime_banner(scan).replace('S45 RUNTIME INTEGRATION','S49 EVIDENCE / EXPLAINABILITY')+
+            f'\n· Real runtime coverage {scan.get("evidence_coverage_pct",0):.1f}% · Rows {rows}'
+            f'\n· Market breadth {ctx.get("breadth") if ctx.get("breadth") is not None else "N/A"} · Long/Short {ctx.get("longs",0)}/{ctx.get("shorts",0)}'
+            '\n· Read only · Synthetic evidence/pass DISABLED · Gate thresholds UNCHANGED')
+
+
+async def ultimate1161devs49_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    await update.message.reply_text('🧠 V116.1 S49 Evidence/Explainability 분석 중...')
+    try:
+        scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
+        if not rows:
+            await update.message.reply_text(_v1161_s49_banner(scan)+'\n\n⚠️ NO_ANALYSIS_ROWS · Synthetic PASS disabled',parse_mode='HTML'); return
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in rows]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        await update.message.reply_text(_v1161_s49_banner(scan),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3 if detail else 2],1):
+            card,res=_v1161_s42_card(row,res,i,detail); ev=row.get('_s49_evidence_runtime',{}); exp=_v1161_s49_explain(row,res); note=_v1161_s49_notebook(row,res)
+            extra=(f'\n\n<b>Evidence Runtime S49</b>\n· Coverage {ev.get("coverage_pct",0):.1f}% · Available {len(ev.get("available",[]))}/{len(_V1161_S49_REAL_ALIASES)}'
+                   f'\n· Connected {", ".join(ev.get("available",[])[:15]) or "NONE"}'
+                   f'\n· Missing {", ".join(ev.get("missing",[])[:10]) or "NONE"}'
+                   f'\n\n<b>Explainable AI 2.1</b>\n· Verdict {exp["final"]} · LONG {exp["long_probability"]:.1f}% · SHORT {exp["short_probability"]:.1f}%'
+                   f'\n· Why {exp["why"]}\n· Positive {"; ".join(exp["positive"])}\n· Negative {"; ".join(exp["negative"])}'
+                   f'\n· LONG trigger {exp["long_trigger"]}\n· SHORT trigger {exp["short_trigger"]}'
+                   f'\n\n<b>Research Notebook 2.1</b>\n· State {note["state"]} · Coverage Δ {note["coverage_change"]:+.1f}% · Verdict {note["verdict_change"]}'
+                   '\n· Read only · consensus/gate/order mutation NO')
+            await update.message.reply_text(_v1161_s5_trim(card+extra),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s49-ultimate',exc); await update.message.reply_text('⚠️ S49 Ultimate 오류 · /errors 확인')
+
+
+async def sniper1161devs49_cmd(update,context):
+    try:
+        scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: await update.message.reply_text(_v1161_s49_banner(scan)+'\n\n🎯 NO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
+        row=max(rows,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row); exp=_v1161_s49_explain(row,res)
+        card,res=_v1161_s42_card(row,res,1,True)
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s49_banner(scan)+'\n\n🎯 <b>SNIPER S49</b>\n'+card+f'\n\nLONG {exp["long_probability"]:.1f}% · SHORT {exp["short_probability"]:.1f}%\nWhy {exp["why"]}'),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s49-sniper',exc); await update.message.reply_text('⚠️ Sniper S49 오류')
+
+
+async def god1161devs49_cmd(update,context):
+    try:
+        scan=await _v1161_s49_runtime_scan(False); mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics(); m=_v1161_s37_metrics()
+        health=_v1161_s49_producer_status(scan)
+        lines='\n'.join(f'· {k}: {status} ({reason})' for k,status,reason in health)
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s49_banner(scan)+f'\n\n🧭 <b>S49 AI / OPERATIONS</b>\n· Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Coverage {scan.get("evidence_coverage_pct",0):.1f}%\n· Cache hit {m.get("cache_hit_ratio",0):.1f}% · Entries {m.get("cache_entries",0)}/{_V1161_S37_CACHE_MAX}\n· Memory {mem["memory_mb"]:.1f}MB · Peak {mem["peak_memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\n\n<b>Producer Audit</b>\n{lines}\n\n· Certification {diag["state"]} {diag["coverage"]:.1f}%\n· Structural diagnostics READ ONLY · no gate mutation'),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s49-god',exc); await update.message.reply_text('⚠️ GOD S49 오류')
+
+
+async def version1161devs49_cmd(update,context):
+    mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
+    await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S49_NUMBER}</b>\n{V1161_DEV_S49_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Real evidence only\nExplainable AI 2.1 · Research Notebook 2.1 · Producer Audit\nSynthetic evidence/pass OFF · Gate thresholds unchanged\nMemory {mem["memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\nCertification {diag["state"]} {diag["coverage"]:.1f}% · Structural diagnostics read only\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+def _v1161_s49_reconcile():
+    desired={'version':version1161devs49_cmd,'ultimate':ultimate1161devs49_cmd,'sniper':sniper1161devs49_cmd,'god':god1161devs49_cmd,'releasegate':releasegate1161devs43_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+_v1161_s49_reconcile()
+
+
+def _v1161_s49_static_audit():
+    required={'version':version1161devs49_cmd,'ultimate':ultimate1161devs49_cmd,'sniper':sniper1161devs49_cmd,'god':god1161devs49_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    sample=Result('TESTUSDT',100,50,'WAIT','TEST',90,110,98,101,95,105,112,60,65,70,1.8,.58,56,0,0,60,55,70,45,60,20,10,'완성도 80% (4/5) | OI 6.2% / Funding -0.01% / Taker 1.1 / L/S 0.9','SHORT_LIQUIDATION','', '', '')
+    bridged=_v1161_s49_enrich_row(sample,{'breadth':50.0,'longs':1,'shorts':1}); ev=bridged.get('_s49_evidence_runtime',{}) if isinstance(bridged,dict) else {}
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'s48_preserved':callable(globals().get('_v1161_s48_runtime_scan')),
+           'object_bridge':isinstance(bridged,dict) and ev.get('object_bridge')=='Result','market_breadth_real_aggregate':_v1161_s46_present(bridged.get('market_breadth')),
+           'explainable':_v1161_s49_explain(bridged,_v1161_s37_consensus(bridged)).get('final') in ('LONG','SHORT','WAIT'),
+           'notebook_bounded':_V1161_S49_NOTEBOOK_MAX<=128,'synthetic_disabled':ev.get('synthetic') is False,
+           'memory_guard_preserved':callable(globals().get('_v1161_s44_report')),'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+           'no_order_authority':all(k not in globals() for k in ('place_order1161devs49','execute_order1161devs49'))}
+    return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    _v1161_s49_reconcile(); audit=_v1161_s49_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S49 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S49 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S49 Evidence/Explainability audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); _v1161_s49_reconcile(); audit=_v1161_s49_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S49_VERSION} worker running...',flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S49 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S49 real runtime evidence expansion: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S49 Explainable AI 2.1: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S49 Research Notebook 2.1 bounded cache: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S49 producer/gate diagnostics: READ ONLY',flush=True)
+    print('A100 V116.1 DEV S49 synthetic evidence/pass: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S49 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S49 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S49 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s49-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()

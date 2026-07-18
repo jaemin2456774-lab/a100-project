@@ -1,11 +1,21 @@
-# S48 패치 설치 안내
+# S49 증분 패치 설치 안내 (Railway)
 
-1. 기존 Railway 프로젝트 데이터와 환경변수는 유지합니다.
+1. 현재 저장소와 `/data` 백업을 확인합니다.
 2. ZIP의 파일을 저장소 루트에 덮어씁니다.
-3. GitHub에 커밋·푸시한 뒤 Railway 배포가 완료될 때까지 기다립니다.
-4. Startup 로그에서 S48 preflight와 producer ACTIVE 로그를 확인합니다.
-5. 아래 명령을 순서대로 실행합니다.
+3. GitHub에 커밋·푸시한 뒤 Railway 배포를 확인합니다.
+4. `/data`, 환경변수, 기존 설정·학습 데이터는 삭제하지 않습니다.
 
+## 예상 시작 로그
+- A100 V116.1 DEV S49 worker running...
+- A100 V116.1 DEV S49 Evidence/Explainability audit: PASS
+- A100 V116.1 DEV S49 real runtime evidence expansion: ACTIVE
+- A100 V116.1 DEV S49 Explainable AI 2.1: ACTIVE
+- A100 V116.1 DEV S49 Research Notebook 2.1 bounded cache: ACTIVE
+- A100 V116.1 DEV S49 producer/gate diagnostics: READ ONLY
+- A100 V116.1 DEV S49 synthetic evidence/pass: DISABLED
+- A100 V116.1 DEV S49 live trading: OFF
+
+## 검증 명령
 /version
 /runtimehealth
 /ultimate
@@ -15,11 +25,8 @@
 /releasegate detail
 /errors
 
-성공 확인 핵심:
-- Evidence Runtime S48
-- Funding/OI/Volume/Volatility/Momentum ON 여부
-- Coverage가 S47보다 상승했는지
-- 신규 NameError/KeyError/TypeError/ImportError/AttributeError 없음
-- 메모리 Guard ACTIVE 및 재시작 급증 없음
+10~15초 내 반복:
+/ultimate detail
+/god
 
-ReleaseGate Structural FAIL은 이번 패치에서 강제 PASS 처리하지 않습니다.
+실제 Runtime 증거가 없는 항목은 MISSING이 정상이며, Coverage나 Certification을 임의 PASS로 판단하지 않습니다.
