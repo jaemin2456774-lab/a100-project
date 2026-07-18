@@ -1,20 +1,22 @@
-# S50 패치 설치 안내
+# S50.1 패치 설치 안내
 
-1. 현재 Railway GitHub 저장소를 백업합니다.
-2. ZIP을 풀어 기존 파일 위에 덮어씁니다.
-3. 기존 `/data`, 환경변수, 데이터베이스 및 학습 데이터는 삭제하지 않습니다.
-4. GitHub에 변경 파일을 반영하고 Railway 배포 완료를 기다립니다.
-5. 시작 로그에서 `A100 V116.1 DEV S50` 및 등록 명령 341을 확인합니다.
-6. 아래 명령을 순서대로 실행합니다.
+1. ZIP을 해제합니다.
+2. `main.py`를 기존 저장소의 동일 경로에 덮어씁니다.
+3. 기존 `/data`, 환경변수, 설정 파일은 삭제하거나 초기화하지 않습니다.
+4. GitHub에 변경 파일을 반영한 뒤 Railway에서 재배포합니다.
 
-```
+## 배포 후 확인
+
+```text
 /version
-/runtimehealth
-/ultimate
-/ultimate detail
-/sniper
-/god
+/evidence
+/releasegate
+/releasegate detail
 /errors
 ```
 
-성공 기준: 실제 후보 심볼 표시, Direction과 Decision 분리, Missing Evidence 압축, Explain/Consensus 점수 일치, 신규 TypeError/KeyError/AttributeError 없음.
+정상 기준:
+- `/evidence`가 미지원 메시지 대신 Live Runtime Evidence 요약을 반환
+- `/releasegate`가 대기 안내만 남기지 않고 최종 요약을 즉시 반환
+- Registry 341/341 유지
+- 신규 NameError/TypeError/KeyError/AttributeError 없음

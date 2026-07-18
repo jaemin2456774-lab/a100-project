@@ -65940,9 +65940,9 @@ def main():
 # producer health diagnostics and structural gate diagnostics. No synthetic evidence,
 # threshold relaxation, gate mutation or order authority.
 # ============================================================================
-V1161_DEV_S49_NUMBER='116.1-DEV-S50'
-V1161_DEV_S49_VERSION='A100 V116.1 DEV S50'
-V1161_DEV_S49_TITLE='Decision Clarity, Symbol Recovery & Compact Consensus Runtime Integration'
+V1161_DEV_S49_NUMBER='116.1-DEV-S50.1'
+V1161_DEV_S49_VERSION='A100 V116.1 DEV S50.1'
+V1161_DEV_S49_TITLE='Evidence Command Compatibility & ReleaseGate Immediate Result Hotfix'
 V91_VERSION=V1161_DEV_S49_VERSION
 
 _V1161_S49_REAL_ALIASES=dict(_V1161_S48_REAL_ALIASES)
@@ -66545,6 +66545,80 @@ async def sniper1161devs49_cmd(update,context):
 async def version1161devs49_cmd(update,context):
     mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
     await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S49_NUMBER}</b>\n{V1161_DEV_S49_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Real evidence only\nDirection and final decision separated\nCandidate symbol recovery · Compact consensus output\nSynthetic evidence/pass OFF · Gate thresholds unchanged\nMemory {mem["memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\nCertification {diag["state"]} {diag["coverage"]:.1f}% · Structural diagnostics read only\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+# ============================================================================
+# A100 V116.1 DEV S50.1 — Evidence Command Compatibility & ReleaseGate Hotfix
+# - Restores /evidence as a dispatcher-level read-only compatibility command
+#   without changing the authoritative Registry 341/341 contract.
+# - Routes /releasegate directly to the current S43 diagnostic renderer so the
+#   user always receives a completed result instead of only a legacy wait notice.
+# ============================================================================
+_V1161_S50_1_DISPATCH_BASE = v90_1_dispatch
+
+async def evidence1161devs501_cmd(update, context):
+    """Read-only evidence view backed by the current live runtime state."""
+    try:
+        st = _v1160_s21728_read_live_state() or {}
+        stats = _v1160_s21744_runtime_stats() or {}
+        diag = _v1161_s43_diagnostics() or {}
+        refreshes = int(st.get('evidence_refreshes', 0) or 0)
+        changes = int(st.get('evidence_changes', 0) or 0)
+        coverage = float(st.get('coverage_72h', diag.get('coverage', 0.0)) or 0.0)
+        age = float(st.get('publish_age', st.get('evidence_age', 0.0)) or 0.0)
+        freshness = 'PASS' if st.get('worker_fresh') else 'WARMING'
+        rows = int(st.get('evidence_rows', st.get('publish_rows', 0)) or 0)
+        text = '\n'.join([
+            '📚 A100 V116.1 DEV S50.1 EVIDENCE',
+            'Mode LIVE RUNTIME · STRICT READ ONLY', '',
+            f'🟢 Runtime freshness {freshness} · evidence age {age:.1f}s',
+            f'🔄 Refreshes {refreshes} · material changes {changes}',
+            f'📦 Evidence rows {rows} · samples {int(stats.get("n", 0) or 0)}',
+            f'⏱️ Persisted 72H {coverage:.1f}%',
+            f'🚦 Mandatory Gates {int(diag.get("passed", 0) or 0)}/5 · consistency {diag.get("state", "UNKNOWN")}', '',
+            'Worker-authoritative live evidence only.',
+            'No storage scan · no evidence rebuild · no gate recomputation · no mutation.'
+        ])
+        return await _v1160_s21729_reply(update, text)
+    except Exception as exc:
+        v88_record_error('v1161-dev-s50-1-evidence', exc)
+        return await update.message.reply_text('⚠️ /evidence 조회 오류 · /errors 확인')
+
+async def releasegate1161devs501_cmd(update, context):
+    """Always return a completed, current read-only diagnostic response."""
+    try:
+        detail = bool(getattr(context, 'args', None) and str(context.args[0]).lower() in ('detail', 'full'))
+        lines = [
+            '🏁 A100 V116.1 DEV S50.1 RELEASE GATE',
+            'Mode ' + ('DETAIL' if detail else 'SUMMARY') + ' · LIVE READ ONLY', ''
+        ]
+        lines += _v1161_s43_lines(detail)
+        if not detail:
+            lines += ['', '상세: /releasegate detail']
+        return await _v1160_s21729_reply(update, '\n'.join(lines))
+    except Exception as exc:
+        v88_record_error('v1161-dev-s50-1-releasegate', exc)
+        try:
+            d = _v1161_s43_diagnostics() or {}
+            fallback = (
+                '🏁 RELEASE GATE FALLBACK · READ ONLY\n'
+                f'State {d.get("state", "UNKNOWN")}\n'
+                f'72H {float(d.get("coverage", 0.0) or 0.0):.1f}% · Gates {int(d.get("passed", 0) or 0)}/5\n'
+                'Diagnostic renderer failed; no gate state was changed.'
+            )
+            return await update.message.reply_text(fallback)
+        except Exception:
+            return await update.message.reply_text('⚠️ /releasegate 결과 생성 오류 · /errors 확인')
+
+async def v90_1_dispatch(update, context):
+    """S50.1 compatibility interception; all other 341 routes remain untouched."""
+    text = str(getattr(getattr(update, 'message', None), 'text', '') or '').strip()
+    command = text.split()[0].split('@')[0].lower() if text.startswith('/') else ''
+    if command == '/evidence':
+        return await evidence1161devs501_cmd(update, context)
+    if command == '/releasegate':
+        return await releasegate1161devs501_cmd(update, context)
+    return await _V1161_S50_1_DISPATCH_BASE(update, context)
 
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
