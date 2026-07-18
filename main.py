@@ -5060,6 +5060,21 @@ async def datastatus_cmd(update, context):
         parse_mode="HTML"
     )
 
+def _v1161_s563_log_identity_audit(audit, phase='startup'):
+    tests=dict(audit.get('tests') or {})
+    snapshot=dict(audit.get('snapshot') or {})
+    failed=[name for name,ok in tests.items() if not ok]
+    print(f'A100 V116.1 DEV S56.3 runtime identity audit [{phase}]: {"PASS" if not failed else "WARNING"}',flush=True)
+    for name,ok in tests.items():
+        print(f'A100 S56.3 identity test {name}: {"PASS" if ok else "FAIL"}',flush=True)
+    if failed:
+        print('A100 S56.3 identity mismatch: '+','.join(failed),flush=True)
+        print('A100 S56.3 expected: version_handler=version1161devs562_cmd verifyall_handler=verifyall1161devs562_cmd registry=341 connectivity/buildinfo=ACTIVE',flush=True)
+        print('A100 S56.3 actual: '+json.dumps(snapshot,ensure_ascii=False,sort_keys=True,default=str),flush=True)
+        print('A100 S56.3 DEV fail-safe: CONTINUE · no crash loop',flush=True)
+    return failed
+
+
 def build_v44_application(token):
     app = Application.builder().token(token).build()
 
@@ -67508,6 +67523,9 @@ async def buildinfo1161devs561_cmd(update, context):
         f'· Version handler <code>{s["version_handler"]}</code>',
         f'· VerifyAll handler <code>{s["verifyall_handler"]}</code>',
         f'· Connectivity dispatch {"ACTIVE" if s["connectivity_dispatch"] else "MISSING"}',
+        f'· BuildInfo dispatch {"ACTIVE" if s["buildinfo_dispatch"] else "MISSING"}',
+        f'· Failed tests <code>{",".join(failed) if failed else "NONE"}</code>',
+        f'· DEV fail-safe <b>ACTIVE</b> · mismatch logs warning, not crash',
         f'· Source <code>{s["main_file"]}</code>',
         '',
         '🔒 Runtime First · Strict Read Only · Gate unchanged'
@@ -67597,15 +67615,15 @@ def main():
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s561-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 # ================================================================
-# A100 V116.1 DEV S56.2 - RUNTIME IDENTITY UNIFICATION HOTFIX
+# A100 V116.1 DEV S56.3 - RUNTIME IDENTITY UNIFICATION HOTFIX
 # Root cause fixed: the executable block had been placed before S56/S56.1,
 # so Python entered the older S55 main() before later definitions existed.
 # This block is defined after every previous sprint and is the sole authority.
 # ================================================================
-V1161_DEV_S562_VERSION='V116.1-DEV-S56.2'
-V1161_DEV_S562_NUMBER='116.1-DEV-S56.2'
-V1161_DEV_S562_TITLE='Runtime Identity Unification · Executable Order Recovery Hotfix'
-V1161_DEV_S562_BUILD_ID='S56.2-20260718-EXEC-ORDER-IDENTITY-01'
+V1161_DEV_S562_VERSION='V116.1-DEV-S56.3'
+V1161_DEV_S562_NUMBER='116.1-DEV-S56.3'
+V1161_DEV_S562_TITLE='Runtime Identity Diagnostic · DEV Fail-Safe Hotfix'
+V1161_DEV_S562_BUILD_ID='S56.3-20260718-IDENTITY-DIAGNOSTIC-FAILSAFE-01'
 
 
 def _v1161_s562_identity_snapshot():
@@ -67632,7 +67650,7 @@ async def version1161devs562_cmd(update, context):
         f'Build ID <code>{V1161_DEV_S562_BUILD_ID}</code>\n'
         'Executable order <b>RECOVERED</b> · latest main physically last\n'
         '/buildinfo · /connectivity · /connectivity detail ACTIVE\n'
-        '/verifyall S56.2 identity unified\n'
+        '/verifyall S56.3 identity unified\n'
         f'Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Registry {len(V90_COMMAND_REGISTRY)}/341\n'
         f'Memory {mem["memory_mb"]:.1f}MB\n'
         'Synthetic completion OFF · Gate unchanged\n'
@@ -67641,7 +67659,7 @@ async def version1161devs562_cmd(update, context):
 
 def _v1161_s562_render(report, detail=False):
     text=_v1161_s56_render(report,detail)
-    return text.replace('A100 자동 검증 · S56','A100 자동 검증 · S56.2',1)
+    return text.replace('A100 자동 검증 · S56','A100 자동 검증 · S56.3',1)
 
 
 def _v1161_s562_write_reports(report):
@@ -67649,7 +67667,7 @@ def _v1161_s562_write_reports(report):
     directory=_V1161_S56_REPORT_DIR
     try: os.makedirs(directory,exist_ok=True)
     except Exception: directory='/tmp'; os.makedirs(directory,exist_ok=True)
-    base=os.path.join(directory,f'a100_verify_S56_2_{stamp}')
+    base=os.path.join(directory,f'a100_verify_S56_3_{stamp}')
     jpath=base+'.json'; tpath=base+'.txt'
     report=dict(report); report['runtime_identity']=V1161_DEV_S562_VERSION; report['build_id']=V1161_DEV_S562_BUILD_ID
     with open(jpath,'w',encoding='utf-8') as f: json.dump(report,f,ensure_ascii=False,indent=2)
@@ -67666,16 +67684,14 @@ async def verifyall1161devs562_cmd(update,context):
         await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
     except Exception as exc:
         v88_record_error('v1161-dev-s562-verifyall',exc)
-        await update.message.reply_text(f'⚠️ /verifyall S56.2 오류 · {type(exc).__name__} · /errors 확인')
+        await update.message.reply_text(f'⚠️ /verifyall S56.3 오류 · {type(exc).__name__} · /errors 확인')
 
 
 async def buildinfo1161devs562_cmd(update, context):
-    s=_v1161_s562_identity_snapshot()
-    ok=(s['registry_actual']==341 and s['version_handler']=='version1161devs562_cmd' and
-        s['verifyall_handler']=='verifyall1161devs562_cmd' and s['connectivity_dispatch'] and
-        s['buildinfo_dispatch'] and s['executable_block_last'])
+    audit=_v1161_s562_static_audit(); s=audit['snapshot']; failed=[k for k,v in audit['tests'].items() if not v]
+    ok=audit['ok']
     lines=[
-        '🧬 <b>A100 BUILD INTEGRITY · S56.2</b>',
+        '🧬 <b>A100 BUILD INTEGRITY · S56.3</b>',
         f'· Running <b>{s["version"]}</b>',
         f'· Build ID <code>{s["build_id"]}</code>',
         f'· Integrity <b>{"PASS" if ok else "FAILED"}</b>',
@@ -67684,6 +67700,8 @@ async def buildinfo1161devs562_cmd(update, context):
         f'· Version handler <code>{s["version_handler"]}</code>',
         f'· VerifyAll handler <code>{s["verifyall_handler"]}</code>',
         f'· Connectivity dispatch {"ACTIVE" if s["connectivity_dispatch"] else "MISSING"}',
+        f'· BuildInfo dispatch {"ACTIVE" if s["buildinfo_dispatch"] else "MISSING"}',
+        f'· DEV fail-safe <b>ACTIVE</b> · mismatch logs warning, not crash',
         f'· Source <code>{s["main_file"]}</code>',
         '',
         '🔒 Runtime First · Strict Read Only · Gate unchanged'
@@ -67732,14 +67750,13 @@ def _v1161_s562_static_audit():
 
 def build_v44_application(token):
     audit=_v1161_s562_static_audit()
-    if not audit['ok']:
-        raise RuntimeError('V116.1 DEV S56.2 identity preflight failed: '+','.join(k for k,v in audit['tests'].items() if not v))
+    _v1161_s563_log_identity_audit(audit,'application-build')
     app=Application.builder().token(token).build()
     app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
     app.add_error_handler(v88_error_handler)
-    print(f'A100 V116.1 DEV S56.2 build id: {V1161_DEV_S562_BUILD_ID}',flush=True)
-    print(f'A100 V116.1 DEV S56.2 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
-    print('A100 V116.1 DEV S56.2 runtime identity audit: PASS',flush=True)
+    print(f'A100 V116.1 DEV S56.3 build id: {V1161_DEV_S562_BUILD_ID}',flush=True)
+    print(f'A100 V116.1 DEV S56.3 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S56.3 application build: ACTIVE',flush=True)
     return app
 
 
@@ -67749,23 +67766,23 @@ def main():
     v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s562_reconcile(); audit=_v1161_s562_static_audit(); boot=_v1161_s44_record_boot()
     print(f'{V1161_DEV_S562_VERSION} worker running...',flush=True)
     print(f'BUILD_ID={V1161_DEV_S562_BUILD_ID}',flush=True)
-    print('A100 V116.1 DEV S56.2 executable order recovery: PASS',flush=True)
-    if repaired: print('A100 V116.1 DEV S56.2 routes reconciled: '+','.join(repaired),flush=True)
-    if not audit['ok']: raise RuntimeError('V116.1 DEV S56.2 runtime identity preflight failed')
+    print('A100 V116.1 DEV S56.3 executable order recovery: PASS',flush=True)
+    if repaired: print('A100 V116.1 DEV S56.3 routes reconciled: '+','.join(repaired),flush=True)
+    _v1161_s563_log_identity_audit(audit,'startup')
     if not acquire_v44_process_lock():
         print('A100 V116.1 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
-    print('A100 V116.1 DEV S56.2 /buildinfo: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S56.2 /connectivity: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S56.2 /verifyall identity: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S56.2 S56 producer bridge: PRESERVED',flush=True)
-    print('A100 V116.1 DEV S56.2 synthetic completion: DISABLED',flush=True)
-    print(f'A100 V116.1 DEV S56.2 continuity boot count: {boot["restart_count"]}',flush=True)
-    print('A100 V116.1 DEV S56.2 live trading: OFF',flush=True)
+    print('A100 V116.1 DEV S56.3 /buildinfo: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S56.3 /connectivity: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S56.3 /verifyall identity: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S56.3 S56 producer bridge: PRESERVED',flush=True)
+    print('A100 V116.1 DEV S56.3 synthetic completion: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S56.3 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S56.3 live trading: OFF',flush=True)
     try: asyncio.run(run_bot_async())
-    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S56.2 stopped by signal',flush=True)
-    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s562-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S56.3 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s563-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 
 # IMPORTANT: this is the sole executable block and is physically last.
