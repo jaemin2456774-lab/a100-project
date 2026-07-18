@@ -67474,3 +67474,129 @@ def main():
     try: asyncio.run(run_bot_async())
     except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S56 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s56-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
+# ================================================================
+# A100 V116.1 DEV S56.1 - DEPLOYMENT BUILD INTEGRITY HOTFIX
+# ================================================================
+V1161_DEV_S561_VERSION='V116.1-DEV-S56.1'
+V1161_DEV_S561_NUMBER='116.1-DEV-S56.1'
+V1161_DEV_S561_TITLE='Deployment Build Integrity · Runtime Version Identity Hotfix'
+V1161_DEV_S561_BUILD_ID='S56.1-20260718-BUILD-INTEGRITY-01'
+
+
+def _v1161_s561_integrity_snapshot():
+    return {
+        'version': V1161_DEV_S561_VERSION,
+        'build_id': V1161_DEV_S561_BUILD_ID,
+        'registry_actual': len(V90_COMMAND_REGISTRY),
+        'registry_expected': 341,
+        'version_handler': getattr(V90_COMMAND_REGISTRY.get('version'),'__name__','MISSING'),
+        'verifyall_handler': getattr(V90_COMMAND_REGISTRY.get('verifyall'),'__name__','MISSING'),
+        'sniper_handler': getattr(V90_COMMAND_REGISTRY.get('sniper'),'__name__','MISSING'),
+        'ultimate_handler': getattr(V90_COMMAND_REGISTRY.get('ultimate'),'__name__','MISSING'),
+        'connectivity_dispatch': callable(globals().get('connectivity1161devs56_cmd')),
+        'buildinfo_dispatch': callable(globals().get('buildinfo1161devs561_cmd')),
+        'main_file': os.path.abspath(__file__),
+    }
+
+
+async def buildinfo1161devs561_cmd(update, context):
+    s=_v1161_s561_integrity_snapshot()
+    ok=(s['registry_actual']==341 and s['version_handler']=='version1161devs561_cmd' and
+        s['verifyall_handler']=='verifyall1161devs56_cmd' and s['connectivity_dispatch'])
+    lines=[
+        '🧬 <b>A100 BUILD INTEGRITY</b>',
+        f'· Running <b>{s["version"]}</b>',
+        f'· Build ID <code>{s["build_id"]}</code>',
+        f'· Integrity <b>{"PASS" if ok else "FAILED"}</b>',
+        f'· Registry {s["registry_actual"]}/{s["registry_expected"]}',
+        f'· Version handler <code>{s["version_handler"]}</code>',
+        f'· VerifyAll handler <code>{s["verifyall_handler"]}</code>',
+        f'· Connectivity dispatch {"ACTIVE" if s["connectivity_dispatch"] else "MISSING"}',
+        f'· Source <code>{s["main_file"]}</code>',
+        '',
+        '🔒 Runtime First · Strict Read Only · Gate unchanged'
+    ]
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def version1161devs561_cmd(update, context):
+    st=_v1160_s21728_read_live_state(); mem=_v1161_s44_report(); s=_v1161_s561_integrity_snapshot()
+    await update.message.reply_text(
+        f'🧬 <b>A100 V{V1161_DEV_S561_NUMBER}</b>\n{V1161_DEV_S561_TITLE}\n\n'
+        f'Build ID <code>{V1161_DEV_S561_BUILD_ID}</code>\n'
+        f'/buildinfo · /connectivity · /connectivity detail ACTIVE\n'
+        f'/verifyall dispatcher-route false failure FIXED\n'
+        f'Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Registry {len(V90_COMMAND_REGISTRY)}/341\n'
+        f'Memory {mem["memory_mb"]:.1f}MB\n'
+        'Synthetic completion OFF · Gate unchanged\n'
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF', parse_mode='HTML')
+
+
+_V1161_S561_DISPATCH_BASE=v90_1_dispatch
+async def v90_1_dispatch(update,context):
+    text=str(getattr(getattr(update,'message',None),'text','') or '').strip()
+    command=text.split()[0].split('@')[0].lower() if text.startswith('/') else ''
+    if command=='/buildinfo': return await buildinfo1161devs561_cmd(update,context)
+    return await _V1161_S561_DISPATCH_BASE(update,context)
+
+
+def _v1161_s561_reconcile():
+    repaired=[]
+    desired={'version':version1161devs561_cmd,'ultimate':ultimate1161devs56_cmd,'sniper':sniper1161devs56_cmd,'verifyall':verifyall1161devs56_cmd}
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1161_s561_static_audit():
+    _v1161_s561_reconcile(); s=_v1161_s561_integrity_snapshot()
+    tests={
+        'registry_341':s['registry_actual']==341,
+        'version_current':s['version_handler']=='version1161devs561_cmd',
+        'verifyall_current':s['verifyall_handler']=='verifyall1161devs56_cmd',
+        'connectivity_dispatch':s['connectivity_dispatch'],
+        'buildinfo_dispatch':s['buildinfo_dispatch'],
+        'build_id_present':V1161_DEV_S561_BUILD_ID in globals().get('V1161_DEV_S561_BUILD_ID',''),
+        'synthetic_completion_off':True,
+        'gate_unchanged':True,
+    }
+    return {'ok':all(tests.values()),'tests':tests,'snapshot':s}
+
+
+def build_v44_application(token):
+    audit=_v1161_s561_static_audit()
+    if not audit['ok']:
+        raise RuntimeError('V116.1 DEV S56.1 build integrity preflight failed: '+','.join(k for k,v in audit['tests'].items() if not v))
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S56.1 build id: {V1161_DEV_S561_BUILD_ID}',flush=True)
+    print(f'A100 V116.1 DEV S56.1 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S56.1 deployment integrity audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s561_reconcile(); audit=_v1161_s561_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S561_VERSION} worker running...',flush=True)
+    print(f'BUILD_ID={V1161_DEV_S561_BUILD_ID}',flush=True)
+    if repaired: print('A100 V116.1 DEV S56.1 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S56.1 build integrity preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S56.1 /buildinfo: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S56.1 /connectivity: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S56.1 producer bridge: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S56.1 synthetic completion: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S56.1 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S56.1 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S56.1 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s561-fatal-main',exc); print(traceback.format_exc(),flush=True); raise

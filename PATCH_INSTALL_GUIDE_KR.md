@@ -1,20 +1,11 @@
-# S56 증분 패치 설치 안내
+# S56.1 패치 설치 안내
 
-1. Railway 연결 GitHub 저장소의 프로젝트 루트에 ZIP 내부 파일을 덮어씁니다.
-2. 기존 `/data`, 환경변수, 설정 및 학습 데이터는 삭제하지 않습니다.
-3. Railway 배포 완료 후 다음 명령을 실행합니다.
+1. ZIP의 `main.py`를 GitHub 저장소 루트의 기존 `main.py`에 반드시 덮어씁니다.
+2. GitHub에서 변경된 `main.py`가 약 3.7MB인지 확인하고 커밋합니다.
+3. Railway에서 새 배포가 완료될 때까지 기다립니다.
+4. Railway Deploy Logs에서 아래 문자열을 확인합니다.
+   - `V116.1-DEV-S56.1 worker running...`
+   - `BUILD_ID=S56.1-20260718-BUILD-INTEGRITY-01`
+5. Telegram에서 `/version`, `/buildinfo`, `/connectivity`, `/verifyall` 순서로 실행합니다.
 
-```text
-/version
-/verifyall
-/connectivity
-/connectivity detail
-/verifyall detail
-/errors
-```
-
-확인 기준:
-- `/evidence`가 Registry 외 dispatcher route임에도 PASS로 표시
-- Connected N/16 및 Missing 목록 확인
-- 네 대상 producer의 Runtime/Schema/Aggregator/Recovery 단계 확인
-- Synthetic completion OFF, Gate mutation NONE, Registry 341/341
+`/version`이 S55로 남아 있으면 Railway가 이전 커밋/브랜치를 배포 중인 것이므로 Railway 서비스의 Source Repository와 Branch를 확인해야 합니다.

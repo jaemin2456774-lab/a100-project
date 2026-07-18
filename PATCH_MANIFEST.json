@@ -1,34 +1,34 @@
 {
-  "release": "A100 V116.1 DEV S56",
-  "baseline": "A100 V116.1 DEV S55",
-  "type": "incremental_prebuilt_patch",
-  "created_at": "2026-07-18",
-  "focus": "real producer connectivity completion and diagnostic trace",
+  "version": "V116.1-DEV-S56.1",
+  "type": "incremental_patch",
+  "baseline": "V116.1-DEV-S56",
+  "build_id": "S56.1-20260718-BUILD-INTEGRITY-01",
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S56.1.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.1.md",
+    "PATCH_INSTALL_GUIDE_KR.md"
+  ],
   "files": [
     {
       "path": "main.py",
-      "size": 3770958,
-      "sha256": "b8e440db74b4792110b2a4ef56167c921c1f1824506cc79d66480c6672c8a882"
+      "size": 3777991,
+      "sha256": "ab6baaf8c82df0e2d38a434e267d3f6d22afc6f678f47b9f7008c334958252c1"
     },
     {
-      "path": "CHANGELOG_V116.1_DEV_S56.md",
-      "size": 1024,
-      "sha256": "1362f05fd0abd1edf2c5ffd5c0d23b4018a3e514ce721b9f2751d62e186f47fc"
+      "path": "CHANGELOG_V116.1_DEV_S56.1.md",
+      "size": 615,
+      "sha256": "5cbf53ca93ba0efcd2bbf80e5412fc5ba5ca837641d8b257da0e7a361d89aaa0"
     },
     {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.md",
-      "size": 646,
-      "sha256": "8dbc44e36881c8cf6f1c6edfbfae393c14795a458371b83858b3f2a55d1213ad"
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.1.md",
+      "size": 426,
+      "sha256": "00a7cb4a2c83aade61ecef73ce338b3f5aad90205aeffba7bb5e94eeb701746a"
     },
     {
       "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 651,
-      "sha256": "bda2b2f6e1e0bd2e0f54175abc3e91f0cf011945c15e8f3e3bb1b06dbe0485f9"
-    },
-    {
-      "path": "changed_files.manifest",
-      "size": 160,
-      "sha256": "c57f7e0c8f40ee057fb14b93d1102d9e852282e01afecc760041ad50a0e31235"
+      "size": 719,
+      "sha256": "1b6b7e3cce80425de813f74cf24bd9cd8abb6d44417f380faf1df54c03b9f762"
     }
   ],
   "safety": {
@@ -38,7 +38,6 @@
     "shadow": 60,
     "live": false,
     "synthetic_completion": false,
-    "gate_mutation": false,
-    "data_migration": false
+    "gate_mutation": false
   }
 }
