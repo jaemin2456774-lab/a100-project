@@ -1,22 +1,40 @@
 {
-  "version": "A100 V116.1 DEV S46",
-  "type": "incremental-prebuilt-patch",
-  "baseline": "A100 V116.1 DEV S45",
-  "changed_files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S46.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S46.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+  "version": "A100 V116.1 DEV S47",
+  "type": "incremental_patch",
+  "baseline": "A100 V116.1 DEV S46",
+  "files": [
+    {
+      "path": "main.py",
+      "sha256": "6f7d4fbfda7224020465b5fb48b03a463cb0eb20b079ceffded91809ecfef186",
+      "size": 3652178
+    },
+    {
+      "path": "CHANGELOG_V116.1_DEV_S47.md",
+      "sha256": "6c8c104c49a58ac96be582329720be8a9b69d293a00279fdb61bc9bb133c7c9a",
+      "size": 895
+    },
+    {
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S47.md",
+      "sha256": "21955e8a2f7faa03b6aa36e34edd9dfc1378c6f5834015b892c399cb242f6c83",
+      "size": 1118
+    },
+    {
+      "path": "PATCH_INSTALL_GUIDE_KR.md",
+      "sha256": "8a4a5a097f827f97cbcaa309a4c9e4a2f9a20d9f7113b54f6a95eb5f40aacf11",
+      "size": 703
+    },
+    {
+      "path": "changed_files.manifest",
+      "sha256": "047337a1b35bbc4b0fb977291ab590a42f2f574c8c7b02120c704eaab8bcf8ab",
+      "size": 160
+    }
   ],
-  "preserves": [
-    "Schema 1",
-    "Registry 341",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF",
-    "existing data/config"
-  ],
-  "runtime_pass_required": true,
-  "synthetic_pass": false
+  "safety": {
+    "schema": 1,
+    "registry": 341,
+    "paper": 20,
+    "shadow": 60,
+    "live": false,
+    "synthetic_evidence": false
+  }
 }
