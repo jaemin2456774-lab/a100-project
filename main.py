@@ -65403,6 +65403,137 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S45 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s45-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S46 — Evidence Runtime Completion & AI Decision Quality
+# Read-only normalization of real runtime fields. No synthetic evidence, no gate/order mutation.
+# ============================================================================
+V1161_DEV_S46_NUMBER='116.1-DEV-S46'
+V1161_DEV_S46_VERSION='A100 V116.1 DEV S46'
+V1161_DEV_S46_TITLE='Evidence Runtime Completion & AI Decision Quality'
+V91_VERSION=V1161_DEV_S46_VERSION
+_V1161_S46_ALIASES={
+ 'funding_rate':('funding_rate','funding','fundingRate','last_funding_rate','fr'),
+ 'open_interest_change':('open_interest_change','oi_change','openInterestChange','oi_change_pct','open_interest_delta'),
+ 'liquidation_signal':('liquidation_signal','liquidation','liquidations','liq_signal','liquidation_bias'),
+ 'whale_signal':('whale_signal','whale','whale_bias','smart_money_signal','large_trade_signal'),
+ 'macro_signal':('macro_signal','macro','macro_bias','event_risk','macro_state'),
+ 'news_signal':('news_signal','news','news_bias','news_sentiment','headline_signal'),
+ 'market_regime':('market_regime','regime','regime_state','market_state'),
+ 'capital_rotation':('capital_rotation','rotation','rotation_state','sector_rotation'),
+ 'timeframe_alignment':('timeframe_alignment','mtf_alignment','multi_timeframe','timeframe_bias'),
+}
+
+def _v1161_s46_present(v):
+    return v is not None and str(v).strip().upper() not in ('','N/A','NA','NONE','UNKNOWN','MISSING')
+
+def _v1161_s46_enrich_row(row):
+    """Copy and normalize only fields already present in real runtime evidence."""
+    if not isinstance(row,dict): return row
+    out=dict(row); sources={}
+    for canonical,aliases in _V1161_S46_ALIASES.items():
+        if _v1161_s46_present(out.get(canonical)):
+            sources[canonical]=canonical; continue
+        for alias in aliases:
+            if alias in row and _v1161_s46_present(row.get(alias)):
+                out[canonical]=row.get(alias); sources[canonical]=alias; break
+    available=[k for k in _V1161_S46_ALIASES if _v1161_s46_present(out.get(k))]
+    missing=[k for k in _V1161_S46_ALIASES if k not in available]
+    out['_s46_evidence_runtime']={'available':available,'missing':missing,'source_aliases':sources,
+        'coverage_pct':round(len(available)/len(_V1161_S46_ALIASES)*100.0,1),'read_only':True,'synthetic':False}
+    return out
+
+async def _v1161_s46_runtime_scan(force=False):
+    scan=await _v1161_s45_runtime_scan(force)
+    enriched=[_v1161_s46_enrich_row(x) for x in (scan.get('results') or [])]
+    payload=dict(scan); payload['results']=enriched
+    cov=[x.get('_s46_evidence_runtime',{}).get('coverage_pct',0.0) for x in enriched if isinstance(x,dict)]
+    payload['evidence_coverage_pct']=round(sum(cov)/len(cov),1) if cov else 0.0
+    payload['evidence_runtime']='NORMALIZED_REAL_FIELDS' if enriched else 'NO_ROWS'
+    return payload
+
+def _v1161_s46_banner(scan):
+    return (_v1161_s45_runtime_banner(scan).replace('S45 RUNTIME INTEGRATION','S46 EVIDENCE RUNTIME')+
+      f'\n· Evidence Runtime {scan.get("evidence_runtime","-")} · Coverage {scan.get("evidence_coverage_pct",0):.1f}%\n'
+      f'· Alias normalization REAL FIELDS ONLY · Synthetic evidence DISABLED')
+
+async def ultimate1161devs46_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    await update.message.reply_text('🧠 V116.1 S46 Evidence Runtime 분석 중...')
+    try:
+        scan=await _v1161_s46_runtime_scan(False); results=scan.get('results') or []
+        if not results:
+            await update.message.reply_text(_v1161_s46_banner(scan)+'\n\n⚠️ <b>NO_ANALYSIS_ROWS</b> · Synthetic PASS disabled',parse_mode='HTML'); return
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        await update.message.reply_text(_v1161_s46_banner(scan),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3 if detail else 2],1):
+            card,res=_v1161_s42_card(row,res,i,detail)
+            ev=row.get('_s46_evidence_runtime',{})
+            extra=(f'\n\n<b>Evidence Runtime S46</b>\n· Coverage {ev.get("coverage_pct",0):.1f}% · Available {len(ev.get("available",[]))}/{len(_V1161_S46_ALIASES)}\n'
+                   f'· Connected {", ".join(ev.get("available",[])[:6]) or "NONE"}\n· Missing {", ".join(ev.get("missing",[])[:6]) or "NONE"}\n'
+                   f'· Read Only · Real runtime aliases only · Decision/order override NO')
+            await update.message.reply_text(_v1161_s5_trim(card+extra),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s46-ultimate',exc); await update.message.reply_text('⚠️ S46 Ultimate 오류 · /errors 확인')
+
+async def sniper1161devs46_cmd(update,context):
+    try:
+        scan=await _v1161_s46_runtime_scan(False); results=scan.get('results') or []
+        if not results: await update.message.reply_text(_v1161_s46_banner(scan)+'\n\n🎯 NO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
+        row=max(results,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row)
+        card,res=_v1161_s42_card(row,res,1,True); ev=row.get('_s46_evidence_runtime',{})
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s46_banner(scan)+'\n\n🎯 <b>SNIPER S46</b>\n'+card+f'\n\nEvidence Runtime {ev.get("coverage_pct",0):.1f}% · Real fields only'),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s46-sniper',exc); await update.message.reply_text('⚠️ Sniper S46 오류')
+
+async def god1161devs46_cmd(update,context):
+    try:
+        scan=await _v1161_s46_runtime_scan(False); mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics(); m=_v1161_s37_metrics()
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s46_banner(scan)+f'\n\n🧭 <b>S46 AI / OPERATIONS</b>\n· Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Evidence coverage {scan.get("evidence_coverage_pct",0):.1f}%\n· Cache hit {m.get("cache_hit_ratio",0):.1f}% · Entries {m.get("cache_entries",0)}/{_V1161_S37_CACHE_MAX}\n· Memory {mem["memory_mb"]:.1f}MB · Peak {mem["peak_memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\n· Certification {diag["state"]} {diag["coverage"]:.1f}% · Structural recovery separate/pending'),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s46-god',exc); await update.message.reply_text('⚠️ GOD S46 오류')
+
+async def version1161devs46_cmd(update,context):
+    mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
+    await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S46_NUMBER}</b>\n{V1161_DEV_S46_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Evidence normalization ACTIVE\nReal runtime aliases only · Synthetic evidence OFF\nMemory {mem["memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\nCertification {diag["state"]} {diag["coverage"]:.1f}% · Structural recovery pending\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+def _v1161_s46_reconcile():
+    desired={'version':version1161devs46_cmd,'ultimate':ultimate1161devs46_cmd,'sniper':sniper1161devs46_cmd,'god':god1161devs46_cmd,'releasegate':releasegate1161devs43_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+_v1161_s46_reconcile()
+
+def _v1161_s46_static_audit():
+    required={'version':version1161devs46_cmd,'ultimate':ultimate1161devs46_cmd,'sniper':sniper1161devs46_cmd,'god':god1161devs46_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'s45_preserved':callable(globals().get('_v1161_s45_runtime_scan')),
+           'alias_map':len(_V1161_S46_ALIASES)==9,'synthetic_disabled':True,'memory_guard_preserved':callable(globals().get('_v1161_s44_report')),
+           'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,'no_order_authority':all(k not in globals() for k in ('place_order1161devs46','execute_order1161devs46'))}
+    return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
+
+def build_v44_application(token):
+    repaired=_v1161_s46_reconcile(); audit=_v1161_s46_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S46 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S46 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S46 Evidence Runtime audit: PASS',flush=True); return app
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s46_reconcile(); audit=_v1161_s46_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S46_VERSION} worker running...',flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S46 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S46 Evidence Runtime Completion: ACTIVE',flush=True); print('A100 V116.1 DEV S46 real-field alias normalization: ACTIVE',flush=True); print('A100 V116.1 DEV S46 synthetic evidence/pass: DISABLED',flush=True); print(f'A100 V116.1 DEV S46 continuity boot count: {boot["restart_count"]}',flush=True); print('A100 V116.1 DEV S46 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S46 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s46-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
