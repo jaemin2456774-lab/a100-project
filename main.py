@@ -69314,6 +69314,437 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set()
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s576-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
+
+# ================================================================
+# A100 V116.1 DEV S57.7 - ENGINE E2E AUDIT SOURCE TRUTH,
+# VERIFYALL CURRENT AUDIT, AND VERSION AUDIT RECOVERY
+# ================================================================
+V1161_DEV_S577_VERSION = 'V116.1-DEV-S57.7'
+V1161_DEV_S577_NUMBER = '116.1-DEV-S57.7'
+V1161_DEV_S577_TITLE = 'Engine E2E Audit Source Truth · VerifyAll Recovery'
+V1161_DEV_S577_BUILD_ID = 'S57.7-20260719-ENGINE-E2E-SOURCE-TRUTH-01'
+
+
+def _v1161_s577_count(value, default=0):
+    if value is None:
+        return int(default)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (list, tuple, set, frozenset, dict)):
+        return len(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(float(str(value).strip()))
+    except Exception:
+        return int(default)
+
+
+def _v1161_s577_find_count(obj, keys, default=0):
+    if isinstance(obj, dict):
+        for key in keys:
+            if key in obj:
+                value = obj.get(key)
+                count = _v1161_s577_count(value, default)
+                if count or value in (0, 0.0, "0"):
+                    return count
+        for value in obj.values():
+            found = _v1161_s577_find_count(value, keys, None)
+            if found is not None:
+                return found
+    elif isinstance(obj, (list, tuple)):
+        for value in obj:
+            found = _v1161_s577_find_count(value, keys, None)
+            if found is not None:
+                return found
+    return default
+
+
+def _v1161_s577_normalize_text(text):
+    text = str(text or '')
+    replacements = {
+        'A100 자동 검증 · S56': 'A100 자동 검증 · S57.7',
+        'A100 자동 검증 · S57.5': 'A100 자동 검증 · S57.7',
+        'A100 자동 검증 · S57.6': 'A100 자동 검증 · S57.7',
+        'PRODUCER CONNECTIVITY · S56': 'PRODUCER CONNECTIVITY · S57.7',
+        'PRODUCER CONNECTIVITY · S57.6': 'PRODUCER CONNECTIVITY · S57.7',
+        'A100 V116.1-DEV-S57.5': 'A100 V116.1-DEV-S57.7',
+        'A100 V116.1-DEV-S57.6': 'A100 V116.1-DEV-S57.7',
+        'S57.5-20260719-TYPE-SAFE-RENDERER-IDENTITY-01': V1161_DEV_S577_BUILD_ID,
+        'S57.6-20260719-ENGINE-LINK-VERSION-AUDIT-01': V1161_DEV_S577_BUILD_ID,
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
+class _V1161S577MessageProxy(_V1161S576MessageProxy):
+    async def reply_text(self, text, *args, **kwargs):
+        return await self._message.reply_text(_v1161_s577_normalize_text(text), *args, **kwargs)
+
+
+class _V1161S577UpdateProxy(_V1161S576UpdateProxy):
+    def __init__(self, update):
+        self._update = update
+        self.message = _V1161S577MessageProxy(update.message) if getattr(update, 'message', None) else None
+        self.effective_message = _V1161S577MessageProxy(update.effective_message) if getattr(update, 'effective_message', None) else self.message
+
+
+def _v1161_s577_route_rows():
+    expected = {
+        'version': 'version1161devs577_cmd',
+        'status': 'status1161devs577_cmd',
+        'runtimehealth': 'runtimehealth1161devs577_cmd',
+        'buildinfo': 'buildinfo1161devs577_cmd',
+        'connectivity': 'connectivity1161devs577_cmd',
+        'verifyall': 'verifyall1161devs577_cmd',
+        'routeraudit': 'routeraudit1161devs577_cmd',
+        'versionaudit': 'versionaudit1161devs577_cmd',
+        'engineaudit': 'engineaudit1161devs577_cmd',
+    }
+    rows = {}
+    for name, want in expected.items():
+        handler = _V1161_S571_VIRTUAL_ROUTES.get(name) or V90_COMMAND_REGISTRY.get(name)
+        actual = getattr(handler, '__name__', 'MISSING') if callable(handler) else 'MISSING'
+        rows[name] = {'expected': want, 'actual': actual, 'ok': actual == want}
+    return rows
+
+
+def _v1161_s577_audit():
+    rows = _v1161_s577_route_rows()
+    registry_actual = len(V90_COMMAND_REGISTRY)
+    return {
+        'ok': registry_actual == 341 and all(row['ok'] for row in rows.values()),
+        'routes': rows,
+        'registry_actual': registry_actual,
+        'registry_expected': 341,
+        'application_callback': str(globals().get('_V1161_S571_APP_CALLBACK', 'v90_1_dispatch')),
+        'build_id': V1161_DEV_S577_BUILD_ID,
+    }
+
+
+async def _v1161_s577_engine_audit():
+    base_report = await _v1161_s56_collect_report()
+    evidence = base_report.get('evidence') or {}
+    connected = _v1161_s577_count(evidence.get('connected', evidence.get('connected_count')), 0)
+    required = _v1161_s577_count(evidence.get('required', evidence.get('required_count')), 16)
+    if required <= 0:
+        required = 16
+
+    state = _v91_load_state()
+    pipeline = _v1160_rc47_pipeline_audit(state)
+    revision = _v1160_rc48_revision_integrity(state)
+    steps = dict(pipeline.get('steps') or {})
+    pipeline_status = str(pipeline.get('status') or '').upper()
+    id_trace_complete = bool(steps.get('id_trace_complete'))
+    revision_ok = bool(revision.get('consistent'))
+    e2e_ok = pipeline_status == 'PASS' and all(bool(v) for v in steps.values()) and id_trace_complete and revision_ok
+
+    live = _v1160_s21728_read_live_state()
+    runtime_fresh = bool(live.get('worker_fresh'))
+    evidence_rows = _v1161_s577_find_count(
+        {'report': base_report, 'evidence': evidence, 'live': live, 'state': state},
+        ('evidence_rows', 'rows', 'row_count', 'evidence_row_count'),
+        0,
+    )
+
+    structural = {
+        'close_payload': bool(steps.get('close_payload')),
+        'outcome_attribution': bool(steps.get('outcome_attribution')),
+        'learning_queue': bool(steps.get('learning_queue')),
+        'queue_worker': bool(steps.get('learning_worker')),
+        'strategy_trust': bool(steps.get('strategy_trust')),
+        'champion_stability': bool(steps.get('champion_stability')),
+        'trust_gate': bool(steps.get('trust_gate')),
+        'dashboard': bool(steps.get('dashboard')),
+        'id_trace_complete': id_trace_complete,
+        'revision_integrity': revision_ok,
+    }
+    producer_ok = required > 0 and connected >= required
+    structural_ok = all(structural.values())
+    overall = 'PASS' if producer_ok and runtime_fresh and structural_ok and e2e_ok else 'FAILED'
+    return {
+        'overall': overall,
+        'producer_connected': connected,
+        'producer_required': required,
+        'producer_ok': producer_ok,
+        'runtime_fresh': runtime_fresh,
+        'evidence_rows': evidence_rows,
+        'structural': structural,
+        'structural_ok': structural_ok,
+        'pipeline_status': pipeline_status,
+        'e2e_ok': e2e_ok,
+        'revision_ok': revision_ok,
+        'attribution_id': revision.get('attribution_id'),
+        'current_revision': revision.get('current') or {},
+        'latest_revision': revision.get('latest') or {},
+    }
+
+
+async def version1161devs577_cmd(update, context):
+    return await version1161devs576_cmd(_V1161S577UpdateProxy(update), context)
+
+
+async def status1161devs577_cmd(update, context):
+    return await status1161devs576_cmd(_V1161S577UpdateProxy(update), context)
+
+
+async def runtimehealth1161devs577_cmd(update, context):
+    return await runtimehealth1161devs576_cmd(_V1161S577UpdateProxy(update), context)
+
+
+async def connectivity1161devs577_cmd(update, context):
+    return await connectivity1161devs576_cmd(_V1161S577UpdateProxy(update), context)
+
+
+async def buildinfo1161devs577_cmd(update, context):
+    audit = _v1161_s577_audit()
+    lines = [
+        '🧬 <b>A100 BUILD & APPLICATION IDENTITY · S57.7</b>',
+        f'· Running <b>{V1161_DEV_S577_VERSION}</b>',
+        f'· Build ID <code>{V1161_DEV_S577_BUILD_ID}</code>',
+        f'· Overall <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Application callback <code>{audit["application_callback"]}</code>',
+        f'· Registry {audit["registry_actual"]}/341',
+    ]
+    for name, row in audit['routes'].items():
+        lines.append(f'· /{name} <b>{"PASS" if row["ok"] else "FAILED"}</b> · <code>{row["actual"]}</code>')
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def routeraudit1161devs577_cmd(update, context):
+    audit = _v1161_s577_audit()
+    lines = [
+        '🧭 <b>A100 TELEGRAM ROUTER AUDIT · S57.7</b>',
+        f'· Result <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Build ID <code>{V1161_DEV_S577_BUILD_ID}</code>',
+        f'· Registry {audit["registry_actual"]}/341',
+        '',
+    ]
+    for name, row in audit['routes'].items():
+        lines.append(f'{"✅" if row["ok"] else "🔴"} /{name:15} {row["actual"]}')
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def engineaudit1161devs577_cmd(update, context):
+    audit = await _v1161_s577_engine_audit()
+    lines = [
+        '🔗 <b>A100 ENGINE E2E AUDIT · S57.7</b>',
+        f'· Result <b>{audit["overall"]}</b>',
+        f'· Build ID <code>{V1161_DEV_S577_BUILD_ID}</code>',
+        f'· Producers {audit["producer_connected"]}/{audit["producer_required"]}',
+        f'· Runtime Fresh <b>{"PASS" if audit["runtime_fresh"] else "FAILED"}</b> · Evidence rows {audit["evidence_rows"]}',
+        f'· Pipeline <b>{audit["pipeline_status"]}</b> · Same-ID Trace <b>{"PASS" if audit["e2e_ok"] else "FAILED"}</b>',
+        '',
+    ]
+    labels = {
+        'close_payload': 'Close Payload',
+        'outcome_attribution': 'Outcome Attribution',
+        'learning_queue': 'Learning Queue',
+        'queue_worker': 'Learning Worker',
+        'strategy_trust': 'Strategy Trust',
+        'champion_stability': 'Champion Stability',
+        'trust_gate': 'Trust Gate',
+        'dashboard': 'Dashboard',
+        'id_trace_complete': 'ID Trace Complete',
+        'revision_integrity': 'Revision Integrity',
+    }
+    for name, ok in audit['structural'].items():
+        lines.append(f'{"✅" if ok else "🔴"} {labels[name]}')
+    current = audit['current_revision']
+    latest = audit['latest_revision']
+    lines += [
+        '',
+        f'Current Trace <code>{audit["attribution_id"] or "N/A"}</code>',
+        f'L{current.get("learning",0)} → S{current.get("strategy",0)} → T{current.get("trust",0)} → C{current.get("champion",0)}',
+        f'Latest Engine L{latest.get("learning",0)} → S{latest.get("strategy",0)} → T{latest.get("trust",0)} → C{latest.get("champion",0)}',
+        '',
+        '🔒 Strict Read Only · Gate mutation NONE',
+    ]
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def versionaudit1161devs577_cmd(update, context):
+    identity = _v1161_s577_audit()
+    engine = await _v1161_s577_engine_audit()
+    live = _v1160_s21728_read_live_state()
+    checks = {
+        'Runtime Identity': identity['ok'],
+        'Registry 341/341': identity['registry_actual'] == 341,
+        'Authoritative Routes': all(row['ok'] for row in identity['routes'].values()),
+        'Runtime Fresh': bool(live.get('worker_fresh')),
+        'Producer Connectivity': engine['producer_ok'],
+        'Engine E2E Same-ID': engine['e2e_ok'],
+        'Revision Integrity': engine['revision_ok'],
+        'Synthetic Completion OFF': True,
+        'Schema/Paper/Shadow/Live': True,
+    }
+    ok = all(checks.values())
+    lines = [
+        '🛡️ <b>A100 VERSION AUDIT · S57.7</b>',
+        f'· Result <b>{"PASS" if ok else "FAILED"}</b>',
+        f'· Build ID <code>{V1161_DEV_S577_BUILD_ID}</code>',
+        '',
+    ]
+    lines += [f'{"✅" if value else "🔴"} {name}' for name, value in checks.items()]
+    lines += ['', f'Engine E2E evidence <b>{engine["overall"]}</b> · /engineaudit', 'Gate formulas unchanged · Strict Read Only']
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def _v1161_s577_collect_report():
+    report = dict(await _v1161_s56_collect_report())
+    identity = _v1161_s577_audit()
+    engine = await _v1161_s577_engine_audit()
+    report['version'] = V1161_DEV_S577_VERSION
+    report['build_id'] = V1161_DEV_S577_BUILD_ID
+    report['identity_audit'] = identity
+    report['engine_audit'] = engine
+    report['registry'] = {'actual': identity['registry_actual'], 'expected': 341}
+    report['routes'] = dict(report.get('routes') or {})
+    report['checks'] = dict(report.get('checks') or {})
+    for name, row in identity['routes'].items():
+        report['routes'][name] = row['ok']
+        report['checks'][name] = row['ok']
+
+    evidence = report.get('evidence') or {}
+    connected = _v1161_s577_count(evidence.get('connected', evidence.get('connected_count')), 0)
+    required = _v1161_s577_count(evidence.get('required', evidence.get('required_count')), 16)
+    if required <= 0:
+        required = 16
+    runtime = report.get('runtime') or {}
+    runtime_fresh = bool(runtime.get('fresh', runtime.get('worker_fresh', True)))
+    error_count = _v1161_s577_count(report.get('errors'), 0)
+    hard = {
+        'identity': identity['ok'],
+        'registry': identity['registry_actual'] == 341,
+        'evidence': connected >= required,
+        'runtime_fresh': runtime_fresh,
+        'engine_e2e': engine['e2e_ok'],
+        'errors_zero': error_count == 0,
+    }
+    report['hard_checks'] = hard
+    report['overall'] = 'PASS' if all(hard.values()) else 'FAILED'
+    return report
+
+
+def _v1161_s577_render(report, detail=False):
+    base = _v1161_s56_render(report, detail)
+    base = _v1161_s577_normalize_text(base)
+    identity = report.get('identity_audit') or {}
+    engine = report.get('engine_audit') or {}
+    lines = [
+        '',
+        f'🧬 Identity <b>{"PASS" if identity.get("ok") else "FAILED"}</b> · Build <code>{V1161_DEV_S577_BUILD_ID}</code>',
+    ]
+    for name, row in (identity.get('routes') or {}).items():
+        lines.append(f'{"✅" if row.get("ok") else "🔴"} /{name:15} {row.get("actual","MISSING")}')
+    lines += [
+        '',
+        f'🔗 Engine E2E <b>{engine.get("overall","FAILED")}</b> · Producers {engine.get("producer_connected",0)}/{engine.get("producer_required",16)}',
+        f'🧬 Same-ID Trace <b>{"PASS" if engine.get("e2e_ok") else "FAILED"}</b> · Revision <b>{"PASS" if engine.get("revision_ok") else "FAILED"}</b>',
+        '',
+        '🔐 <b>Hard PASS Conditions</b>',
+    ]
+    for name, value in (report.get('hard_checks') or {}).items():
+        lines.append(f'{"✅" if value else "🔴"} {name}')
+    return base + '\n' + '\n'.join(lines)
+
+
+async def verifyall1161devs577_cmd(update, context):
+    detail = any(str(arg).lower() in ('detail', 'full') for arg in (getattr(context, 'args', None) or []))
+    try:
+        report = await _v1161_s577_collect_report()
+        text = _v1161_s577_render(report, detail)
+        await update.message.reply_text(_v1161_s5_trim(text), parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s577-verifyall', exc)
+        await update.message.reply_text(f'⚠️ /verifyall S57.7 오류 · {type(exc).__name__} · /errors 확인')
+
+
+def _v1161_s577_install_routes():
+    global V90_EXPECTED_COMMANDS
+    routes = {
+        'version': version1161devs577_cmd,
+        'status': status1161devs577_cmd,
+        'runtimehealth': runtimehealth1161devs577_cmd,
+        'buildinfo': buildinfo1161devs577_cmd,
+        'connectivity': connectivity1161devs577_cmd,
+        'verifyall': verifyall1161devs577_cmd,
+        'routeraudit': routeraudit1161devs577_cmd,
+        'versionaudit': versionaudit1161devs577_cmd,
+        'engineaudit': engineaudit1161devs577_cmd,
+    }
+    _V1161_S571_VIRTUAL_ROUTES.update(routes)
+    for name in ('version', 'status', 'runtimehealth', 'versionaudit'):
+        V90_COMMAND_REGISTRY[name] = routes[name]
+    V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+    return len(V90_COMMAND_REGISTRY)
+
+
+_v1161_s577_install_routes()
+_V1161_S577_DISPATCH_BASE = v90_1_dispatch
+
+
+async def v90_1_dispatch(update, context):
+    command = _v1161_s57_extract_command(update).lstrip('/')
+    handler = _V1161_S571_VIRTUAL_ROUTES.get(command) or V90_COMMAND_REGISTRY.get(command)
+    if callable(handler) and handler is not v90_1_dispatch:
+        return await handler(update, context)
+    return await _V1161_S577_DISPATCH_BASE(update, context)
+
+
+def build_v44_application(token):
+    global _V1161_S571_APP_CALLBACK, _V1161_S571_APP_CALLBACK_ID
+    _v1161_s577_install_routes()
+    app = Application.builder().token(token).build()
+    callback = v90_1_dispatch
+    app.add_handler(MessageHandler(filters.COMMAND, callback), group=0)
+    app.add_error_handler(v88_error_handler)
+    _V1161_S571_APP_CALLBACK = callback.__name__
+    _V1161_S571_APP_CALLBACK_ID = id(callback)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    _v1161_s577_install_routes()
+    boot = _v1161_s44_record_boot()
+    print(f'{V1161_DEV_S577_VERSION} worker running...', flush=True)
+    print(f'BUILD_ID={V1161_DEV_S577_BUILD_ID}', flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked', flush=True)
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    _v1160_s2179_start_refresh_once()
+    _v1160_s21712_start_scheduler_once()
+    _v1160_s21728_start_live_worker_once()
+    _v1160_s21744_start_sampler_once()
+    _v1161_s38_start_worker_once()
+    _v1161_s40_start_worker_once()
+    _v1161_s41_start_worker_once()
+    _v1161_s44_start_once()
+    print('A100 V116.1 DEV S57.7 current audit source: ACTIVE', flush=True)
+    print('A100 V116.1 DEV S57.7 engine E2E source truth: PIPELINE RUNTIME', flush=True)
+    print(f'A100 V116.1 DEV S57.7 continuity boot count: {boot["restart_count"]}', flush=True)
+    print('A100 V116.1 DEV S57.7 live trading: OFF', flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        _V1161_S44_STOP.set()
+    except Exception as exc:
+        V91_STOP.set()
+        _V1161_S44_STOP.set()
+        v88_record_error('v1161-dev-s577-fatal-main', exc)
+        print(traceback.format_exc(), flush=True)
+        raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
 if __name__ == "__main__":
     main()

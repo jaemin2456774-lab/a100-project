@@ -1,19 +1,23 @@
-# S57.6 설치 안내
+# A100 V116.1 DEV S57.7 Railway Patch Install Guide
 
-1. Railway에 기존 저장소와 데이터 볼륨을 유지합니다.
-2. ZIP의 변경 파일을 저장소 루트에 덮어씁니다.
-3. Railway에서 새 배포를 실행합니다.
-4. 데이터 디렉터리, 환경변수, Schema, Paper/Shadow 한도는 변경하지 않습니다.
+1. Back up the current repository and Railway volume.
+2. Extract this patch over the repository root.
+3. Commit and push only the changed files.
+4. Deploy through Railway.
+5. Confirm startup logs contain:
+   - `V116.1-DEV-S57.7 worker running...`
+   - `BUILD_ID=S57.7-20260719-ENGINE-E2E-SOURCE-TRUTH-01`
+   - `engine E2E source truth: PIPELINE RUNTIME`
+6. Run:
+   - `/version`
+   - `/buildinfo`
+   - `/routeraudit`
+   - `/versionaudit`
+   - `/engineaudit`
+   - `/pipelineaudit`
+   - `/verifyall`
+   - `/verifyall detail`
+   - `/errors`
 
-## 배포 후 확인
-/version
-/buildinfo
-/routeraudit
-/versionaudit
-/status
-/runtimehealth
-/verifyall
-/connectivity detail
-/engineaudit
-/pipelineaudit
-/errors
+Approval requires Registry 341/341, Version Audit PASS, Engine E2E PASS,
+VerifyAll PASS, Same-ID Trace PASS, Revision Integrity PASS, and Errors 0.

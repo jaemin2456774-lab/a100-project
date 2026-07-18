@@ -1,19 +1,21 @@
 {
-  "version": "A100 V116.1 DEV S57.6",
-  "build_id": "S57.6-20260719-ENGINE-LINK-VERSION-AUDIT-01",
-  "patch_type": "incremental",
+  "version": "A100 V116.1 DEV S57.7",
+  "build_id": "S57.7-20260719-ENGINE-E2E-SOURCE-TRUTH-01",
+  "package_type": "incremental_patch",
+  "base_version": "A100 V116.1 DEV S57.6",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S57.6.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.6.md",
+    "CHANGELOG_V116.1_DEV_S57.7.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.7.md",
     "PATCH_INSTALL_GUIDE_KR.md"
   ],
-  "preserves": {
+  "invariants": {
+    "registry": "341/341",
     "schema": 1,
     "paper": 20,
     "shadow": 60,
     "live_trading": false,
-    "registry": 341,
-    "gate_formulas": "unchanged"
+    "synthetic_completion": false,
+    "gate_formulas_changed": false
   }
 }
