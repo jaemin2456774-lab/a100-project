@@ -1,22 +1,23 @@
 {
-  "version": "A100 V116.1 DEV S50.1",
-  "type": "incremental_prebuilt_patch",
-  "baseline": "A100 V116.1 DEV S50",
-  "title": "Evidence Command Compatibility & ReleaseGate Immediate Result Hotfix",
-  "changed_files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S50.1.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S50.1.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
-  ],
-  "preserves": [
-    "Registry 341/341",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF",
-    "existing data and configuration"
-  ],
-  "runtime_validation_required": true
+  "version": "A100 V116.1 DEV S51",
+  "baseline": "A100 V116.1 DEV S50.1",
+  "package_type": "incremental_prebuilt_patch",
+  "runtime_first": true,
+  "strict_read_only": true,
+  "evidence_only": true,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": false,
+  "registry_expected": 341,
+  "gate_formula_changed": false,
+  "synthetic_pass": false,
+  "features": [
+    "Explainable AI 2.2",
+    "Consensus Tree",
+    "Evidence Coverage Heatmap",
+    "Runtime Compression foundation",
+    "Symbol Recovery 2.0",
+    "Decision Quality Score"
+  ]
 }

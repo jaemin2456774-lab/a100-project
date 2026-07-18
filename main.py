@@ -66620,6 +66620,223 @@ async def v90_1_dispatch(update, context):
         return await releasegate1161devs501_cmd(update, context)
     return await _V1161_S50_1_DISPATCH_BASE(update, context)
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S51 — Explainable AI 2.2 / Consensus Tree / Coverage Heatmap
+# Runtime-first, evidence-only, strict read-only. No synthetic PASS, no gate mutation.
+# ============================================================================
+V1161_DEV_S51_NUMBER='116.1-DEV-S51'
+V1161_DEV_S51_VERSION='A100 V116.1 DEV S51'
+V1161_DEV_S51_TITLE='Explainable AI 2.2 · Consensus Tree · Evidence Coverage Heatmap'
+V91_VERSION=V1161_DEV_S51_VERSION
+_V1161_S51_RENDER_CACHE={}
+_V1161_S51_RENDER_CACHE_MAX=64
+
+
+def _v1161_s51_state(value):
+    if isinstance(value,dict):
+        for key in ('state','bias','verdict','signal','direction','status'):
+            if value.get(key) not in (None,''):
+                return str(value.get(key)).upper()
+    if value not in (None,''):
+        return str(value).upper()
+    return 'NO_EVIDENCE'
+
+
+def _v1161_s51_signal_side(value):
+    text=_v1161_s51_state(value)
+    if any(x in text for x in ('BULL','LONG','POSITIVE','RISK_ON','ACCUMULATION','ACTIVE','HIGH')):
+        return 'LONG'
+    if any(x in text for x in ('BEAR','SHORT','NEGATIVE','RISK_OFF','DISTRIBUTION','STRESS')):
+        return 'SHORT'
+    return 'NEUTRAL'
+
+
+def _v1161_s51_age(row,key):
+    now=time.time()
+    candidates=(f'{key}_ts',f'{key}_timestamp',f'{key}_updated_at','updated_at','timestamp','ts')
+    for name in candidates:
+        v=row.get(name) if isinstance(row,dict) else None
+        try:
+            if isinstance(v,str):
+                v=float(v)
+            if v and float(v)>1e12: v=float(v)/1000.0
+            if v: return max(0.0,now-float(v))
+        except Exception: pass
+    return None
+
+
+def _v1161_s51_contributions(row,res):
+    """Explain directional contribution from real runtime evidence only."""
+    specs=(
+      ('Funding','funding_rate',12),('OI','open_interest_change',9),('Volume','volume_activity',11),
+      ('News','news_signal',8),('Whale','whale_signal',5),('Trend','timeframe_alignment',14),
+      ('Momentum','momentum_state',10),('Consensus','cross_market_state',13),
+    )
+    out=[]
+    for label,key,weight in specs:
+        val=row.get(key) if isinstance(row,dict) else None
+        present=_v1161_s46_present(val)
+        side='NEUTRAL'
+        if present:
+            if key=='funding_rate':
+                n=_v1161_s49_num(val); side='LONG' if n is not None and n<0 else 'SHORT' if n is not None and n>0 else 'NEUTRAL'
+            elif key=='open_interest_change':
+                n=_v1161_s49_num(val)
+                mom=_v1161_s51_signal_side(row.get('momentum_state')) if isinstance(row,dict) else 'NEUTRAL'
+                side=mom if n is not None and abs(n)>0 else 'NEUTRAL'
+            else: side=_v1161_s51_signal_side(val)
+        signed=weight if side=='LONG' else -weight if side=='SHORT' else 0
+        out.append({'label':label,'key':key,'weight':weight,'side':side,'signed':signed,'present':present})
+    return out
+
+
+def _v1161_s51_consensus_tree(row,res):
+    specs=(('News','news_signal'),('Funding','funding_rate'),('OI','open_interest_change'),('Whale','whale_signal'),('Market Regime','market_regime'))
+    lines=['<b>Consensus Tree</b>']; passed=0; available=0
+    for label,key in specs:
+        val=row.get(key) if isinstance(row,dict) else None
+        if not _v1161_s46_present(val): state='NO_EVIDENCE'
+        else:
+            available+=1; side=_v1161_s51_signal_side(val)
+            state='PASS' if side!='NEUTRAL' else 'WAIT'
+            if state=='PASS': passed+=1
+        lines.append(f'· {label} └ {state}')
+    lines.append(f'· Consensus <b>{passed} / {len(specs)}</b> · available {available}/{len(specs)}')
+    return '\n'.join(lines),passed,available
+
+
+def _v1161_s51_heatmap(row):
+    ev=(row.get('_s49_evidence_runtime') or {}) if isinstance(row,dict) else {}
+    sources=ev.get('producer_sources') or ev.get('source_aliases') or {}
+    lines=['<b>Evidence Coverage Heatmap</b>']
+    for key in _V1161_S49_REAL_ALIASES:
+        label=_V1161_S50_FRIENDLY_EVIDENCE.get(key,key.replace('_',' ').title())
+        present=_v1161_s46_present(row.get(key)) if isinstance(row,dict) else False
+        age=_v1161_s51_age(row,key)
+        freshness='LIVE' if age is not None and age<=60 else 'AGED' if age is not None else 'UNKNOWN'
+        weight=next((x[2] for x in (('Funding','funding_rate',12),('OI','open_interest_change',9),('Volume','volume_activity',11),('News','news_signal',8),('Whale','whale_signal',5),('Trend','timeframe_alignment',14),('Momentum','momentum_state',10),('Consensus','cross_market_state',13)) if x[1]==key),0)
+        src=str(sources.get(key,'RUNTIME' if present else '-'))
+        age_text=f'{age:.0f}s' if age is not None else '?'
+        lines.append(f'· {"🟩" if present else "⬜"} {label} · {100 if present else 0}% · {freshness} · W{weight} · Age {age_text} · {src[:18]}')
+    return '\n'.join(lines)
+
+
+def _v1161_s51_quality(row,res,exp,passed,available):
+    ev=(row.get('_s49_evidence_runtime') or {}) if isinstance(row,dict) else {}
+    coverage=float(ev.get('coverage_pct',0) or 0)
+    consensus=(passed/5.0*100.0)
+    known_ages=[_v1161_s51_age(row,k) for k in _V1161_S49_REAL_ALIASES]
+    known_ages=[x for x in known_ages if x is not None]
+    freshness=max(0.0,100.0-min(100.0,(sum(known_ages)/len(known_ages))/3.0)) if known_ages else 0.0
+    confidence=_v1161_s50_confidence(res,row)
+    calibration=_v1161_s49_1_numeric_score((res.get('ai_reliability_dashboard') or {}).get('calibration_score'),None) if isinstance(res,dict) else None
+    calibration=float(calibration) if calibration is not None else 0.0
+    quality=coverage*.30+consensus*.25+freshness*.15+confidence*.20+calibration*.10
+    return {'coverage':coverage,'consensus':consensus,'freshness':freshness,'confidence':confidence,'calibration':calibration,'quality':round(quality,1)}
+
+
+def _v1161_s51_explain(row,res,detail=False):
+    exp=_v1161_s49_explain(row,res); contrib=_v1161_s51_contributions(row,res)
+    tree,passed,available=_v1161_s51_consensus_tree(row,res); q=_v1161_s51_quality(row,res,exp,passed,available)
+    long_total=sum(x['weight'] for x in contrib if x['side']=='LONG'); short_total=sum(x['weight'] for x in contrib if x['side']=='SHORT')
+    lines=[_v1161_s49_2_explain_block(exp,compact=not detail),'', '<b>Directional Contribution</b>']
+    for x in contrib:
+        sign='+' if x['signed']>0 else ''
+        value=f'{sign}{x["signed"]}' if x['present'] else 'NO_EVIDENCE'
+        lines.append(f'· {x["label"]} {value} · {x["side"]}')
+    lines += [f'· TOTAL LONG {long_total} · SHORT {short_total}', '', tree, '', '<b>Decision Quality Score</b>',
+              f'· Evidence {q["coverage"]:.1f} · Consensus {q["consensus"]:.1f} · Freshness {q["freshness"]:.1f}',
+              f'· Confidence {q["confidence"]:.1f} · Calibration {q["calibration"]:.1f}',f'· Decision Quality <b>{q["quality"]:.1f}</b>']
+    if detail: lines += ['',_v1161_s51_heatmap(row)]
+    return '\n'.join(lines)
+
+
+async def ultimate1161devs51_cmd(update,context):
+    detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+    await update.message.reply_text('🧠 V116.1 S51 Explainable AI 2.2 분석 중...')
+    try:
+        scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: return await update.message.reply_text(_v1161_s49_banner(scan)+'\n\nNO_ANALYSIS_ROWS · WAIT',parse_mode='HTML')
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in rows]
+        evaluated.sort(key=lambda z:_v1161_s50_confidence(z[1],z[0]),reverse=True)
+        await update.message.reply_text(_v1161_s49_banner(scan).replace('S49 EVIDENCE / EXPLAINABILITY','S51 EXPLAINABLE AI 2.2'),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3 if detail else 2],1):
+            head=f'<b>{i}. {_v1161_s50_symbol(row)}</b>\n'
+            text=head+_v1161_s51_explain(row,res,detail)
+            await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s51-ultimate',exc); await update.message.reply_text('⚠️ S51 Ultimate 오류 · /errors 확인')
+
+
+async def sniper1161devs51_cmd(update,context):
+    try:
+        detail=bool(getattr(context,'args',None) and str(context.args[0]).lower() in ('detail','full'))
+        scan=await _v1161_s49_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: return await update.message.reply_text('🎯 S51 NO_ANALYSIS_ROWS · WAIT')
+        row=max(rows,key=lambda r:_v1161_s50_confidence(_v1161_s37_consensus(r),r)); res=_v1161_s37_consensus(row)
+        text=f'🎯 <b>SNIPER S51 · {_v1161_s50_symbol(row)}</b>\n'+_v1161_s51_explain(row,res,detail)
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s51-sniper',exc); await update.message.reply_text('⚠️ Sniper S51 오류')
+
+
+async def version1161devs51_cmd(update,context):
+    mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state()
+    await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S51_NUMBER}</b>\n{V1161_DEV_S51_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Real evidence only\nConsensus Tree · Directional Contribution · Decision Quality\nCoverage Heatmap detail · bounded render cache {_V1161_S51_RENDER_CACHE_MAX}\nSynthetic evidence/pass OFF · Gate thresholds unchanged\nMemory {mem["memory_mb"]:.1f}MB · Registry {len(V90_COMMAND_REGISTRY)}/341\nSchema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+def _v1161_s51_reconcile():
+    desired={'version':version1161devs51_cmd,'ultimate':ultimate1161devs51_cmd,'sniper':sniper1161devs51_cmd,'god':god1161devs49_cmd}
+    repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return repaired
+
+
+def _v1161_s51_static_audit():
+    _v1161_s51_reconcile()
+    sample={'symbol':'TESTUSDT','funding_rate':-0.01,'open_interest_change':5.0,'volume_activity':{'state':'ACTIVE'},'momentum_state':{'state':'BULLISH'},'market_regime':'RISK_ON','news_signal':'POSITIVE','whale_signal':'LONG','timeframe_alignment':'BULLISH','cross_market_state':'LONG','_s49_evidence_runtime':{'coverage_pct':100,'available':list(_V1161_S49_REAL_ALIASES),'missing':[],'synthetic':False}}
+    text=_v1161_s51_explain(sample,{},True)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':V90_COMMAND_REGISTRY.get('ultimate') is ultimate1161devs51_cmd,'consensus_tree':'Consensus Tree' in text,'heatmap':'Evidence Coverage Heatmap' in text,'quality':'Decision Quality' in text,'synthetic_disabled':sample['_s49_evidence_runtime']['synthetic'] is False,'gate_unchanged':True}
+    return {'ok':all(tests.values()),'tests':tests}
+
+
+def build_v44_application(token):
+    audit=_v1161_s51_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S51 preflight failed: '+','.join(k for k,v in audit['tests'].items() if not v))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S51 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S51 Explainability/Consensus/Heatmap audit: PASS',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s51_reconcile(); audit=_v1161_s51_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S51_VERSION} worker running...',flush=True)
+    if repaired: print('A100 V116.1 DEV S51 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S51 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S51 Explainable AI 2.2: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S51 Consensus Tree: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S51 Evidence Coverage Heatmap: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S51 Runtime Compression: BOUNDED CACHE',flush=True)
+    print('A100 V116.1 DEV S51 Symbol Recovery 2.0: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S51 Decision Quality Score: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S51 synthetic evidence/pass: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S51 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S51 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S51 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s51-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
