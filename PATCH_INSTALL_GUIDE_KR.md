@@ -1,12 +1,19 @@
-# S56.3 증분 패치 설치 안내
+# A100 V116.1 DEV S57 증분 패치 설치 가이드
 
-1. ZIP을 해제합니다.
-2. 저장소 루트의 기존 `main.py`를 새 `main.py`로 덮어씁니다.
-3. 변경 파일을 GitHub에 commit/push 합니다.
-4. Railway 최신 배포가 완료될 때까지 기다립니다.
-5. 시작 로그에서 `V116.1-DEV-S56.3 worker running`과 `DEV fail-safe: CONTINUE` 또는 identity audit PASS를 확인합니다.
+1. Railway에 연결된 GitHub 저장소에서 기존 `main.py`를 패치의 `main.py`로 덮어씁니다.
+2. 기존 `/data`, 환경변수, Telegram Token, 학습 데이터, Snapshot 파일은 삭제하거나 초기화하지 않습니다.
+3. GitHub commit/push 후 Railway 자동 배포를 확인합니다.
+4. Railway 로그에서 아래 항목을 확인합니다.
 
-## 배포 후 확인
+```text
+V116.1-DEV-S57 worker running...
+BUILD_ID=S57-20260718-ROUTE-TRUTH-REGISTRY-341-01
+A100 V116.1 DEV S57 registry identity: 341/341
+A100 V116.1 DEV S57 identity audit: PASS
+A100 V116.1 DEV S57 /buildinfo /connectivity /verifyall: FINAL DISPATCH ACTIVE
+```
+
+5. Telegram에서 순서대로 실행하고 캡처합니다.
 
 ```text
 /version
@@ -14,7 +21,15 @@
 /connectivity
 /connectivity detail
 /verifyall
+/verifyall detail
 /errors
+/status
+/runtimehealth
 ```
 
-Identity 항목이 불일치해도 DEV에서는 경고를 기록하고 계속 실행합니다. LTS Gate 계산식과 실제 Evidence 값은 변경하지 않습니다.
+## 승인 기준
+- `/buildinfo`, `/connectivity`, `/connectivity detail`이 지원하지 않는 명령으로 나오지 않아야 함
+- Registry 341/341
+- Identity PASS
+- `/verifyall` 종합 PASS
+- Errors 0

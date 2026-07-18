@@ -1,23 +1,21 @@
 {
-  "version": "V116.1-DEV-S56.3",
-  "build_id": "S56.3-20260718-IDENTITY-DIAGNOSTIC-FAILSAFE-01",
-  "package_type": "incremental_patch",
-  "baseline": "V116.1-DEV-S56.2",
+  "release": "A100 V116.1 DEV S57",
+  "build_id": "S57-20260718-ROUTE-TRUTH-REGISTRY-341-01",
+  "type": "incremental_patch",
+  "base": "A100 V116.1 DEV S56.3",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S56.3.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.3.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
+    "CHANGELOG_V116.1_DEV_S57.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
   ],
   "safety": {
-    "runtime_first": true,
-    "strict_read_only": true,
-    "synthetic_completion": false,
-    "gate_mutation": false,
     "schema": 1,
     "paper": 20,
     "shadow": 60,
     "live_trading": false,
-    "registry_target": 341
+    "synthetic_completion": false,
+    "gate_formula_changed": false
   }
 }

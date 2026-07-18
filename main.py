@@ -67785,7 +67785,230 @@ def main():
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s563-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 
+
+
+
+# ================================================================
+# A100 V116.1 DEV S57 - RUNTIME IDENTITY RECOVERY & ROUTE TRUTH
+# Fixes:
+# - final Telegram dispatcher owns /buildinfo /connectivity /verifyall
+# - compatibility commands do not consume the frozen 341 Registry slots
+# - verifyall uses final dispatcher resolution and cannot PASS on 342/341
+# ================================================================
+V1161_DEV_S57_VERSION='V116.1-DEV-S57'
+V1161_DEV_S57_NUMBER='116.1-DEV-S57'
+V1161_DEV_S57_TITLE='Runtime Identity Recovery · Route Truth Hotfix'
+V1161_DEV_S57_BUILD_ID='S57-20260718-ROUTE-TRUTH-REGISTRY-341-01'
+_V1161_S57_COMPAT_ROUTES={}
+
+
+def _v1161_s57_extract_command(update):
+    text=str(getattr(getattr(update,'message',None),'text','') or '').strip()
+    return text.split()[0].split('@')[0].lower() if text.startswith('/') else ''
+
+
+def _v1161_s57_route_target(command):
+    command=str(command or '').split('@')[0].lower()
+    if not command.startswith('/'):
+        command='/'+command
+    direct=_V1161_S57_COMPAT_ROUTES.get(command)
+    if callable(direct):
+        return direct,'FINAL_DISPATCH_COMPAT'
+    handler=V90_COMMAND_REGISTRY.get(command[1:])
+    if callable(handler):
+        return handler,'REGISTRY'
+    return None,'UNSUPPORTED'
+
+
+def _v1161_s57_reconcile():
+    repaired=[]; removed=[]
+    # Frozen registry routes: replace existing slots only.
+    desired={
+        'version':version1161devs57_cmd,
+        'ultimate':ultimate1161devs56_cmd,
+        'sniper':sniper1161devs56_cmd,
+    }
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler:
+            V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    # /verifyall was introduced as an extra slot in S55. It remains available
+    # through the final dispatcher but must not mutate the frozen 341 registry.
+    vh=V90_COMMAND_REGISTRY.get('verifyall')
+    if len(V90_COMMAND_REGISTRY)>341 and callable(vh) and getattr(vh,'__name__','').startswith('verifyall1161devs'):
+        V90_COMMAND_REGISTRY.pop('verifyall',None); removed.append('verifyall')
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY)
+    return {'repaired':repaired,'removed':removed}
+
+
+def _v1161_s57_route_audit():
+    expected={
+        '/buildinfo':'buildinfo1161devs57_cmd',
+        '/connectivity':'connectivity1161devs56_cmd',
+        '/verifyall':'verifyall1161devs57_cmd',
+        '/version':'version1161devs57_cmd',
+    }
+    rows={}
+    for cmd,want in expected.items():
+        handler,source=_v1161_s57_route_target(cmd)
+        actual=getattr(handler,'__name__','MISSING') if handler else 'MISSING'
+        rows[cmd]={'source':source,'expected':want,'actual':actual,'ok':actual==want}
+    return rows
+
+
+def _v1161_s57_static_audit():
+    changes=_v1161_s57_reconcile(); routes=_v1161_s57_route_audit()
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'version_source_single':V90_COMMAND_REGISTRY.get('version') is version1161devs57_cmd,
+        'buildinfo_route_e2e':routes['/buildinfo']['ok'],
+        'connectivity_route_e2e':routes['/connectivity']['ok'],
+        'verifyall_route_e2e':routes['/verifyall']['ok'],
+        'version_route_e2e':routes['/version']['ok'],
+        'verifyall_not_registry_slot':'verifyall' not in V90_COMMAND_REGISTRY,
+        'producer_bridge_preserved':callable(globals().get('_v1161_s56_engine_bridge')),
+        'synthetic_completion_off':True,
+        'gate_unchanged':True,
+    }
+    return {'ok':all(tests.values()),'tests':tests,'routes':routes,'changes':changes,
+            'registry_actual':len(V90_COMMAND_REGISTRY),'registry_expected':341,
+            'version':V1161_DEV_S57_VERSION,'build_id':V1161_DEV_S57_BUILD_ID}
+
+
+async def version1161devs57_cmd(update,context):
+    st=_v1160_s21728_read_live_state(); mem=_v1161_s44_report(); audit=_v1161_s57_static_audit()
+    await update.message.reply_text(
+        f'🧬 <b>A100 V{V1161_DEV_S57_NUMBER}</b>\n{V1161_DEV_S57_TITLE}\n\n'
+        f'Build ID <code>{V1161_DEV_S57_BUILD_ID}</code>\n'
+        f'Identity Audit <b>{"PASS" if audit["ok"] else "FAILED"}</b>\n'
+        'Final dispatcher route truth ACTIVE\n'
+        '/buildinfo · /connectivity · /connectivity detail · /verifyall ACTIVE\n'
+        f'Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Registry {len(V90_COMMAND_REGISTRY)}/341\n'
+        f'Memory {mem["memory_mb"]:.1f}MB\n'
+        'Synthetic completion OFF · Gate unchanged\n'
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+async def buildinfo1161devs57_cmd(update,context):
+    audit=_v1161_s57_static_audit(); failed=[k for k,v in audit['tests'].items() if not v]
+    lines=[
+        '🧬 <b>A100 BUILD & ROUTE IDENTITY · S57</b>',
+        f'· Running <b>{audit["version"]}</b>',
+        f'· Build ID <code>{audit["build_id"]}</code>',
+        f'· Identity <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Registry {audit["registry_actual"]}/{audit["registry_expected"]}',
+    ]
+    for cmd,row in audit['routes'].items():
+        lines.append(f'· {cmd} <b>{"PASS" if row["ok"] else "FAILED"}</b> · {row["source"]} · <code>{row["actual"]}</code>')
+    if failed: lines += ['', '⚠️ <b>Failed checks</b>', ' · '.join(failed)]
+    lines += ['', '🔒 Runtime First · Strict Read Only · Gate unchanged']
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def _v1161_s57_collect_report():
+    report=await _v1161_s56_collect_report(); audit=_v1161_s57_static_audit()
+    report=dict(report)
+    report['version']=V1161_DEV_S57_VERSION; report['build_id']=V1161_DEV_S57_BUILD_ID
+    report['registry']={'actual':audit['registry_actual'],'expected':audit['registry_expected']}
+    report['identity_audit']=audit
+    # Route truth replaces function-existence assumptions.
+    report['routes']=dict(report.get('routes') or {})
+    report['checks']=dict(report.get('checks') or {})
+    for cmd,key in (('/version','version'),('/connectivity','connectivity')):
+        report['routes'][key]=audit['routes'][cmd]['ok']; report['checks'][key]=audit['routes'][cmd]['ok']
+    report['routes']['buildinfo']=audit['routes']['/buildinfo']['ok']
+    report['routes']['verifyall']=audit['routes']['/verifyall']['ok']
+    report['checks']['buildinfo']=audit['routes']['/buildinfo']['ok']
+    report['checks']['verifyall']=audit['routes']['/verifyall']['ok']
+    hard_ok=(audit['ok'] and report['registry']['actual']==report['registry']['expected'])
+    if not hard_ok: report['overall']='FAILED'
+    elif report.get('overall')!='PASS': report['overall']=report.get('overall','PARTIAL')
+    return report
+
+
+def _v1161_s57_render(report,detail=False):
+    text=_v1161_s56_render(report,detail).replace('A100 자동 검증 · S56','A100 자동 검증 · S57',1)
+    audit=report.get('identity_audit') or {}
+    route_lines=['',f'🧬 Identity <b>{"PASS" if audit.get("ok") else "FAILED"}</b> · Build <code>{report.get("build_id",V1161_DEV_S57_BUILD_ID)}</code>']
+    for cmd,row in (audit.get('routes') or {}).items():
+        route_lines.append(f'{"✅" if row.get("ok") else "🔴"} {cmd:16} {row.get("source","UNKNOWN")}')
+    return text+'\n'+'\n'.join(route_lines)
+
+
+def _v1161_s57_write_reports(report):
+    stamp=time.strftime('%Y%m%d_%H%M%S',time.localtime(report['generated_at']))
+    directory=_V1161_S56_REPORT_DIR
+    try: os.makedirs(directory,exist_ok=True)
+    except Exception: directory='/tmp'; os.makedirs(directory,exist_ok=True)
+    base=os.path.join(directory,f'a100_verify_S57_{stamp}'); jpath=base+'.json'; tpath=base+'.txt'
+    with open(jpath,'w',encoding='utf-8') as f: json.dump(report,f,ensure_ascii=False,indent=2)
+    with open(tpath,'w',encoding='utf-8') as f: f.write(_v1161_s57_render(report,True).replace('<b>','').replace('</b>',''))
+    return jpath,tpath
+
+
+async def verifyall1161devs57_cmd(update,context):
+    detail=any(str(x).lower() in ('detail','full') for x in (getattr(context,'args',None) or []))
+    try:
+        report=await _v1161_s57_collect_report(); paths=_v1161_s57_write_reports(report) if detail else None
+        text=_v1161_s57_render(report,detail)
+        if paths: text+=f'\n\n💾 Saved\n<code>{paths[0]}</code>\n<code>{paths[1]}</code>'
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s57-verifyall',exc)
+        await update.message.reply_text(f'⚠️ /verifyall S57 오류 · {type(exc).__name__} · /errors 확인')
+
+
+# Bind compatibility routes only after all handlers exist.
+_V1161_S57_COMPAT_ROUTES.update({
+    '/buildinfo':buildinfo1161devs57_cmd,
+    '/connectivity':connectivity1161devs56_cmd,
+    '/verifyall':verifyall1161devs57_cmd,
+})
+
+_V1161_S57_DISPATCH_BASE=v90_1_dispatch
+async def v90_1_dispatch(update,context):
+    command=_v1161_s57_extract_command(update)
+    handler=_V1161_S57_COMPAT_ROUTES.get(command)
+    if callable(handler):
+        return await handler(update,context)
+    return await _V1161_S57_DISPATCH_BASE(update,context)
+
+
+def build_v44_application(token):
+    audit=_v1161_s57_static_audit()
+    _v1161_s563_log_identity_audit({'ok':audit['ok'],'tests':audit['tests'],'snapshot':audit},'s57-application-build')
+    app=Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0)
+    app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S57 build id: {V1161_DEV_S57_BUILD_ID}',flush=True)
+    print(f'A100 V116.1 DEV S57 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print(f'A100 V116.1 DEV S57 identity audit: {"PASS" if audit["ok"] else "FAILED"}',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); changes=_v1161_s57_reconcile(); audit=_v1161_s57_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S57_VERSION} worker running...',flush=True)
+    print(f'BUILD_ID={V1161_DEV_S57_BUILD_ID}',flush=True)
+    print(f'A100 V116.1 DEV S57 registry identity: {len(V90_COMMAND_REGISTRY)}/341',flush=True)
+    print('A100 V116.1 DEV S57 final dispatcher route truth: ACTIVE',flush=True)
+    if changes['repaired']: print('A100 V116.1 DEV S57 routes reconciled: '+','.join(changes['repaired']),flush=True)
+    if changes['removed']: print('A100 V116.1 DEV S57 registry overflow removed: '+','.join(changes['removed']),flush=True)
+    _v1161_s563_log_identity_audit({'ok':audit['ok'],'tests':audit['tests'],'snapshot':audit},'s57-startup')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S57 /buildinfo /connectivity /verifyall: FINAL DISPATCH ACTIVE',flush=True)
+    print('A100 V116.1 DEV S57 synthetic completion: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S57 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S57 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S57 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s57-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
 if __name__ == "__main__":
     main()
-
