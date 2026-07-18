@@ -1,30 +1,13 @@
-# A100 V116.1 DEV S57.8 Railway 설치 가이드
+# S58.0 Railway 설치 및 검증
 
-1. 현재 저장소와 Railway Volume을 백업합니다.
-2. ZIP 파일을 저장소 루트에 덮어씁니다.
-3. 변경 파일만 GitHub에 커밋·푸시합니다.
-4. Railway에서 배포합니다.
-
-시작 로그:
-- `V116.1-DEV-S57.8 worker running...`
-- `BUILD_ID=S57.8-20260719-METADATA-SINGLE-SOURCE-FINAL-01`
-- `metadata single source: ACTIVE`
-- `UI major redesign: DEFERRED`
-
-배포 후 확인:
+배포 후 실행:
 /version
-/buildinfo
-/routeraudit
-/versionaudit
-/engineaudit
-/status
-/runtimehealth
+/commandcert
+/commandcert detail
+/commandmatrix
+/regressionguard
 /verifyall
+/engineaudit
 /errors
 
-승인 기준:
-- `/version` 제목이 S57.8 현재 제목
-- `/version` Identity Audit PASS
-- 모든 Audit PASS
-- Registry 341/341
-- Errors 0
+Registry 341/341, 오류 0을 유지해야 합니다. PARTIAL은 실패를 숨기지 않는 정상적인 감사 결과입니다.
