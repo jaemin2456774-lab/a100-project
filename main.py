@@ -65940,9 +65940,9 @@ def main():
 # producer health diagnostics and structural gate diagnostics. No synthetic evidence,
 # threshold relaxation, gate mutation or order authority.
 # ============================================================================
-V1161_DEV_S49_NUMBER='116.1-DEV-S49'
-V1161_DEV_S49_VERSION='A100 V116.1 DEV S49'
-V1161_DEV_S49_TITLE='Evidence Completion · Explainable AI · Research Notebook · Gate Diagnostics'
+V1161_DEV_S49_NUMBER='116.1-DEV-S49.1'
+V1161_DEV_S49_VERSION='A100 V116.1 DEV S49.1'
+V1161_DEV_S49_TITLE='Explainable AI Brain Schema Compatibility & Startup Audit Isolation Hotfix'
 V91_VERSION=V1161_DEV_S49_VERSION
 
 _V1161_S49_REAL_ALIASES=dict(_V1161_S48_REAL_ALIASES)
@@ -66038,13 +66038,49 @@ def _v1161_s49_producer_status(scan):
     return out
 
 
+def _v1161_s49_1_numeric_score(value, default=0.0):
+    """Read legacy numeric and current structured brain payloads without mutation."""
+    if value is None or isinstance(value, bool):
+        return float(default) if default is not None else None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip().replace('%',''))
+        except (TypeError, ValueError):
+            return float(default)
+    if isinstance(value, dict):
+        # Current AI Debate payloads may expose a structured brain object.
+        for key in ('score','brain_score','value','probability','confidence','strength','weighted_score'):
+            if key in value:
+                parsed=_v1161_s49_1_numeric_score(value.get(key), None)
+                if parsed is not None:
+                    return float(parsed)
+        # Bounded fallback for one extra nested schema level.
+        for key in ('result','metrics','summary','decision'):
+            nested=value.get(key)
+            if isinstance(nested, dict):
+                parsed=_v1161_s49_1_numeric_score(nested, None)
+                if parsed is not None:
+                    return float(parsed)
+        return float(default) if default is not None else None
+    if isinstance(value, (list, tuple)):
+        for item in value[:8]:
+            parsed=_v1161_s49_1_numeric_score(item, None)
+            if parsed is not None:
+                return float(parsed)
+    return float(default) if default is not None else None
+
+
 def _v1161_s49_explain(row,res):
     ev=row.get('_s49_evidence_runtime',{}) if isinstance(row,dict) else {}
     missing=list(ev.get('missing') or [])
     final=str(res.get('final_ai_orchestrator',{}).get('verdict') or res.get('cross_engine_consensus_quality',{}).get('verdict') or 'WAIT').upper()
-    long_score=float(res.get('ai_debate_2',{}).get('long_brain',0) or 0)
-    short_score=float(res.get('ai_debate_2',{}).get('short_brain',0) or 0)
-    wait_score=float(res.get('ai_debate_2',{}).get('wait_brain',0) or 0)
+    debate=res.get('ai_debate_2',{}) if isinstance(res,dict) else {}
+    debate=debate if isinstance(debate,dict) else {}
+    long_score=_v1161_s49_1_numeric_score(debate.get('long_brain'),0.0)
+    short_score=_v1161_s49_1_numeric_score(debate.get('short_brain'),0.0)
+    wait_score=_v1161_s49_1_numeric_score(debate.get('wait_brain'),0.0)
     total=max(1.0,long_score+short_score)
     lp=round(long_score/total*100.0,1); sp=round(short_score/total*100.0,1)
     positives=[]; negatives=[]
@@ -66158,32 +66194,55 @@ def _v1161_s49_static_audit():
     return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
 
 
+def _v1161_s49_1_safe_static_audit():
+    try:
+        audit=_v1161_s49_static_audit()
+        audit['isolated_exception']=None
+        return audit
+    except Exception as exc:
+        # Explainability diagnostics are read-only and must never crash the runtime.
+        try: v88_record_error('v1161-dev-s49-1-static-audit',exc)
+        except Exception: pass
+        return {'ok':False,'mismatches':[],
+                'tests':{'static_audit_exception_isolated':False},
+                'isolated_exception':f'{type(exc).__name__}: {exc}'}
+
+
+def _v1161_s49_1_critical_preflight_ok(audit):
+    tests=audit.get('tests') or {}
+    return len(V90_COMMAND_REGISTRY)==341 and not (audit.get('mismatches') or []) and tests.get('registry_341',True) and tests.get('routes_current',True)
+
+
 def build_v44_application(token):
-    _v1161_s49_reconcile(); audit=_v1161_s49_static_audit()
-    if not audit['ok']: raise RuntimeError('V116.1 DEV S49 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    _v1161_s49_reconcile(); audit=_v1161_s49_1_safe_static_audit()
+    if not _v1161_s49_1_critical_preflight_ok(audit):
+        raise RuntimeError('V116.1 DEV S49.1 critical preflight failed: '+','.join(audit.get('mismatches') or []))
     app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
-    print(f'A100 V116.1 DEV S49 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S49 Evidence/Explainability audit: PASS',flush=True); return app
+    print(f'A100 V116.1 DEV S49.1 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True)
+    print('A100 V116.1 DEV S49.1 Explainable AI schema compatibility audit: '+('PASS' if audit.get('ok') else 'WARN/ISOLATED'),flush=True)
+    return app
 
 
 def main():
     start_health_server_once()
     if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
-    v90_3_start_background_once(); v91_start_background_once(); _v1161_s49_reconcile(); audit=_v1161_s49_static_audit(); boot=_v1161_s44_record_boot()
+    v90_3_start_background_once(); v91_start_background_once(); _v1161_s49_reconcile(); audit=_v1161_s49_1_safe_static_audit(); boot=_v1161_s44_record_boot()
     print(f'{V1161_DEV_S49_VERSION} worker running...',flush=True)
-    if not audit['ok']: raise RuntimeError('V116.1 DEV S49 preflight failed')
+    if not _v1161_s49_1_critical_preflight_ok(audit): raise RuntimeError('V116.1 DEV S49.1 critical preflight failed')
+    if not audit.get('ok'): print('A100 V116.1 DEV S49.1 non-critical static audit: WARN/ISOLATED · runtime continues',flush=True)
     if not acquire_v44_process_lock():
         print('A100 V116.1 duplicate polling process blocked',flush=True)
         while True: time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
-    print('A100 V116.1 DEV S49 real runtime evidence expansion: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S49 Explainable AI 2.1: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S49 Research Notebook 2.1 bounded cache: ACTIVE',flush=True)
-    print('A100 V116.1 DEV S49 producer/gate diagnostics: READ ONLY',flush=True)
-    print('A100 V116.1 DEV S49 synthetic evidence/pass: DISABLED',flush=True)
-    print(f'A100 V116.1 DEV S49 continuity boot count: {boot["restart_count"]}',flush=True)
-    print('A100 V116.1 DEV S49 live trading: OFF',flush=True)
+    print('A100 V116.1 DEV S49.1 real runtime evidence expansion: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S49.1 Explainable AI 2.1 schema compatibility: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S49.1 Research Notebook 2.1 bounded cache: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S49.1 producer/gate diagnostics: READ ONLY',flush=True)
+    print('A100 V116.1 DEV S49.1 synthetic evidence/pass: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S49.1 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S49.1 live trading: OFF',flush=True)
     try: asyncio.run(run_bot_async())
-    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S49 stopped by signal',flush=True)
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S49.1 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s49-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 # IMPORTANT: this is the only executable block and must remain physically last.

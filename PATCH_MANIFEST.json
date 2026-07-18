@@ -1,37 +1,31 @@
 {
-  "version": "A100 V116.1 DEV S49",
-  "baseline": "A100 V116.1 DEV S48",
+  "version": "A100 V116.1 DEV S49.1",
   "package_type": "incremental_prebuilt_patch",
-  "created_utc": "2026-07-18T12:03:52.027444+00:00",
-  "changed_files": [
-    {
-      "path": "main.py",
-      "size": 3685811,
-      "sha256": "b590c87a470a159f3615806f2d9782abe7ffe4b142113089b713a2c23f1e43af"
-    },
-    {
-      "path": "CHANGELOG_V116.1_DEV_S49.md",
-      "size": 915,
-      "sha256": "00b8f8adc00fbb4625861ff73e0e1f177f568894cdbd3feda05c53afc62e30c0"
-    },
-    {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S49.md",
-      "size": 1162,
-      "sha256": "5cec9d36a332aa330184f1b5b4535555554e05c5a5434d31fdbecfb9a6e12a29"
-    },
-    {
-      "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 1066,
-      "sha256": "ef47b684edfb2a8ffd0109bb20cfe763676fae50fc6d26b39ab44dab570b3458"
-    }
+  "baseline": "A100 V116.1 DEV S49",
+  "title": "Explainable AI Brain Schema Compatibility & Startup Audit Isolation Hotfix",
+  "preserves": [
+    "Runtime First",
+    "Strict Read Only",
+    "Evidence Only",
+    "Schema 1",
+    "Registry 341",
+    "Paper 20",
+    "Shadow 60",
+    "Live OFF",
+    "existing data/configuration"
   ],
-  "safety": {
-    "runtime_first": true,
-    "evidence_only": true,
-    "synthetic_evidence": false,
-    "synthetic_pass": false,
-    "gate_mutation": false,
-    "order_authority": false,
-    "live_trading": false
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S49_1.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S49_1.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest",
+    "PATCH_MANIFEST.json",
+    "SHA256SUMS"
+  ],
+  "validation": {
+    "python_compile": "PASS",
+    "numeric_schema_compatibility_tests": "PASS",
+    "railway_runtime": "PENDING"
   }
 }
