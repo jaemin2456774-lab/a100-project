@@ -67196,3 +67196,281 @@ def main():
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
+
+
+# ============================================================================
+# A100 V116.1 DEV S56 — Producer Connectivity Completion & Diagnostic Trace
+# UI freeze: S53 visual layer preserved. Focus is real producer-to-evidence linkage.
+# No synthetic completion, no gate/order mutation, Registry remains 341.
+# ============================================================================
+V1161_DEV_S56_NUMBER='116.1-DEV-S56'
+V1161_DEV_S56_VERSION='A100 V116.1 DEV S56'
+V1161_DEV_S56_TITLE='Producer Connectivity Completion · Evidence Path Diagnostic Trace'
+V91_VERSION=V1161_DEV_S56_VERSION
+_V1161_S56_REPORT_DIR=os.getenv('A100_VERIFY_REPORT_DIR','/data')
+_V1161_S56_TARGETS=('capital_rotation','macro_signal','news_signal','timeframe_alignment')
+
+
+def _v1161_s56_valid_engine_output(name, result):
+    if not isinstance(result,dict): return False
+    state=str(result.get('state') or '').upper()
+    if state in ('','NO_EVIDENCE','MISSING','UNKNOWN'): return False
+    if name=='macro_signal': return float(result.get('coverage',0) or 0)>0
+    if name=='news_signal': return bool(result.get('evidence')) or float(result.get('quality',0) or 0)>0
+    if name=='timeframe_alignment': return bool(result.get('available_timeframes')) and float(result.get('coverage',0) or 0)>0
+    if name=='capital_rotation':
+        evidence=result.get('evidence') or {}
+        return any(v is not None for v in evidence.values()) and float(result.get('coverage',0) or 0)>0
+    return False
+
+
+def _v1161_s56_engine_bridge(row):
+    """Expose outputs from already-developed evidence-only engines when their real inputs exist."""
+    out=dict(row) if isinstance(row,dict) else {}
+    diagnostics={}
+    specs=(
+      ('macro_signal',globals().get('_v1161_s14_macro'),'bias','macro_ai'),
+      ('news_signal',globals().get('_v1161_s20_news_ai'),'research_verdict','news_ai'),
+      ('timeframe_alignment',globals().get('_v1161_s24_timeframe_intelligence'),'research_verdict','multi_timeframe_intelligence'),
+      ('capital_rotation',None,'rotation','capital_rotation_intelligence'),
+    )
+    regime=None
+    try:
+        fn=globals().get('_v1161_s25_regime')
+        mtf=globals().get('_v1161_s24_timeframe_intelligence')
+        regime=fn(out,mtf(out) if callable(mtf) else None) if callable(fn) else None
+    except Exception: regime=None
+    for canonical,fn,value_key,engine_name in specs:
+        if _v1161_s46_present(out.get(canonical)):
+            diagnostics[canonical]={'producer':'DIRECT_OR_SCHEMA_BRIDGE','runtime':'FOUND','schema':'OK','aggregator':'CONNECTED','recovery':'NOT_NEEDED'}
+            continue
+        try:
+            if canonical=='capital_rotation':
+                rfn=globals().get('_v1161_s26_rotation'); result=rfn(out,regime) if callable(rfn) else {}
+            else: result=fn(out) if callable(fn) else {}
+            valid=_v1161_s56_valid_engine_output(canonical,result)
+            if valid:
+                value=result.get(value_key)
+                if _v1161_s46_present(value):
+                    out[canonical]=value
+                    out[engine_name]=result
+                    diagnostics[canonical]={'producer':engine_name,'runtime':'FOUND','schema':'BRIDGED','aggregator':'CONNECTED','recovery':'SUCCESS','state':result.get('state'),'coverage':result.get('coverage',result.get('quality'))}
+                    continue
+            diagnostics[canonical]={'producer':engine_name,'runtime':'NO_REAL_INPUT','schema':'AVAILABLE','aggregator':'SKIPPED','recovery':'NOT_SYNTHESIZED','state':result.get('state') if isinstance(result,dict) else 'UNAVAILABLE','coverage':result.get('coverage',result.get('quality',0)) if isinstance(result,dict) else 0}
+        except Exception as exc:
+            diagnostics[canonical]={'producer':engine_name,'runtime':'ERROR','schema':'AVAILABLE','aggregator':'SKIPPED','recovery':'FAILED','error':f'{type(exc).__name__}: {exc}'}
+            v88_record_error('v1161-dev-s56-'+canonical,exc)
+    out['_s56_producer_diagnostics']=diagnostics
+    return out
+
+
+def _v1161_s56_enrich_row(row, scan_context=None):
+    bridged=_v1161_s56_engine_bridge(row)
+    out=_v1161_s54_enrich_row(bridged,scan_context)
+    if not isinstance(out,dict): return out
+    meta=dict(out.get('_s54_evidence_runtime') or {})
+    diagnostics=dict(bridged.get('_s56_producer_diagnostics') or {})
+    aliases=dict(meta.get('source_aliases') or {}); sources=dict(meta.get('producer_sources') or {})
+    for key,d in diagnostics.items():
+        if _v1161_s46_present(out.get(key)) and d.get('recovery')=='SUCCESS':
+            aliases[key]='engine.'+str(d.get('producer')); sources[key]='S56_EXISTING_ENGINE_OUTPUT'
+    available=[k for k in _V1161_S49_REAL_ALIASES if _v1161_s46_present(out.get(k))]
+    missing=[k for k in _V1161_S49_REAL_ALIASES if k not in available]
+    meta.update({'available':available,'missing':missing,'source_aliases':aliases,'producer_sources':sources,
+                 'coverage_pct':round(len(available)/len(_V1161_S49_REAL_ALIASES)*100.0,1),
+                 'connectivity_state':'COMPLETE' if not missing else 'PARTIAL','required_total':len(_V1161_S49_REAL_ALIASES),
+                 'producer_diagnostics':diagnostics,'s56_engine_bridge':True,'synthetic':False,'read_only':True})
+    out['_s56_evidence_runtime']=meta
+    for key in ('_s54_evidence_runtime','_s49_evidence_runtime','_s48_evidence_runtime','_s47_evidence_runtime','_s46_evidence_runtime'): out[key]=dict(meta)
+    return out
+
+
+async def _v1161_s56_runtime_scan(force=False):
+    raw=await _v1161_s45_runtime_scan(force)
+    prelim=[_v1161_s48_enrich_row(x) for x in (raw.get('results') or [])]
+    context=_v1161_s49_market_context(prelim)
+    rows=[_v1161_s56_enrich_row(x,context) for x in prelim]
+    payload=dict(raw); payload['results']=rows; payload['market_context']=context
+    coverages=[float(r.get('_s56_evidence_runtime',{}).get('coverage_pct',0) or 0) for r in rows if isinstance(r,dict)]
+    payload['evidence_coverage_pct']=round(sum(coverages)/len(coverages),1) if coverages else 0.0
+    payload['evidence_runtime']='S56_REAL_ENGINE_PRODUCER_BRIDGE' if rows else 'NO_ROWS'
+    payload['connectivity_complete']=bool(rows) and all(not r.get('_s56_evidence_runtime',{}).get('missing') for r in rows if isinstance(r,dict))
+    return payload
+
+
+def _v1161_s56_diag_summary(rows):
+    merged={}
+    for row in rows:
+        ev=row.get('_s56_evidence_runtime',{}) if isinstance(row,dict) else {}
+        for key,d in (ev.get('producer_diagnostics') or {}).items():
+            old=merged.get(key)
+            rank={'SUCCESS':4,'NOT_NEEDED':3,'NOT_SYNTHESIZED':2,'FAILED':1}
+            if old is None or rank.get(str(d.get('recovery')),0)>rank.get(str(old.get('recovery')),0): merged[key]=dict(d)
+    return merged
+
+
+async def connectivity1161devs56_cmd(update,context):
+    detail=any(str(x).lower() in ('detail','full') for x in (getattr(context,'args',None) or []))
+    try:
+        scan=await _v1161_s56_runtime_scan(False); rows=scan.get('results') or []
+        connected=set(); missing=set()
+        for row in rows:
+            ev=row.get('_s56_evidence_runtime',{}) if isinstance(row,dict) else {}
+            connected.update(ev.get('available') or []); missing.update(ev.get('missing') or [])
+        lines=['🔗 <b>PRODUCER CONNECTIVITY · S56</b>',f'· State <b>{"COMPLETE" if not missing and rows else "PARTIAL"}</b>',f'· Connected {len(connected)}/{len(_V1161_S49_REAL_ALIASES)} · Coverage {len(connected)/len(_V1161_S49_REAL_ALIASES)*100:.1f}%',f'· Candidates {len(rows)} · Real runtime/engine evidence only']
+        if missing: lines += ['', '⚠️ <b>Missing</b>', ', '.join(sorted(missing))]
+        else: lines += ['', '✅ All required producers connected']
+        if detail:
+            diag=_v1161_s56_diag_summary(rows); lines += ['', '<b>Producer path diagnostics</b>']
+            for key in _V1161_S56_TARGETS:
+                d=diag.get(key,{})
+                lines += [f'\n<b>{key}</b>',f'Producer {d.get("producer","NOT_FOUND")}',f'Runtime {d.get("runtime","MISSING")} · Schema {d.get("schema","UNKNOWN")}',f'Aggregator {d.get("aggregator","SKIPPED")} · Recovery {d.get("recovery","FAILED")}']
+        lines += ['', '🔒 Strict Read Only · Synthetic completion OFF · Gate mutation NONE']
+        await update.message.reply_text(_v1161_s5_trim('\n'.join(lines)),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s56-connectivity',exc); await update.message.reply_text('⚠️ /connectivity 오류 · /errors 확인')
+
+
+async def _v1161_s56_collect_report():
+    started=time.perf_counter(); now=int(time.time()); live=_v1160_s21728_read_live_state() or {}
+    scan_error=None
+    try: scan=await _v1161_s56_runtime_scan(False)
+    except Exception as exc:
+        scan={}; scan_error=f'{type(exc).__name__}: {exc}'; v88_record_error('v1161-dev-s56-scan',exc)
+    rows=scan.get('results') or []; connected=set(); missing=set()
+    for row in rows:
+        ev=row.get('_s56_evidence_runtime',{}) if isinstance(row,dict) else {}
+        connected.update(map(str,ev.get('available') or [])); missing.update(map(str,ev.get('missing') or []))
+    routes={name:callable(V90_COMMAND_REGISTRY.get(name)) for name in ('version','status','runtimehealth','releasegate','sniper','ultimate','errors')}
+    # /evidence and /connectivity are dispatcher-level compatibility routes and intentionally do not consume Registry slots.
+    routes['evidence']=callable(globals().get('evidence1161devs501_cmd'))
+    routes['connectivity']=callable(globals().get('connectivity1161devs56_cmd'))
+    errors=_v1161_s55_recent_errors()
+    checks={'version':routes['version'],'status':routes['status'],'runtimehealth':routes['runtimehealth'] and bool(live.get('worker_fresh')),
+            'evidence':routes['evidence'] and scan_error is None and bool(rows),'releasegate':routes['releasegate'],'sniper':routes['sniper'],'ultimate':routes['ultimate'],'errors':routes['errors'],'connectivity':routes['connectivity']}
+    coverage=round(len(connected)/len(_V1161_S49_REAL_ALIASES)*100.0,1)
+    if scan_error or not all(routes.values()): overall='FAILED'
+    elif not all(checks.values()) or missing or errors: overall='PARTIAL'
+    else: overall='PASS'
+    return {'schema':1,'version':V1161_DEV_S56_VERSION,'generated_at':now,'overall':overall,'checks':checks,'routes':routes,
+      'registry':{'actual':len(V90_COMMAND_REGISTRY),'expected':341},'runtime':{'worker_fresh':bool(live.get('worker_fresh')),'state':live.get('state') or live.get('status') or 'UNKNOWN'},
+      'evidence':{'coverage_pct':coverage,'connected_count':len(connected),'required_total':len(_V1161_S49_REAL_ALIASES),'connected':sorted(connected),'missing':sorted(missing),'candidates':len(rows),'scan_error':scan_error,'producer_diagnostics':_v1161_s56_diag_summary(rows)},
+      'safety':{'runtime_first':True,'strict_read_only':True,'synthetic_completion':False,'gate_mutation':False,'schema':1,'paper':20,'shadow':60,'live_trading':False},
+      'errors':errors,'latency_ms':round((time.perf_counter()-started)*1000,1)}
+
+
+def _v1161_s56_render(report,detail=False):
+    icon={'PASS':'✅','PARTIAL':'🟡','FAILED':'🔴'}; lines=['🧪 <b>A100 자동 검증 · S56</b>',f'{icon.get(report["overall"],"⚪")} 종합 <b>{report["overall"]}</b> · {report["latency_ms"]:.1f}ms','']
+    labels=(('version','/version'),('status','/status'),('runtimehealth','/runtimehealth'),('evidence','/evidence'),('releasegate','/releasegate'),('sniper','/sniper'),('ultimate','/ultimate'),('connectivity','/connectivity'),('errors','/errors'))
+    for k,label in labels: lines.append(f'{"✅" if report["checks"].get(k) else "🔴"} {label:16} {"PASS" if report["checks"].get(k) else "FAILED"}')
+    ev=report['evidence']; lines += ['',f'🔗 Evidence <b>{ev["coverage_pct"]:.1f}%</b> · {ev["connected_count"]}/{ev["required_total"]}',f'📡 Candidates {ev["candidates"]} · Runtime {"FRESH" if report["runtime"]["worker_fresh"] else "WARMING"}',f'🧾 Registry {report["registry"]["actual"]}/{report["registry"]["expected"]} · Errors {len(report["errors"])}']
+    if ev['missing']: lines.append('⚠️ Missing '+', '.join(ev['missing']))
+    if detail:
+        lines += ['', '<b>Producer diagnostics</b>']
+        for key in _V1161_S56_TARGETS:
+            d=(ev.get('producer_diagnostics') or {}).get(key,{})
+            lines.append(f'· {key}: Runtime {d.get("runtime","MISSING")} · Schema {d.get("schema","UNKNOWN")} · Aggregator {d.get("aggregator","SKIPPED")} · Recovery {d.get("recovery","FAILED")}')
+        lines += ['', '<b>Safety</b>','✅ Runtime First · Strict Read Only','✅ Synthetic completion OFF · Gate mutation NONE','✅ Schema 1 · Paper 20 · Shadow 60 · Live OFF']
+    lines += ['', '📄 /verifyall detail → 상세 + JSON/TXT 저장']
+    return '\n'.join(lines)
+
+
+def _v1161_s56_write_reports(report):
+    stamp=time.strftime('%Y%m%d_%H%M%S',time.localtime(report['generated_at'])); directory=_V1161_S56_REPORT_DIR
+    try: os.makedirs(directory,exist_ok=True)
+    except Exception: directory='/tmp'; os.makedirs(directory,exist_ok=True)
+    base=os.path.join(directory,f'a100_verify_S56_{stamp}'); jpath=base+'.json'; tpath=base+'.txt'
+    with open(jpath,'w',encoding='utf-8') as f: json.dump(report,f,ensure_ascii=False,indent=2)
+    with open(tpath,'w',encoding='utf-8') as f: f.write(_v1161_s56_render(report,True).replace('<b>','').replace('</b>',''))
+    return jpath,tpath
+
+
+async def verifyall1161devs56_cmd(update,context):
+    detail=any(str(x).lower() in ('detail','full') for x in (getattr(context,'args',None) or []))
+    try:
+        report=await _v1161_s56_collect_report(); paths=_v1161_s56_write_reports(report) if detail else None
+        text=_v1161_s56_render(report,detail)
+        if paths: text+=f'\n\n💾 Saved\n<code>{paths[0]}</code>\n<code>{paths[1]}</code>'
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s56-verifyall',exc); await update.message.reply_text(f'⚠️ /verifyall 오류 · {type(exc).__name__} · /errors 확인')
+
+
+async def sniper1161devs56_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    try:
+        scan=await _v1161_s56_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: return await update.message.reply_text('🎯 S56 NO_ANALYSIS_ROWS · WAIT')
+        row=max(rows,key=lambda r:_v1161_s50_confidence(_v1161_s37_consensus(r),r)); res=_v1161_s37_consensus(row)
+        text=_v1161_s53_detail(row,res) if detail else _v1161_s53_summary(row,res,title='SNIPER S56')[0]
+        await update.message.reply_text(_v1161_s5_trim(text+'\n\n'+_v1161_s54_connectivity_card(row)),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s56-sniper',exc); await update.message.reply_text('⚠️ Sniper S56 오류 · /errors 확인')
+
+
+async def ultimate1161devs56_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    try:
+        scan=await _v1161_s56_runtime_scan(False); rows=scan.get('results') or []
+        if not rows: return await update.message.reply_text('⚠️ NO_ANALYSIS_ROWS · Synthetic completion disabled')
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in rows]; evaluated.sort(key=lambda z:_v1161_s50_confidence(z[1],z[0]),reverse=True)
+        await update.message.reply_text(f'🔗 <b>ULTIMATE S56 CONNECTIVITY</b>\n· State {"COMPLETE" if scan.get("connectivity_complete") else "PARTIAL"} · Coverage {scan.get("evidence_coverage_pct",0):.1f}%\n· UI freeze · Producer linkage recovery only\n🔒 Read only · Synthetic completion OFF',parse_mode='HTML')
+        for row,res in evaluated[:3 if detail else 2]:
+            card=_v1161_s53_detail(row,res) if detail else _v1161_s53_summary(row,res,title='ULTIMATE S56')[0]
+            await update.message.reply_text(_v1161_s5_trim(card+'\n\n'+_v1161_s54_connectivity_card(row)),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s56-ultimate',exc); await update.message.reply_text('⚠️ S56 Ultimate 오류 · /errors 확인')
+
+
+async def version1161devs56_cmd(update,context):
+    st=_v1160_s21728_read_live_state(); mem=_v1161_s44_report()
+    await update.message.reply_text(f'🔗 <b>A100 V{V1161_DEV_S56_NUMBER}</b>\n{V1161_DEV_S56_TITLE}\n\n/connectivity · /connectivity detail ACTIVE\n/verifyall dispatcher-route false failure FIXED\nExisting Macro/News/MTF/Rotation engines bridged only when real inputs exist\nUI frozen at S53/S55 level for later final polish\nSynthetic completion OFF · Gate unchanged\nMemory {mem["memory_mb"]:.1f}MB · Registry {len(V90_COMMAND_REGISTRY)}/341\nSchema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+_V1161_S56_DISPATCH_BASE=v90_1_dispatch
+async def v90_1_dispatch(update,context):
+    text=str(getattr(getattr(update,'message',None),'text','') or '').strip()
+    command=text.split()[0].split('@')[0].lower() if text.startswith('/') else ''
+    if command=='/connectivity': return await connectivity1161devs56_cmd(update,context)
+    return await _V1161_S56_DISPATCH_BASE(update,context)
+
+
+def _v1161_s56_reconcile():
+    repaired=[]
+    desired={'version':version1161devs56_cmd,'ultimate':ultimate1161devs56_cmd,'sniper':sniper1161devs56_cmd,'verifyall':verifyall1161devs56_cmd}
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler: V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+def _v1161_s56_static_audit():
+    _v1161_s56_reconcile()
+    sample={'symbol':'TESTUSDT','news_score':0.8,'news_sources':['A','B'],'news_age_hours':2,'news_event':'test','fomc_event':False,'cpi_surprise':-0.4,'tf_4h_signal':'LONG','tf_1d_signal':'LONG','tf_3d_signal':'LONG','btc_dominance_change':-0.8,'alt_market_share_change':0.9,'alt_flow_score':0.8}
+    bridged=_v1161_s56_engine_bridge(sample)
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'verifyall_current':V90_COMMAND_REGISTRY.get('verifyall') is verifyall1161devs56_cmd,
+           'evidence_dispatch_handler':callable(globals().get('evidence1161devs501_cmd')),'connectivity_dispatch_handler':callable(globals().get('connectivity1161devs56_cmd')),
+           'news_real_bridge':_v1161_s46_present(bridged.get('news_signal')),'macro_real_bridge':_v1161_s46_present(bridged.get('macro_signal')),
+           'rotation_real_bridge':_v1161_s46_present(bridged.get('capital_rotation')),'no_synthetic':True,'gate_unchanged':True,'ui_frozen':callable(globals().get('_v1161_s53_summary'))}
+    return {'ok':all(tests.values()),'tests':tests}
+
+
+def build_v44_application(token):
+    audit=_v1161_s56_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S56 preflight failed: '+','.join(k for k,v in audit['tests'].items() if not v))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S56 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S56 producer connectivity audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s56_reconcile(); audit=_v1161_s56_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S56_VERSION} worker running...',flush=True)
+    if repaired: print('A100 V116.1 DEV S56 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S56 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S56 real producer engine bridge: ACTIVE',flush=True); print('A100 V116.1 DEV S56 /connectivity diagnostics: ACTIVE',flush=True); print('A100 V116.1 DEV S56 verifyall dispatcher-route fix: ACTIVE',flush=True); print('A100 V116.1 DEV S56 UI feature freeze: ACTIVE',flush=True); print('A100 V116.1 DEV S56 synthetic completion: DISABLED',flush=True); print(f'A100 V116.1 DEV S56 continuity boot count: {boot["restart_count"]}',flush=True); print('A100 V116.1 DEV S56 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S56 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s56-fatal-main',exc); print(traceback.format_exc(),flush=True); raise

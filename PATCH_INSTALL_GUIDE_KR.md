@@ -1,15 +1,20 @@
-# S55 Railway 증분 패치 설치
+# S56 증분 패치 설치 안내
 
-1. 기존 S54 저장소에 이 ZIP의 파일을 덮어씁니다.
-2. `/data` 볼륨과 기존 환경변수는 그대로 유지합니다.
-3. Railway에서 재배포 또는 재시작합니다.
-4. Telegram에서 아래만 실행합니다.
+1. Railway 연결 GitHub 저장소의 프로젝트 루트에 ZIP 내부 파일을 덮어씁니다.
+2. 기존 `/data`, 환경변수, 설정 및 학습 데이터는 삭제하지 않습니다.
+3. Railway 배포 완료 후 다음 명령을 실행합니다.
 
 ```text
 /version
 /verifyall
+/connectivity
+/connectivity detail
 /verifyall detail
+/errors
 ```
 
-`/verifyall detail`은 `/data/a100_verify_S55_*.json`과 `.txt`를 생성합니다.
-캡처 대신 텍스트 결과를 복사하거나 리포트 파일 하나를 첨부하면 됩니다.
+확인 기준:
+- `/evidence`가 Registry 외 dispatcher route임에도 PASS로 표시
+- Connected N/16 및 Missing 목록 확인
+- 네 대상 producer의 Runtime/Schema/Aggregator/Recovery 단계 확인
+- Synthetic completion OFF, Gate mutation NONE, Registry 341/341

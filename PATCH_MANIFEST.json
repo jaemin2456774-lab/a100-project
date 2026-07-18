@@ -1,45 +1,44 @@
 {
-  "version": "A100 V116.1 DEV S55",
-  "baseline": "A100 V116.1 DEV S54",
-  "type": "incremental_patch",
-  "title": "Automated E2E Command Monitor · Consolidated Verification Report",
+  "release": "A100 V116.1 DEV S56",
+  "baseline": "A100 V116.1 DEV S55",
+  "type": "incremental_prebuilt_patch",
+  "created_at": "2026-07-18",
+  "focus": "real producer connectivity completion and diagnostic trace",
   "files": [
     {
       "path": "main.py",
-      "size": 3749783,
-      "sha256": "e0f9e77776a57b5fbc379005a4d224178a0ff20f4d2325cd24fa3e0ee7ef30c3"
+      "size": 3770958,
+      "sha256": "b8e440db74b4792110b2a4ef56167c921c1f1824506cc79d66480c6672c8a882"
     },
     {
-      "path": "CHANGELOG_V116.1_DEV_S55.md",
-      "size": 773,
-      "sha256": "e6e036387dc0c3ec1012a5e151fde79e692ef53525151ee0f35a88978d040984"
+      "path": "CHANGELOG_V116.1_DEV_S56.md",
+      "size": 1024,
+      "sha256": "1362f05fd0abd1edf2c5ffd5c0d23b4018a3e514ce721b9f2751d62e186f47fc"
     },
     {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S55.md",
-      "size": 526,
-      "sha256": "b787af5983803155fff18b5ca3744dde9f3cb3729613e8de7759a0c21ded61e6"
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.md",
+      "size": 646,
+      "sha256": "8dbc44e36881c8cf6f1c6edfbfae393c14795a458371b83858b3f2a55d1213ad"
     },
     {
       "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 508,
-      "sha256": "8bc73bd1f7bed7e33dff5857d972d3495b64aa630b4ca4267920a2b1e216ce55"
+      "size": 651,
+      "sha256": "bda2b2f6e1e0bd2e0f54175abc3e91f0cf011945c15e8f3e3bb1b06dbe0485f9"
     },
     {
       "path": "changed_files.manifest",
       "size": 160,
-      "sha256": "6184b8c45ecc93e2d8ca825ac86f58467da254861e276a0bcc7cca113d84ebf9"
+      "sha256": "c57f7e0c8f40ee057fb14b93d1102d9e852282e01afecc760041ad50a0e31235"
     }
   ],
-  "preserved": [
-    "Runtime First",
-    "Strict Read Only",
-    "Evidence Only",
-    "Registry 341",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF",
-    "Gate unchanged",
-    "Existing data/settings"
-  ]
+  "safety": {
+    "registry": 341,
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live": false,
+    "synthetic_completion": false,
+    "gate_mutation": false,
+    "data_migration": false
+  }
 }
