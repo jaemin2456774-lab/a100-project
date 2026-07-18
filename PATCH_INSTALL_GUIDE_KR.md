@@ -1,30 +1,35 @@
-# S57.1 Railway 설치 가이드
+# A100 V116.1 DEV S57.2 설치 안내
 
-1. 현재 저장소를 백업합니다.
-2. 패치 ZIP의 `main.py`를 프로젝트 루트에 덮어씁니다.
-3. 기존 `/data`, 환경변수, 설정 파일은 수정하지 않습니다.
-4. GitHub 반영 후 Railway에서 재배포합니다.
-5. Railway 로그에서 아래 문구를 확인합니다.
+1. Railway에 연결된 GitHub 저장소에서 ZIP의 `main.py`를 기존 파일에 덮어씁니다.
+2. 문서 및 manifest 파일은 배포 기록용으로 저장합니다.
+3. Railway 새 배포가 시작되면 아래 로그를 확인합니다.
 
 ```text
-V116.1-DEV-S57.1 worker running...
-BUILD_ID=S57.1-20260718-APP-CALLBACK-VIRTUAL-ROUTE-01
-A100 V116.1 DEV S57.1 application callback: v90_1_dispatch
-A100 V116.1 DEV S57.1 virtual route audit: 4/4
-A100 V116.1 DEV S57.1 registry identity: 341/341
+V116.1-DEV-S57.2 worker running...
+BUILD_ID=S57.2-20260719-VERSION-RENDERER-SINGLE-SOURCE-01
+A100 V116.1 DEV S57.2 application callback: v90_1_dispatch
+A100 V116.1 DEV S57.2 route identity: 7/7
+A100 V116.1 DEV S57.2 registry identity: 341/341
 ```
 
-## Telegram 확인 순서
+## 배포 후 확인 명령
 
 ```text
 /version
 /buildinfo
 /routeraudit
-/connectivity
-/connectivity detail
-/verifyall
-/verifyall detail
 /status
 /runtimehealth
+/verifyall
+/verifyall detail
+/connectivity detail
 /errors
 ```
+
+## 승인 기준
+- 모든 명령에서 S57.2 Build ID가 일치
+- Router Audit PASS
+- Build/Application Identity PASS
+- Registry 341/341
+- VerifyAll 종합 PASS
+- Errors 0

@@ -1,21 +1,23 @@
 {
-  "release": "A100 V116.1 DEV S57.1",
-  "build_id": "S57.1-20260718-APP-CALLBACK-VIRTUAL-ROUTE-01",
-  "type": "incremental_patch",
-  "base": "A100 V116.1 DEV S57",
-  "changed_files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S57.1.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.1.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+  "product": "A100",
+  "version": "V116.1-DEV-S57.2",
+  "build_id": "S57.2-20260719-VERSION-RENDERER-SINGLE-SOURCE-01",
+  "patch_type": "incremental",
+  "baseline": "A100 V116.1 DEV S57.1",
+  "changed_project_files": [
+    "main.py"
   ],
-  "safety": {
+  "preserves": {
     "schema": 1,
     "paper": 20,
     "shadow": 60,
     "live_trading": false,
     "synthetic_completion": false,
-    "gate_formula_changed": false
+    "gate_formulas": "unchanged"
+  },
+  "checks": {
+    "python_compile": "PASS",
+    "registry_target": "341/341",
+    "executable_block_last": true
   }
 }
