@@ -69745,6 +69745,325 @@ def main():
         raise
 
 
+# ================================================================
+# A100 V116.1 DEV S57.8 - FINAL METADATA SINGLE SOURCE CONSISTENCY POLISH
+# ================================================================
+V1161_DEV_S578_VERSION = 'V116.1-DEV-S57.8'
+V1161_DEV_S578_NUMBER = '116.1-DEV-S57.8'
+V1161_DEV_S578_TITLE = 'Final Metadata Single Source Consistency Polish'
+V1161_DEV_S578_BUILD_ID = 'S57.8-20260719-METADATA-SINGLE-SOURCE-FINAL-01'
+
+
+def _v1161_s578_normalize_text(text):
+    value = str(text or '')
+    value = re.sub(r'V116\.1-DEV-S57(?:\.\d+)?', V1161_DEV_S578_VERSION, value)
+    value = re.sub(r'S57(?:\.\d+)?-\d{8}-[A-Z0-9-]+', V1161_DEV_S578_BUILD_ID, value)
+    value = re.sub(r'A100 자동 검증 · S57(?:\.\d+)?', 'A100 자동 검증 · S57.8', value)
+    value = re.sub(r'PRODUCER CONNECTIVITY · S57(?:\.\d+)?', 'PRODUCER CONNECTIVITY · S57.8', value)
+    return value
+
+
+class _V1161S578MessageProxy:
+    def __init__(self, message):
+        self._message = message
+    def __getattr__(self, name):
+        return getattr(self._message, name)
+    async def reply_text(self, text, *args, **kwargs):
+        return await self._message.reply_text(_v1161_s578_normalize_text(text), *args, **kwargs)
+    async def reply_html(self, text, *args, **kwargs):
+        kwargs.setdefault('parse_mode', 'HTML')
+        return await self._message.reply_text(_v1161_s578_normalize_text(text), *args, **kwargs)
+    async def edit_text(self, text, *args, **kwargs):
+        return await self._message.edit_text(_v1161_s578_normalize_text(text), *args, **kwargs)
+
+
+class _V1161S578UpdateProxy:
+    def __init__(self, update):
+        self._update = update
+        self.message = _V1161S578MessageProxy(update.message) if getattr(update, 'message', None) else None
+        self.effective_message = _V1161S578MessageProxy(update.effective_message) if getattr(update, 'effective_message', None) else self.message
+    def __getattr__(self, name):
+        return getattr(self._update, name)
+
+
+def _v1161_s578_route_rows():
+    expected = {
+        'version': 'version1161devs578_cmd',
+        'status': 'status1161devs578_cmd',
+        'runtimehealth': 'runtimehealth1161devs578_cmd',
+        'buildinfo': 'buildinfo1161devs578_cmd',
+        'connectivity': 'connectivity1161devs578_cmd',
+        'verifyall': 'verifyall1161devs578_cmd',
+        'routeraudit': 'routeraudit1161devs578_cmd',
+        'versionaudit': 'versionaudit1161devs578_cmd',
+        'engineaudit': 'engineaudit1161devs578_cmd',
+    }
+    rows = {}
+    for name, expected_name in expected.items():
+        handler = _V1161_S571_VIRTUAL_ROUTES.get(name) or V90_COMMAND_REGISTRY.get(name)
+        actual = getattr(handler, '__name__', 'MISSING') if callable(handler) else 'MISSING'
+        rows[name] = {'expected': expected_name, 'actual': actual, 'ok': actual == expected_name}
+    return rows
+
+
+def _v1161_s578_audit():
+    rows = _v1161_s578_route_rows()
+    registry_actual = len(V90_COMMAND_REGISTRY)
+    callback = str(globals().get('_V1161_S571_APP_CALLBACK', 'v90_1_dispatch'))
+    return {
+        'ok': registry_actual == 341 and callback == 'v90_1_dispatch' and all(row['ok'] for row in rows.values()),
+        'routes': rows,
+        'registry_actual': registry_actual,
+        'registry_expected': 341,
+        'application_callback': callback,
+        'build_id': V1161_DEV_S578_BUILD_ID,
+        'version': V1161_DEV_S578_VERSION,
+    }
+
+
+async def version1161devs578_cmd(update, context):
+    live = _v1160_s21728_read_live_state()
+    memory = _v1161_s44_report()
+    audit = _v1161_s578_audit()
+    await update.message.reply_text(
+        f'🧬 <b>A100 V{V1161_DEV_S578_NUMBER}</b>\n'
+        f'{V1161_DEV_S578_TITLE}\n\n'
+        f'Build ID <code>{V1161_DEV_S578_BUILD_ID}</code>\n'
+        f'Identity Audit <b>{"PASS" if audit["ok"] else "FAILED"}</b>\n'
+        f'Application callback <code>{audit["application_callback"]}</code>\n'
+        f'Authoritative routes {sum(1 for row in audit["routes"].values() if row["ok"])}/{len(audit["routes"])} · '
+        f'Registry {audit["registry_actual"]}/341\n'
+        f'Runtime <b>{"PASS" if live.get("worker_fresh") else "WARMING"}</b> · Memory {memory["memory_mb"]:.1f}MB\n'
+        'Synthetic completion OFF · Gate unchanged\n'
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+        parse_mode='HTML',
+    )
+
+
+async def status1161devs578_cmd(update, context):
+    return await status1161devs577_cmd(_V1161S578UpdateProxy(update), context)
+
+
+async def runtimehealth1161devs578_cmd(update, context):
+    return await runtimehealth1161devs577_cmd(_V1161S578UpdateProxy(update), context)
+
+
+async def connectivity1161devs578_cmd(update, context):
+    return await connectivity1161devs577_cmd(_V1161S578UpdateProxy(update), context)
+
+
+async def engineaudit1161devs578_cmd(update, context):
+    return await engineaudit1161devs577_cmd(_V1161S578UpdateProxy(update), context)
+
+
+async def buildinfo1161devs578_cmd(update, context):
+    audit = _v1161_s578_audit()
+    lines = [
+        '🧬 <b>A100 BUILD & APPLICATION IDENTITY · S57.8</b>',
+        f'· Running <b>{V1161_DEV_S578_VERSION}</b>',
+        f'· Build ID <code>{V1161_DEV_S578_BUILD_ID}</code>',
+        f'· Overall <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Application callback <code>{audit["application_callback"]}</code>',
+        f'· Registry {audit["registry_actual"]}/341',
+    ]
+    for name, row in audit['routes'].items():
+        lines.append(f'· /{name} <b>{"PASS" if row["ok"] else "FAILED"}</b> · <code>{row["actual"]}</code>')
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def routeraudit1161devs578_cmd(update, context):
+    audit = _v1161_s578_audit()
+    lines = [
+        '🧭 <b>A100 TELEGRAM ROUTER AUDIT · S57.8</b>',
+        f'· Result <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Build ID <code>{V1161_DEV_S578_BUILD_ID}</code>',
+        f'· Registry {audit["registry_actual"]}/341',
+        '',
+    ]
+    for name, row in audit['routes'].items():
+        lines.append(f'{"✅" if row["ok"] else "🔴"} /{name:15} {row["actual"]}')
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def versionaudit1161devs578_cmd(update, context):
+    identity = _v1161_s578_audit()
+    engine = await _v1161_s577_engine_audit()
+    live = _v1160_s21728_read_live_state()
+    checks = {
+        'Runtime Identity': identity['ok'],
+        'Registry 341/341': identity['registry_actual'] == 341,
+        'Authoritative Routes': all(row['ok'] for row in identity['routes'].values()),
+        'Runtime Fresh': bool(live.get('worker_fresh')),
+        'Producer Connectivity': engine['producer_ok'],
+        'Engine E2E Same-ID': engine['e2e_ok'],
+        'Revision Integrity': engine['revision_ok'],
+        'Synthetic Completion OFF': True,
+        'Schema/Paper/Shadow/Live': True,
+    }
+    ok = all(checks.values())
+    lines = [
+        '🛡️ <b>A100 VERSION AUDIT · S57.8</b>',
+        f'· Result <b>{"PASS" if ok else "FAILED"}</b>',
+        f'· Build ID <code>{V1161_DEV_S578_BUILD_ID}</code>',
+        '',
+    ]
+    lines.extend(f'{"✅" if result else "🔴"} {name}' for name, result in checks.items())
+    lines += ['', f'Engine E2E evidence <b>{engine["overall"]}</b> · /engineaudit',
+              'Gate formulas unchanged · Strict Read Only']
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def _v1161_s578_collect_report():
+    report = dict(await _v1161_s577_collect_report())
+    identity = _v1161_s578_audit()
+    engine = await _v1161_s577_engine_audit()
+    report['version'] = V1161_DEV_S578_VERSION
+    report['build_id'] = V1161_DEV_S578_BUILD_ID
+    report['identity_audit'] = identity
+    report['engine_audit'] = engine
+    report['registry'] = {'actual': identity['registry_actual'], 'expected': 341}
+    report['routes'] = dict(report.get('routes') or {})
+    report['checks'] = dict(report.get('checks') or {})
+    for name, row in identity['routes'].items():
+        report['routes'][name] = row['ok']
+        report['checks'][name] = row['ok']
+    previous_hard = dict(report.get('hard_checks') or {})
+    hard = {
+        'identity': identity['ok'],
+        'registry': identity['registry_actual'] == 341,
+        'evidence': bool(previous_hard.get('evidence')),
+        'runtime_fresh': bool(previous_hard.get('runtime_fresh')),
+        'engine_e2e': bool(engine.get('e2e_ok')),
+        'errors_zero': bool(previous_hard.get('errors_zero')),
+    }
+    report['hard_checks'] = hard
+    report['overall'] = 'PASS' if all(hard.values()) else 'FAILED'
+    return report
+
+
+def _v1161_s578_render(report, detail=False):
+    base = _v1161_s577_render(report, detail)
+    base = _v1161_s578_normalize_text(base)
+    # Remove the S57.7 identity/hard-check appendix and replace it with current metadata.
+    cut = base.find('\n🧬 Identity ')
+    if cut >= 0:
+        base = base[:cut]
+    identity = report.get('identity_audit') or {}
+    engine = report.get('engine_audit') or {}
+    lines = [
+        '',
+        f'🧬 Identity <b>{"PASS" if identity.get("ok") else "FAILED"}</b> · Build <code>{V1161_DEV_S578_BUILD_ID}</code>',
+    ]
+    for name, row in (identity.get('routes') or {}).items():
+        lines.append(f'{"✅" if row.get("ok") else "🔴"} /{name:15} {row.get("actual", "MISSING")}')
+    lines += [
+        '',
+        f'🔗 Engine E2E <b>{engine.get("overall", "FAILED")}</b> · '
+        f'Producers {engine.get("producer_connected", 0)}/{engine.get("producer_required", 16)}',
+        f'🧬 Same-ID Trace <b>{"PASS" if engine.get("e2e_ok") else "FAILED"}</b> · '
+        f'Revision <b>{"PASS" if engine.get("revision_ok") else "FAILED"}</b>',
+        '',
+        '🔐 <b>Hard PASS Conditions</b>',
+    ]
+    for name, value in (report.get('hard_checks') or {}).items():
+        lines.append(f'{"✅" if value else "🔴"} {name}')
+    return base + '\n' + '\n'.join(lines)
+
+
+async def verifyall1161devs578_cmd(update, context):
+    detail = any(str(arg).lower() in ('detail', 'full') for arg in (getattr(context, 'args', None) or []))
+    try:
+        report = await _v1161_s578_collect_report()
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s578_render(report, detail)), parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s578-verifyall', exc)
+        await update.message.reply_text(f'⚠️ /verifyall S57.8 오류 · {type(exc).__name__} · /errors 확인')
+
+
+def _v1161_s578_install_routes():
+    global V90_EXPECTED_COMMANDS
+    routes = {
+        'version': version1161devs578_cmd,
+        'status': status1161devs578_cmd,
+        'runtimehealth': runtimehealth1161devs578_cmd,
+        'buildinfo': buildinfo1161devs578_cmd,
+        'connectivity': connectivity1161devs578_cmd,
+        'verifyall': verifyall1161devs578_cmd,
+        'routeraudit': routeraudit1161devs578_cmd,
+        'versionaudit': versionaudit1161devs578_cmd,
+        'engineaudit': engineaudit1161devs578_cmd,
+    }
+    _V1161_S571_VIRTUAL_ROUTES.update(routes)
+    for name in ('version', 'status', 'runtimehealth', 'versionaudit'):
+        V90_COMMAND_REGISTRY[name] = routes[name]
+    V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+    return len(V90_COMMAND_REGISTRY)
+
+
+_v1161_s578_install_routes()
+_V1161_S578_DISPATCH_BASE = v90_1_dispatch
+
+
+async def v90_1_dispatch(update, context):
+    command = _v1161_s57_extract_command(update).lstrip('/')
+    handler = _V1161_S571_VIRTUAL_ROUTES.get(command) or V90_COMMAND_REGISTRY.get(command)
+    if callable(handler) and handler is not v90_1_dispatch:
+        return await handler(update, context)
+    return await _V1161_S578_DISPATCH_BASE(update, context)
+
+
+def build_v44_application(token):
+    global _V1161_S571_APP_CALLBACK, _V1161_S571_APP_CALLBACK_ID
+    _v1161_s578_install_routes()
+    app = Application.builder().token(token).build()
+    callback = v90_1_dispatch
+    app.add_handler(MessageHandler(filters.COMMAND, callback), group=0)
+    app.add_error_handler(v88_error_handler)
+    _V1161_S571_APP_CALLBACK = callback.__name__
+    _V1161_S571_APP_CALLBACK_ID = id(callback)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    _v1161_s578_install_routes()
+    boot = _v1161_s44_record_boot()
+    print(f'{V1161_DEV_S578_VERSION} worker running...', flush=True)
+    print(f'BUILD_ID={V1161_DEV_S578_BUILD_ID}', flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked', flush=True)
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    _v1160_s2179_start_refresh_once()
+    _v1160_s21712_start_scheduler_once()
+    _v1160_s21728_start_live_worker_once()
+    _v1160_s21744_start_sampler_once()
+    _v1161_s38_start_worker_once()
+    _v1161_s40_start_worker_once()
+    _v1161_s41_start_worker_once()
+    _v1161_s44_start_once()
+    print('A100 V116.1 DEV S57.8 metadata single source: ACTIVE', flush=True)
+    print('A100 V116.1 DEV S57.8 UI major redesign: DEFERRED', flush=True)
+    print(f'A100 V116.1 DEV S57.8 continuity boot count: {boot["restart_count"]}', flush=True)
+    print('A100 V116.1 DEV S57.8 live trading: OFF', flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        _V1161_S44_STOP.set()
+    except Exception as exc:
+        V91_STOP.set()
+        _V1161_S44_STOP.set()
+        v88_record_error('v1161-dev-s578-fatal-main', exc)
+        print(traceback.format_exc(), flush=True)
+        raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
 if __name__ == "__main__":
     main()

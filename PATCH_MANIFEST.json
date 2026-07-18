@@ -1,12 +1,13 @@
 {
-  "version": "A100 V116.1 DEV S57.7",
-  "build_id": "S57.7-20260719-ENGINE-E2E-SOURCE-TRUTH-01",
+  "version": "A100 V116.1 DEV S57.8",
+  "build_id": "S57.8-20260719-METADATA-SINGLE-SOURCE-FINAL-01",
   "package_type": "incremental_patch",
-  "base_version": "A100 V116.1 DEV S57.6",
+  "base_version": "A100 V116.1 DEV S57.7",
+  "scope": "metadata consistency only; major UI redesign deferred",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S57.7.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.7.md",
+    "CHANGELOG_V116.1_DEV_S57.8.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S57.8.md",
     "PATCH_INSTALL_GUIDE_KR.md"
   ],
   "invariants": {
@@ -16,6 +17,7 @@
     "shadow": 60,
     "live_trading": false,
     "synthetic_completion": false,
-    "gate_formulas_changed": false
+    "gate_formulas_changed": false,
+    "engine_logic_changed": false
   }
 }
