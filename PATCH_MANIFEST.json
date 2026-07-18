@@ -1,25 +1,27 @@
 {
-  "version": "A100 V116.1 DEV S44.2",
-  "title": "Common Import Dependency Stability Hotfix",
-  "base": "A100 V116.1 DEV S44.1",
-  "deployment": "URGENT DEV HOTFIX",
-  "incident": "NameError: copy is not defined in S38/S40/S41 background workers",
+  "version": "A100 V116.1 DEV S45",
+  "baseline": "A100 V116.1 DEV S44.2",
+  "package_type": "incremental_prebuilt_patch",
+  "scope": "LONG/SHORT AI Runtime Integration & Final Certification",
+  "runtime_tested": false,
+  "static_checks": {
+    "python_compile": "PASS"
+  },
+  "invariants": {
+    "registry": 341,
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "synthetic_pass": false
+  },
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S44_2.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S44_2.md",
+    "CHANGELOG_V116.1_DEV_S45.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S45.md",
     "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest",
     "PATCH_MANIFEST.json",
-    "SHA256SUMS",
-    "changed_files.manifest"
-  ],
-  "safety": {
-    "runtime_mutation": false,
-    "certification_mutation": false,
-    "consensus_override": false,
-    "release_gate_override": false,
-    "order_authority": false,
-    "adaptive_weight_locked": true,
-    "live_trading": false
-  }
+    "SHA256SUMS"
+  ]
 }

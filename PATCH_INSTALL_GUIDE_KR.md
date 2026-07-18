@@ -1,35 +1,34 @@
-# A100 V116.1 DEV S44.2 설치 안내
+# S45 패치 설치 안내 (Railway)
 
-## 적용 방법
-이 ZIP의 파일을 현재 프로젝트 루트에 덮어씁니다. S44 또는 S44.1을 다시 순서대로 적용할 필요가 없습니다.
+1. 현재 GitHub 저장소에서 `main.py`를 이 패치의 파일로 덮어씁니다.
+2. 문서 파일은 배포 필수 파일이 아니며 기록용입니다.
+3. GitHub에 커밋·푸시합니다.
+4. Railway 배포가 완료될 때까지 기다립니다.
+5. Railway 로그에서 아래 문구를 확인합니다.
 
-핵심 변경 파일은 `main.py`입니다. `/data`, 환경변수, 학습 데이터, Outcome 데이터는 삭제하지 마세요.
+- `A100 V116.1 DEV S45 worker running...`
+- `A100 V116.1 DEV S45 LONG/SHORT Runtime Integration audit: PASS`
+- `scan path: FILTERED RUNTIME -> RAW RUNTIME QUALITY HOLD`
+- `synthetic evidence/pass: DISABLED`
+- `live trading: OFF`
 
-## Railway 배포 후 확인 로그
+## 배포 후 1차 명령
 
-```text
-Health server listening on port 8080
-A100 V116.1 DEV S44.2 worker running...
-A100 V116.1 DEV S44.2 Memory Containment safety audit: PASS
-A100 V116.1 DEV S44.2 Memory Leak Containment & Certification Continuity Hotfix: ACTIVE
-Telegram single polling started
-```
-
-다음 오류가 새로 발생하면 안 됩니다.
-
-```text
-NameError: name 'copy' is not defined
-NameError: name 'Path' is not defined
-```
-
-## Telegram 확인
-
-```text
 /version
 /runtimehealth
+/ultimate
+/ultimate detail
+/sniper
 /god
 /releasegate detail
 /errors
-```
 
-`/errors`에는 과거 오류가 남아 있을 수 있으므로, 배포 시각 이후 같은 오류가 새로 추가되는지를 확인하세요.
+## 2차 반복 테스트
+
+10~15초 안에 다음을 다시 실행합니다.
+
+/ultimate
+/ultimate detail
+/god
+
+확인 항목: `CACHE_` source 표시, 방향 일관성, Consensus/Final AI 모순 여부, 메모리 급증, 신규 오류.

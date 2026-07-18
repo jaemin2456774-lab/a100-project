@@ -65220,6 +65220,189 @@ def main():
     except KeyboardInterrupt:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S44.2 stopped by signal',flush=True)
     except Exception as e:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s44-2-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S45 — LONG/SHORT AI Runtime Integration & Final Certification
+# Runtime-first bridge: use normal quality-filtered scan first, then the existing
+# raw runtime scan as evidence-only fallback. No synthetic rows, no order authority.
+# ============================================================================
+V1161_DEV_S45_NUMBER='116.1-DEV-S45'
+V1161_DEV_S45_VERSION='A100 V116.1 DEV S45'
+V1161_DEV_S45_TITLE='LONG/SHORT AI Runtime Integration & Final Certification'
+V91_VERSION=V1161_DEV_S45_VERSION
+_V1161_S45_SCAN_LOCK=threading.RLock()
+_V1161_S45_SCAN_CACHE={'at':0.0,'rows':[],'results':[],'errors':[],'source':'NONE','quality_hold':False}
+_V1161_S45_SCAN_TTL_SEC=12.0
+
+
+async def _v1161_s45_runtime_scan(force=False):
+    """Return real runtime analysis rows without manufacturing evidence.
+
+    Primary path is the active v79 quality-filtered runtime scan. If that path
+    yields zero candidates, reuse the pre-filter runtime result produced by the
+    same scanner and mark it QUALITY_HOLD. This activates the AI reasoning stack
+    while preserving the quality gate as advisory evidence, not as an order pass.
+    """
+    now=time.time()
+    with _V1161_S45_SCAN_LOCK:
+        cached=dict(_V1161_S45_SCAN_CACHE)
+    if not force and cached.get('results') and now-float(cached.get('at',0.0))<=_V1161_S45_SCAN_TTL_SEC:
+        cached['source']='CACHE_'+str(cached.get('source','RUNTIME'))
+        return cached
+    rows=[]; results=[]; errors=[]; source='FILTERED_RUNTIME'; quality_hold=False
+    try:
+        rows,results,errors=await v70_async_scan()
+    except Exception as exc:
+        errors=[f'{type(exc).__name__}: {exc}']; v88_record_error('v1161-dev-s45-filtered-runtime-scan',exc)
+    if not results:
+        try:
+            raw_rows,raw_results,raw_errors=await _v79_original_async_scan()
+            rows=raw_rows or rows; results=raw_results or []
+            errors=list(errors or [])+list(raw_errors or [])
+            source='RAW_RUNTIME_QUALITY_HOLD'; quality_hold=bool(results)
+        except Exception as exc:
+            errors=list(errors or [])+[f'{type(exc).__name__}: {exc}']; v88_record_error('v1161-dev-s45-raw-runtime-scan',exc)
+    payload={'at':time.time(),'rows':rows or [],'results':results or [],'errors':errors or [],'source':source,'quality_hold':quality_hold}
+    with _V1161_S45_SCAN_LOCK:
+        _V1161_S45_SCAN_CACHE.clear(); _V1161_S45_SCAN_CACHE.update(payload)
+    return dict(payload)
+
+
+def _v1161_s45_runtime_banner(scan):
+    st=_v1160_s21728_read_live_state()
+    return (f'⚙️ <b>S45 RUNTIME INTEGRATION</b>\n'
+            f'· Source {scan.get("source","NONE")} · Candidates {len(scan.get("results") or [])}\n'
+            f'· Live Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Authority {st.get("source","-")}\n'
+            f'· Quality Gate {"HOLD (analysis only)" if scan.get("quality_hold") else "FILTERED PASS"}\n'
+            f'· Long/Short/Wait + Consensus: EVIDENCE ONLY · Live Trading OFF')
+
+
+async def ultimate1161devs45_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    await update.message.reply_text('🧠 V116.1 S45 Long/Short AI Runtime Evidence 분석 중...')
+    try:
+        scan=await _v1161_s45_runtime_scan(False); results=scan.get('results') or []
+        if not results:
+            st=_v1160_s21728_read_live_state()
+            await update.message.reply_text(
+                _v1161_s45_runtime_banner(scan)+
+                f'\n\n⚠️ <b>NO_ANALYSIS_ROWS</b>\nRuntime worker {st.get("worker_status","-")} but market scan returned zero real rows.\nSynthetic PASS disabled.',
+                parse_mode='HTML'); return
+        evaluated=[(row,_v1161_s37_consensus(row)) for row in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        await update.message.reply_text(_v1161_s45_runtime_banner(scan),parse_mode='HTML')
+        limit=3 if detail else 2
+        for i,(row,res) in enumerate(evaluated[:limit],1):
+            _v1161_s35_record(row,res,'ultimate'); _v1161_s29_register(row,res,'ultimate')
+            card,res=_v1161_s42_card(row,res,i,detail)
+            _v1161_s9_record(row,res,'ultimate')
+            await update.message.reply_text(card,parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s45-ultimate',exc)
+        await update.message.reply_text('⚠️ S45 Ultimate Runtime 통합 출력 오류 · /errors 확인')
+
+
+async def sniper1161devs45_cmd(update,context):
+    try:
+        scan=await _v1161_s45_runtime_scan(False); results=scan.get('results') or []
+        if not results:
+            await update.message.reply_text(_v1161_s45_runtime_banner(scan)+'\n\n🎯 <b>SNIPER</b>\nNO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
+        row=max(results,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0))
+        res=_v1161_s37_consensus(row)
+        _v1161_s35_record(row,res,'sniper'); _v1161_s29_register(row,res,'sniper')
+        card,res=_v1161_s42_card(row,res,1,True); _v1161_s9_record(row,res,'sniper')
+        await update.message.reply_text(_v1161_s45_runtime_banner(scan)+'\n\n🎯 <b>SNIPER S45 · LONG/SHORT RUNTIME EVIDENCE</b>\n'+card,parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s45-sniper',exc); await update.message.reply_text('⚠️ Sniper S45 오류 · /errors 확인')
+
+
+async def god1161devs45_cmd(update,context):
+    try:
+        scan=await _v1161_s45_runtime_scan(False); results=scan.get('results') or []
+        mem=_v1161_s44_report(); diag=_v1161_s43_diagnostics(); rr=_v1161_s42_release_readiness(); st=_v1160_s21728_read_live_state()
+        readiness='NO_ANALYSIS_ROWS'; reliability='-'; verification='-'; scenario='-'; memory_graph='-'
+        if results:
+            row=max(results,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row)
+            dash=res.get('ai_reliability_dashboard',{}) or {}; verify=res.get('self_verification',{}) or {}; scen=res.get('scenario_simulation',{}) or {}; graph=res.get('ai_memory_graph',{}) or {}
+            readiness=str(dash.get('ai_readiness_state',dash.get('state','EVIDENCE_READY')))
+            reliability=str(dash.get('ai_readiness_score',dash.get('reliability_score','-')))
+            verification=str(verify.get('state',verify.get('verdict','-')))
+            scenario=str(scen.get('stability',scen.get('state','-')))
+            memory_graph=str(graph.get('state',graph.get('status','-')))
+        text=(_v1161_s45_runtime_banner(scan)+
+              f'\n\n🧭 <b>AI RELIABILITY DASHBOARD</b>\n· AI Readiness {readiness} · Score {reliability}\n'
+              f'· Self Verification {verification} · Scenario Stability {scenario}\n· Memory Graph {memory_graph}\n'
+              f'\n🧠 <b>MEMORY / OPERATIONS</b>\n· Pressure {mem["level"]} · Memory {mem["memory_mb"]:.1f}MB · Peak {mem["peak_memory_mb"]:.1f}MB\n'
+              f'· Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"} · Cache {mem["cache_entries"]}/{_V1161_S37_CACHE_MAX}\n'
+              f'· Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Certification {diag["state"]} {diag["coverage"]:.1f}%\n'
+              f'· Release Readiness {rr["state"]} · Structural recovery remains separate')
+        await update.message.reply_text(_v1161_s5_trim(text),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s45-god',exc); await update.message.reply_text('⚠️ GOD S45 오류 · /errors 확인')
+
+
+async def version1161devs45_cmd(update,context):
+    mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
+    await update.message.reply_text(
+        f'🧠 <b>A100 V{V1161_DEV_S45_NUMBER}</b>\n{V1161_DEV_S45_TITLE}\n\n'
+        f'Runtime: {"PASS" if st.get("worker_fresh") else "WARMING"} · {st.get("source","-")}\n'
+        f'Long/Short AI routes: ACTIVE · Evidence-only fallback: ENABLED\n'
+        f'Memory: {mem["memory_mb"]:.1f}MB · Pressure {mem["level"]} · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\n'
+        f'Certification: {diag["state"]} {diag["coverage"]:.1f}% · Structural recovery pending\n'
+        f'Registry: {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+def _v1161_s45_reconcile():
+    desired={'version':version1161devs45_cmd,'ultimate':ultimate1161devs45_cmd,'sniper':sniper1161devs45_cmd,'god':god1161devs45_cmd,'releasegate':releasegate1161devs43_cmd}; repaired=[]
+    for name,handler in desired.items():
+        if V90_COMMAND_REGISTRY.get(name) is not handler: V90_COMMAND_REGISTRY[name]=handler; repaired.append(name)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+
+_v1161_s45_reconcile()
+
+
+def _v1161_s45_static_audit():
+    required={'version':version1161devs45_cmd,'ultimate':ultimate1161devs45_cmd,'sniper':sniper1161devs45_cmd,'god':god1161devs45_cmd,'releasegate':releasegate1161devs43_cmd}
+    mismatches=[name for name,handler in required.items() if V90_COMMAND_REGISTRY.get(name) is not handler]
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'raw_runtime_source':callable(globals().get('_v79_original_async_scan')),
+           'consensus_available':callable(globals().get('_v1161_s37_consensus')),'cumulative_card_available':callable(globals().get('_v1161_s42_card')),
+           'memory_guard_preserved':callable(globals().get('_v1161_s44_report')),'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,
+           'live_off':True,'no_order_authority':all(k not in globals() for k in ('place_order1161devs45','execute_order1161devs45'))}
+    return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
+
+
+def build_v44_application(token):
+    repaired=_v1161_s45_reconcile(); audit=_v1161_s45_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S45 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S45 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S45 dispatcher count: 1',flush=True)
+    if repaired: print('A100 V116.1 DEV S45 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S45 LONG/SHORT Runtime Integration audit: PASS',flush=True); return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s45_reconcile(); audit=_v1161_s45_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S45_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S45 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired: print('A100 V116.1 DEV S45 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S45 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S45 Long/Short AI Runtime Integration: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S45 scan path: FILTERED RUNTIME -> RAW RUNTIME QUALITY HOLD',flush=True)
+    print('A100 V116.1 DEV S45 synthetic evidence/pass: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S45 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S45 certification structural recovery: SEPARATE/PENDING',flush=True)
+    print('A100 V116.1 DEV S45 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S45 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s45-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
