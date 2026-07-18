@@ -1,40 +1,36 @@
 {
-  "version": "A100 V116.1 DEV S47",
-  "type": "incremental_patch",
-  "baseline": "A100 V116.1 DEV S46",
+  "version": "A100 V116.1 DEV S48",
+  "type": "incremental_prebuilt_patch",
+  "baseline": "A100 V116.1 DEV S47",
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S48.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S48.md",
+    "PATCH_INSTALL_GUIDE_KR.md"
+  ],
   "files": [
     {
       "path": "main.py",
-      "sha256": "6f7d4fbfda7224020465b5fb48b03a463cb0eb20b079ceffded91809ecfef186",
-      "size": 3652178
+      "size": 3667062,
+      "sha256": "585370db7f1e9af0456e3854436cda3ad2de7b3236e56f68020c777beeb5adc7"
     },
     {
-      "path": "CHANGELOG_V116.1_DEV_S47.md",
-      "sha256": "6c8c104c49a58ac96be582329720be8a9b69d293a00279fdb61bc9bb133c7c9a",
-      "size": 895
+      "path": "CHANGELOG_V116.1_DEV_S48.md",
+      "size": 926,
+      "sha256": "722e4132e4a85c13e4be311fe0934d2abfcee925bd0c92b18a570fcf5cb781ce"
     },
     {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S47.md",
-      "sha256": "21955e8a2f7faa03b6aa36e34edd9dfc1378c6f5834015b892c399cb242f6c83",
-      "size": 1118
+      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S48.md",
+      "size": 1115,
+      "sha256": "bd2e395f11e10e3f8b119cdbb35e85dd6e8ec07552ffd6c6e875f0acf0552f85"
     },
     {
       "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "sha256": "8a4a5a097f827f97cbcaa309a4c9e4a2f9a20d9f7113b54f6a95eb5f40aacf11",
-      "size": 703
-    },
-    {
-      "path": "changed_files.manifest",
-      "sha256": "047337a1b35bbc4b0fb977291ab590a42f2f574c8c7b02120c704eaab8bcf8ab",
-      "size": 160
+      "size": 831,
+      "sha256": "b754dd5538612b36e6847bd9f3e74ee17875b4ed48a517ff1433dfd4fb3147cb"
     }
   ],
-  "safety": {
-    "schema": 1,
-    "registry": 341,
-    "paper": 20,
-    "shadow": 60,
-    "live": false,
-    "synthetic_evidence": false
-  }
+  "runtime_test_required": true,
+  "data_preservation": true,
+  "live_trading": "OFF"
 }

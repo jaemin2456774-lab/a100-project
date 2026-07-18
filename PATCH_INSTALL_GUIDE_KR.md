@@ -1,8 +1,25 @@
-# S47 패치 설치 가이드
+# S48 패치 설치 안내
 
-1. Railway에 연결된 GitHub 저장소에서 ZIP의 파일을 동일 경로에 덮어씁니다.
-2. 기존 `/data`, 환경변수, DB, 설정 파일은 삭제하지 않습니다.
-3. Railway 배포 완료 후 시작 로그에서 S47 Runtime Producer Bridge audit PASS를 확인합니다.
-4. `/version`, `/runtimehealth`, `/ultimate detail`, `/sniper`, `/god`, `/releasegate detail`, `/errors`를 실행합니다.
+1. 기존 Railway 프로젝트 데이터와 환경변수는 유지합니다.
+2. ZIP의 파일을 저장소 루트에 덮어씁니다.
+3. GitHub에 커밋·푸시한 뒤 Railway 배포가 완료될 때까지 기다립니다.
+4. Startup 로그에서 S48 preflight와 producer ACTIVE 로그를 확인합니다.
+5. 아래 명령을 순서대로 실행합니다.
 
-성공 기준은 `Evidence Runtime S47`의 Coverage가 기존 0.0%보다 상승하고, Object bridge가 `Result` 또는 실제 행 타입으로 표시되는 것입니다. Macro/News 등 실제 Feed가 없는 항목은 계속 Missing이어야 정상입니다.
+/version
+/runtimehealth
+/ultimate
+/ultimate detail
+/sniper
+/god
+/releasegate detail
+/errors
+
+성공 확인 핵심:
+- Evidence Runtime S48
+- Funding/OI/Volume/Volatility/Momentum ON 여부
+- Coverage가 S47보다 상승했는지
+- 신규 NameError/KeyError/TypeError/ImportError/AttributeError 없음
+- 메모리 Guard ACTIVE 및 재시작 급증 없음
+
+ReleaseGate Structural FAIL은 이번 패치에서 강제 PASS 처리하지 않습니다.

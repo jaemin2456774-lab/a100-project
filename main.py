@@ -65741,6 +65741,196 @@ def main():
     except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S47 stopped by signal',flush=True)
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s47-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
+
+
+# ============================================================================
+# A100 V116.1 DEV S48 — Core Market Producer Recovery
+# Extends the real-object bridge with deterministic read-only producers for
+# volume, volatility and momentum using fields already calculated by the live
+# scanner. Funding/OI/liquidation remain sourced from existing CoinGlass data.
+# No synthetic market observations, gate mutation or order authority.
+# ============================================================================
+V1161_DEV_S48_NUMBER='116.1-DEV-S48'
+V1161_DEV_S48_VERSION='A100 V116.1 DEV S48'
+V1161_DEV_S48_TITLE='Core Market Producer Recovery & Evidence Coverage Expansion'
+V91_VERSION=V1161_DEV_S48_VERSION
+
+_V1161_S48_REAL_ALIASES=dict(_V1161_S47_REAL_ALIASES)
+_V1161_S48_REAL_ALIASES.update({
+ 'volume_activity':('volume_activity','volume_signal','volume_ratio','vol_ratio','relative_volume'),
+ 'volatility_state':('volatility_state','volatility_signal','atr_pct','volatility','risk_band'),
+ 'momentum_state':('momentum_state','momentum_signal','momentum','momentum_score','trend_momentum'),
+})
+
+def _v1161_s48_float(v):
+    return _v1161_s47_num(v)
+
+def _v1161_s48_volume(row):
+    vr=_v1161_s48_float(row.get('vol_ratio'))
+    if vr is None: return None
+    return {'ratio':round(vr,4),'state':'HIGH' if vr>=1.8 else 'ACTIVE' if vr>=1.2 else 'NORMAL' if vr>=0.75 else 'LOW'}
+
+def _v1161_s48_volatility(row):
+    price=_v1161_s48_float(row.get('price')); stop=_v1161_s48_float(row.get('stop'))
+    if price and stop is not None and price>0:
+        pct=abs(price-stop)/price*100.0
+        return {'pct':round(pct,4),'state':'EXTREME' if pct>=10 else 'HIGH' if pct>=6 else 'NORMAL' if pct>=2 else 'LOW'}
+    # Use an existing scanner-produced ATR percentage when present.
+    atr=_v1161_s48_float(row.get('atr_pct'))
+    if atr is not None:
+        return {'pct':round(abs(atr),4),'state':'EXTREME' if abs(atr)>=10 else 'HIGH' if abs(atr)>=6 else 'NORMAL' if abs(atr)>=2 else 'LOW'}
+    return None
+
+def _v1161_s48_momentum(row):
+    p24=_v1161_s48_float(row.get('prob24')); p3=_v1161_s48_float(row.get('prob3d')); p7=_v1161_s48_float(row.get('prob7d'))
+    rsi=_v1161_s48_float(row.get('rsi')); buy=_v1161_s48_float(row.get('buy_ratio'))
+    vals=[x for x in (p24,p3,p7) if x is not None]
+    if not vals and rsi is None and buy is None: return None
+    score=(sum(vals)/len(vals)) if vals else 50.0
+    if rsi is not None: score=score*0.75+max(0,min(100,rsi))*0.25
+    if buy is not None: score=score*0.85+max(0,min(100,buy*100.0))*0.15
+    state='BULLISH' if score>=62 else 'BEARISH' if score<=38 else 'NEUTRAL'
+    return {'score':round(score,2),'state':state}
+
+def _v1161_s48_enrich_row(row):
+    base=_v1161_s47_enrich_row(row)
+    out=dict(base) if isinstance(base,dict) else _v1161_s47_mapping(base)
+    if not out: return base
+    aliases=dict((out.get('_s47_evidence_runtime') or {}).get('source_aliases') or {})
+    sources=dict((out.get('_s47_evidence_runtime') or {}).get('producer_sources') or {})
+
+    vol=_v1161_s48_volume(out)
+    if vol is not None:
+        out['volume_activity']=vol; aliases['volume_activity']='vol_ratio'; sources['volume_activity']='LIVE_SCANNER_VOLUME_RATIO'
+    vola=_v1161_s48_volatility(out)
+    if vola is not None:
+        out['volatility_state']=vola; aliases['volatility_state']='price_stop_or_atr'; sources['volatility_state']='LIVE_SCANNER_RISK_BAND'
+    mom=_v1161_s48_momentum(out)
+    if mom is not None:
+        out['momentum_state']=mom; aliases['momentum_state']='probability_rsi_buy_ratio'; sources['momentum_state']='LIVE_SCANNER_MOMENTUM_FIELDS'
+
+    available=[k for k in _V1161_S48_REAL_ALIASES if _v1161_s46_present(out.get(k))]
+    missing=[k for k in _V1161_S48_REAL_ALIASES if k not in available]
+    meta={
+      'available':available,'missing':missing,'source_aliases':aliases,'producer_sources':sources,
+      'coverage_pct':round(len(available)/len(_V1161_S48_REAL_ALIASES)*100.0,1),
+      'read_only':True,'synthetic':False,
+      'object_bridge':type(row).__name__ if not isinstance(row,dict) else 'dict',
+      'core_producers':{'funding':_v1161_s46_present(out.get('funding_rate')),
+                        'open_interest':_v1161_s46_present(out.get('open_interest_change')),
+                        'volume':vol is not None,'volatility':vola is not None,'momentum':mom is not None}
+    }
+    out['_s48_evidence_runtime']=meta
+    out['_s47_evidence_runtime']=dict(meta)
+    out['_s46_evidence_runtime']=dict(meta)
+    return out
+
+async def _v1161_s48_runtime_scan(force=False):
+    scan=await _v1161_s45_runtime_scan(force)
+    enriched=[_v1161_s48_enrich_row(x) for x in (scan.get('results') or [])]
+    payload=dict(scan); payload['results']=enriched
+    cov=[x.get('_s48_evidence_runtime',{}).get('coverage_pct',0.0) for x in enriched if isinstance(x,dict)]
+    payload['evidence_coverage_pct']=round(sum(cov)/len(cov),1) if cov else 0.0
+    payload['evidence_runtime']='CORE_REAL_PRODUCERS_ACTIVE' if enriched else 'NO_ROWS'
+    payload['producer_bridge']='ACTIVE'
+    core={'funding':0,'open_interest':0,'volume':0,'volatility':0,'momentum':0}
+    for x in enriched:
+        for k,v in (x.get('_s48_evidence_runtime',{}).get('core_producers') or {}).items():
+            if v: core[k]+=1
+    payload['core_producer_rows']=core
+    return payload
+
+def _v1161_s48_banner(scan):
+    c=scan.get('core_producer_rows') or {}
+    n=max(1,len(scan.get('results') or []))
+    return (_v1161_s45_runtime_banner(scan).replace('S45 RUNTIME INTEGRATION','S48 CORE PRODUCER RUNTIME')+
+      f'\n· Producer Bridge ACTIVE · {scan.get("evidence_runtime","-")}\n'
+      f'· Coverage {scan.get("evidence_coverage_pct",0):.1f}% · Funding {c.get("funding",0)}/{n} · OI {c.get("open_interest",0)}/{n}\n'
+      f'· Volume {c.get("volume",0)}/{n} · Volatility {c.get("volatility",0)}/{n} · Momentum {c.get("momentum",0)}/{n}\n'
+      f'· Real scanner/CoinGlass fields only · Synthetic evidence/pass DISABLED')
+
+async def ultimate1161devs48_cmd(update,context):
+    detail=any(str(x).lower()=='detail' for x in (getattr(context,'args',None) or []))
+    await update.message.reply_text('🧠 V116.1 S48 Core Producer Evidence 분석 중...')
+    try:
+        scan=await _v1161_s48_runtime_scan(False); results=scan.get('results') or []
+        if not results:
+            await update.message.reply_text(_v1161_s48_banner(scan)+'\n\n⚠️ <b>NO_ANALYSIS_ROWS</b> · Synthetic PASS disabled',parse_mode='HTML'); return
+        evaluated=[(r,_v1161_s37_consensus(r)) for r in results]
+        evaluated.sort(key=lambda z:z[1].get('ai_reliability_dashboard',{}).get('ai_readiness_score',0),reverse=True)
+        await update.message.reply_text(_v1161_s48_banner(scan),parse_mode='HTML')
+        for i,(row,res) in enumerate(evaluated[:3 if detail else 2],1):
+            card,res=_v1161_s42_card(row,res,i,detail); ev=row.get('_s48_evidence_runtime',{}); core=ev.get('core_producers') or {}
+            extra=(f'\n\n<b>Evidence Runtime S48</b>\n· Coverage {ev.get("coverage_pct",0):.1f}% · Available {len(ev.get("available",[]))}/{len(_V1161_S48_REAL_ALIASES)}'
+                   f'\n· Core Funding {"ON" if core.get("funding") else "MISS"} · OI {"ON" if core.get("open_interest") else "MISS"} · Volume {"ON" if core.get("volume") else "MISS"}'
+                   f'\n· Volatility {"ON" if core.get("volatility") else "MISS"} · Momentum {"ON" if core.get("momentum") else "MISS"}'
+                   f'\n· Connected {", ".join(ev.get("available",[])[:12]) or "NONE"}'
+                   f'\n· Missing {", ".join(ev.get("missing",[])[:12]) or "NONE"}'
+                   f'\n· Read Only · Consensus/gate/order override NO')
+            await update.message.reply_text(_v1161_s5_trim(card+extra),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s48-ultimate',exc); await update.message.reply_text('⚠️ S48 Ultimate 오류 · /errors 확인')
+
+async def sniper1161devs48_cmd(update,context):
+    try:
+        scan=await _v1161_s48_runtime_scan(False); results=scan.get('results') or []
+        if not results: await update.message.reply_text(_v1161_s48_banner(scan)+'\n\n🎯 NO_ANALYSIS_ROWS · WAIT',parse_mode='HTML'); return
+        row=max(results,key=lambda x:_v1161_s37_consensus(x).get('ai_reliability_dashboard',{}).get('ai_readiness_score',0)); res=_v1161_s37_consensus(row)
+        card,res=_v1161_s42_card(row,res,1,True); ev=row.get('_s48_evidence_runtime',{})
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s48_banner(scan)+'\n\n🎯 <b>SNIPER S48</b>\n'+card+f'\n\nEvidence Runtime {ev.get("coverage_pct",0):.1f}% · Core producer recovery'),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s48-sniper',exc); await update.message.reply_text('⚠️ Sniper S48 오류')
+
+async def god1161devs48_cmd(update,context):
+    try:
+        scan=await _v1161_s48_runtime_scan(False); mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics(); m=_v1161_s37_metrics()
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s48_banner(scan)+f'\n\n🧭 <b>S48 AI / OPERATIONS</b>\n· Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Evidence coverage {scan.get("evidence_coverage_pct",0):.1f}%\n· Cache hit {m.get("cache_hit_ratio",0):.1f}% · Entries {m.get("cache_entries",0)}/{_V1161_S37_CACHE_MAX}\n· Memory {mem["memory_mb"]:.1f}MB · Peak {mem["peak_memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\n· Certification {diag["state"]} {diag["coverage"]:.1f}% · Structural recovery separate/pending'),parse_mode='HTML')
+    except Exception as exc: v88_record_error('v1161-dev-s48-god',exc); await update.message.reply_text('⚠️ GOD S48 오류')
+
+async def version1161devs48_cmd(update,context):
+    mem=_v1161_s44_report(); st=_v1160_s21728_read_live_state(); diag=_v1161_s43_diagnostics()
+    await update.message.reply_text(f'🧠 <b>A100 V{V1161_DEV_S48_NUMBER}</b>\n{V1161_DEV_S48_TITLE}\n\nRuntime {"PASS" if st.get("worker_fresh") else "WARMING"} · Core producers ACTIVE\nFunding/OI bridge + Volume/Volatility/Momentum recovery\nSynthetic evidence OFF · Read-only runtime\nMemory {mem["memory_mb"]:.1f}MB · Guard {"ACTIVE" if mem["guard_alive"] else "STARTING"}\nCertification {diag["state"]} {diag["coverage"]:.1f}% · Structural recovery pending\nRegistry {len(V90_COMMAND_REGISTRY)}/341 · Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+def _v1161_s48_reconcile():
+    desired={'version':version1161devs48_cmd,'ultimate':ultimate1161devs48_cmd,'sniper':sniper1161devs48_cmd,'god':god1161devs48_cmd,'releasegate':releasegate1161devs43_cmd}; repaired=[]
+    for n,h in desired.items():
+        if V90_COMMAND_REGISTRY.get(n) is not h: V90_COMMAND_REGISTRY[n]=h; repaired.append(n)
+    globals()['V90_EXPECTED_COMMANDS']=frozenset(V90_COMMAND_REGISTRY); return repaired
+
+_v1161_s48_reconcile()
+
+def _v1161_s48_static_audit():
+    required={'version':version1161devs48_cmd,'ultimate':ultimate1161devs48_cmd,'sniper':sniper1161devs48_cmd,'god':god1161devs48_cmd}
+    mismatches=[n for n,h in required.items() if V90_COMMAND_REGISTRY.get(n) is not h]
+    sample=Result('TESTUSDT',100,50,'WAIT','TEST',90,110,98,101,95,105,112,60,65,70,1.8,.58,56,0,0,60,55,70,45,60,20,10,'완성도 80% (4/5) | OI 6.2% / Funding -0.01% / Taker 1.1 / L/S 0.9','SHORT_LIQUIDATION','', '', '')
+    bridged=_v1161_s48_enrich_row(sample); ev=bridged.get('_s48_evidence_runtime',{}) if isinstance(bridged,dict) else {}; core=ev.get('core_producers') or {}
+    tests={'registry_341':len(V90_COMMAND_REGISTRY)==341,'routes_current':not mismatches,'s47_preserved':callable(globals().get('_v1161_s47_runtime_scan')),
+           'object_bridge':isinstance(bridged,dict) and ev.get('object_bridge')=='Result','funding_oi':bridged.get('funding_rate')==-0.01 and bridged.get('open_interest_change')==6.2,
+           'volume_producer':core.get('volume') is True,'volatility_producer':core.get('volatility') is True,'momentum_producer':core.get('momentum') is True,
+           'coverage_expanded':ev.get('coverage_pct',0)>=50,'synthetic_disabled':ev.get('synthetic') is False,'memory_guard_preserved':callable(globals().get('_v1161_s44_report')),
+           'weights_locked':dict(_V1161_S7_FACTOR_WEIGHTS)==_V1161_S12_BASE_WEIGHTS,'no_order_authority':all(k not in globals() for k in ('place_order1161devs48','execute_order1161devs48'))}
+    return {'ok':not mismatches and all(tests.values()),'mismatches':mismatches,'tests':tests}
+
+def build_v44_application(token):
+    _v1161_s48_reconcile(); audit=_v1161_s48_static_audit()
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S48 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
+    print(f'A100 V116.1 DEV S48 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S48 Core Producer Recovery audit: PASS',flush=True); return app
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); _v1161_s48_reconcile(); audit=_v1161_s48_static_audit(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S48_VERSION} worker running...',flush=True)
+    if not audit['ok']: raise RuntimeError('V116.1 DEV S48 preflight failed')
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S48 Funding/OI producer recovery: ACTIVE',flush=True); print('A100 V116.1 DEV S48 Volume producer: ACTIVE',flush=True); print('A100 V116.1 DEV S48 Volatility producer: ACTIVE',flush=True); print('A100 V116.1 DEV S48 Momentum producer: ACTIVE',flush=True); print('A100 V116.1 DEV S48 synthetic evidence/pass: DISABLED',flush=True); print(f'A100 V116.1 DEV S48 continuity boot count: {boot["restart_count"]}',flush=True); print('A100 V116.1 DEV S48 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S48 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s48-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
 # IMPORTANT: this is the only executable block and must remain physically last.
 if __name__ == "__main__":
     main()
