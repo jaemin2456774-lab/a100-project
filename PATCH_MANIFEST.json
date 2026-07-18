@@ -1,43 +1,22 @@
 {
-  "version": "V116.1-DEV-S56.1",
+  "version": "A100 V116.1 DEV S56.2",
+  "build_id": "S56.2-20260718-EXEC-ORDER-IDENTITY-01",
   "type": "incremental_patch",
-  "baseline": "V116.1-DEV-S56",
-  "build_id": "S56.1-20260718-BUILD-INTEGRITY-01",
+  "baseline": "A100 V116.1 DEV S56.1",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S56.1.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.1.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
+    "CHANGELOG_V116.1_DEV_S56.2.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.2.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
   ],
-  "files": [
-    {
-      "path": "main.py",
-      "size": 3777991,
-      "sha256": "ab6baaf8c82df0e2d38a434e267d3f6d22afc6f678f47b9f7008c334958252c1"
-    },
-    {
-      "path": "CHANGELOG_V116.1_DEV_S56.1.md",
-      "size": 615,
-      "sha256": "5cbf53ca93ba0efcd2bbf80e5412fc5ba5ca837641d8b257da0e7a361d89aaa0"
-    },
-    {
-      "path": "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S56.1.md",
-      "size": 426,
-      "sha256": "00a7cb4a2c83aade61ecef73ce338b3f5aad90205aeffba7bb5e94eeb701746a"
-    },
-    {
-      "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 719,
-      "sha256": "1b6b7e3cce80425de813f74cf24bd9cd8abb6d44417f380faf1df54c03b9f762"
-    }
-  ],
-  "safety": {
+  "invariants": {
     "registry": 341,
     "schema": 1,
     "paper": 20,
     "shadow": 60,
-    "live": false,
-    "synthetic_completion": false,
-    "gate_mutation": false
+    "live_trading": false,
+    "gate_mutation": false,
+    "synthetic_completion": false
   }
 }

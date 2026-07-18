@@ -1,11 +1,26 @@
-# S56.1 패치 설치 안내
+# S56.2 설치 안내
 
-1. ZIP의 `main.py`를 GitHub 저장소 루트의 기존 `main.py`에 반드시 덮어씁니다.
-2. GitHub에서 변경된 `main.py`가 약 3.7MB인지 확인하고 커밋합니다.
-3. Railway에서 새 배포가 완료될 때까지 기다립니다.
-4. Railway Deploy Logs에서 아래 문자열을 확인합니다.
-   - `V116.1-DEV-S56.1 worker running...`
-   - `BUILD_ID=S56.1-20260718-BUILD-INTEGRITY-01`
-5. Telegram에서 `/version`, `/buildinfo`, `/connectivity`, `/verifyall` 순서로 실행합니다.
+1. ZIP을 압축 해제합니다.
+2. 저장소 루트의 기존 `main.py`를 ZIP의 `main.py`로 완전히 덮어씁니다.
+3. Git commit/push 후 Railway 최신 배포가 완료될 때까지 기다립니다.
+4. Railway 시작 로그에서 아래 문구를 확인합니다.
 
-`/version`이 S55로 남아 있으면 Railway가 이전 커밋/브랜치를 배포 중인 것이므로 Railway 서비스의 Source Repository와 Branch를 확인해야 합니다.
+```
+V116.1-DEV-S56.2 worker running...
+BUILD_ID=S56.2-20260718-EXEC-ORDER-IDENTITY-01
+A100 V116.1 DEV S56.2 executable order recovery: PASS
+A100 V116.1 DEV S56.2 runtime identity audit: PASS
+```
+
+5. 텔레그램에서 실행합니다.
+
+```
+/version
+/buildinfo
+/connectivity
+/connectivity detail
+/verifyall
+/errors
+```
+
+정상이라면 `/version`, `/buildinfo`, `/verifyall`이 모두 S56.2를 표시합니다.
