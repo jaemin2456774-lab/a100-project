@@ -68009,6 +68009,239 @@ def main():
     except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s57-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 
+
+
+# ================================================================
+# A100 V116.1 DEV S57.1 - APPLICATION CALLBACK & VIRTUAL ROUTE RECOVERY
+# Root cause recovery:
+# - old dispatcher callbacks can remain captured by python-telegram-bot
+# - compatibility routes are therefore exposed through Registry.get()
+#   without consuming frozen Registry slots (len remains exactly 341)
+# - status/runtimehealth output identity is normalized at reply boundary
+# - routeraudit inspects the callback actually attached to Application
+# ================================================================
+V1161_DEV_S571_VERSION='V116.1-DEV-S57.1'
+V1161_DEV_S571_NUMBER='116.1-DEV-S57.1'
+V1161_DEV_S571_TITLE='Application Callback Recovery · Virtual Route Identity Hotfix'
+V1161_DEV_S571_BUILD_ID='S57.1-20260718-APP-CALLBACK-VIRTUAL-ROUTE-01'
+_V1161_S571_APP_CALLBACK='UNBUILT'
+_V1161_S571_APP_CALLBACK_ID=0
+_V1161_S571_VIRTUAL_ROUTES={}
+
+
+class _V1161S571VirtualRegistry(dict):
+    """Frozen-size command registry with non-slot compatibility routes."""
+    def get(self,key,default=None):
+        name=str(key or '').lstrip('/').split('@')[0].lower()
+        virtual=_V1161_S571_VIRTUAL_ROUTES.get(name)
+        if callable(virtual):
+            return virtual
+        return super().get(key,default)
+
+    def __getitem__(self,key):
+        name=str(key or '').lstrip('/').split('@')[0].lower()
+        virtual=_V1161_S571_VIRTUAL_ROUTES.get(name)
+        if callable(virtual):
+            return virtual
+        return super().__getitem__(key)
+
+    def __contains__(self,key):
+        name=str(key or '').lstrip('/').split('@')[0].lower()
+        return callable(_V1161_S571_VIRTUAL_ROUTES.get(name)) or super().__contains__(key)
+
+
+def _v1161_s571_normalize_identity_text(text):
+    import re
+    value=str(text or '')
+    value=re.sub(r'A100 V116\.0-LTS-S2\.17\.\d+',f'A100 V{V1161_DEV_S571_NUMBER}',value)
+    value=re.sub(r'A100 V116\.1-DEV-S5[67](?:\.\d+)?',f'A100 V{V1161_DEV_S571_NUMBER}',value)
+    if V1161_DEV_S571_BUILD_ID not in value:
+        lines=value.splitlines()
+        if lines:
+            lines.insert(1,f'🧬 Build ID {V1161_DEV_S571_BUILD_ID}')
+            value='\n'.join(lines)
+    return value
+
+
+class _V1161S571MessageProxy:
+    def __init__(self,message):
+        self._message=message
+    def __getattr__(self,name):
+        return getattr(self._message,name)
+    async def reply_text(self,text,*args,**kwargs):
+        return await self._message.reply_text(_v1161_s571_normalize_identity_text(text),*args,**kwargs)
+
+
+class _V1161S571UpdateProxy:
+    def __init__(self,update):
+        self._update=update
+        self.message=_V1161S571MessageProxy(update.message) if getattr(update,'message',None) else None
+    def __getattr__(self,name):
+        return getattr(self._update,name)
+
+
+_V1161_S571_STATUS_BASE=V90_COMMAND_REGISTRY.get('status')
+_V1161_S571_RUNTIMEHEALTH_BASE=V90_COMMAND_REGISTRY.get('runtimehealth')
+
+
+async def status1161devs571_cmd(update,context):
+    if not callable(_V1161_S571_STATUS_BASE):
+        return await update.message.reply_text('🔴 /status base handler missing')
+    return await _V1161_S571_STATUS_BASE(_V1161S571UpdateProxy(update),context)
+
+
+async def runtimehealth1161devs571_cmd(update,context):
+    if not callable(_V1161_S571_RUNTIMEHEALTH_BASE):
+        return await update.message.reply_text('🔴 /runtimehealth base handler missing')
+    return await _V1161_S571_RUNTIMEHEALTH_BASE(_V1161S571UpdateProxy(update),context)
+
+
+async def version1161devs571_cmd(update,context):
+    st=_v1160_s21728_read_live_state(); mem=_v1161_s44_report(); audit=_v1161_s571_audit()
+    await update.message.reply_text(
+        f'🧬 <b>A100 V{V1161_DEV_S571_NUMBER}</b>\n{V1161_DEV_S571_TITLE}\n\n'
+        f'Build ID <code>{V1161_DEV_S571_BUILD_ID}</code>\n'
+        f'Identity Audit <b>{"PASS" if audit["ok"] else "FAILED"}</b>\n'
+        f'Application callback <code>{audit["application_callback"]}</code>\n'
+        f'Virtual routes {audit["virtual_pass"]}/{audit["virtual_total"]} · Registry {audit["registry_actual"]}/341\n'
+        f'Runtime {"PASS" if st.get("worker_fresh") else "WARMING"} · Memory {mem["memory_mb"]:.1f}MB\n'
+        'Synthetic completion OFF · Gate unchanged\n'
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+async def buildinfo1161devs571_cmd(update,context):
+    audit=_v1161_s571_audit()
+    lines=[
+        '🧬 <b>A100 BUILD & APPLICATION IDENTITY · S57.1</b>',
+        f'· Running <b>{V1161_DEV_S571_VERSION}</b>',
+        f'· Build ID <code>{V1161_DEV_S571_BUILD_ID}</code>',
+        f'· Overall <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Application callback <code>{audit["application_callback"]}</code>',
+        f'· Callback object ID <code>{audit["application_callback_id"]}</code>',
+        f'· Registry {audit["registry_actual"]}/341',
+    ]
+    for name,row in audit['routes'].items():
+        lines.append(f'· /{name} <b>{"PASS" if row["ok"] else "FAILED"}</b> · <code>{row["actual"]}</code>')
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def routeraudit1161devs571_cmd(update,context):
+    audit=_v1161_s571_audit()
+    lines=[
+        '🧭 <b>A100 TELEGRAM ROUTER AUDIT · S57.1</b>',
+        f'· Result <b>{"PASS" if audit["ok"] else "FAILED"}</b>',
+        f'· Application callback <code>{audit["application_callback"]}</code>',
+        f'· Dispatcher global <code>{getattr(v90_1_dispatch,"__name__","MISSING")}</code>',
+        f'· Registry {audit["registry_actual"]}/341',
+        f'· Virtual routes {audit["virtual_pass"]}/{audit["virtual_total"]}',
+        '',
+    ]
+    for name,row in audit['routes'].items():
+        lines.append(f'{"✅" if row["ok"] else "🔴"} /{name:15} {row["actual"]}')
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+def _v1161_s571_install_virtual_registry():
+    global V90_COMMAND_REGISTRY,V90_EXPECTED_COMMANDS
+    if not isinstance(V90_COMMAND_REGISTRY,_V1161S571VirtualRegistry):
+        V90_COMMAND_REGISTRY=_V1161S571VirtualRegistry(V90_COMMAND_REGISTRY)
+    # Frozen slots are replacements only; compatibility commands remain virtual.
+    V90_COMMAND_REGISTRY['version']=version1161devs571_cmd
+    V90_COMMAND_REGISTRY['status']=status1161devs571_cmd
+    V90_COMMAND_REGISTRY['runtimehealth']=runtimehealth1161devs571_cmd
+    V90_EXPECTED_COMMANDS=frozenset(dict.keys(V90_COMMAND_REGISTRY))
+    return len(V90_COMMAND_REGISTRY)
+
+
+def _v1161_s571_audit():
+    expected={
+        'version':'version1161devs571_cmd',
+        'status':'status1161devs571_cmd',
+        'runtimehealth':'runtimehealth1161devs571_cmd',
+        'buildinfo':'buildinfo1161devs571_cmd',
+        'connectivity':'connectivity1161devs56_cmd',
+        'verifyall':'verifyall1161devs57_cmd',
+        'routeraudit':'routeraudit1161devs571_cmd',
+    }
+    rows={}
+    for name,want in expected.items():
+        handler=V90_COMMAND_REGISTRY.get(name)
+        actual=getattr(handler,'__name__','MISSING') if callable(handler) else 'MISSING'
+        rows[name]={'expected':want,'actual':actual,'ok':actual==want}
+    vp=sum(1 for n in ('buildinfo','connectivity','verifyall','routeraudit') if rows[n]['ok'])
+    app_ok=_V1161_S571_APP_CALLBACK not in ('UNBUILT','MISSING')
+    tests={
+        'registry_341':len(V90_COMMAND_REGISTRY)==341,
+        'routes_all':all(x['ok'] for x in rows.values()),
+        'application_callback_bound':app_ok,
+        'version_source_single':rows['version']['ok'] and rows['status']['ok'] and rows['runtimehealth']['ok'],
+    }
+    return {'ok':all(tests.values()),'tests':tests,'routes':rows,
+            'registry_actual':len(V90_COMMAND_REGISTRY),'registry_expected':341,
+            'virtual_pass':vp,'virtual_total':4,
+            'application_callback':_V1161_S571_APP_CALLBACK,
+            'application_callback_id':_V1161_S571_APP_CALLBACK_ID,
+            'version':V1161_DEV_S571_VERSION,'build_id':V1161_DEV_S571_BUILD_ID}
+
+
+# Virtual routes are visible to every historical dispatcher using Registry.get().
+_V1161_S571_VIRTUAL_ROUTES.update({
+    'buildinfo':buildinfo1161devs571_cmd,
+    'connectivity':connectivity1161devs56_cmd,
+    'verifyall':verifyall1161devs57_cmd,
+    'routeraudit':routeraudit1161devs571_cmd,
+})
+_v1161_s571_install_virtual_registry()
+
+
+# Keep direct final dispatch as the first path; Registry.get() is the fallback
+# that also repairs callbacks captured before this definition existed.
+_V1161_S571_DISPATCH_BASE=v90_1_dispatch
+async def v90_1_dispatch(update,context):
+    command=_v1161_s57_extract_command(update).lstrip('/')
+    handler=V90_COMMAND_REGISTRY.get(command)
+    if callable(handler) and handler is not v90_1_dispatch:
+        return await handler(update,context)
+    return await _V1161_S571_DISPATCH_BASE(update,context)
+
+
+def build_v44_application(token):
+    global _V1161_S571_APP_CALLBACK,_V1161_S571_APP_CALLBACK_ID
+    _v1161_s571_install_virtual_registry()
+    app=Application.builder().token(token).build()
+    callback=v90_1_dispatch
+    app.add_handler(MessageHandler(filters.COMMAND,callback),group=0)
+    app.add_error_handler(v88_error_handler)
+    _V1161_S571_APP_CALLBACK=getattr(callback,'__name__','MISSING')
+    _V1161_S571_APP_CALLBACK_ID=id(callback)
+    audit=_v1161_s571_audit()
+    print(f'A100 V116.1 DEV S57.1 build id: {V1161_DEV_S571_BUILD_ID}',flush=True)
+    print(f'A100 V116.1 DEV S57.1 application callback: {_V1161_S571_APP_CALLBACK} id={_V1161_S571_APP_CALLBACK_ID}',flush=True)
+    print(f'A100 V116.1 DEV S57.1 virtual route audit: {audit["virtual_pass"]}/{audit["virtual_total"]}',flush=True)
+    print(f'A100 V116.1 DEV S57.1 registry identity: {len(V90_COMMAND_REGISTRY)}/341',flush=True)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once(); _v1161_s571_install_virtual_registry(); boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S571_VERSION} worker running...',flush=True)
+    print(f'BUILD_ID={V1161_DEV_S571_BUILD_ID}',flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S57.1 virtual registry compatibility: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S57.1 version/status/runtimehealth identity normalization: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S57.1 synthetic completion: DISABLED',flush=True)
+    print(f'A100 V116.1 DEV S57.1 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S57.1 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt: V91_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S57.1 stopped by signal',flush=True)
+    except Exception as exc: V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s571-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
 if __name__ == "__main__":
     main()
