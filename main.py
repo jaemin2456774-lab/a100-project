@@ -1,5 +1,6 @@
 
 import os, time, asyncio, threading, traceback, requests, math, json, hashlib
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from typing import Any, Dict, List
@@ -65002,11 +65003,11 @@ def main():
 
 
 # ============================================================================
-# A100 V116.1 DEV S44 — Memory Leak Containment & Certification Continuity Hotfix
+# A100 V116.1 DEV S44.1 — Memory Leak Containment & Certification Continuity Hotfix
 # Bounded Shadow memory pressure guard. No runtime/final-AI/gate/order mutation.
 # ============================================================================
 V1161_DEV_S44_NUMBER='116.1-DEV-S44'
-V1161_DEV_S44_VERSION='A100 V116.1 DEV S44'
+V1161_DEV_S44_VERSION='A100 V116.1 DEV S44.1'
 V1161_DEV_S44_TITLE='Memory Leak Containment & Certification Continuity Hotfix · Shadow Only'
 V91_VERSION=V1161_DEV_S44_VERSION
 _V1161_S44_INTERVAL_SEC=60.0
@@ -65173,34 +65174,34 @@ def _v1161_s44_static_audit():
 
 def build_v44_application(token):
     repaired=_v1161_s44_reconcile(); audit=_v1161_s44_static_audit()
-    if not audit['ok']:raise RuntimeError('V116.1 DEV S44 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    if not audit['ok']:raise RuntimeError('V116.1 DEV S44.1 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
     app=Application.builder().token(token).build(); app.add_handler(MessageHandler(filters.COMMAND,v90_1_dispatch),group=0); app.add_error_handler(v88_error_handler)
-    print(f'A100 V116.1 DEV S44 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S44 dispatcher count: 1',flush=True)
-    if repaired:print('A100 V116.1 DEV S44 routes reconciled: '+','.join(repaired),flush=True)
-    print('A100 V116.1 DEV S44 Memory Containment safety audit: PASS',flush=True); return app
+    print(f'A100 V116.1 DEV S44.1 registered commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print('A100 V116.1 DEV S44.1 dispatcher count: 1',flush=True)
+    if repaired:print('A100 V116.1 DEV S44.1 routes reconciled: '+','.join(repaired),flush=True)
+    print('A100 V116.1 DEV S44.1 Memory Containment safety audit: PASS',flush=True); return app
 
 
 def main():
     start_health_server_once()
     if not _v1160_s21711_restore():_v1160_s21710_restore_snapshot_once()
     v90_3_start_background_once(); v91_start_background_once(); repaired=_v1161_s44_reconcile(); audit=_v1161_s44_static_audit(); boot=_v1161_s44_record_boot()
-    print(f'{V1161_DEV_S44_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S44 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
-    if repaired:print('A100 V116.1 DEV S44 routes reconciled: '+','.join(repaired),flush=True)
-    if not audit['ok']:raise RuntimeError('V116.1 DEV S44 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
+    print(f'{V1161_DEV_S44_VERSION} worker running...',flush=True); print(f'A100 V116.1 DEV S44.1 startup commands: {len(V90_COMMAND_REGISTRY)}',flush=True); print(f'A100 V91 data dir: {V91_DATA_DIR}',flush=True)
+    if repaired:print('A100 V116.1 DEV S44.1 routes reconciled: '+','.join(repaired),flush=True)
+    if not audit['ok']:raise RuntimeError('V116.1 DEV S44.1 preflight failed: '+','.join(audit['mismatches']+[k for k,v in audit['tests'].items() if not v]))
     if not acquire_v44_process_lock():
         print('A100 V116.1 duplicate polling process blocked',flush=True)
         while True:time.sleep(60)
     _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once(); _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once(); _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once(); _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
     r=_v1161_s44_report()
-    print('A100 V116.1 DEV S44 Memory Leak Containment & Certification Continuity Hotfix: ACTIVE',flush=True)
-    print(f'A100 V116.1 DEV S44 memory thresholds: soft {_V1161_S44_SOFT_MB:.0f}MB · hard {_V1161_S44_HARD_MB:.0f}MB',flush=True)
-    print('A100 V116.1 DEV S44 recovery authority: SHADOW CACHE/SAMPLES ONLY',flush=True)
-    print(f'A100 V116.1 DEV S44 continuity boot count: {boot["restart_count"]}',flush=True)
-    print('A100 V116.1 DEV S44 runtime/final AI/telegram/certification mutation: DISABLED',flush=True)
-    print('A100 V116.1 DEV S44 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S44 consensus/gate/order override: DISABLED',flush=True)
-    print('A100 V116.1 DEV S44 live trading: OFF',flush=True)
+    print('A100 V116.1 DEV S44.1 Memory Leak Containment & Certification Continuity Hotfix: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S44.1 memory thresholds: soft {_V1161_S44_SOFT_MB:.0f}MB · hard {_V1161_S44_HARD_MB:.0f}MB',flush=True)
+    print('A100 V116.1 DEV S44.1 recovery authority: SHADOW CACHE/SAMPLES ONLY',flush=True)
+    print(f'A100 V116.1 DEV S44.1 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S44.1 runtime/final AI/telegram/certification mutation: DISABLED',flush=True)
+    print('A100 V116.1 DEV S44.1 adaptive weight mutation: LOCKED',flush=True); print('A100 V116.1 DEV S44.1 consensus/gate/order override: DISABLED',flush=True)
+    print('A100 V116.1 DEV S44.1 live trading: OFF',flush=True)
     try:asyncio.run(run_bot_async())
-    except KeyboardInterrupt:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S44 stopped by signal',flush=True)
+    except KeyboardInterrupt:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); print('A100 V116.1 DEV S44.1 stopped by signal',flush=True)
     except Exception as e:V91_STOP.set(); _V1160_S21744_SAMPLE_STOP.set(); _V1161_S38_STOP.set(); _V1161_S40_STOP.set(); _V1161_S41_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s44-fatal-main',e); print(traceback.format_exc(),flush=True); raise
 
 # IMPORTANT: this is the only executable block and must remain physically last.
