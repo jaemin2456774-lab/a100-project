@@ -1,37 +1,26 @@
-# S59.7.2 Railway 설치 및 검증 가이드
+# S59.7.3 Railway 증분 패치 설치 가이드
 
-1. 현재 Railway 배포본과 `/data` 볼륨을 백업합니다.
-2. 패치의 `main.py`만 프로젝트의 기존 `main.py`에 덮어씁니다.
-3. 기존 `/data`, 환경변수, Learning/Runtime 파일을 삭제하거나 초기화하지 않습니다.
-4. Railway에서 재배포합니다.
-5. 시작 로그에서 아래 문구를 확인합니다.
+1. Railway에 연결된 GitHub 저장소의 기존 `main.py`를 백업합니다.
+2. ZIP의 `main.py`만 저장소 루트의 동일 파일에 덮어씁니다.
+3. 문서 파일은 배포 패키지와 분리 보관해도 됩니다.
+4. 커밋 후 Railway 배포 로그에서 S59.7.3 Build ID와 Registry 341을 확인합니다.
+5. 기존 `/data` Runtime/Learning 파일은 삭제하거나 초기화하지 않습니다.
 
-```text
-A100 V116.1 DEV S59.7.2 ledger compatibility recovery: PASS
-```
-
-6. 아래 명령을 순서대로 실행합니다.
-
-```text
+## 검증 순서
 /version
 /versionaudit
 /engineaudit
-/commandcert
-/commandmatrix
 /crossengineaudit
 /evidencereplay
+/commandmatrix
 /rcpreflight
 /verifyall
 /errors
-```
 
-## 정상 기대값
-
-- Registry 341/341
+## 정상 기대
+- `/versionaudit` S59.7.3
 - Runtime Identity PASS
 - Authoritative Routes PASS
-- Matrix 341
-- 실행한 명령은 `run Y` 또는 실행 수 증가
-- `ledger root must be dict, got list` 오류 0건
-- Replay/Drift는 복구된 실제 증거에 따라 PASS, REVIEW 또는 MEASURING
-- 24h/72h/7d는 실제 시간이 지나기 전 MEASURING
+- Replay PASS 또는 실제 source 미존재 시 MEASURING
+- Drift는 실제 실패 항목만 Active
+- V88 신규 오류 0건
