@@ -1,9 +1,14 @@
-# S59.7.8 Railway 설치 안내
+# Railway 설치 안내
 
-1. ZIP을 저장소 루트에 덮어씁니다.
-2. 기존 `/data`, 환경변수, Runtime/Learning 파일은 삭제하지 않습니다.
-3. Railway에서 새 배포를 실행합니다.
-4. 시작 로그에서 Registry 341/341과 startup error 0을 확인합니다.
-5. 아래 명령을 순서대로 검증합니다.
+ZIP의 변경 파일을 기존 저장소 루트에 덮어쓴 뒤 Railway에서 재배포합니다.
+`/data` 및 기존 Runtime/Learning 데이터는 삭제하지 않습니다.
 
-`/version` `/versionaudit` `/paper` `/papershadowperformance` `/learning` `/review` `/accuracytracker` `/strategytrust` `/memoryhealth` `/championstability` `/errors`
+검증 명령:
+/version
+/versionaudit
+/accuracytracker
+/strategyperformance
+/strategytrust
+/championstability
+/memoryhealth
+/errors
