@@ -1,50 +1,12 @@
 {
-  "version": "A100 V116.1 DEV S59.7.5",
-  "build_id": "S59.7.5-20260719-CURRENT-ROUTE-WORKER-REPLAY-RC-SYNC-01",
-  "package_type": "incremental_patch",
-  "base": "S59.7.4",
-  "files": [
-    {
-      "path": "main.py",
-      "size": 4482463,
-      "sha256": "8fa09c9459c25a86ba71a56bb318ffcc0d7c87b195b1efdf9db23a1499d121a1"
-    },
-    {
-      "path": "CHANGELOG_V116.1_DEV_S59.7.5.md",
-      "size": 1145,
-      "sha256": "608e331b02a701fec1fd5331de6c736bdb93004df09f45f6e16f269c6ecc75c0"
-    },
-    {
-      "path": "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.md",
-      "size": 672,
-      "sha256": "36b0012392fe42add13a4c1066835b3d77dd7bcdb732022b7841f0e984f73758"
-    },
-    {
-      "path": "PREDEPLOY_TEST_RESULT_S59.7.5.json",
-      "size": 773,
-      "sha256": "fd788ae40df5fe0c8e514bb9e6e5ac8bdf05ad6d1d4a7e940cd639e78b49c3cb"
-    },
-    {
-      "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "size": 753,
-      "sha256": "358936f5d0656215e86d55a102a9c8dcc6c82e05329cc2419c6c1bc80fd97f70"
-    },
-    {
-      "path": "changed_files.manifest",
-      "size": 193,
-      "sha256": "23f560acc52a186a70e3e0148585fa435dea4c77b93313b2aa9396116cd1c61b"
-    }
+  "version": "V116.1-DEV-S59.7.5.1",
+  "build_id": "S59.7.5.1-20260719-REGISTRY341-VIRTUAL-ROUTE-MATRIX-SCHEMA-01",
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S59.7.5.1.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.1.md",
+    "PREDEPLOY_TEST_RESULT_S59.7.5.1.json"
   ],
-  "invariants": [
-    "Registry 341/341",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live Trading OFF",
-    "Synthetic Completion OFF",
-    "Runtime First",
-    "Strict Read Only",
-    "Gate Formula unchanged",
-    "Runtime/Learning data preserved"
-  ]
+  "preserve_data": true,
+  "registry_target": 341
 }
