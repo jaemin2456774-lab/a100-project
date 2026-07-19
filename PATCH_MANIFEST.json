@@ -1,15 +1,17 @@
 {
-  "version": "S59.7.10",
-  "build_id": "S59.7.10-20260719-ADAPTIVE-EVIDENCE-TRUST-MEMORY-CHAMPION-01",
+  "version": "S59.7.11",
+  "build_id": "S59.7.11-20260719-ADAPTIVE-OUTPUT-TRUST-TRACE-CHAMPION-VALIDATION-01",
   "files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.10.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.10.md",
+    "CHANGELOG_V116.1_DEV_S59.7.11.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.11.md",
     "PATCH_INSTALL_GUIDE_KR.md",
     "changed_files.manifest"
   ],
-  "preserve_data": true,
-  "registry": 341,
-  "execution_mutation": false,
-  "gate_formula_changed": false
+  "preserve": [
+    "/data",
+    "runtime data",
+    "learning data"
+  ],
+  "registry_expected": 341
 }
