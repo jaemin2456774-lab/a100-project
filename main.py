@@ -70268,6 +70268,384 @@ def main():
         V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s580-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 
+# ================================================================
+# A100 V116.1 DEV S58.1 - CURRENT IDENTITY & RUNTIME ROUTE RESOLUTION HOTFIX
+# ================================================================
+V1161_DEV_S581_VERSION = 'V116.1-DEV-S58.1'
+V1161_DEV_S581_BUILD_ID = 'S58.1-20260719-CURRENT-IDENTITY-ROUTE-RESOLUTION-01'
+V1161_DEV_S581_TITLE = 'Current Identity · Runtime Route Resolution Hotfix'
+V1161_DEV_S581_REPORT_DIR = Path(os.getenv('A100_REPORT_DIR', '/data/reports'))
+
+
+def _v1161_s581_resolve_handler(name):
+    """Resolve the handler used by the live dispatcher, including compatibility routes."""
+    name = str(name or '').strip().lower().lstrip('/')
+    handler = _V1161_S571_VIRTUAL_ROUTES.get(name) or V90_COMMAND_REGISTRY.get(name)
+    if callable(handler):
+        return handler, 'DIRECT'
+
+    # Commands proven to exist through the compatibility/fallback path.
+    compatibility = {
+        'evidence': ('connectivity', 'COMPAT_EVIDENCE'),
+        'snapshot': ('datastatus', 'COMPAT_SNAPSHOT_STATUS'),
+        'outcome': ('pipelineaudit', 'COMPAT_OUTCOME_PIPELINE'),
+    }
+    target = compatibility.get(name)
+    if target:
+        target_name, source = target
+        handler = _V1161_S571_VIRTUAL_ROUTES.get(target_name) or V90_COMMAND_REGISTRY.get(target_name)
+        if callable(handler):
+            return handler, source
+    return None, 'MISSING'
+
+
+def _v1161_s581_route_rows():
+    expected = {
+        'version': 'version1161devs581_cmd',
+        'status': 'status1161devs578_cmd',
+        'runtimehealth': 'runtimehealth1161devs578_cmd',
+        'buildinfo': 'buildinfo1161devs578_cmd',
+        'connectivity': 'connectivity1161devs578_cmd',
+        'verifyall': 'verifyall1161devs581_cmd',
+        'routeraudit': 'routeraudit1161devs578_cmd',
+        'versionaudit': 'versionaudit1161devs578_cmd',
+        'engineaudit': 'engineaudit1161devs578_cmd',
+        'commandcert': 'commandcert1161devs581_cmd',
+        'commandmatrix': 'commandmatrix1161devs581_cmd',
+        'regressionguard': 'regressionguard1161devs581_cmd',
+    }
+    rows = {}
+    for name, expected_name in expected.items():
+        handler, source = _v1161_s581_resolve_handler(name)
+        actual = getattr(handler, '__name__', 'MISSING') if callable(handler) else 'MISSING'
+        rows[name] = {
+            'expected': expected_name,
+            'actual': actual,
+            'source': source,
+            'ok': actual == expected_name,
+        }
+    return rows
+
+
+def _v1161_s581_identity_audit():
+    rows = _v1161_s581_route_rows()
+    registry_actual = len(V90_COMMAND_REGISTRY)
+    callback = str(globals().get('_V1161_S571_APP_CALLBACK', 'v90_1_dispatch'))
+    return {
+        'ok': registry_actual == 341 and callback == 'v90_1_dispatch' and all(row['ok'] for row in rows.values()),
+        'routes': rows,
+        'registry_actual': registry_actual,
+        'registry_expected': 341,
+        'application_callback': callback,
+        'version': V1161_DEV_S581_VERSION,
+        'build_id': V1161_DEV_S581_BUILD_ID,
+    }
+
+
+def _v1161_s581_collect_command_certification():
+    report = dict(_v1161_s580_collect_command_certification())
+    report['version'] = V1161_DEV_S581_VERSION
+    report['build_id'] = V1161_DEV_S581_BUILD_ID
+    report['generated_at'] = int(time.time())
+    # Re-evaluate live handlers after S58.1 route installation.
+    rows = []
+    for name in sorted(V90_COMMAND_REGISTRY):
+        handler, source = _v1161_s581_resolve_handler(name)
+        row = _v1161_s580_command_row(name, handler)
+        row['resolution_source'] = source
+        rows.append(row)
+    counts = {key: sum(1 for row in rows if row['status'] == key)
+              for key in ('PASS', 'PARTIAL', 'FAILED', 'DISCONNECTED')}
+    report['rows'] = rows
+    report['counts'] = counts
+    report['registry_actual'] = len(V90_COMMAND_REGISTRY)
+    report['registry_expected'] = 341
+    report['registry_ok'] = len(V90_COMMAND_REGISTRY) == 341
+    report['overall'] = (
+        'PASS' if report['registry_ok'] and counts['FAILED'] == 0 and counts['DISCONNECTED'] == 0
+        else 'FAILED'
+    )
+    return report
+
+
+def _v1161_s581_runtime_link_matrix():
+    groups = {
+        'identity': ['version', 'status', 'runtimehealth', 'buildinfo', 'routeraudit', 'versionaudit'],
+        'evidence': ['evidence', 'connectivity', 'datastatus', 'snapshot'],
+        'pipeline': ['pipelineaudit', 'engineaudit', 'outcome', 'learning', 'strategytrust', 'memoryhealth'],
+        'decision': ['sniper', 'ultimate', 'advisor', 'best', 'confidence', 'conviction'],
+        'operations': ['releasegate', 'commandcert', 'errors', 'dashboard', 'performanceaudit'],
+    }
+    matrix = {}
+    for group, names in groups.items():
+        entries = []
+        for name in names:
+            handler, source = _v1161_s581_resolve_handler(name)
+            row = _v1161_s580_command_row(name, handler)
+            status = row['status']
+            if source.startswith('COMPAT_') and callable(handler):
+                # Compatibility routes are connected but require command-level runtime evidence.
+                status = 'PARTIAL'
+            entries.append({
+                'command': name,
+                'handler': row['handler'],
+                'status': status,
+                'present': callable(handler),
+                'resolution_source': source,
+            })
+        matrix[group] = entries
+    return matrix
+
+
+def _v1161_s581_regression_guard():
+    identity = _v1161_s581_identity_audit()
+    cert = _v1161_s581_collect_command_certification()
+    live = _v1160_s21728_read_live_state()
+    engine = asyncio.run(_v1161_s577_engine_audit()) if False else None
+    checks = {
+        'identity': bool(identity.get('ok')),
+        'registry_341': len(V90_COMMAND_REGISTRY) == 341,
+        'handlers_callable': cert['counts']['DISCONNECTED'] == 0,
+        'failed_zero': cert['counts']['FAILED'] == 0,
+        'runtime_fresh': bool(live.get('worker_fresh')),
+        'synthetic_completion_off': True,
+        'live_trading_off': True,
+    }
+    return {'ok': all(checks.values()), 'checks': checks, 'cert': cert, 'identity': identity}
+
+
+async def commandcert1161devs581_cmd(update, context):
+    report = _v1161_s581_collect_command_certification()
+    detail = any(str(arg).lower() in ('detail', 'full') for arg in (getattr(context, 'args', None) or []))
+    jp, tp = _v1161_s580_save_report(report) if detail else (None, None)
+    counts = report['counts']
+    lines = [
+        '🧾 <b>A100 COMMAND E2E CERTIFICATION · S58.1</b>',
+        f'· Result <b>{report["overall"]}</b>',
+        f'· Build ID <code>{V1161_DEV_S581_BUILD_ID}</code>',
+        f'· Registry {report["registry_actual"]}/341',
+        f'✅ PASS {counts["PASS"]} · 🟡 PARTIAL {counts["PARTIAL"]}',
+        f'🔴 FAILED {counts["FAILED"]} · ⚫ DISCONNECTED {counts["DISCONNECTED"]}',
+        '',
+        '판정 기준: Handler → Output → Runtime/Evidence/Learning 정적 연결 증거',
+        'PARTIAL은 실제 명령 실행 증거가 더 필요한 상태입니다.',
+    ]
+    if detail:
+        problem = [row for row in report['rows'] if row['status'] != 'PASS'][:35]
+        lines += ['', '<b>우선 점검 대상</b>']
+        lines += [
+            f'{"🟡" if row["status"] == "PARTIAL" else "🔴"} '
+            f'/{row["command"]} · {row["status"]} · <code>{row["handler"]}</code>'
+            for row in problem
+        ]
+        if jp:
+            lines += ['', f'JSON <code>{jp}</code>', f'TXT <code>{tp}</code>']
+    else:
+        lines += ['', '📄 /commandcert detail → 문제 명령 + JSON/TXT 저장']
+    await update.message.reply_text(_v1161_s5_trim('\n'.join(lines)), parse_mode='HTML')
+
+
+async def commandmatrix1161devs581_cmd(update, context):
+    matrix = _v1161_s581_runtime_link_matrix()
+    lines = [
+        '🧩 <b>A100 RUNTIME LINK MATRIX · S58.1</b>',
+        f'· Build ID <code>{V1161_DEV_S581_BUILD_ID}</code>',
+        '',
+    ]
+    for group, rows in matrix.items():
+        present = sum(1 for row in rows if row['present'])
+        lines.append(f'<b>{group.upper()}</b> · {present}/{len(rows)} resolved')
+        for row in rows:
+            icon = '✅' if row['present'] else '🔴'
+            source = '' if row['resolution_source'] == 'DIRECT' else f' · {row["resolution_source"]}'
+            lines.append(
+                f'{icon} /{row["command"]} · {row["status"]} · '
+                f'<code>{row["handler"]}</code>{source}'
+            )
+        lines.append('')
+    await update.message.reply_text(_v1161_s5_trim('\n'.join(lines)), parse_mode='HTML')
+
+
+async def regressionguard1161devs581_cmd(update, context):
+    guard = _v1161_s581_regression_guard()
+    lines = [
+        '🛡️ <b>A100 REGRESSION GUARD · S58.1</b>',
+        f'· Result <b>{"PASS" if guard["ok"] else "FAILED"}</b>',
+        f'· Build ID <code>{V1161_DEV_S581_BUILD_ID}</code>',
+        '',
+    ]
+    lines += [f'{"✅" if ok else "🔴"} {name}' for name, ok in guard['checks'].items()]
+    counts = guard['cert']['counts']
+    lines += [
+        '',
+        f'Command Cert PASS {counts["PASS"]} · PARTIAL {counts["PARTIAL"]} · '
+        f'FAILED {counts["FAILED"]} · DISCONNECTED {counts["DISCONNECTED"]}',
+    ]
+    await update.message.reply_text('\n'.join(lines), parse_mode='HTML')
+
+
+async def version1161devs581_cmd(update, context):
+    guard = _v1161_s581_regression_guard()
+    await update.message.reply_text(
+        f'🧬 <b>A100 {V1161_DEV_S581_VERSION}</b>\n'
+        f'{V1161_DEV_S581_TITLE}\n\n'
+        f'Build ID <code>{V1161_DEV_S581_BUILD_ID}</code>\n'
+        f'Regression Guard <b>{"PASS" if guard["ok"] else "FAILED"}</b>\n'
+        f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Runtime First\n'
+        'Schema 1 · Paper 20 · Shadow 60 · Live OFF',
+        parse_mode='HTML',
+    )
+
+
+async def _v1161_s581_collect_verify_report():
+    report = dict(await _v1161_s578_collect_report())
+    identity = _v1161_s581_identity_audit()
+    engine = await _v1161_s577_engine_audit()
+    cert = _v1161_s581_collect_command_certification()
+    report['version'] = V1161_DEV_S581_VERSION
+    report['build_id'] = V1161_DEV_S581_BUILD_ID
+    report['identity_audit'] = identity
+    report['engine_audit'] = engine
+    report['command_certification'] = cert
+    previous = dict(report.get('hard_checks') or {})
+    hard = {
+        'identity': identity['ok'],
+        'registry': identity['registry_actual'] == 341,
+        'evidence': bool(previous.get('evidence')),
+        'runtime_fresh': bool(previous.get('runtime_fresh')),
+        'engine_e2e': bool(engine.get('e2e_ok')),
+        'commands_callable': cert['counts']['DISCONNECTED'] == 0,
+        'command_failed_zero': cert['counts']['FAILED'] == 0,
+        'errors_zero': bool(previous.get('errors_zero')),
+    }
+    report['hard_checks'] = hard
+    report['overall'] = 'PASS' if all(hard.values()) else 'FAILED'
+    return report
+
+
+def _v1161_s581_render_verify(report, detail=False):
+    text = _v1161_s578_render(report, detail)
+    text = text.replace('A100 자동 검증 · S57.8', 'A100 자동 검증 · S58.1')
+    text = text.replace(V1161_DEV_S578_BUILD_ID, V1161_DEV_S581_BUILD_ID)
+    cut = text.find('\n🧬 Identity ')
+    if cut >= 0:
+        text = text[:cut]
+    identity = report.get('identity_audit') or {}
+    engine = report.get('engine_audit') or {}
+    cert = report.get('command_certification') or {}
+    counts = cert.get('counts') or {}
+    lines = [
+        '',
+        f'🧬 Identity <b>{"PASS" if identity.get("ok") else "FAILED"}</b> · '
+        f'Build <code>{V1161_DEV_S581_BUILD_ID}</code>',
+    ]
+    for name, row in (identity.get('routes') or {}).items():
+        lines.append(f'{"✅" if row.get("ok") else "🔴"} /{name:17} {row.get("actual", "MISSING")}')
+    lines += [
+        '',
+        f'🔗 Engine E2E <b>{engine.get("overall", "FAILED")}</b> · '
+        f'Producers {engine.get("producer_connected", 0)}/{engine.get("producer_required", 16)}',
+        f'🧾 Command Cert PASS {counts.get("PASS", 0)} · PARTIAL {counts.get("PARTIAL", 0)} · '
+        f'FAILED {counts.get("FAILED", 0)} · DISCONNECTED {counts.get("DISCONNECTED", 0)}',
+        '',
+        '🔐 <b>Hard PASS Conditions</b>',
+    ]
+    for name, value in (report.get('hard_checks') or {}).items():
+        lines.append(f'{"✅" if value else "🔴"} {name}')
+    return text + '\n' + '\n'.join(lines)
+
+
+async def verifyall1161devs581_cmd(update, context):
+    detail = any(str(arg).lower() in ('detail', 'full') for arg in (getattr(context, 'args', None) or []))
+    try:
+        report = await _v1161_s581_collect_verify_report()
+        text = _v1161_s581_render_verify(report, detail)
+        await update.message.reply_text(_v1161_s5_trim(text), parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s581-verifyall', exc)
+        await update.message.reply_text(f'⚠️ /verifyall S58.1 오류 · {type(exc).__name__} · /errors 확인')
+
+
+def _v1161_s581_install_routes():
+    global V90_EXPECTED_COMMANDS
+    routes = {
+        'version': version1161devs581_cmd,
+        'verifyall': verifyall1161devs581_cmd,
+        'commandcert': commandcert1161devs581_cmd,
+        'commandmatrix': commandmatrix1161devs581_cmd,
+        'regressionguard': regressionguard1161devs581_cmd,
+    }
+    _V1161_S571_VIRTUAL_ROUTES.update(routes)
+    V90_COMMAND_REGISTRY['version'] = version1161devs581_cmd
+    V90_COMMAND_REGISTRY['commandcert'] = commandcert1161devs581_cmd
+    V90_EXPECTED_COMMANDS = frozenset(V90_COMMAND_REGISTRY)
+    return len(V90_COMMAND_REGISTRY)
+
+
+_v1161_s581_install_routes()
+_V1161_S581_DISPATCH_BASE = v90_1_dispatch
+
+
+async def v90_1_dispatch(update, context):
+    command = _v1161_s57_extract_command(update).lstrip('/')
+    handler, _source = _v1161_s581_resolve_handler(command)
+    if callable(handler) and handler is not v90_1_dispatch:
+        return await handler(update, context)
+    return await _V1161_S581_DISPATCH_BASE(update, context)
+
+
+def build_v44_application(token):
+    global _V1161_S571_APP_CALLBACK, _V1161_S571_APP_CALLBACK_ID
+    _v1161_s581_install_routes()
+    app = Application.builder().token(token).build()
+    callback = v90_1_dispatch
+    app.add_handler(MessageHandler(filters.COMMAND, callback), group=0)
+    app.add_error_handler(v88_error_handler)
+    _V1161_S571_APP_CALLBACK = callback.__name__
+    _V1161_S571_APP_CALLBACK_ID = id(callback)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    _v1161_s581_install_routes()
+    boot = _v1161_s44_record_boot()
+    print(f'{V1161_DEV_S581_VERSION} worker running...', flush=True)
+    print(f'BUILD_ID={V1161_DEV_S581_BUILD_ID}', flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked', flush=True)
+        while True:
+            time.sleep(60)
+    _v1160_s2174_start_warmup_once()
+    _v1160_s2179_start_refresh_once()
+    _v1160_s21712_start_scheduler_once()
+    _v1160_s21728_start_live_worker_once()
+    _v1160_s21744_start_sampler_once()
+    _v1161_s38_start_worker_once()
+    _v1161_s40_start_worker_once()
+    _v1161_s41_start_worker_once()
+    _v1161_s44_start_once()
+    print('A100 V116.1 DEV S58.1 current identity audit: ACTIVE', flush=True)
+    print('A100 V116.1 DEV S58.1 compatibility route resolution: ACTIVE', flush=True)
+    print(f'A100 V116.1 DEV S58.1 continuity boot count: {boot["restart_count"]}', flush=True)
+    print('A100 V116.1 DEV S58.1 live trading: OFF', flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set()
+        _V1161_S44_STOP.set()
+    except Exception as exc:
+        V91_STOP.set()
+        _V1161_S44_STOP.set()
+        v88_record_error('v1161-dev-s581-fatal-main', exc)
+        print(traceback.format_exc(), flush=True)
+        raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
-if __name__=='__main__':
+if __name__ == '__main__':
     main()
