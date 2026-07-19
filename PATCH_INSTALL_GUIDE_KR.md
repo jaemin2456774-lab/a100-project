@@ -1,35 +1,34 @@
-# S58.4 Railway 설치 및 확인
+# A100 V116.1 DEV S58.4.1 Railway 설치 가이드
 
-패치를 저장소 루트에 덮어쓰고 Railway로 배포합니다.
+1. 현재 저장소와 Railway Volume을 백업합니다.
+2. ZIP을 저장소 루트에 덮어씁니다.
+3. 변경 파일만 커밋하고 Railway에 배포합니다.
 
-먼저 실행:
+시작 로그:
+- `V116.1-DEV-S58.4.1 worker running...`
+- `BUILD_ID=S58.4.1-20260719-LEDGER-ATOMIC-IDENTITY-STABLE-01`
+- `ledger atomic writer: ACTIVE`
+- `current identity routes: ACTIVE`
+
+배포 후 순서:
+/version
 /status
 /runtimehealth
 /buildinfo
 /routeraudit
 /versionaudit
 /connectivity
-/pipelineaudit
 /engineaudit
-/strategytrust
-/memoryhealth
-/releasegate
-/dashboard
-/errors
-/performanceaudit
-
-그 다음 확인:
 /commandcert
-/commandcert detail
 /commandmatrix
 /regressionguard
 /verifyall
 /errors
 
 승인 기준:
-- `/engineaudit` S58.4 제목과 Build ID
-- 실행한 PARTIAL 명령에 `RUNTIME_CERT`
-- Command Cert PASS 증가 / PARTIAL 감소
-- FAILED 0 / DISCONNECTED 0
+- Ledger 저장 NameError 신규 발생 0
+- 모든 Identity/Router/Version/Regression Audit PASS
 - Registry 341/341
+- Runtime Ledger entries 증가
+- FAILED 0 / DISCONNECTED 0
 - Errors 0

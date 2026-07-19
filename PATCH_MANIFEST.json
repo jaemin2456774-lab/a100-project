@@ -1,14 +1,21 @@
 {
-  "version": "A100 V116.1 DEV S58.4",
-  "build_id": "S58.4-20260719-RUNTIME-INVOCATION-LEDGER-01",
+  "version": "A100 V116.1 DEV S58.4.1",
+  "build_id": "S58.4.1-20260719-LEDGER-ATOMIC-IDENTITY-STABLE-01",
   "package_type": "incremental_patch",
-  "base_version": "A100 V116.1 DEV S58.3",
+  "base_version": "A100 V116.1 DEV S58.4",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S58.4.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S58.4.md",
+    "CHANGELOG_V116.1_DEV_S58.4.1.md",
+    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S58.4.1.md",
     "PATCH_INSTALL_GUIDE_KR.md"
   ],
+  "predeploy_audit": {
+    "ast_parse": "PASS",
+    "compile": "PASS",
+    "sole_final_executable_block": "PASS",
+    "undefined_ledger_writer_reference_active_block": "NONE",
+    "route_expectations": "12/12"
+  },
   "invariants": {
     "registry": "341/341",
     "schema": 1,
@@ -17,7 +24,6 @@
     "live_trading": false,
     "synthetic_completion": false,
     "gate_formulas_changed": false,
-    "engine_logic_changed": false,
-    "runtime_ledger_read_only": true
+    "engine_logic_changed": false
   }
 }
