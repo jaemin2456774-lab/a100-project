@@ -1,29 +1,23 @@
 {
-  "version": "A100 V116.1 DEV S58.4.2",
-  "build_id": "S58.4.2-20260719-LEDGER-SAFE-READ-ROUNDTRIP-01",
-  "package_type": "incremental_patch",
-  "base_version": "A100 V116.1 DEV S58.4.1",
+  "version": "A100 V116.1 DEV S59.7.1",
+  "build_id": "S59.7.1-20260719-RC-CERTIFICATION-TRUTHFULNESS-RUNTIME-PERFORMANCE-HOTFIX-01",
+  "package_type": "incremental_prebuilt_patch",
+  "baseline": "A100 V116.1 DEV S59.7",
   "changed_files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S58.4.2.md",
-    "FINAL_COMPREHENSIVE_AUDIT_V116.1_DEV_S58.4.2.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
+    "main.py"
   ],
-  "predeployment_checks": {
-    "python_compile": "PASS",
-    "final_executable_block": "PASS",
-    "route_handlers": "12/12",
-    "ledger_roundtrip": "PASS",
-    "zip_integrity": "PASS"
-  },
-  "invariants": {
-    "registry": "341/341",
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live_trading": false,
-    "synthetic_completion": false,
-    "gate_formulas_changed": false,
-    "engine_logic_changed": false
-  }
+  "registry_target": 341,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
+  "live_trading": "OFF",
+  "synthetic_completion": "OFF",
+  "runtime_first": true,
+  "strict_read_only": true,
+  "gate_formula_changed": false,
+  "data_reset": false,
+  "runtime_tested": false,
+  "static_compile_pass": true,
+  "ast_parse_pass": true,
+  "known_runtime_status": "MEASURING_REQUIRED"
 }
