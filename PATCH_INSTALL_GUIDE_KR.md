@@ -1,6 +1,8 @@
 # 설치 안내
 
-기존 프로젝트 루트에 `main.py`를 덮어쓴 뒤 Railway에서 재배포합니다.
-기존 `/data`, Runtime, Learning 데이터는 삭제하지 않습니다.
+1. ZIP의 `main.py`를 기존 프로젝트의 동일 파일에 덮어씁니다.
+2. Railway에 배포 후 재시작 로그에서 Registry 341/341을 확인합니다.
+3. `/version`, `/versionaudit`, `/help`, `/errors`를 실행합니다.
+4. Help 카테고리에서 명령을 누른 뒤 `E2E 상세` 버튼으로 단계별 상태를 확인합니다.
 
-배포 후 `/version`, `/versionaudit`, `/help`, `/errors`를 확인하고 같은 Help 카테고리 버튼을 연속 두 번 눌러도 오류가 기록되지 않는지 검사합니다.
+기존 `/data`, Runtime Evidence, Learning 데이터 및 환경변수는 삭제하거나 초기화하지 않습니다.

@@ -1,12 +1,13 @@
 {
-  "version": "A100 V116.1 DEV S59.7.16",
-  "build_id": "S59.7.16-20260719-CLICK-QA-IDEMPOTENT-EDIT-GUARD-01",
+  "version": "A100 V116.1 DEV S59.7.17",
+  "build_id": "S59.7.17-20260720-RUNTIME-E2E-ACTIVATION-AUDIT-QA-CONSOLE2-01",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.16.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.16.md",
+    "CHANGELOG_V116.1_DEV_S59.7.17.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.17.md",
     "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+    "changed_files.manifest",
+    "SHA256SUMS"
   ],
   "preserve_data": true,
   "registry_target": 341
