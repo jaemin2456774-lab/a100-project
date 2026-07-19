@@ -1,12 +1,11 @@
 {
-  "version": "V116.1-DEV-S59.7.5.1",
-  "build_id": "S59.7.5.1-20260719-REGISTRY341-VIRTUAL-ROUTE-MATRIX-SCHEMA-01",
-  "changed_files": [
+  "version": "V116.1-DEV-S59.7.5.2",
+  "build_id": "S59.7.5.2-20260719-CANONICAL-MATRIX-REGISTRY341-LABEL-UNIFICATION-01",
+  "files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.5.1.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.1.md",
-    "PREDEPLOY_TEST_RESULT_S59.7.5.1.json"
-  ],
-  "preserve_data": true,
-  "registry_target": 341
+    "CHANGELOG_V116.1_DEV_S59.7.5.2.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.2.md",
+    "PREDEPLOY_TEST_RESULT_S59.7.5.2.json",
+    "PATCH_INSTALL_GUIDE_KR.md"
+  ]
 }
