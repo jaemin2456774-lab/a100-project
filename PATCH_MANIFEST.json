@@ -1,33 +1,13 @@
 {
-  "version": "V116.1-DEV-S59.7.15",
-  "build_id": "S59.7.15-20260719-COMMAND-ACTIVATION-AUDIT-CLICK-QA-CONSOLE-01",
-  "type": "incremental_prebuilt_patch",
-  "registry_expected": 341,
-  "schema": 1,
-  "paper": 20,
-  "shadow": 60,
-  "live_trading": false,
-  "synthetic_completion": false,
-  "files": [
-    {
-      "path": "main.py",
-      "sha256": "7b92f744b1832ec93b6ccb7edbdfbb251686ad4b1958bc23b4723d79fcfaeec1",
-      "size": 4579485
-    },
-    {
-      "path": "CHANGELOG_V116.1_DEV_S59.7.15.md",
-      "sha256": "b303b43ee0f4a9fb39d9f81aa10613aa727fbfa82f2d0e0938b065d0f1395a3f",
-      "size": 630
-    },
-    {
-      "path": "PATCH_INSTALL_GUIDE_KR.md",
-      "sha256": "31c92f298e7af3fa6f7b1f8bb642b8fa6240e746e78ea694288c5ea4d57d1089",
-      "size": 549
-    },
-    {
-      "path": "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.15.md",
-      "sha256": "3b554252916a2253d0ab685a0401f5bfa115701fba3366a674a1780495beead6",
-      "size": 528
-    }
-  ]
+  "version": "A100 V116.1 DEV S59.7.16",
+  "build_id": "S59.7.16-20260719-CLICK-QA-IDEMPOTENT-EDIT-GUARD-01",
+  "changed_files": [
+    "main.py",
+    "CHANGELOG_V116.1_DEV_S59.7.16.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.16.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
+  ],
+  "preserve_data": true,
+  "registry_target": 341
 }
