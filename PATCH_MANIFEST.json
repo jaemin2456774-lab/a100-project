@@ -1,17 +1,18 @@
 {
-  "version": "S59.7.11",
-  "build_id": "S59.7.11-20260719-ADAPTIVE-OUTPUT-TRUST-TRACE-CHAMPION-VALIDATION-01",
-  "files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.11.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.11.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+  "version": "V116.1-DEV-S59.7.12",
+  "build_id": "S59.7.12-20260719-ADAPTIVE-HISTORY-FEATURE-TREND-CHAMPION-EVOLUTION-01",
+  "type": "incremental_patch",
+  "changed_files": [
+    "main.py"
   ],
-  "preserve": [
-    "/data",
-    "runtime data",
-    "learning data"
-  ],
-  "registry_expected": 341
+  "preserves": [
+    "registry_341",
+    "schema_1",
+    "paper_20",
+    "shadow_60",
+    "live_off",
+    "runtime_data",
+    "learning_data",
+    "gate_formula"
+  ]
 }
