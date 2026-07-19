@@ -1,11 +1,22 @@
 {
-  "version": "V116.1-DEV-S59.7.5.2",
-  "build_id": "S59.7.5.2-20260719-CANONICAL-MATRIX-REGISTRY341-LABEL-UNIFICATION-01",
-  "files": [
+  "version": "V116.1-DEV-S59.7.5.3",
+  "build_id": "S59.7.5.3-20260719-LATE-CANONICAL-REGISTRY-ASYNC-DRIFT-ROUTE-01",
+  "package_type": "incremental_patch",
+  "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.5.2.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.2.md",
-    "PREDEPLOY_TEST_RESULT_S59.7.5.2.json",
-    "PATCH_INSTALL_GUIDE_KR.md"
+    "CHANGELOG_V116.1_DEV_S59.7.5.3.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.3.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
+  ],
+  "preserves": [
+    "runtime_data",
+    "learning_data",
+    "schema_1",
+    "paper_20",
+    "shadow_60",
+    "live_off",
+    "strict_read_only",
+    "gate_formula"
   ]
 }
