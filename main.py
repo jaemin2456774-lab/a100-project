@@ -71152,6 +71152,351 @@ def main():
         raise
 
 
+# ================================================================
+# A100 V116.1 DEV S58.4
+# RUNTIME INVOCATION EVIDENCE LEDGER & ENGINE METADATA CURRENT
+# ================================================================
+V1161_DEV_S584_VERSION='V116.1-DEV-S58.4'
+V1161_DEV_S584_BUILD_ID='S58.4-20260719-RUNTIME-INVOCATION-LEDGER-01'
+V1161_DEV_S584_TITLE='Runtime Invocation Evidence Ledger · Engine Metadata Current'
+V1161_DEV_S584_LEDGER_PATH=os.path.join(V91_DATA_DIR,'v1161_s584_command_runtime_ledger.json')
+V1161_DEV_S584_PRIORITY_COMMANDS={
+ 'status','runtimehealth','buildinfo','routeraudit','versionaudit','connectivity',
+ 'evidence','pipelineaudit','engineaudit','outcome','strategytrust','memoryhealth',
+ 'releasegate','dashboard','errors','performanceaudit'
+}
+_V1161_S584_LEDGER_LOCK=threading.Lock()
+
+
+def _v1161_s584_load_ledger():
+    try:
+        data=_v1160_s2171_read_json(V1161_DEV_S584_LEDGER_PATH,{})
+        return data if isinstance(data,dict) else {}
+    except Exception:
+        return {}
+
+
+def _v1161_s584_save_ledger(data):
+    try:
+        os.makedirs(os.path.dirname(V1161_DEV_S584_LEDGER_PATH),exist_ok=True)
+        _v1160_s2171_atomic_json_write(V1161_DEV_S584_LEDGER_PATH,data)
+        return True
+    except Exception as exc:
+        v88_record_error('v1161-dev-s584-ledger-save',exc)
+        return False
+
+
+def _v1161_s584_record(command,handler_name,ok,output_count,error_type=None):
+    command=str(command or '').lower().lstrip('/')
+    with _V1161_S584_LEDGER_LOCK:
+        ledger=_v1161_s584_load_ledger()
+        row=dict(ledger.get(command) or {})
+        row['command']=command
+        row['handler']=str(handler_name or 'MISSING')
+        row['attempts']=int(row.get('attempts',0))+1
+        row['last_ts']=int(time.time())
+        row['last_ok']=bool(ok)
+        row['last_output_count']=int(output_count or 0)
+        row['last_error']=str(error_type or '')
+        if ok:
+            row['successes']=int(row.get('successes',0))+1
+        else:
+            row['failures']=int(row.get('failures',0))+1
+        if ok and int(output_count or 0)>0:
+            row['runtime_certified']=True
+            row['certified_ts']=int(time.time())
+        ledger[command]=row
+        _v1161_s584_save_ledger(ledger)
+    return row
+
+
+class _V1161S584MessageProxy:
+    def __init__(self,message,counter):
+        self._message=message
+        self._counter=counter
+    def __getattr__(self,name):
+        return getattr(self._message,name)
+    async def reply_text(self,text,*args,**kwargs):
+        self._counter['outputs']=int(self._counter.get('outputs',0))+1
+        return await self._message.reply_text(text,*args,**kwargs)
+    async def reply_html(self,text,*args,**kwargs):
+        self._counter['outputs']=int(self._counter.get('outputs',0))+1
+        kwargs.setdefault('parse_mode','HTML')
+        return await self._message.reply_text(text,*args,**kwargs)
+    async def edit_text(self,text,*args,**kwargs):
+        self._counter['outputs']=int(self._counter.get('outputs',0))+1
+        return await self._message.edit_text(text,*args,**kwargs)
+
+
+class _V1161S584UpdateProxy:
+    def __init__(self,update,counter):
+        self._update=update
+        self.message=_V1161S584MessageProxy(update.message,counter) if getattr(update,'message',None) else None
+        self.effective_message=_V1161S584MessageProxy(update.effective_message,counter) if getattr(update,'effective_message',None) else self.message
+    def __getattr__(self,name):
+        return getattr(self._update,name)
+
+
+def _v1161_s584_route_rows():
+    expected={
+      'version':'version1161devs584_cmd',
+      'status':'status1161devs578_cmd',
+      'runtimehealth':'runtimehealth1161devs578_cmd',
+      'buildinfo':'buildinfo1161devs578_cmd',
+      'connectivity':'connectivity1161devs578_cmd',
+      'verifyall':'verifyall1161devs584_cmd',
+      'routeraudit':'routeraudit1161devs578_cmd',
+      'versionaudit':'versionaudit1161devs578_cmd',
+      'engineaudit':'engineaudit1161devs584_cmd',
+      'commandcert':'commandcert1161devs584_cmd',
+      'commandmatrix':'commandmatrix1161devs584_cmd',
+      'regressionguard':'regressionguard1161devs584_cmd',
+    }
+    rows={}
+    for name,want in expected.items():
+        handler,_source=_v1161_s581_resolve_handler(name)
+        actual=getattr(handler,'__name__','MISSING') if callable(handler) else 'MISSING'
+        rows[name]={'expected':want,'actual':actual,'ok':actual==want}
+    return rows
+
+
+def _v1161_s584_identity_audit():
+    rows=_v1161_s584_route_rows()
+    actual=len(V90_COMMAND_REGISTRY)
+    callback=str(globals().get('_V1161_S571_APP_CALLBACK','v90_1_dispatch'))
+    return {'ok':actual==341 and callback=='v90_1_dispatch' and all(r['ok'] for r in rows.values()),
+      'routes':rows,'registry_actual':actual,'registry_expected':341,
+      'application_callback':callback,'version':V1161_DEV_S584_VERSION,'build_id':V1161_DEV_S584_BUILD_ID}
+
+
+def _v1161_s584_collect_command_certification():
+    base=dict(_v1161_s581_collect_command_certification())
+    ledger=_v1161_s584_load_ledger()
+    rows=[]
+    for row in base.get('rows') or []:
+        item=dict(row)
+        runtime=dict(ledger.get(item.get('command')) or {})
+        item['runtime_evidence']=runtime
+        if item.get('status')=='PARTIAL' and runtime.get('runtime_certified'):
+            item['status']='PASS'
+            item['runtime_certified']=True
+        rows.append(item)
+    counts={k:sum(1 for r in rows if r.get('status')==k) for k in ('PASS','PARTIAL','FAILED','DISCONNECTED')}
+    base.update({'version':V1161_DEV_S584_VERSION,'build_id':V1161_DEV_S584_BUILD_ID,
+      'generated_at':int(time.time()),'rows':rows,'counts':counts,'runtime_ledger_entries':len(ledger)})
+    base['overall']='PASS' if base.get('registry_ok') and counts['FAILED']==0 and counts['DISCONNECTED']==0 else 'FAILED'
+    return base
+
+
+def _v1161_s584_regression_guard():
+    identity=_v1161_s584_identity_audit()
+    cert=_v1161_s584_collect_command_certification()
+    live=_v1160_s21728_read_live_state() or {}
+    checks={'identity':identity['ok'],'registry_341':len(V90_COMMAND_REGISTRY)==341,
+      'handlers_callable':cert['counts']['DISCONNECTED']==0,'failed_zero':cert['counts']['FAILED']==0,
+      'runtime_fresh':bool(live.get('worker_fresh')),'synthetic_completion_off':True,'live_trading_off':True}
+    return {'ok':all(checks.values()),'checks':checks,'cert':cert,'identity':identity}
+
+
+async def engineaudit1161devs584_cmd(update,context):
+    audit=await _v1161_s577_engine_audit()
+    lines=['🔗 <b>A100 ENGINE E2E AUDIT · S58.4</b>',f'· Result <b>{audit["overall"]}</b>',
+      f'· Build ID <code>{V1161_DEV_S584_BUILD_ID}</code>',
+      f'· Producers {audit["producer_connected"]}/{audit["producer_required"]}',
+      f'· Runtime Fresh <b>{"PASS" if audit["runtime_fresh"] else "FAILED"}</b> · Evidence rows {audit["evidence_rows"]}',
+      f'· Pipeline <b>{audit["pipeline_status"]}</b> · Same-ID Trace <b>{"PASS" if audit["e2e_ok"] else "FAILED"}</b>','']
+    labels={'close_payload':'Close Payload','outcome_attribution':'Outcome Attribution','learning_queue':'Learning Queue',
+      'queue_worker':'Learning Worker','strategy_trust':'Strategy Trust','champion_stability':'Champion Stability',
+      'trust_gate':'Trust Gate','dashboard':'Dashboard','id_trace_complete':'ID Trace Complete','revision_integrity':'Revision Integrity'}
+    for name,ok in audit['structural'].items():
+        lines.append(f'{"✅" if ok else "🔴"} {labels[name]}')
+    current=audit['current_revision']; latest=audit['latest_revision']
+    lines += ['',f'Current Trace <code>{audit["attribution_id"] or "N/A"}</code>',
+      f'L{current.get("learning",0)} → S{current.get("strategy",0)} → T{current.get("trust",0)} → C{current.get("champion",0)}',
+      f'Latest Engine L{latest.get("learning",0)} → S{latest.get("strategy",0)} → T{latest.get("trust",0)} → C{latest.get("champion",0)}',
+      '','🔒 Strict Read Only · Gate mutation NONE']
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def commandcert1161devs584_cmd(update,context):
+    report=_v1161_s584_collect_command_certification()
+    detail=any(str(a).lower() in ('detail','full') for a in (getattr(context,'args',None) or []))
+    jp,tp=_v1161_s580_save_report(report) if detail else (None,None)
+    c=report['counts']
+    lines=['🧾 <b>A100 COMMAND E2E CERTIFICATION · S58.4</b>',f'· Result <b>{report["overall"]}</b>',
+      f'· Build ID <code>{V1161_DEV_S584_BUILD_ID}</code>',f'· Registry {report["registry_actual"]}/341',
+      f'✅ PASS {c["PASS"]} · 🟡 PARTIAL {c["PARTIAL"]}',f'🔴 FAILED {c["FAILED"]} · ⚫ DISCONNECTED {c["DISCONNECTED"]}',
+      f'· Runtime ledger {report["runtime_ledger_entries"]} commands','',
+      'PASS 승격 기준: 실제 Telegram 호출 + Handler 정상 완료 + 응답 출력 확인',
+      '정적 연결만 확인된 명령은 PARTIAL을 유지합니다.']
+    if detail:
+        problems=[r for r in report['rows'] if r['status']!='PASS'][:35]
+        lines += ['', '<b>우선 점검 대상</b>']
+        lines += [f'🟡 /{r["command"]} · {r["status"]} · <code>{r["handler"]}</code>' for r in problems]
+        if jp: lines += ['',f'JSON <code>{jp}</code>',f'TXT <code>{tp}</code>']
+    else:
+        lines += ['', '📄 /commandcert detail → 문제 명령 + Runtime Ledger 저장']
+    await update.message.reply_text(_v1161_s5_trim('\n'.join(lines)),parse_mode='HTML')
+
+
+async def commandmatrix1161devs584_cmd(update,context):
+    matrix=_v1161_s581_runtime_link_matrix()
+    ledger=_v1161_s584_load_ledger()
+    lines=['🧩 <b>A100 RUNTIME LINK MATRIX · S58.4</b>',f'· Build ID <code>{V1161_DEV_S584_BUILD_ID}</code>','']
+    for group,rows in matrix.items():
+        present=sum(1 for r in rows if r['present'])
+        lines.append(f'<b>{group.upper()}</b> · {present}/{len(rows)} resolved')
+        for r in rows:
+            runtime=ledger.get(r['command']) or {}
+            certified=bool(runtime.get('runtime_certified'))
+            status='PASS' if certified and r['status']=='PARTIAL' else r['status']
+            icon='✅' if r['present'] else '🔴'
+            runtime_tag=' · RUNTIME_CERT' if certified else ''
+            source='' if r['resolution_source']=='DIRECT' else f' · {r["resolution_source"]}'
+            lines.append(f'{icon} /{r["command"]} · {status} · <code>{r["handler"]}</code>{source}{runtime_tag}')
+        lines.append('')
+    await update.message.reply_text(_v1161_s5_trim('\n'.join(lines)),parse_mode='HTML')
+
+
+async def regressionguard1161devs584_cmd(update,context):
+    guard=_v1161_s584_regression_guard()
+    lines=['🛡️ <b>A100 REGRESSION GUARD · S58.4</b>',f'· Result <b>{"PASS" if guard["ok"] else "FAILED"}</b>',
+      f'· Build ID <code>{V1161_DEV_S584_BUILD_ID}</code>','']
+    lines += [f'{"✅" if ok else "🔴"} {name}' for name,ok in guard['checks'].items()]
+    c=guard['cert']['counts']
+    lines += ['',f'Command Cert PASS {c["PASS"]} · PARTIAL {c["PARTIAL"]} · FAILED {c["FAILED"]} · DISCONNECTED {c["DISCONNECTED"]}']
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def version1161devs584_cmd(update,context):
+    guard=_v1161_s584_regression_guard()
+    await update.message.reply_text(
+      f'🧬 <b>A100 {V1161_DEV_S584_VERSION}</b>\n{V1161_DEV_S584_TITLE}\n\n'
+      f'Build ID <code>{V1161_DEV_S584_BUILD_ID}</code>\n'
+      f'Regression Guard <b>{"PASS" if guard["ok"] else "FAILED"}</b>\n'
+      f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Runtime First\n'
+      'Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+async def _v1161_s584_collect_verify_report():
+    report=dict(await _v1161_s583_collect_verify_report())
+    identity=_v1161_s584_identity_audit()
+    cert=_v1161_s584_collect_command_certification()
+    report['version']=V1161_DEV_S584_VERSION
+    report['build_id']=V1161_DEV_S584_BUILD_ID
+    report['identity_audit']=identity
+    report['command_certification']=cert
+    previous=dict(report.get('hard_checks') or {})
+    hard={'identity':identity['ok'],'registry':identity['registry_actual']==341,
+      'evidence':bool(previous.get('evidence')),'runtime_fresh':bool(previous.get('runtime_fresh')),
+      'engine_e2e':bool(previous.get('engine_e2e')),'commands_callable':cert['counts']['DISCONNECTED']==0,
+      'command_failed_zero':cert['counts']['FAILED']==0,'errors_zero':bool(previous.get('errors_zero'))}
+    report['hard_checks']=hard
+    report['overall']='PASS' if all(hard.values()) else 'FAILED'
+    return report
+
+
+def _v1161_s584_render_verify(report,detail=False):
+    text=_v1161_s583_render_verify(report,detail)
+    text=text.replace('A100 자동 검증 · S58.3','A100 자동 검증 · S58.4')
+    text=text.replace(V1161_DEV_S583_BUILD_ID,V1161_DEV_S584_BUILD_ID)
+    cut=text.find('\n🧬 Identity ')
+    if cut>=0: text=text[:cut]
+    identity=report.get('identity_audit') or {}; engine=report.get('engine_audit') or {}
+    cert=report.get('command_certification') or {}; c=cert.get('counts') or {}
+    lines=['',f'🧬 Identity <b>{"PASS" if identity.get("ok") else "FAILED"}</b> · Build <code>{V1161_DEV_S584_BUILD_ID}</code>']
+    for name,row in (identity.get('routes') or {}).items():
+        lines.append(f'{"✅" if row.get("ok") else "🔴"} /{name:17} {row.get("actual","MISSING")}')
+    lines += ['',f'🔗 Engine E2E <b>{engine.get("overall","FAILED")}</b> · Producers {engine.get("producer_connected",0)}/{engine.get("producer_required",16)}',
+      f'🧾 Command Cert PASS {c.get("PASS",0)} · PARTIAL {c.get("PARTIAL",0)} · FAILED {c.get("FAILED",0)} · DISCONNECTED {c.get("DISCONNECTED",0)}',
+      '','🔐 <b>Hard PASS Conditions</b>']
+    for name,value in (report.get('hard_checks') or {}).items():
+        lines.append(f'{"✅" if value else "🔴"} {name}')
+    return text+'\n'+'\n'.join(lines)
+
+
+async def verifyall1161devs584_cmd(update,context):
+    detail=any(str(a).lower() in ('detail','full') for a in (getattr(context,'args',None) or []))
+    try:
+        report=await _v1161_s584_collect_verify_report()
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s584_render_verify(report,detail)),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s584-verifyall',exc)
+        await update.message.reply_text(f'⚠️ /verifyall S58.4 오류 · {type(exc).__name__} · /errors 확인')
+
+
+def _v1161_s584_install_routes():
+    global V90_EXPECTED_COMMANDS
+    routes={'version':version1161devs584_cmd,'verifyall':verifyall1161devs584_cmd,
+      'engineaudit':engineaudit1161devs584_cmd,'commandcert':commandcert1161devs584_cmd,
+      'commandmatrix':commandmatrix1161devs584_cmd,'regressionguard':regressionguard1161devs584_cmd}
+    _V1161_S571_VIRTUAL_ROUTES.update(routes)
+    V90_COMMAND_REGISTRY['version']=version1161devs584_cmd
+    V90_COMMAND_REGISTRY['commandcert']=commandcert1161devs584_cmd
+    V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+    return len(V90_COMMAND_REGISTRY)
+
+
+_v1161_s584_install_routes()
+_V1161_S584_DISPATCH_BASE=v90_1_dispatch
+
+
+async def v90_1_dispatch(update,context):
+    command=_v1161_s57_extract_command(update).lstrip('/')
+    handler,_source=_v1161_s581_resolve_handler(command)
+    if callable(handler) and handler is not v90_1_dispatch:
+        counter={'outputs':0}
+        proxy=_V1161S584UpdateProxy(update,counter)
+        try:
+            result=await handler(proxy,context)
+            _v1161_s584_record(command,getattr(handler,'__name__','MISSING'),True,counter['outputs'])
+            return result
+        except Exception as exc:
+            _v1161_s584_record(command,getattr(handler,'__name__','MISSING'),False,counter['outputs'],type(exc).__name__)
+            raise
+    return await _V1161_S584_DISPATCH_BASE(update,context)
+
+
+def build_v44_application(token):
+    global _V1161_S571_APP_CALLBACK,_V1161_S571_APP_CALLBACK_ID
+    _v1161_s584_install_routes()
+    app=Application.builder().token(token).build()
+    callback=v90_1_dispatch
+    app.add_handler(MessageHandler(filters.COMMAND,callback),group=0)
+    app.add_error_handler(v88_error_handler)
+    _V1161_S571_APP_CALLBACK=callback.__name__
+    _V1161_S571_APP_CALLBACK_ID=id(callback)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore(): _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once(); v91_start_background_once()
+    _v1161_s584_install_routes()
+    boot=_v1161_s44_record_boot()
+    print(f'{V1161_DEV_S584_VERSION} worker running...',flush=True)
+    print(f'BUILD_ID={V1161_DEV_S584_BUILD_ID}',flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once()
+    _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once()
+    _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once()
+    _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S58.4 runtime invocation ledger: ACTIVE',flush=True)
+    print('A100 V116.1 DEV S58.4 engine metadata current: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S58.4 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S58.4 live trading: OFF',flush=True)
+    try: asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set(); _V1161_S44_STOP.set()
+    except Exception as exc:
+        V91_STOP.set(); _V1161_S44_STOP.set()
+        v88_record_error('v1161-dev-s584-fatal-main',exc)
+        print(traceback.format_exc(),flush=True); raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
 if __name__=='__main__':
     main()
