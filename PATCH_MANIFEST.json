@@ -1,14 +1,45 @@
 {
-  "version": "S59.7.18",
-  "build_id": "S59.7.18-20260720-AUTHORITATIVE-LEARNING-EVIDENCE-RECOVERY-01",
-  "changed_files": [
-    "main.py"
-  ],
-  "preserve": [
-    "runtime_data",
-    "learning_data",
-    "config"
-  ],
+  "version": "A100 V116.1 DEV S59.7.19",
+  "build_id": "S59.7.19-20260720-SHARED-SNAPSHOT-COMMAND-HEALTH-PERFORMANCE-RECOVERY-01",
+  "base": "S59.7.18",
+  "patch_type": "incremental",
   "registry_expected": 341,
-  "synthetic_completion": false
+  "files": [
+    {
+      "path": "main.py",
+      "sha256": "04b82020efc9e6e988c1b792f8d27c7cabc8d27e2de645ce7b42944e1e3dfe02",
+      "size": 4620768
+    },
+    {
+      "path": "CHANGELOG_V116.1_DEV_S59.7.19.md",
+      "sha256": "d7a5c47c120f7f6003788fb2da46220362e42e29abc33d033aaff2d62ce17872",
+      "size": 792
+    },
+    {
+      "path": "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.19.md",
+      "sha256": "02af91e57ea41d266ab4a05951411d223c6b7701c300cfed60c9246bbd4eac76",
+      "size": 613
+    },
+    {
+      "path": "PATCH_INSTALL_GUIDE_KR.md",
+      "sha256": "9085ba88bead9b6aee0e39af45886d7ec72600e0706ce35337338a3807c3291b",
+      "size": 588
+    },
+    {
+      "path": "changed_files.manifest",
+      "sha256": "6b6178c83f0b0cd0839662fbf56d6683e8f92240514e19e3f2ef50bc60439bba",
+      "size": 160
+    }
+  ],
+  "preserves": [
+    "Runtime First",
+    "Strict Read Only",
+    "Schema 1",
+    "Paper 20",
+    "Shadow 60",
+    "Live Trading OFF",
+    "Synthetic Completion OFF",
+    "Gate Formula",
+    "Runtime/Learning data"
+  ]
 }
