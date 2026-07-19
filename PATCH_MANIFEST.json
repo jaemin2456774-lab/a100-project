@@ -1,14 +1,14 @@
 {
-  "version": "A100 V116.1 DEV S59.7.17",
-  "build_id": "S59.7.17-20260720-RUNTIME-E2E-ACTIVATION-AUDIT-QA-CONSOLE2-01",
+  "version": "S59.7.18",
+  "build_id": "S59.7.18-20260720-AUTHORITATIVE-LEARNING-EVIDENCE-RECOVERY-01",
   "changed_files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.17.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.17.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest",
-    "SHA256SUMS"
+    "main.py"
   ],
-  "preserve_data": true,
-  "registry_target": 341
+  "preserve": [
+    "runtime_data",
+    "learning_data",
+    "config"
+  ],
+  "registry_expected": 341,
+  "synthetic_completion": false
 }

@@ -1,8 +1,20 @@
-# 설치 안내
+# S59.7.18 설치 및 검수
 
-1. ZIP의 `main.py`를 기존 프로젝트의 동일 파일에 덮어씁니다.
-2. Railway에 배포 후 재시작 로그에서 Registry 341/341을 확인합니다.
-3. `/version`, `/versionaudit`, `/help`, `/errors`를 실행합니다.
-4. Help 카테고리에서 명령을 누른 뒤 `E2E 상세` 버튼으로 단계별 상태를 확인합니다.
+기존 프로젝트에 변경 파일을 덮어쓴 뒤 Railway에서 재배포합니다. `/data` 및 기존 설정은 삭제하지 않습니다.
 
-기존 `/data`, Runtime Evidence, Learning 데이터 및 환경변수는 삭제하거나 초기화하지 않습니다.
+검수 순서:
+
+```text
+/version
+/versionaudit
+/help
+/review
+/accuracytracker
+/strategyperformance
+/strategytrust
+/memoryhealth
+/championstability
+/errors
+```
+
+각 명령의 `E2E 상세`에서 Learning 단계와 `LEARNING TRACE`를 확인합니다.
