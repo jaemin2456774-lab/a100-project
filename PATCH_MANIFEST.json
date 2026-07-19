@@ -1,24 +1,23 @@
 {
-  "version": "S59.7.6",
-  "build_id": "S59.7.6-20260719-PAPER-CLOSED-LOOP-LEARNING-BRIDGE-01",
+  "version": "S59.7.7",
+  "build_id": "S59.7.7-20260719-PAPER-SHADOW-LEARNING-AGGREGATION-TRUST-SYNC-01",
   "changed_files": [
     "main.py"
   ],
-  "preserves": [
-    "schema1",
-    "paper20",
-    "shadow60",
-    "live_off",
-    "runtime_data",
-    "learning_data",
-    "gate_formula",
-    "registry341"
-  ],
+  "preserves": {
+    "registry": 341,
+    "schema": 1,
+    "paper": 20,
+    "shadow": 60,
+    "live_trading": false,
+    "gate_formula": true,
+    "runtime_learning_data": true
+  },
   "sha256": {
-    "main.py": "5a02b3107b91d89ff94810035363648b4d9478e6e8cb9e95e3087dd323bf2652",
-    "CHANGELOG_V116.1_DEV_S59.7.6.md": "4d8dff6a5c2f4450095e564cdc91906e191c4d2893515078e1845a6b38301675",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.6.md": "e85052b82bd0ee462597f08a16f90a19932d20422ee4fc5738c794651a66dc31",
-    "PATCH_INSTALL_GUIDE_KR.md": "0d0a8096e2251dcc8d2d1948d36960bc9fb6f4e79db321b6ded55d97d24cc41e",
+    "main.py": "352dae8d40eb383c4b8e59c58f7b7b054a04086f12d7cbe861b6170598b71ede",
+    "CHANGELOG_V116.1_DEV_S59.7.7.md": "c53de0fb0ab25548f975fcb5bdaee1355f0a59d0992e38bfd5acb4ff72cf4f8c",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.7.md": "71762eb7c6c9d50e48236533902d80ca39d526a0847653ed715e11111a1c122e",
+    "PATCH_INSTALL_GUIDE_KR.md": "2a667994c2a10a3785faf7133074fd0baef8c413314481254dac5f3389249ebc",
     "changed_files.manifest": "58ffbfc5ea2a845743ee8f94961f2b273f171e0081e96ec9ff8cf472e46ce635"
   }
 }
