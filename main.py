@@ -71754,6 +71754,371 @@ def main():
         V91_STOP.set(); _V1161_S44_STOP.set(); v88_record_error('v1161-dev-s5841-fatal-main',exc); print(traceback.format_exc(),flush=True); raise
 
 
+# ================================================================
+# A100 V116.1 DEV S58.4.2
+# LEDGER SAFE READ / ROUNDTRIP VERIFY / METADATA FINALIZATION
+# ================================================================
+V1161_DEV_S5842_VERSION='V116.1-DEV-S58.4.2'
+V1161_DEV_S5842_BUILD_ID='S58.4.2-20260719-LEDGER-SAFE-READ-ROUNDTRIP-01'
+V1161_DEV_S5842_TITLE='Ledger Safe Read · Roundtrip Verification · Metadata Finalization'
+V1161_DEV_S5842_LEDGER_STATUS={'read_ok':False,'write_ok':False,'roundtrip_ok':False,'entries':0,'path':V1161_DEV_S584_LEDGER_PATH,'error':''}
+
+
+def _v1161_s5842_safe_json_read(path,default=None):
+    default={} if default is None else default
+    try:
+        if not os.path.exists(path):
+            return default
+        with open(path,'r',encoding='utf-8') as fh:
+            data=json.load(fh)
+        if not isinstance(data,dict):
+            raise TypeError(f'ledger root must be dict, got {type(data).__name__}')
+        V1161_DEV_S5842_LEDGER_STATUS['read_ok']=True
+        V1161_DEV_S5842_LEDGER_STATUS['entries']=len(data)
+        V1161_DEV_S5842_LEDGER_STATUS['error']=''
+        return data
+    except Exception as exc:
+        V1161_DEV_S5842_LEDGER_STATUS['read_ok']=False
+        V1161_DEV_S5842_LEDGER_STATUS['error']=f'{type(exc).__name__}: {exc}'
+        try:
+            if os.path.exists(path):
+                backup=f'{path}.corrupt.{int(time.time())}'
+                os.replace(path,backup)
+        except Exception:
+            pass
+        v88_record_error('v1161-dev-s5842-ledger-read',exc)
+        return default
+
+
+def _v1161_s584_load_ledger():
+    return _v1161_s5842_safe_json_read(V1161_DEV_S584_LEDGER_PATH,{})
+
+
+def _v1161_s584_save_ledger(data):
+    try:
+        if not isinstance(data,dict):
+            raise TypeError('ledger data must be dict')
+        _v1161_s5841_atomic_json_write(V1161_DEV_S584_LEDGER_PATH,data)
+        verify=_v1161_s5842_safe_json_read(V1161_DEV_S584_LEDGER_PATH,{})
+        if verify != data:
+            raise RuntimeError('ledger roundtrip mismatch')
+        V1161_DEV_S5842_LEDGER_STATUS['write_ok']=True
+        V1161_DEV_S5842_LEDGER_STATUS['roundtrip_ok']=True
+        V1161_DEV_S5842_LEDGER_STATUS['entries']=len(verify)
+        V1161_DEV_S5842_LEDGER_STATUS['error']=''
+        return True
+    except Exception as exc:
+        V1161_DEV_S5842_LEDGER_STATUS['write_ok']=False
+        V1161_DEV_S5842_LEDGER_STATUS['roundtrip_ok']=False
+        V1161_DEV_S5842_LEDGER_STATUS['error']=f'{type(exc).__name__}: {exc}'
+        v88_record_error('v1161-dev-s5842-ledger-save',exc)
+        return False
+
+
+def _v1161_s5842_roundtrip_selftest():
+    folder=os.path.dirname(V1161_DEV_S584_LEDGER_PATH) or '/tmp'
+    os.makedirs(folder,exist_ok=True)
+    path=os.path.join(folder,f'.s5842_roundtrip_{os.getpid()}_{threading.get_ident()}.json')
+    sample={'probe':{'value':5842,'ok':True},'ts':int(time.time())}
+    try:
+        _v1161_s5841_atomic_json_write(path,sample)
+        with open(path,'r',encoding='utf-8') as fh:
+            loaded=json.load(fh)
+        ok=loaded==sample
+        if not ok:
+            raise RuntimeError('roundtrip selftest mismatch')
+        return True
+    finally:
+        try: os.remove(path)
+        except Exception: pass
+
+
+def _v1161_s5842_normalize_text(text):
+    value=str(text or '')
+    value=value.replace('A100 COMMAND E2E CERTIFICATION · S58.4','A100 COMMAND E2E CERTIFICATION · S58.4.2')
+    value=value.replace('A100 RUNTIME LINK MATRIX · S58.4','A100 RUNTIME LINK MATRIX · S58.4.2')
+    value=value.replace('A100 자동 검증 · S58.4','A100 자동 검증 · S58.4.2')
+    value=value.replace('A100 REGRESSION GUARD · S58.4.1','A100 REGRESSION GUARD · S58.4.2')
+    value=value.replace('A100 ENGINE E2E AUDIT · S58.4.1','A100 ENGINE E2E AUDIT · S58.4.2')
+    value=value.replace(V1161_DEV_S5841_BUILD_ID,V1161_DEV_S5842_BUILD_ID)
+    value=value.replace(V1161_DEV_S584_BUILD_ID,V1161_DEV_S5842_BUILD_ID)
+    value=value.replace(V1161_DEV_S5841_VERSION,V1161_DEV_S5842_VERSION)
+    return value
+
+
+class _V1161S5842MessageProxy:
+    def __init__(self,message): self._message=message
+    def __getattr__(self,name): return getattr(self._message,name)
+    async def reply_text(self,text,*args,**kwargs):
+        return await self._message.reply_text(_v1161_s5842_normalize_text(text),*args,**kwargs)
+    async def reply_html(self,text,*args,**kwargs):
+        kwargs.setdefault('parse_mode','HTML')
+        return await self._message.reply_text(_v1161_s5842_normalize_text(text),*args,**kwargs)
+    async def edit_text(self,text,*args,**kwargs):
+        return await self._message.edit_text(_v1161_s5842_normalize_text(text),*args,**kwargs)
+
+
+class _V1161S5842UpdateProxy:
+    def __init__(self,update):
+        self._update=update
+        self.message=_V1161S5842MessageProxy(update.message) if getattr(update,'message',None) else None
+        self.effective_message=_V1161S5842MessageProxy(update.effective_message) if getattr(update,'effective_message',None) else self.message
+    def __getattr__(self,name): return getattr(self._update,name)
+
+
+def _v1161_s5842_route_rows():
+    expected={
+      'version':'version1161devs5842_cmd','status':'status1161devs5842_cmd',
+      'runtimehealth':'runtimehealth1161devs5842_cmd','buildinfo':'buildinfo1161devs5842_cmd',
+      'connectivity':'connectivity1161devs5842_cmd','verifyall':'verifyall1161devs5842_cmd',
+      'routeraudit':'routeraudit1161devs5842_cmd','versionaudit':'versionaudit1161devs5842_cmd',
+      'engineaudit':'engineaudit1161devs5842_cmd','commandcert':'commandcert1161devs5842_cmd',
+      'commandmatrix':'commandmatrix1161devs5842_cmd','regressionguard':'regressionguard1161devs5842_cmd'
+    }
+    rows={}
+    for name,want in expected.items():
+        handler,_source=_v1161_s581_resolve_handler(name)
+        actual=getattr(handler,'__name__','MISSING') if callable(handler) else 'MISSING'
+        rows[name]={'expected':want,'actual':actual,'ok':actual==want}
+    return rows
+
+
+def _v1161_s5842_identity_audit():
+    rows=_v1161_s5842_route_rows()
+    actual=len(V90_COMMAND_REGISTRY)
+    callback=str(globals().get('_V1161_S571_APP_CALLBACK','v90_1_dispatch'))
+    return {'ok':actual==341 and callback=='v90_1_dispatch' and all(r['ok'] for r in rows.values()),
+      'routes':rows,'registry_actual':actual,'registry_expected':341,'application_callback':callback,
+      'version':V1161_DEV_S5842_VERSION,'build_id':V1161_DEV_S5842_BUILD_ID}
+
+
+async def version1161devs5842_cmd(update,context):
+    identity=_v1161_s5842_identity_audit()
+    ledger=_v1161_s584_load_ledger()
+    await update.message.reply_text(
+      f'🧬 <b>A100 {V1161_DEV_S5842_VERSION}</b>\n{V1161_DEV_S5842_TITLE}\n\n'
+      f'Build ID <code>{V1161_DEV_S5842_BUILD_ID}</code>\n'
+      f'Identity Audit <b>{"PASS" if identity["ok"] else "FAILED"}</b>\n'
+      f'Ledger Read <b>{"PASS" if V1161_DEV_S5842_LEDGER_STATUS["read_ok"] else "WARMING"}</b> · Entries {len(ledger)}\n'
+      f'Ledger Roundtrip <b>{"PASS" if V1161_DEV_S5842_LEDGER_STATUS["roundtrip_ok"] else "WARMING"}</b>\n'
+      f'Registry {len(V90_COMMAND_REGISTRY)}/341 · Runtime First\n'
+      'Schema 1 · Paper 20 · Shadow 60 · Live OFF',parse_mode='HTML')
+
+
+async def status1161devs5842_cmd(update,context):
+    return await status1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+async def runtimehealth1161devs5842_cmd(update,context):
+    return await runtimehealth1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+async def connectivity1161devs5842_cmd(update,context):
+    return await connectivity1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+async def engineaudit1161devs5842_cmd(update,context):
+    return await engineaudit1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+async def buildinfo1161devs5842_cmd(update,context):
+    identity=_v1161_s5842_identity_audit()
+    ledger=_v1161_s584_load_ledger()
+    lines=['🧬 <b>A100 BUILD & APPLICATION IDENTITY · S58.4.2</b>',
+      f'· Running <b>{V1161_DEV_S5842_VERSION}</b>',
+      f'· Build ID <code>{V1161_DEV_S5842_BUILD_ID}</code>',
+      f'· Overall <b>{"PASS" if identity["ok"] else "FAILED"}</b>',
+      f'· Application callback <code>{identity["application_callback"]}</code>',
+      f'· Registry {identity["registry_actual"]}/341',
+      f'· Ledger entries {len(ledger)} · Read {"PASS" if V1161_DEV_S5842_LEDGER_STATUS["read_ok"] else "FAILED"} · '
+      f'Roundtrip {"PASS" if V1161_DEV_S5842_LEDGER_STATUS["roundtrip_ok"] else "WARMING"}']
+    for name,row in identity['routes'].items():
+        lines.append(f'· /{name} <b>{"PASS" if row["ok"] else "FAILED"}</b> · <code>{row["actual"]}</code>')
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def routeraudit1161devs5842_cmd(update,context):
+    identity=_v1161_s5842_identity_audit()
+    lines=['🧭 <b>A100 TELEGRAM ROUTER AUDIT · S58.4.2</b>',
+      f'· Result <b>{"PASS" if identity["ok"] else "FAILED"}</b>',
+      f'· Build ID <code>{V1161_DEV_S5842_BUILD_ID}</code>',
+      f'· Registry {identity["registry_actual"]}/341','']
+    for name,row in identity['routes'].items():
+        lines.append(f'{"✅" if row["ok"] else "🔴"} /{name:17} {row["actual"]}')
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def versionaudit1161devs5842_cmd(update,context):
+    return await versionaudit1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+async def commandcert1161devs5842_cmd(update,context):
+    return await commandcert1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+async def commandmatrix1161devs5842_cmd(update,context):
+    return await commandmatrix1161devs5841_cmd(_V1161S5842UpdateProxy(update),context)
+
+
+def _v1161_s5842_regression_guard():
+    identity=_v1161_s5842_identity_audit()
+    cert=_v1161_s584_collect_command_certification()
+    live=_v1160_s21728_read_live_state() or {}
+    ledger=_v1161_s584_load_ledger()
+    checks={'identity':identity['ok'],'registry_341':len(V90_COMMAND_REGISTRY)==341,
+      'handlers_callable':cert['counts']['DISCONNECTED']==0,'failed_zero':cert['counts']['FAILED']==0,
+      'runtime_fresh':bool(live.get('worker_fresh')),'ledger_read':V1161_DEV_S5842_LEDGER_STATUS['read_ok'],
+      'ledger_roundtrip':V1161_DEV_S5842_LEDGER_STATUS['roundtrip_ok'],
+      'synthetic_completion_off':True,'live_trading_off':True}
+    return {'ok':all(checks.values()),'checks':checks,'cert':cert,'identity':identity,'ledger_entries':len(ledger)}
+
+
+async def regressionguard1161devs5842_cmd(update,context):
+    guard=_v1161_s5842_regression_guard()
+    lines=['🛡️ <b>A100 REGRESSION GUARD · S58.4.2</b>',
+      f'· Result <b>{"PASS" if guard["ok"] else "FAILED"}</b>',
+      f'· Build ID <code>{V1161_DEV_S5842_BUILD_ID}</code>',
+      f'· Ledger entries {guard["ledger_entries"]}','']
+    lines += [f'{"✅" if ok else "🔴"} {name}' for name,ok in guard['checks'].items()]
+    c=guard['cert']['counts']
+    lines += ['',f'Command Cert PASS {c["PASS"]} · PARTIAL {c["PARTIAL"]} · FAILED {c["FAILED"]} · DISCONNECTED {c["DISCONNECTED"]}']
+    await update.message.reply_text('\n'.join(lines),parse_mode='HTML')
+
+
+async def _v1161_s5842_collect_verify_report():
+    report=dict(await _v1161_s5841_collect_verify_report())
+    identity=_v1161_s5842_identity_audit()
+    cert=_v1161_s584_collect_command_certification()
+    report['version']=V1161_DEV_S5842_VERSION
+    report['build_id']=V1161_DEV_S5842_BUILD_ID
+    report['identity_audit']=identity
+    report['command_certification']=cert
+    previous=dict(report.get('hard_checks') or {})
+    hard={'identity':identity['ok'],'registry':identity['registry_actual']==341,
+      'evidence':bool(previous.get('evidence')),'runtime_fresh':bool(previous.get('runtime_fresh')),
+      'engine_e2e':bool(previous.get('engine_e2e')),'commands_callable':cert['counts']['DISCONNECTED']==0,
+      'command_failed_zero':cert['counts']['FAILED']==0,'ledger_read':V1161_DEV_S5842_LEDGER_STATUS['read_ok'],
+      'ledger_roundtrip':V1161_DEV_S5842_LEDGER_STATUS['roundtrip_ok'],'errors_zero':bool(previous.get('errors_zero'))}
+    report['hard_checks']=hard
+    report['overall']='PASS' if all(hard.values()) else 'FAILED'
+    return report
+
+
+def _v1161_s5842_render_verify(report,detail=False):
+    text=_v1161_s5841_render_verify(report,detail)
+    text=_v1161_s5842_normalize_text(text)
+    cut=text.find('\n🧬 Identity ')
+    if cut>=0: text=text[:cut]
+    identity=report.get('identity_audit') or {}
+    engine=report.get('engine_audit') or {}
+    cert=report.get('command_certification') or {}
+    c=cert.get('counts') or {}
+    ledger=_v1161_s584_load_ledger()
+    lines=['',f'🧬 Identity <b>{"PASS" if identity.get("ok") else "FAILED"}</b> · Build <code>{V1161_DEV_S5842_BUILD_ID}</code>']
+    for name,row in (identity.get('routes') or {}).items():
+        lines.append(f'{"✅" if row.get("ok") else "🔴"} /{name:17} {row.get("actual","MISSING")}')
+    lines += ['',f'🔗 Engine E2E <b>{engine.get("overall","FAILED")}</b> · Producers {engine.get("producer_connected",0)}/{engine.get("producer_required",16)}',
+      f'🧾 Command Cert PASS {c.get("PASS",0)} · PARTIAL {c.get("PARTIAL",0)} · FAILED {c.get("FAILED",0)} · DISCONNECTED {c.get("DISCONNECTED",0)}',
+      f'📚 Runtime Ledger {len(ledger)} commands · Read {"PASS" if V1161_DEV_S5842_LEDGER_STATUS["read_ok"] else "FAILED"} · '
+      f'Roundtrip {"PASS" if V1161_DEV_S5842_LEDGER_STATUS["roundtrip_ok"] else "FAILED"}',
+      '','🔐 <b>Hard PASS Conditions</b>']
+    for name,value in (report.get('hard_checks') or {}).items():
+        lines.append(f'{"✅" if value else "🔴"} {name}')
+    return text+'\n'+'\n'.join(lines)
+
+
+async def verifyall1161devs5842_cmd(update,context):
+    detail=any(str(a).lower() in ('detail','full') for a in (getattr(context,'args',None) or []))
+    try:
+        report=await _v1161_s5842_collect_verify_report()
+        await update.message.reply_text(_v1161_s5_trim(_v1161_s5842_render_verify(report,detail)),parse_mode='HTML')
+    except Exception as exc:
+        v88_record_error('v1161-dev-s5842-verifyall',exc)
+        await update.message.reply_text(f'⚠️ /verifyall S58.4.2 오류 · {type(exc).__name__} · /errors 확인')
+
+
+def _v1161_s5842_install_routes():
+    global V90_EXPECTED_COMMANDS
+    routes={'version':version1161devs5842_cmd,'status':status1161devs5842_cmd,
+      'runtimehealth':runtimehealth1161devs5842_cmd,'buildinfo':buildinfo1161devs5842_cmd,
+      'connectivity':connectivity1161devs5842_cmd,'verifyall':verifyall1161devs5842_cmd,
+      'routeraudit':routeraudit1161devs5842_cmd,'versionaudit':versionaudit1161devs5842_cmd,
+      'engineaudit':engineaudit1161devs5842_cmd,'commandcert':commandcert1161devs5842_cmd,
+      'commandmatrix':commandmatrix1161devs5842_cmd,'regressionguard':regressionguard1161devs5842_cmd}
+    _V1161_S571_VIRTUAL_ROUTES.update(routes)
+    for name in ('version','status','runtimehealth','versionaudit','commandcert'):
+        V90_COMMAND_REGISTRY[name]=routes[name]
+    V90_EXPECTED_COMMANDS=frozenset(V90_COMMAND_REGISTRY)
+    return len(V90_COMMAND_REGISTRY)
+
+
+_v1161_s5842_install_routes()
+_V1161_S5842_DISPATCH_BASE=v90_1_dispatch
+
+
+async def v90_1_dispatch(update,context):
+    command=_v1161_s57_extract_command(update).lstrip('/')
+    handler,_source=_v1161_s581_resolve_handler(command)
+    if callable(handler) and handler is not v90_1_dispatch:
+        counter={'outputs':0}
+        proxy=_V1161S584UpdateProxy(update,counter)
+        try:
+            result=await handler(proxy,context)
+            _v1161_s584_record(command,getattr(handler,'__name__','MISSING'),True,counter['outputs'])
+            return result
+        except Exception as exc:
+            _v1161_s584_record(command,getattr(handler,'__name__','MISSING'),False,counter['outputs'],type(exc).__name__)
+            raise
+    return await _V1161_S5842_DISPATCH_BASE(update,context)
+
+
+def build_v44_application(token):
+    global _V1161_S571_APP_CALLBACK,_V1161_S571_APP_CALLBACK_ID
+    _v1161_s5842_install_routes()
+    app=Application.builder().token(token).build()
+    callback=v90_1_dispatch
+    app.add_handler(MessageHandler(filters.COMMAND,callback),group=0)
+    app.add_error_handler(v88_error_handler)
+    _V1161_S571_APP_CALLBACK=callback.__name__
+    _V1161_S571_APP_CALLBACK_ID=id(callback)
+    return app
+
+
+def main():
+    start_health_server_once()
+    if not _v1160_s21711_restore():
+        _v1160_s21710_restore_snapshot_once()
+    v90_3_start_background_once()
+    v91_start_background_once()
+    _v1161_s5842_install_routes()
+    boot=_v1161_s44_record_boot()
+    roundtrip=_v1161_s5842_roundtrip_selftest()
+    V1161_DEV_S5842_LEDGER_STATUS['roundtrip_ok']=bool(roundtrip)
+    _v1161_s584_load_ledger()
+    print(f'{V1161_DEV_S5842_VERSION} worker running...',flush=True)
+    print(f'BUILD_ID={V1161_DEV_S5842_BUILD_ID}',flush=True)
+    print(f'A100 V116.1 DEV S58.4.2 ledger roundtrip selftest: {"PASS" if roundtrip else "FAILED"}',flush=True)
+    if not acquire_v44_process_lock():
+        print('A100 V116.1 duplicate polling process blocked',flush=True)
+        while True: time.sleep(60)
+    _v1160_s2174_start_warmup_once(); _v1160_s2179_start_refresh_once()
+    _v1160_s21712_start_scheduler_once(); _v1160_s21728_start_live_worker_once()
+    _v1160_s21744_start_sampler_once(); _v1161_s38_start_worker_once()
+    _v1161_s40_start_worker_once(); _v1161_s41_start_worker_once(); _v1161_s44_start_once()
+    print('A100 V116.1 DEV S58.4.2 ledger safe read: ACTIVE',flush=True)
+    print(f'A100 V116.1 DEV S58.4.2 continuity boot count: {boot["restart_count"]}',flush=True)
+    print('A100 V116.1 DEV S58.4.2 live trading: OFF',flush=True)
+    try:
+        asyncio.run(run_bot_async())
+    except KeyboardInterrupt:
+        V91_STOP.set(); _V1161_S44_STOP.set()
+    except Exception as exc:
+        V91_STOP.set(); _V1161_S44_STOP.set()
+        v88_record_error('v1161-dev-s5842-fatal-main',exc)
+        print(traceback.format_exc(),flush=True)
+        raise
+
+
 # IMPORTANT: this is the sole executable block and is physically last.
 if __name__=='__main__':
     main()
