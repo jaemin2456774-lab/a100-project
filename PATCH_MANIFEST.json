@@ -1,35 +1,18 @@
 {
-  "version": "V116.1-DEV-S59.7.5.4",
-  "build_id": "S59.7.5.4-20260719-METADATA-SINGLE-SOURCE-ROUTE-CONSISTENCY-01",
-  "base": "V116.1-DEV-S59.7.5.3",
+  "version": "V116.1-DEV-S59.7.5.5",
+  "build_id": "S59.7.5.5-20260719-POST-INSTALL-REGISTRY-FINALIZATION-01",
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.5.4.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.4.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
+    "CHANGELOG_V116.1_DEV_S59.7.5.5.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.5.md",
+    "PATCH_INSTALL_GUIDE_KR.md",
+    "changed_files.manifest"
   ],
-  "constraints": {
-    "registry": 341,
-    "schema": 1,
-    "paper": 20,
-    "shadow": 60,
-    "live": false,
-    "synthetic_completion": false,
-    "strict_read_only": true,
-    "gate_formula_changed": false,
-    "runtime_learning_data_preserved": true
-  },
-  "predeploy_checks": {
-    "syntax_compiled": true,
-    "single_main_block": true,
-    "main_block_last": true,
-    "version_constant": true,
-    "build_constant": true,
-    "route_count_9": true,
-    "reply_boundary_rewriter": true,
-    "identity_aliases": true,
-    "registry_guard_341": true,
-    "no_data_path_changes": true,
-    "no_gate_formula_change": true
-  }
+  "preserve": [
+    "/data",
+    "runtime data",
+    "learning data",
+    "environment variables"
+  ],
+  "registry_expected": 341
 }
