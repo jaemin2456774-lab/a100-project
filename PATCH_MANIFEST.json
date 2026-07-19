@@ -1,20 +1,18 @@
 {
-  "schema": 1,
-  "version": "A100 V116.1 DEV S59.7.3",
-  "build_id": "S59.7.3-20260719-CURRENT-AUDIT-REPLAY-DRIFT-ALIGNMENT-01",
-  "package_type": "incremental_prebuilt_hotfix",
-  "prebuilt": true,
+  "version": "V116.1-DEV-S59.7.4",
+  "build_id": "S59.7.4-20260719-VERSION-LABEL-REPLAY-SOURCE-TELEGRAM-RETRY-01",
+  "package_type": "incremental_prebuilt_patch",
   "runtime_tested": false,
-  "changed_project_files": [
+  "prebuilt": true,
+  "changed_files": [
     "main.py"
   ],
   "registry_expected": 341,
-  "schema_expected": 1,
-  "paper_expected": 20,
-  "shadow_expected": 60,
+  "schema": 1,
+  "paper": 20,
+  "shadow": 60,
   "live_trading": false,
   "synthetic_completion": false,
   "gate_formula_changed": false,
-  "data_reset_required": false,
-  "created_at": "2026-07-19T00:00:00+09:00"
+  "data_destructive_operations": false
 }
