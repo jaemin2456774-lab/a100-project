@@ -1,21 +1,20 @@
 {
-  "version": "A100 V116.1 DEV S59.7.13",
-  "build_id": "S59.7.13-20260719-CHAMPION-SOURCE-SYNC-CLICK-HELP-CONSOLE-01",
-  "type": "incremental_patch",
+  "version": "S59.7.14",
+  "build_id": "S59.7.14-20260719-CHAMPION-IDENTITY-SOURCE-ALIGNMENT-HELP-AUDIT-01",
   "changed_files": [
-    "main.py",
+    "CHANGELOG_V116.1_DEV_S59.7.11.md",
+    "CHANGELOG_V116.1_DEV_S59.7.12.md",
     "CHANGELOG_V116.1_DEV_S59.7.13.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.13.md",
+    "CHANGELOG_V116.1_DEV_S59.7.14.md",
     "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+    "PATCH_MANIFEST.json",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.11.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.12.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.13.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.14.md",
+    "SHA256SUMS",
+    "changed_files.manifest",
+    "main.py"
   ],
-  "preserve": [
-    "Registry 341",
-    "Schema 1",
-    "Paper 20",
-    "Shadow 60",
-    "Live OFF",
-    "Runtime/Learning data",
-    "Gate Formula"
-  ]
+  "registry_target": 341
 }
