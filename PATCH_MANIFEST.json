@@ -1,23 +1,23 @@
 {
-  "version": "A100 V116.1 DEV S59.7.1",
-  "build_id": "S59.7.1-20260719-RC-CERTIFICATION-TRUTHFULNESS-RUNTIME-PERFORMANCE-HOTFIX-01",
-  "package_type": "incremental_prebuilt_patch",
-  "baseline": "A100 V116.1 DEV S59.7",
+  "version": "A100 V116.1 DEV S59.7.2",
+  "build_id": "S59.7.2-20260719-LEDGER-FORMAT-COMPATIBILITY-EVIDENCE-RECOVERY-01",
+  "package_type": "incremental_prebuilt_hotfix",
+  "baseline": "A100 V116.1 DEV S59.7.1",
   "changed_files": [
     "main.py"
   ],
-  "registry_target": 341,
+  "registry_expected": 341,
   "schema": 1,
   "paper": 20,
   "shadow": 60,
-  "live_trading": "OFF",
-  "synthetic_completion": "OFF",
+  "live_trading": false,
+  "synthetic_completion": false,
   "runtime_first": true,
   "strict_read_only": true,
   "gate_formula_changed": false,
-  "data_reset": false,
-  "runtime_tested": false,
-  "static_compile_pass": true,
+  "destructive_data_change": false,
+  "python_compile_pass": true,
   "ast_parse_pass": true,
-  "known_runtime_status": "MEASURING_REQUIRED"
+  "runtime_tested": false,
+  "prebuilt": true
 }

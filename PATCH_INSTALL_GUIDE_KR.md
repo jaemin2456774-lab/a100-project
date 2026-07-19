@@ -1,33 +1,23 @@
-# S59.7.1 증분 패치 설치 및 Railway 검증
+# S59.7.2 Railway 설치 및 검증 가이드
 
-## 설치
-1. 현재 저장소와 Railway Volume 데이터를 백업합니다.
-2. ZIP의 `main.py`만 프로젝트 루트의 기존 파일에 덮어씁니다.
-3. 기존 `/data`, Runtime, Learning, 환경설정 파일은 삭제하거나 초기화하지 않습니다.
-4. GitHub 반영 후 Railway에서 재배포합니다.
+1. 현재 Railway 배포본과 `/data` 볼륨을 백업합니다.
+2. 패치의 `main.py`만 프로젝트의 기존 `main.py`에 덮어씁니다.
+3. 기존 `/data`, 환경변수, Learning/Runtime 파일을 삭제하거나 초기화하지 않습니다.
+4. Railway에서 재배포합니다.
+5. 시작 로그에서 아래 문구를 확인합니다.
 
-## 중요한 환경변수
-다음 값은 실제 검증을 완료한 항목만 `true`로 설정합니다. 검증 전에는 설정하지 않습니다.
-- `A100_RUNTIME_FIRST_CERTIFIED`
-- `A100_GATE_FORMULA_UNCHANGED_CERTIFIED`
-- `A100_RUNTIME_DATA_PRESERVED_CERTIFIED`
-- `A100_LEARNING_DATA_PRESERVED_CERTIFIED`
-- `A100_LIVE_TRADING_OFF_CERTIFIED`
+```text
+A100 V116.1 DEV S59.7.2 ledger compatibility recovery: PASS
+```
 
-미설정 상태에서는 관련 Freeze 항목이 PASS가 아니라 `MEASURING`으로 유지됩니다.
+6. 아래 명령을 순서대로 실행합니다.
 
-## 배포 직후 캡처 명령
 ```text
 /version
-/status
-/runtimehealth
-/buildinfo
-/routeraudit
 /versionaudit
 /engineaudit
 /commandcert
 /commandmatrix
-/regressionguard
 /crossengineaudit
 /evidencereplay
 /rcpreflight
@@ -35,15 +25,13 @@
 /errors
 ```
 
-## Railway 로그 확인 키워드
-```text
-V116.1-DEV-S59.7.1
-S59.7.1-20260719-RC-CERTIFICATION-TRUTHFULNESS-RUNTIME-PERFORMANCE-HOTFIX-01
-registered commands: 341
-worker running
-Traceback
-RuntimeError
-TypeError
-```
+## 정상 기대값
 
-배포 직후 24h/72h/7d는 반드시 `MEASURING`이어야 정상입니다.
+- Registry 341/341
+- Runtime Identity PASS
+- Authoritative Routes PASS
+- Matrix 341
+- 실행한 명령은 `run Y` 또는 실행 수 증가
+- `ledger root must be dict, got list` 오류 0건
+- Replay/Drift는 복구된 실제 증거에 따라 PASS, REVIEW 또는 MEASURING
+- 24h/72h/7d는 실제 시간이 지나기 전 MEASURING
