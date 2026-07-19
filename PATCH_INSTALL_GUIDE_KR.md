@@ -1,23 +1,21 @@
-# S59.7.4 Railway 설치 가이드
+# S59.7.5 Railway 증분 패치 설치
 
-1. 기존 Railway 데이터 볼륨과 환경변수를 보존합니다.
-2. 패치의 `main.py`만 프로젝트의 동일 경로에 덮어씁니다.
-3. Railway에서 새 배포를 실행합니다.
-4. 시작 로그에서 S59.7.4 Build ID와 Registry 341/341을 확인합니다.
-5. 다음 명령을 순서대로 실행합니다.
+1. ZIP을 풀고 `main.py`를 저장소 루트의 기존 `main.py`에 덮어씁니다.
+2. 기존 `/data` Runtime/Learning 파일과 Railway 환경변수는 변경하지 않습니다.
+3. GitHub에 커밋/푸시한 뒤 Railway 배포 완료를 확인합니다.
+4. 시작 로그에서 Build ID `S59.7.5-20260719-CURRENT-ROUTE-WORKER-REPLAY-RC-SYNC-01`, Registry 341/341, Live OFF를 확인합니다.
 
+## 배포 후 검증 명령
 /version
 /versionaudit
-/evidencereplay
+/runtimehealth
+/status
 /crossengineaudit
-/commandmatrix
+/evidencereplay
 /rcpreflight
-/verifyall
+/commandmatrix
+/ledgeraudit
+/releasegate
 /errors
 
-정상 기준:
-- 모든 현재 인증 화면 버전 S59.7.4
-- Version Audit PASS
-- Evidence가 존재하면 Replay PASS 100/100
-- Telegram TimedOut 반복 없음
-- 장시간 인증은 실제 시간이 충족될 때까지 MEASURING
+주의: `/crossengine`, `/rcpredictor`, `/coverage`, `/ledger`는 Registry 정식 명령이 아닙니다. 위 대응 명령을 사용합니다.

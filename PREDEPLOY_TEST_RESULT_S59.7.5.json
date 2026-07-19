@@ -1,0 +1,24 @@
+{
+  "result": "PASS",
+  "checks": {
+    "syntax_compile": true,
+    "sole_main_block": true,
+    "version_constant": true,
+    "build_id_constant": true,
+    "handler_versionaudit1161devs5975_cmd": true,
+    "handler_runtimehealth1161devs5975_cmd": true,
+    "handler_status1161devs5975_cmd": true,
+    "handler_releasegate1161devs5975_cmd": true,
+    "handler_crossengineaudit1161devs5975_cmd": true,
+    "handler_rcpreflight1161devs5975_cmd": true,
+    "handler_evidencereplay1161devs5975_cmd": true,
+    "registry_frozen_assignment": true,
+    "no_new_alias_commands": true,
+    "dev_releasegate_label": true,
+    "worker_truth_live_fallback": true,
+    "synthetic_off_preserved": true,
+    "live_off_preserved": true,
+    "strict_read_only": true
+  },
+  "failed": []
+}
