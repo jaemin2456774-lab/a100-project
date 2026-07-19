@@ -1,18 +1,24 @@
 {
-  "version": "V116.1-DEV-S59.7.5.5",
-  "build_id": "S59.7.5.5-20260719-POST-INSTALL-REGISTRY-FINALIZATION-01",
+  "version": "S59.7.6",
+  "build_id": "S59.7.6-20260719-PAPER-CLOSED-LOOP-LEARNING-BRIDGE-01",
   "changed_files": [
-    "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.5.5.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.5.5.md",
-    "PATCH_INSTALL_GUIDE_KR.md",
-    "changed_files.manifest"
+    "main.py"
   ],
-  "preserve": [
-    "/data",
-    "runtime data",
-    "learning data",
-    "environment variables"
+  "preserves": [
+    "schema1",
+    "paper20",
+    "shadow60",
+    "live_off",
+    "runtime_data",
+    "learning_data",
+    "gate_formula",
+    "registry341"
   ],
-  "registry_expected": 341
+  "sha256": {
+    "main.py": "5a02b3107b91d89ff94810035363648b4d9478e6e8cb9e95e3087dd323bf2652",
+    "CHANGELOG_V116.1_DEV_S59.7.6.md": "4d8dff6a5c2f4450095e564cdc91906e191c4d2893515078e1845a6b38301675",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.6.md": "e85052b82bd0ee462597f08a16f90a19932d20422ee4fc5738c794651a66dc31",
+    "PATCH_INSTALL_GUIDE_KR.md": "0d0a8096e2251dcc8d2d1948d36960bc9fb6f4e79db321b6ded55d97d24cc41e",
+    "changed_files.manifest": "58ffbfc5ea2a845743ee8f94961f2b273f171e0081e96ec9ff8cf472e46ce635"
+  }
 }
