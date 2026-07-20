@@ -1,9 +1,11 @@
 {
-  "version": "V116.2-RC1.4",
-  "build_id": "V116.2-RC1.4-20260721-AUTHORITATIVE-ROUTE-STATE-SIGNATURE-CACHE-01",
-  "baseline": "A100_V116_2_RC1_3_OUTPUT_IDENTITY_HOT_CACHE_RECONCILIATION_PREBUILT_PATCH.zip",
-  "mode": "incremental overwrite patch",
-  "registry_expected": 341,
-  "live_trading": false,
-  "data_mutation": false
+  "version": "V116.2-RC1.5",
+  "build_id": "V116.2-RC1.5-20260721-REGISTRY-BOUNDED-CACHE-ATOMIC-SAVE-01",
+  "files": [
+    "main.py",
+    "RELEASE_NOTES_KR.md",
+    "INSTALL_AND_QA_KR.md",
+    "PREDEPLOY_AUDIT.md",
+    "changed_files.manifest"
+  ]
 }
