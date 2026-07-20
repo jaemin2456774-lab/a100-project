@@ -2,7 +2,10 @@
 
 - Python compile: PASS
 - Executable block: 1
-- Registry additions: 0
+- Registry new command: 0
 - Gate/Threshold mutation: 0
 - Learning/Order mutation: 0
-- Synthetic E2E PASS: 없음; read-only bounded remeasurement only
+- Same-ID reconciliation: read-only completed-chain filtering
+- Attribution deletion/synthetic completion: NONE
+- READY_HISTORY: bounded diagnostic store
+- Boot identity normalization: enabled
