@@ -1,17 +1,9 @@
 {
-  "version": "V116.2-RC1.3",
-  "build_id": "V116.2-RC1.3-20260721-OUTPUT-IDENTITY-HOT-CACHE-RECONCILIATION-01",
-  "base": "V116.2-RC1.2",
-  "type": "incremental-prebuilt-patch",
-  "changed_files": [
-    "main.py"
-  ],
-  "invariants": [
-    "registry 341/341",
-    "runtime first",
-    "strict read only",
-    "live trading off",
-    "no gate/threshold mutation",
-    "existing data preserved"
-  ]
+  "version": "V116.2-RC1.4",
+  "build_id": "V116.2-RC1.4-20260721-AUTHORITATIVE-ROUTE-STATE-SIGNATURE-CACHE-01",
+  "baseline": "A100_V116_2_RC1_3_OUTPUT_IDENTITY_HOT_CACHE_RECONCILIATION_PREBUILT_PATCH.zip",
+  "mode": "incremental overwrite patch",
+  "registry_expected": 341,
+  "live_trading": false,
+  "data_mutation": false
 }

@@ -1,16 +1,9 @@
-# A100 V116.2 RC1.3
-## Output Identity + Hot Cache Reconciliation
+# A100 V116.2 RC1.4
+## Authoritative Route Lock & State Signature Cache
 
-### 수정
-- `/buildinfo` 응답 경계의 구형 S59.7 Application Identity를 V116.2 RC1.3으로 정규화
-- `/coverageplan`의 S59.0.2 표기를 실행 버전이 아닌 Module provenance로 분리
-- 기존 함수명은 구현 이력으로 유지하되 Running Identity와 Build ID는 RC1.3으로 단일화
-- `/papershadowperformance` 연속 실행 시 전체 durable store를 다시 읽지 않는 15초 bounded read-only hot cache 적용
-- RC1.2의 Lifetime Outcome/Attribution/Performance 카운터 정합성 유지
-
-### 불변
-- Registry 341/341
-- Runtime First / Strict Read Only
-- Gate, Threshold, TP/SL 변경 없음
-- Learning/Attribution/Shadow/Paper store write 추가 없음
-- Live Trading OFF
+- 부팅 중 legacy route installer 실행 후 RC1.4 핵심 route를 다시 고정합니다.
+- /buildinfo, /routeraudit, /runtimehealth, /versionaudit, /papershadow, /coverageplan의 표시 Identity를 RC1.4로 통일합니다.
+- /papershadowperformance 캐시를 시간 TTL 방식에서 durable state 파일 mtime/size 서명 방식으로 변경합니다.
+- 상태 파일이 바뀌지 않은 연속 호출은 JSON 전체 재읽기 없이 캐시를 반환합니다.
+- Registry 341/341, Runtime First, Strict Read Only, Live OFF를 유지합니다.
+- Entry Gate, Threshold, TP/SL, 전략 및 Learning 저장 로직은 변경하지 않습니다.

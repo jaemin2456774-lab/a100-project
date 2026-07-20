@@ -1,24 +1,22 @@
 # Railway 설치 및 QA
 
-기존 프로젝트 루트의 `main.py`만 덮어씁니다. `/data`와 환경변수는 유지합니다.
+기존 저장소의 main.py만 덮어쓴 후 Railway에서 재배포합니다. /data, 환경변수, 기존 학습 데이터는 삭제하지 않습니다.
 
-## 배포 후 명령
-```
+배포 후 실행 순서:
+
 /version
 /buildinfo
-/papershadowperformance
-/papershadowperformance
 /runtimehealth
 /versionaudit
 /papershadow
 /coverageplan
+/papershadowperformance
+/papershadowperformance
 /errors
-```
 
-## 기대 결과
-- `/buildinfo`: Running `V116.2-RC1.3`, RC1.3 Build ID
-- 구형 S59 함수명은 `Implementation provenance`로만 표시
-- `/coverageplan`: 헤더는 `V116.2 RC1.3`, S59.0.2는 `Module provenance`로만 표시
-- `/papershadowperformance` 첫 실행 2000ms 이하
-- 두 번째 즉시 실행: Snapshot Read에 가까운 값이 0ms, Cache H 증가, 2000ms 이하
-- Registry 341/341, Error 0
+확인 기준:
+- 모든 제품 헤더와 Build ID가 V116.2 RC1.4로 표시
+- S59.x는 Implementation/Module provenance가 아닌 현재 Running Identity로 표시되지 않음
+- 두 번째 /papershadowperformance의 Snapshot Read가 매우 작고 Handler Total 2000ms 이하
+- Lifetime Outcome/Attribution/Performance 값이 서로 정합
+- Registry 341/341, Errors 0, Gate mutation NONE
