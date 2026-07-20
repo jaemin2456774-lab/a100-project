@@ -1,17 +1,16 @@
 {
-  "version": "V116.2-RC1.6",
-  "build_id": "V116.2-RC1.6-20260721-CANONICAL-REGISTRY-FINAL-ROUTE-PREWARM-01",
-  "type": "PREBUILT_PATCH",
+  "version": "V116.2-RC1.7",
+  "build_id": "V116.2-RC1.7-20260721-RUNTIME-IDENTITY-AUDIT-PREWARM-FINALIZATION-01",
   "changed_files": [
     "main.py"
   ],
   "preserves": [
     "/data",
     "environment",
-    "learning data",
-    "registry membership 341",
+    "registry canonical 341",
     "gate",
     "threshold",
+    "learning stores",
     "live OFF"
   ]
 }

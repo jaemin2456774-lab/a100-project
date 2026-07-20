@@ -1,12 +1,8 @@
-# RC1.6 사전 감사
+# Predeploy Audit
 
 - Python compile: PASS
-- executable block: 1
-- Registry source: certified canonical 341 names
-- New command registration: NONE
-- Store mutation: NONE
+- Registry membership mutation: NONE (canonical 341 restore only)
+- Store writes added: NONE
 - Gate/Threshold mutation: NONE
-- Performance cache: bounded read-only
-- Prewarm: daemon read-only snapshot
-- Binance atomic save from RC1.5: preserved
-- Live Trading: OFF
+- Version Audit source: current RC authoritative metadata/routes
+- Prewarm: bounded read-only retry
