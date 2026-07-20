@@ -2,10 +2,10 @@
 
 - Python compile: PASS
 - Executable block: 1
-- Registry new commands: 0
-- Gate/Threshold mutation: 0
-- Attribution deletion/rewrite: 0
-- Synthetic completion: 0
-- Performance durable key mapping: performance_outcomes 포함
-- Matching: ID alias intersection + outcome-bounded durable counter
-- Existing /data preservation: PASS
+- Telegram command additions: 0
+- Registry canonical restore: preserved
+- Historical baseline: diagnostic-only `/data/a100_rc235_historical_anomaly_baseline.json`
+- Learning/Attribution/Outcome/Performance record deletion: NONE
+- Synthetic completion: NONE
+- Gate/Threshold/Order mutation: NONE
+- Live Trading: OFF
