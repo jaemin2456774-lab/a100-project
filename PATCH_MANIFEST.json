@@ -1,20 +1,16 @@
 {
-  "version": "V116.1-DEV-S59.7.22",
-  "build_id": "S59.7.22-20260720-SHADOW-ENTRY-GATE-TRACE-LEARNING-SOURCE-ALIGNMENT-01",
-  "base": "S59.7.21",
-  "registry_expected": 341,
-  "changed_files": [
+  "version": "V116.2-RC1",
+  "build_id": "V116.2-RC1-20260720-INTEGRATED-PRODUCT-HARDENING-BASE-01",
+  "base": "S59.7.22",
+  "files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.22.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.22.md",
-    "PATCH_INSTALL_GUIDE_KR.md"
+    "RELEASE_NOTES_KR.md",
+    "INSTALL_AND_QA_KR.md",
+    "PREDEPLOY_AUDIT.md",
+    "PATCH_MANIFEST.json",
+    "SHA256SUMS"
   ],
-  "safety": {
-    "runtime_first": true,
-    "strict_read_only": true,
-    "live_trading": false,
-    "synthetic_completion": false,
-    "gate_formula_changed": false,
-    "score_threshold_changed": false
-  }
+  "registry_target": 341,
+  "live_trading": false,
+  "synthetic_completion": false
 }
