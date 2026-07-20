@@ -1,10 +1,11 @@
-# PREDEPLOY AUDIT
+# Predeploy Audit
 
 - Python compile: PASS
-- Sole executable block: PASS
+- Executable block: 1
 - New Telegram command keys: 0
-- Canonical Registry target: 341
+- Registry restore target: 341
+- Command argument fallback parser: PASS
+- Runner persistent state/heartbeat: PASS
+- Bootstrap once guard: PASS
 - Gate/Threshold/Order mutation: NONE
-- Historical data deletion/normalization: NONE
 - Synthetic completion: NONE
-- QA runner: explicit, bounded, safe-plan only

@@ -1,14 +1,14 @@
-# 설치 및 QA
+# Railway 설치 및 QA
 
-기존 프로젝트에 `main.py`를 덮어쓰고 Railway를 재배포합니다. `/data`와 환경변수는 유지합니다.
+기존 프로젝트의 `main.py`만 덮어쓰고 기존 `/data`와 환경변수는 보존합니다.
 
-## 검증 순서
+검증 순서:
+
 ```text
 /version
 /buildinfo
 /runtimehealth
 /versionaudit
-/commandcert
 /commandcert batch 1
 /commandcert batch 1 run
 /commandcert status
@@ -17,4 +17,22 @@
 /errors
 ```
 
-전체 Safe 배치는 `/commandcert autorun`으로 시작하고 `/commandcert stop`으로 중지합니다. 자동 검수는 기존 Coverage Planner가 SAFE로 분류한 조회 명령만 실행합니다.
+Batch 1이 정상 완료되면:
+
+```text
+/commandcert autorun
+/commandcert status
+```
+
+중지:
+
+```text
+/commandcert stop
+```
+
+기대 결과:
+- Registry 341/341
+- `batch 1 run`이 기본 Summary가 아니라 START/COMPLETE 메시지 출력
+- `status`에 RUNNING/COMPLETED, Batch, Current/Last Command, Heartbeat 표시
+- Completed 수 증가
+- 실제 증거 충족 명령만 PARTIAL에서 PASS로 승격
