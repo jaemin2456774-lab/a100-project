@@ -1,8 +1,11 @@
 # Predeploy Audit
 
 - Python compile: PASS
-- Registry membership mutation: NONE (canonical 341 restore only)
-- Store writes added: NONE
-- Gate/Threshold mutation: NONE
-- Version Audit source: current RC authoritative metadata/routes
-- Prewarm: bounded read-only retry
+- Sole executable block: PASS
+- Registry new command key: NONE
+- Existing route replacement only: papershadow / papershadowstatus / shadow
+- Gate score formula mutation: NONE
+- Threshold mutation: NONE
+- Live/order path mutation: NONE
+- Diagnostic persistence: bounded RC2.1 trace/history/ledger only
+- Existing learning and attribution stores: unchanged

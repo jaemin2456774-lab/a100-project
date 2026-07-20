@@ -1,16 +1,18 @@
 {
-  "version": "V116.2-RC1.7",
-  "build_id": "V116.2-RC1.7-20260721-RUNTIME-IDENTITY-AUDIT-PREWARM-FINALIZATION-01",
+  "version": "V116.2-RC2.1",
+  "build_id": "V116.2-RC2.1-20260721-ENTRY-GATE-EXPLAINABILITY-CERTIFICATION-01",
+  "baseline": "A100 V116.2 RC1.7",
   "changed_files": [
     "main.py"
   ],
-  "preserves": [
-    "/data",
-    "environment",
-    "registry canonical 341",
-    "gate",
-    "threshold",
-    "learning stores",
-    "live OFF"
+  "sha256": {
+    "main.py": "ac96473e865d12201d2027887b8efac267ca5170842105a004de0a769459214d"
+  },
+  "invariants": [
+    "Registry 341/341",
+    "Runtime First",
+    "Strict Read Only",
+    "Live Trading OFF",
+    "Gate/Threshold unchanged"
   ]
 }
