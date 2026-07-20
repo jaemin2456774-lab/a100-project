@@ -1,11 +1,18 @@
 {
-  "version": "V116.2-RC2.3.1",
-  "build_id": "V116.2-RC2.3.1-20260721-READY-TIMELINE-EVIDENCE-V2-PERFORMANCE-FINAL-01",
-  "base": "A100_V116_2_RC2_1_ENTRY_GATE_EXPLAINABILITY_CERTIFICATION_PREBUILT_PATCH.zip",
-  "changed_files": [
-    "main.py"
+  "version": "V116.2-RC2.3.2",
+  "build_id": "V116.2-RC2.3.2-20260721-ENGINE-E2E-RECONCILIATION-DASHBOARD-PREWARM-01",
+  "files": [
+    "main.py",
+    "changed_files.manifest",
+    "RELEASE_NOTES_KR.md",
+    "INSTALL_AND_QA_KR.md",
+    "PREDEPLOY_AUDIT.md"
   ],
-  "registry_expected": 341,
-  "live_trading": "OFF",
-  "strict_read_only": true
+  "sha256": {
+    "main.py": "a61b464486242e91ca7c4169fb644cccc813588361df85657ead8bd2c24e1bc4",
+    "changed_files.manifest": "58ffbfc5ea2a845743ee8f94961f2b273f171e0081e96ec9ff8cf472e46ce635",
+    "RELEASE_NOTES_KR.md": "826fd601c70ee295f8f02de50492774636e58f083ba814e216619c91dfad70ea",
+    "INSTALL_AND_QA_KR.md": "1392c2ffd920b7ededa89181b9cbf8ca8634897ec51374fd6416a12f3297d38d",
+    "PREDEPLOY_AUDIT.md": "3558d7af5ad77bc15382a42671a34c3a334b76230babdf2ee299bb9e42d5db8e"
+  }
 }
