@@ -1,11 +1,9 @@
-# Predeploy Audit
+# 사전 감사
 
 - Python compile: PASS
-- Executable block: 1
-- New Telegram command keys: 0
-- Registry restore target: 341
-- Command argument fallback parser: PASS
-- Runner persistent state/heartbeat: PASS
-- Bootstrap once guard: PASS
-- Gate/Threshold/Order mutation: NONE
-- Synthetic completion: NONE
+- Registry target: 341
+- 신규 Telegram key: 0
+- Runner stop source trace: enabled
+- Batch transition trace: enabled
+- Resume unfinished batch: enabled
+- Gate/Threshold/Order mutation: none

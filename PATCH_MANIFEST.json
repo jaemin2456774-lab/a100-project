@@ -1,36 +1,13 @@
 {
-  "version": "V116.2-RC2.4.2",
-  "build_id": "V116.2-RC2.4.2-20260721-COMMAND-ARGUMENT-ROUTING-BOOTSTRAP-ONCE-RUNNER-RECOVERY-01",
-  "base": "V116.2-RC2.4.1",
-  "changed_files": [
+  "version": "V116.2-RC2.4.3",
+  "build_id": "V116.2-RC2.4.3-20260721-RUNNER-COMPLETION-TRACE-IDENTITY-ALIGNMENT-01",
+  "files": [
+    "INSTALL_AND_QA_KR.md",
+    "PATCH_MANIFEST.json",
+    "PREDEPLOY_AUDIT.md",
+    "RELEASE_NOTES_KR.md",
+    "SHA256SUMS",
+    "changed_files.manifest",
     "main.py"
-  ],
-  "preserve": [
-    "/data",
-    "environment variables",
-    "registry 341",
-    "gate",
-    "threshold",
-    "learning",
-    "paper",
-    "live trading OFF"
-  ],
-  "files": {
-    "main.py": {
-      "sha256": "bec4f65eaa0dfd868aad8bbdcbad92c08e8ad6ce4387433cf94e10ce646812a4",
-      "size": 4841294
-    },
-    "RELEASE_NOTES_KR.md": {
-      "sha256": "e42efb2c943eb5daa386e62128175253998f599609f72623e03111e6aa89baf8",
-      "size": 610
-    },
-    "INSTALL_AND_QA_KR.md": {
-      "sha256": "3f0255c7a429a13b2d4b097ad3b228c6a6cae7adee5470ba1507fdfd02e31aed",
-      "size": 710
-    },
-    "PREDEPLOY_AUDIT.md": {
-      "sha256": "a939d15d6a8f781a7c22d2a760ef0f82e7101e47e5a52cb13042de4e75a3ddc5",
-      "size": 305
-    }
-  }
+  ]
 }

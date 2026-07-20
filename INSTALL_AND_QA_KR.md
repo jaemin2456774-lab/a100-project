@@ -1,38 +1,19 @@
-# Railway 설치 및 QA
+# 설치 및 QA
 
-기존 프로젝트의 `main.py`만 덮어쓰고 기존 `/data`와 환경변수는 보존합니다.
+1. 패치를 기존 방식으로 적용하고 Railway를 재배포합니다.
+2. `/version`, `/buildinfo`에서 RC2.4.3을 확인합니다.
+3. `/commandcert autorun` 실행 후 `/commandcert status`로 Batch가 계속 증가하는지 확인합니다.
+4. 중단 시험은 `/commandcert stop`으로만 수행합니다. 상태에 `Stop reason USER_COMMAND`가 표시되어야 합니다.
+5. 재시작 시 미완료 Batch부터 재검수되는지 확인합니다.
 
-검증 순서:
-
-```text
+검증 명령:
+```
 /version
 /buildinfo
-/runtimehealth
-/versionaudit
-/commandcert batch 1
-/commandcert batch 1 run
-/commandcert status
-/commandcert
-/commandmatrix
-/errors
-```
-
-Batch 1이 정상 완료되면:
-
-```text
 /commandcert autorun
 /commandcert status
-```
-
-중지:
-
-```text
+/commandcert status
 /commandcert stop
+/commandcert status
+/errors
 ```
-
-기대 결과:
-- Registry 341/341
-- `batch 1 run`이 기본 Summary가 아니라 START/COMPLETE 메시지 출력
-- `status`에 RUNNING/COMPLETED, Batch, Current/Last Command, Heartbeat 표시
-- Completed 수 증가
-- 실제 증거 충족 명령만 PARTIAL에서 PASS로 승격
