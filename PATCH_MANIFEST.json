@@ -1,12 +1,17 @@
 {
-  "version": "V116.2-RC1.2",
-  "build_id": "V116.2-RC1.2-20260720-IDENTITY-LEARNING-COUNTER-RECONCILIATION-01",
-  "baseline": "V116.2-RC1.1",
+  "version": "V116.2-RC1.3",
+  "build_id": "V116.2-RC1.3-20260721-OUTPUT-IDENTITY-HOT-CACHE-RECONCILIATION-01",
+  "base": "V116.2-RC1.2",
+  "type": "incremental-prebuilt-patch",
   "changed_files": [
     "main.py"
   ],
-  "registry_expected": "341/341",
-  "strict_read_only": true,
-  "live_trading": false,
-  "main_sha256": "152c5e9aec089b41e647a92b62e29bf6d5a36d8c8a9c9bbeaf51806d773d77fc"
+  "invariants": [
+    "registry 341/341",
+    "runtime first",
+    "strict read only",
+    "live trading off",
+    "no gate/threshold mutation",
+    "existing data preserved"
+  ]
 }

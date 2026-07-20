@@ -1,9 +1,10 @@
 # PREDEPLOY AUDIT
+
 - Python compile: PASS
-- Sole executable block: PASS
-- Registry cardinality mutation: NONE
-- Gate/Threshold/TP/SL mutation: NONE
-- Durable store write added: NONE
-- Live trading path added: NONE
-- Identity authoritative route: /buildinfo, /routeraudit
-- Performance cache preserved: YES
+- Single executable block: PASS
+- Registry membership mutation: NONE
+- Gate/threshold mutation: NONE
+- Store write path added: NONE
+- Live order path added: NONE
+- Output identity normalization: reply boundary only
+- Hot cache: in-memory, bounded 15 seconds, read-only
