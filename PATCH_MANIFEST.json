@@ -1,18 +1,11 @@
 {
-  "version": "V116.2-RC2.1",
-  "build_id": "V116.2-RC2.1-20260721-ENTRY-GATE-EXPLAINABILITY-CERTIFICATION-01",
-  "baseline": "A100 V116.2 RC1.7",
+  "version": "V116.2-RC2.3.1",
+  "build_id": "V116.2-RC2.3.1-20260721-READY-TIMELINE-EVIDENCE-V2-PERFORMANCE-FINAL-01",
+  "base": "A100_V116_2_RC2_1_ENTRY_GATE_EXPLAINABILITY_CERTIFICATION_PREBUILT_PATCH.zip",
   "changed_files": [
     "main.py"
   ],
-  "sha256": {
-    "main.py": "ac96473e865d12201d2027887b8efac267ca5170842105a004de0a769459214d"
-  },
-  "invariants": [
-    "Registry 341/341",
-    "Runtime First",
-    "Strict Read Only",
-    "Live Trading OFF",
-    "Gate/Threshold unchanged"
-  ]
+  "registry_expected": 341,
+  "live_trading": "OFF",
+  "strict_read_only": true
 }
