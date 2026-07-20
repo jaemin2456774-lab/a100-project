@@ -1,25 +1,41 @@
 {
-  "version": "V116.2-RC2.3.3",
-  "build_id": "V116.2-RC2.3.3-20260721-ENGINE-CHAIN-READY-HISTORY-COLDSTART-FINAL-01",
-  "base": "V116.2-RC2.3.2",
-  "changed_files": [
-    "main.py"
+  "version": "V116.2-RC2.3.4",
+  "build_id": "V116.2-RC2.3.4-20260721-ENGINE-E2E-FINAL-RECONCILIATION-01",
+  "type": "incremental_prebuilt_patch",
+  "created_at": "2026-07-21T00:00:00+09:00",
+  "files": [
+    {
+      "path": "INSTALL_AND_QA_KR.md",
+      "size": 508,
+      "sha256": "d4c08a985f42d3e0c70b17e97b8a032f3d325bdc7018127a46cd3328ea973177"
+    },
+    {
+      "path": "PREDEPLOY_AUDIT.md",
+      "size": 347,
+      "sha256": "ce0c7274f52868d77410afabf38886f048874cc14680c90fc45baf0f8a9c60ab"
+    },
+    {
+      "path": "RELEASE_NOTES_KR.md",
+      "size": 694,
+      "sha256": "17cf8685c9638deefafe971cdf4d5f8fd4bb99a64aa19402de3d1323d4321585"
+    },
+    {
+      "path": "changed_files.manifest",
+      "size": 8,
+      "sha256": "58ffbfc5ea2a845743ee8f94961f2b273f171e0081e96ec9ff8cf472e46ce635"
+    },
+    {
+      "path": "main.py",
+      "size": 4788009,
+      "sha256": "173e49761e8cd7d01c58976dc6f76971587b21ab4adef465d2a2d4fbb8a34b08"
+    }
   ],
-  "preserved": [
+  "invariants": [
     "Registry 341/341",
     "Runtime First",
     "Strict Read Only",
-    "Gate/Threshold",
-    "Learning/Attribution durable stores",
-    "Shadow/Paper/Live paths",
-    "/data"
-  ],
-  "sha256": {
-    "main.py": "a5074acc0114dd0a4ae370d17e91e94358740bdf2342b9255106b1683072e21e",
-    "changed_files.manifest": "58ffbfc5ea2a845743ee8f94961f2b273f171e0081e96ec9ff8cf472e46ce635",
-    "RELEASE_NOTES_KR.md": "837f4212af6dc97d7fdc942ed795a3d855d3b956fb417f643718f3d896f76167",
-    "INSTALL_AND_QA_KR.md": "e637b82de5a83a5b1e6c39b2a5b581a44dffc5d8e2899d5fb0fa60e1fc8f73b2",
-    "PREDEPLOY_AUDIT.md": "22e44b5ca66728f363f45c80f017a5df12b69621e0e4c0faaf36e7f54668a998"
-  },
-  "created_at": "2026-07-21T00:00:00+09:00"
+    "Live Trading OFF",
+    "Gate/Threshold unchanged",
+    "Synthetic completion NONE"
+  ]
 }
