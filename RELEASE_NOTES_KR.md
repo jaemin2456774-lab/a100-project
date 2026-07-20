@@ -1,23 +1,8 @@
-# A100 V116.2 RC2.4 Command Certification Framework
+# A100 V116.2 RC2.4.1 릴리스 노트
 
-## 목적
-Registry 341/341 등록 여부와 실제 End-to-End 실행 인증을 분리합니다.
-
-## 주요 변경
-- 기존 `/commandcert`에 summary/full/batch/report 모드 추가
-- canonical 341개 명령을 Runtime Evidence Matrix와 대조
-- PASS 조건: Registry + Handler + Route + Runtime 실행 + Evidence + Store + Output + Replay
-- 실행 증거가 없는 명령은 PARTIAL로 유지
-- Handler/Route 누락은 FAILED
-- `/commandmatrix`를 동일 인증 기준으로 통일
-- Entry Decision Score/Threshold/Gap 표시를 소수점 둘째 자리로 개선
-
-## 명령
-- `/commandcert`
-- `/commandcert full`
-- `/commandcert batch 1`
-- `/commandcert report`
-- `/commandmatrix`
-
-## 변경 금지 유지
-Gate/Threshold/Learning/Paper/Live/Registry membership 변경 없음.
+- Historical Growth Trace: 신규 duplicate/attribution growth의 ID 샘플·revision·delta를 bounded 기록합니다.
+- Safe QA Batch Runner: 기존 Coverage Planner의 SAFE 배치만 명시적 실행합니다.
+- `/commandcert batch N run`, `/commandcert autorun`, `/commandcert status`, `/commandcert stop` 지원.
+- 실제 Runtime+Evidence+Store+Output+Replay가 모두 존재하면 matrix state와 무관하게 PASS 승격.
+- 거래/주문/Gate/Threshold/설정 변경 명령은 자동 검수에서 제외합니다.
+- Registry 341/341, Runtime First, Strict Read Only, Live OFF 유지.

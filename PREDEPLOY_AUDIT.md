@@ -1,12 +1,10 @@
-# Predeploy Audit
+# PREDEPLOY AUDIT
 
 - Python compile: PASS
 - Sole executable block: PASS
 - New Telegram command keys: 0
-- Existing routes changed: commandcert, commandmatrix
-- Canonical Registry restore retained
-- Gate/Threshold mutation: NONE
-- Learning/Attribution mutation: NONE
-- Paper/Live order mutation: NONE
-- Synthetic command PASS: NONE
-- Certification policy: measured evidence required
+- Canonical Registry target: 341
+- Gate/Threshold/Order mutation: NONE
+- Historical data deletion/normalization: NONE
+- Synthetic completion: NONE
+- QA runner: explicit, bounded, safe-plan only

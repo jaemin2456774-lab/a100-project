@@ -1,8 +1,6 @@
-# Railway 설치 및 QA
+# 설치 및 QA
 
-1. 패치의 `main.py`를 저장소의 기존 `main.py`에 덮어씁니다.
-2. Railway에서 새 배포를 실행합니다.
-3. `/data` 볼륨과 환경변수는 그대로 유지합니다.
+기존 프로젝트에 `main.py`를 덮어쓰고 Railway를 재배포합니다. `/data`와 환경변수는 유지합니다.
 
 ## 검증 순서
 ```text
@@ -11,19 +9,12 @@
 /runtimehealth
 /versionaudit
 /commandcert
-/commandcert full
 /commandcert batch 1
-/commandcert report
+/commandcert batch 1 run
+/commandcert status
+/commandcert
 /commandmatrix
-/papershadow
 /errors
 ```
 
-## 기대값
-- Registry 341/341
-- Version Audit PASS
-- Total 341
-- 등록만 된 미실행 명령은 PARTIAL
-- 끊어진 Handler/Route만 FAILED
-- `/papershadow` 점수/기준/Gap이 소수점 둘째 자리로 표시
-- Gate/Threshold/Live mutation NONE
+전체 Safe 배치는 `/commandcert autorun`으로 시작하고 `/commandcert stop`으로 중지합니다. 자동 검수는 기존 Coverage Planner가 SAFE로 분류한 조회 명령만 실행합니다.
