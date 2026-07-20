@@ -1,11 +1,10 @@
 # Railway 설치 및 QA
 
-1. 패치의 `main.py`로 기존 파일을 덮어씁니다.
-2. 기존 `/data` 볼륨과 환경변수를 그대로 유지합니다.
-3. Railway에서 새 배포를 실행합니다.
+1. ZIP의 `main.py`를 기존 프로젝트에 덮어씁니다.
+2. Railway에서 재배포합니다.
+3. 아래 명령을 순서대로 실행합니다.
 
-## 검증 명령
-```
+```text
 /version
 /buildinfo
 /runtimehealth
@@ -16,11 +15,11 @@
 /errors
 ```
 
-## 기대 결과
+## 확인 기준
 - Registry 341/341
 - Current Engine E2E Same-ID PASS
-- Historical Baseline No-Growth PASS
-- 첫 `/versionaudit`: Baseline State CREATED 또는 ACTIVE
-- 두 번째 `/versionaudit`: Baseline State ACTIVE
-- Post-baseline Delta 모두 0 이하
+- 첫 Version Audit에서 baseline CREATED 또는 ACTIVE
+- 두 번째 Version Audit에서 baseline ACTIVE
+- Post-baseline Delta orphan/duplicate/attribution 모두 0
+- Version Audit PASS
 - Errors 0

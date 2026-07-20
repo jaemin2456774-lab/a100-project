@@ -1,14 +1,15 @@
-# A100 V116.2 RC2.3.5 릴리스 노트
+# A100 V116.2 RC2.3.6 릴리스 노트
 
 ## 목적
-현재 완료 체인의 Same-ID 정합성과 과거 durable-store anomaly를 분리하여 인증합니다.
+RC2.3.5에서 historical anomaly가 승인 한도를 초과하면 baseline을 만들지 못해 영구적으로 `MISSING`이 되던 bootstrap 결함을 수정합니다.
 
 ## 변경
-- Current Completed Same-ID 체인 별도 PASS 판정
-- Historical anomaly baseline 진단 파일 추가
-- 승인 가능한 최초 기준선: orphan ≤12, duplicate ≤1, revision-only 0, performance-unlinked 0, Attribution delta ≤1
-- 기준선 이후 anomaly 증가 시 Version Audit FAIL
-- 과거 anomaly 삭제/수정 및 synthetic completion 없음
+- 현재 Completed Same-ID 체인이 일치할 때 현재 historical anomaly 상태를 최초 baseline으로 저장
+- 최초 저장 이후 증가분만 FAIL 처리
+- 기존 orphan/duplicate/Attribution 초과 데이터 삭제·수정 없음
+- 새 baseline 파일: `/data/a100_rc236_historical_anomaly_baseline.json`
+- Gate, Threshold, Learning, Attribution, Shadow/Paper/Live 로직 변경 없음
 
-## 불변 조건
-Registry 341/341, Runtime First, Strict Read Only, Live Trading OFF, Gate/Threshold/Learning/Order 로직 불변.
+## 기대 결과
+첫 `/versionaudit`: Baseline State `CREATED` 또는 `ACTIVE`
+두 번째 `/versionaudit`: Baseline State `ACTIVE`, Post-baseline Delta 0, Version Audit PASS

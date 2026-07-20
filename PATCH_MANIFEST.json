@@ -1,23 +1,12 @@
 {
-  "version": "V116.2-RC2.3.5",
-  "build_id": "V116.2-RC2.3.5-20260721-HISTORICAL-BASELINE-CERTIFICATION-01",
+  "version": "V116.2-RC2.3.6",
+  "build_id": "V116.2-RC2.3.6-20260721-HISTORICAL-BASELINE-BOOTSTRAP-FIX-01",
   "type": "incremental_prebuilt_patch",
-  "created_at": "2026-07-21T00:00:00+09:00",
   "files": [
     {
-      "path": "INSTALL_AND_QA_KR.md",
-      "size": 607,
-      "sha256": "c4d878714f578f5cbe7996f3aa549f9e0d8158ac0dd49043941029f19d0f5098"
-    },
-    {
-      "path": "PREDEPLOY_AUDIT.md",
-      "size": 379,
-      "sha256": "d1f5bc6c10424af2b47e15c1f8b1f9ed13f6d44d9db1daa9aebfde50cca1c90c"
-    },
-    {
-      "path": "RELEASE_NOTES_KR.md",
-      "size": 656,
-      "sha256": "563f985af8f82ee232ed2bb6aa7c7477abc83c8fddd2a5a6dae91846f20ae5cb"
+      "path": "main.py",
+      "size": 4797872,
+      "sha256": "1295cf4f51fd05c508ae9667f6c0f6c93edfb867b6049fb7b02229ffdb6f2808"
     },
     {
       "path": "changed_files.manifest",
@@ -25,18 +14,27 @@
       "sha256": "58ffbfc5ea2a845743ee8f94961f2b273f171e0081e96ec9ff8cf472e46ce635"
     },
     {
-      "path": "main.py",
-      "size": 4797659,
-      "sha256": "147d6d3799b49c79df68ab18ef5a481819c444b118c7a4022048bbd5026dec5b"
+      "path": "RELEASE_NOTES_KR.md",
+      "size": 801,
+      "sha256": "52198f33389a441ef7a7d290244758ea69f439e23664447e17d066e3873d4ac2"
+    },
+    {
+      "path": "INSTALL_AND_QA_KR.md",
+      "size": 565,
+      "sha256": "a6792d28594c4fcaba1452b1892b3d2b80bbae3bc8045c35db1bc68dced6254c"
+    },
+    {
+      "path": "PREDEPLOY_AUDIT.md",
+      "size": 367,
+      "sha256": "d7c0fb024e1a11761173369bffc48ce9559e08417c626c075b30f0791608b34b"
     }
   ],
-  "invariants": [
+  "preserves": [
     "Registry 341/341",
     "Runtime First",
     "Strict Read Only",
-    "Live Trading OFF",
-    "Gate/Threshold unchanged",
-    "Synthetic completion NONE",
-    "Historical records preserved"
+    "Gate/Threshold",
+    "Learning/Attribution data",
+    "Shadow/Paper/Live paths"
   ]
 }

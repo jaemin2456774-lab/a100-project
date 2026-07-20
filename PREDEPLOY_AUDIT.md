@@ -1,11 +1,10 @@
 # Predeploy Audit
 
 - Python compile: PASS
-- Executable block: 1
-- Telegram command additions: 0
-- Registry canonical restore: preserved
-- Historical baseline: diagnostic-only `/data/a100_rc235_historical_anomaly_baseline.json`
-- Learning/Attribution/Outcome/Performance record deletion: NONE
+- Executable patch block: single appended lineage
+- Registry command additions: 0
+- Gate/Threshold mutation: 0
+- Learning/Attribution data deletion or rewrite: 0
+- Historical baseline bootstrap: current preserved state only when completed chain aligned
+- Future anomaly growth detection: enabled
 - Synthetic completion: NONE
-- Gate/Threshold/Order mutation: NONE
-- Live Trading: OFF
