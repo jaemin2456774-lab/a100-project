@@ -1,12 +1,12 @@
 {
-  "version": "V116.1-DEV-S59.7.21",
-  "build_id": "S59.7.21-20260720-SHADOW-SYMBOL-QUARANTINE-SNAPSHOT-RECOVERY-01",
-  "base": "S59.7.20",
+  "version": "V116.1-DEV-S59.7.22",
+  "build_id": "S59.7.22-20260720-SHADOW-ENTRY-GATE-TRACE-LEARNING-SOURCE-ALIGNMENT-01",
+  "base": "S59.7.21",
   "registry_expected": 341,
   "changed_files": [
     "main.py",
-    "CHANGELOG_V116.1_DEV_S59.7.21.md",
-    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.21.md",
+    "CHANGELOG_V116.1_DEV_S59.7.22.md",
+    "PREDEPLOY_AUDIT_V116.1_DEV_S59.7.22.md",
     "PATCH_INSTALL_GUIDE_KR.md"
   ],
   "safety": {
@@ -14,6 +14,7 @@
     "strict_read_only": true,
     "live_trading": false,
     "synthetic_completion": false,
-    "gate_formula_changed": false
+    "gate_formula_changed": false,
+    "score_threshold_changed": false
   }
 }
