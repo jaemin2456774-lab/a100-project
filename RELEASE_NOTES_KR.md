@@ -1,15 +1,23 @@
-# A100 V116.2 RC2.3.6 릴리스 노트
+# A100 V116.2 RC2.4 Command Certification Framework
 
 ## 목적
-RC2.3.5에서 historical anomaly가 승인 한도를 초과하면 baseline을 만들지 못해 영구적으로 `MISSING`이 되던 bootstrap 결함을 수정합니다.
+Registry 341/341 등록 여부와 실제 End-to-End 실행 인증을 분리합니다.
 
-## 변경
-- 현재 Completed Same-ID 체인이 일치할 때 현재 historical anomaly 상태를 최초 baseline으로 저장
-- 최초 저장 이후 증가분만 FAIL 처리
-- 기존 orphan/duplicate/Attribution 초과 데이터 삭제·수정 없음
-- 새 baseline 파일: `/data/a100_rc236_historical_anomaly_baseline.json`
-- Gate, Threshold, Learning, Attribution, Shadow/Paper/Live 로직 변경 없음
+## 주요 변경
+- 기존 `/commandcert`에 summary/full/batch/report 모드 추가
+- canonical 341개 명령을 Runtime Evidence Matrix와 대조
+- PASS 조건: Registry + Handler + Route + Runtime 실행 + Evidence + Store + Output + Replay
+- 실행 증거가 없는 명령은 PARTIAL로 유지
+- Handler/Route 누락은 FAILED
+- `/commandmatrix`를 동일 인증 기준으로 통일
+- Entry Decision Score/Threshold/Gap 표시를 소수점 둘째 자리로 개선
 
-## 기대 결과
-첫 `/versionaudit`: Baseline State `CREATED` 또는 `ACTIVE`
-두 번째 `/versionaudit`: Baseline State `ACTIVE`, Post-baseline Delta 0, Version Audit PASS
+## 명령
+- `/commandcert`
+- `/commandcert full`
+- `/commandcert batch 1`
+- `/commandcert report`
+- `/commandmatrix`
+
+## 변경 금지 유지
+Gate/Threshold/Learning/Paper/Live/Registry membership 변경 없음.

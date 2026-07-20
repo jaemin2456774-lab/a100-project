@@ -1,10 +1,12 @@
 # Predeploy Audit
 
 - Python compile: PASS
-- Executable patch block: single appended lineage
-- Registry command additions: 0
-- Gate/Threshold mutation: 0
-- Learning/Attribution data deletion or rewrite: 0
-- Historical baseline bootstrap: current preserved state only when completed chain aligned
-- Future anomaly growth detection: enabled
-- Synthetic completion: NONE
+- Sole executable block: PASS
+- New Telegram command keys: 0
+- Existing routes changed: commandcert, commandmatrix
+- Canonical Registry restore retained
+- Gate/Threshold mutation: NONE
+- Learning/Attribution mutation: NONE
+- Paper/Live order mutation: NONE
+- Synthetic command PASS: NONE
+- Certification policy: measured evidence required
