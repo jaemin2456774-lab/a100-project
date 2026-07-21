@@ -1,22 +1,27 @@
 {
-  "version": "V118.0-RC2",
-  "build_id": "V118.0-RC2-20260722-AUTHORITATIVE-TAIL-BOOT-PERFORMANCE-ROUTE-01",
-  "files": {
-    "main.py": {
-      "sha256": "d5abcd6de407d8aa4ff540b3c3e8145d303de18db9e55aecb38647c997a28f0e",
-      "size": 5030999
+  "schema": "a100.patch.manifest.v1",
+  "version": "V118.0-RC3",
+  "build_id": "V118.0-RC3-20260722-QA-PROVENANCE-PERFORMANCE-SAMPLE-STATIC-FASTPATH-BOOT-PHASE-01",
+  "files": [
+    {
+      "path": "main.py",
+      "size": 5034214,
+      "sha256": "fbe49fadab83631a1c0a77eef355fb79e43bada7045d182071fe537948dbf7c1"
     },
-    "INSTALL_AND_QA_KR.md": {
-      "sha256": "c327ddbb7a26ffc502844396bcfc1a80f39ae3995769d77c8cbac5aedd3f5eba",
-      "size": 751
+    {
+      "path": "INSTALL_AND_QA_KR.md",
+      "size": 913,
+      "sha256": "08dbf9a2b1ae6634dd75b9bde8ffdcbb9579d4751c506e9ecde1576548ce5f25"
     },
-    "RELEASE_NOTES_KR.md": {
-      "sha256": "f90cc06ee524f93ba6bbd5ad55ef5a04e8e20bc4a28d04f23a08e9e65d5f7574",
-      "size": 335
+    {
+      "path": "PREDEPLOY_AUDIT.md",
+      "size": 524,
+      "sha256": "be16ed3601e25bd02f241524d23e1e2de115e8e58b0638b29609e90c1c13e14e"
     },
-    "PREDEPLOY_AUDIT.md": {
-      "sha256": "f491cc83a1ef1d7f1a55dfce4e890359971c3cecc0c5cc7dc6b0a597827b3fd7",
-      "size": 258
+    {
+      "path": "RELEASE_NOTES_KR.md",
+      "size": 1251,
+      "sha256": "707441d60cbcdb362d4b8c44fc420a2ef1d3f8945877da6ba04f8ff928d90ce2"
     }
-  }
+  ]
 }
