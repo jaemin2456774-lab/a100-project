@@ -1,13 +1,24 @@
 {
-  "version": "V117.0-RC1",
-  "build_id": "V117.0-RC1-20260721-CERTIFICATION-SSOT-IMMUTABLE-LEDGER-TRUST-ENGINE-01",
-  "base": "V116.2-RC2.4.8",
-  "sha256_main_py": "a1178f59a46da7fffd6fcd95530c03186744d96b3b278bc348a6e559292e26c4",
-  "files": [
-    "main.py",
-    "INSTALL_AND_QA_KR.md",
-    "PREDEPLOY_AUDIT.md",
-    "RELEASE_NOTES_KR.md",
-    "changed_files.manifest"
+  "version": "V117.0-RC2",
+  "build_id": "V117.0-RC2-20260721-BOOTSTRAP-IDEMPOTENCY-LAZY-SSOT-PERFORMANCE-01",
+  "created_at": 1784619694.396072,
+  "registry_target": 341,
+  "main_sha256": "74cde71708d96272f9411e3385df7e3896a6dc9003a5614098d6b9ef992580da",
+  "features": [
+    "single_startup_path",
+    "bootstrap_once",
+    "route_once",
+    "recovery_once",
+    "lazy_projection",
+    "lazy_trust",
+    "startup_event_dedupe",
+    "cached_ledger_head"
+  ],
+  "safety": [
+    "strict_read_only",
+    "live_trading_off",
+    "historical_preserved",
+    "gate_unchanged",
+    "threshold_unchanged"
   ]
 }

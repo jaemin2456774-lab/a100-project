@@ -1,22 +1,20 @@
-# A100 V117.0 RC1 Release Notes
+# A100 V117.0 RC2 릴리스 노트
 
-## 빌드
-- Version: `V117.0-RC1`
-- Build ID: `V117.0-RC1-20260721-CERTIFICATION-SSOT-IMMUTABLE-LEDGER-TRUST-ENGINE-01`
+## 목표
+V117 RC1에서 확인된 느린 기동과 반복 Identity 로그를 제거한다.
 
 ## 핵심 변경
-- Certification SSOT 도입: Command Certification, Command Matrix, Version Audit, Trust가 동일 Projection을 읽습니다.
-- 단일 Rule Engine `v117.ssot.rule.v1` 도입.
-- Command State Machine: DISCOVERED → REGISTERED → OUTPUT_VERIFIED → RUNTIME_VERIFIED → EVIDENCE_VERIFIED → STORE_VERIFIED → CERTIFIED.
-- Append-only JSONL Certification Event Ledger와 SHA-256 hash chain 도입.
-- Trust Engine v1 도입. Runtime, Ledger, Replay, Historical, Certification Coverage를 동일 가중치로 계산합니다.
-- 기존 `/trustgate`를 Platform Trust Report로, `/intelligencescore`를 Trust Score 요약으로 승격했습니다.
-- Registry 341/341 고정을 위해 신규 Telegram 명령은 추가하지 않았습니다.
+- 역사적 RC `main()` wrapper 연쇄 호출 제거
+- 최종 Runtime main으로 단일 진입
+- Identity, Route, Recovery, Banner 프로세스당 1회 실행
+- Certification Projection과 Trust 계산을 최초 명령 호출까지 지연
+- Startup Event를 startup session + payload hash로 중복 방지
+- Event Ledger chain head를 메모리에 캐시하여 매 append 시 전체 JSONL 재독 제거
+- Registry 341/341 및 기존 명령 유지
 
-## 변경하지 않은 영역
-- Entry Gate / Threshold
-- Learning / Attribution 생산 경로
-- Paper / Shadow / Live 주문 경로
-- Historical anomaly 데이터
-- Replay 원본 데이터
+## 비변경 영역
+- Trading Gate / Threshold / Orders
+- Learning / Attribution producer
+- Historical data
+- Safe QA mutation firewall
 - Live Trading OFF
