@@ -1,11 +1,14 @@
 # Predeploy Audit
 
 - Python compile: PASS
+- Sole executable block: PASS
 - Registry target: 341
 - New Telegram commands: 0
-- Historical deletion: NONE
+- Existing routes reused: `/trustgate`, `/intelligencescore`
+- Certification authority: SSOT Rule Engine
+- Event ledger: APPEND ONLY JSONL + SHA-256 chain
+- Historical deletion/rewrite: NONE
 - Synthetic completion: NONE
 - Gate/Threshold/Order mutation: NONE
-- QA provenance token: ENABLED
-- ID-level anomaly diff: ENABLED
-- Persistent mutation quarantine: ENABLED
+- Runner compatibility: PRESERVED
+- Runtime First / Strict Read Only: PRESERVED

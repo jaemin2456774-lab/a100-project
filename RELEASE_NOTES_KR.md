@@ -1,15 +1,22 @@
-# A100 V116.2 RC2.4.8 릴리스 노트
+# A100 V117.0 RC1 Release Notes
 
-## 변경 사항
-- Safe QA Probe마다 immutable `qa_probe_id` 부여
-- Historical anomaly를 신규 ID 단위로 비교
-- 증가 원인을 `QA_CAUSED`, `BACKGROUND_CONCURRENT`, `UNKNOWN`으로 분리
-- `/aidashboard` 및 기존 mutation-risk 명령 영속 격리 유지
-- Batch reconciliation을 global counter가 아닌 provenance event 기준으로 판정
-- Version Audit에서 QA와 Background 파이프라인을 별도 인증
+## 빌드
+- Version: `V117.0-RC1`
+- Build ID: `V117.0-RC1-20260721-CERTIFICATION-SSOT-IMMUTABLE-LEDGER-TRUST-ENGINE-01`
 
-## 불변 사항
-- Historical 데이터 삭제/정규화 없음
-- Synthetic completion 없음
-- Gate, Threshold, 주문 및 Live 경로 변경 없음
-- Registry 341/341 유지
+## 핵심 변경
+- Certification SSOT 도입: Command Certification, Command Matrix, Version Audit, Trust가 동일 Projection을 읽습니다.
+- 단일 Rule Engine `v117.ssot.rule.v1` 도입.
+- Command State Machine: DISCOVERED → REGISTERED → OUTPUT_VERIFIED → RUNTIME_VERIFIED → EVIDENCE_VERIFIED → STORE_VERIFIED → CERTIFIED.
+- Append-only JSONL Certification Event Ledger와 SHA-256 hash chain 도입.
+- Trust Engine v1 도입. Runtime, Ledger, Replay, Historical, Certification Coverage를 동일 가중치로 계산합니다.
+- 기존 `/trustgate`를 Platform Trust Report로, `/intelligencescore`를 Trust Score 요약으로 승격했습니다.
+- Registry 341/341 고정을 위해 신규 Telegram 명령은 추가하지 않았습니다.
+
+## 변경하지 않은 영역
+- Entry Gate / Threshold
+- Learning / Attribution 생산 경로
+- Paper / Shadow / Live 주문 경로
+- Historical anomaly 데이터
+- Replay 원본 데이터
+- Live Trading OFF
