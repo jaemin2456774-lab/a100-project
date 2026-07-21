@@ -1,24 +1,27 @@
 {
-  "version": "V117.0-RC2",
-  "build_id": "V117.0-RC2-20260721-BOOTSTRAP-IDEMPOTENCY-LAZY-SSOT-PERFORMANCE-01",
-  "created_at": 1784619694.396072,
-  "registry_target": 341,
-  "main_sha256": "74cde71708d96272f9411e3385df7e3896a6dc9003a5614098d6b9ef992580da",
-  "features": [
-    "single_startup_path",
-    "bootstrap_once",
-    "route_once",
-    "recovery_once",
-    "lazy_projection",
-    "lazy_trust",
-    "startup_event_dedupe",
-    "cached_ledger_head"
-  ],
-  "safety": [
-    "strict_read_only",
-    "live_trading_off",
-    "historical_preserved",
-    "gate_unchanged",
-    "threshold_unchanged"
+  "version": "V117.0-RC3",
+  "build_id": "V117.0-RC3-20260721-REGISTRY-RECOVERY-READONLY-TRUST-ATOMIC-BACKUP-01",
+  "created_at": 1784625930.5746243,
+  "files": [
+    {
+      "name": "INSTALL_AND_QA_KR.md",
+      "size": 755,
+      "sha256": "6008e1279bbafb65cd3faef709107fe32932dde8dfe0446a5cee89c3578502cc"
+    },
+    {
+      "name": "PREDEPLOY_AUDIT.md",
+      "size": 596,
+      "sha256": "7c4bcfbdd6497563885bbcd121ad7a1be1073004879672d7f368107fe9d495e1"
+    },
+    {
+      "name": "RELEASE_NOTES_KR.md",
+      "size": 960,
+      "sha256": "f7ab4dd7ebd44856c565b3b660f7b467a93cb1cb56b794fe6a629ba941e3af5b"
+    },
+    {
+      "name": "main.py",
+      "size": 4974683,
+      "sha256": "32b7e4490e1ea7f29f63b39af37c8ded100d77a92c3b578e644e116d3ac31fff"
+    }
   ]
 }

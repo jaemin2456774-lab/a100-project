@@ -1,17 +1,13 @@
 # Predeploy Audit
 
 - Python compile: PASS
-- Executable block: 1
-- Registry target: 341
+- Executable `__main__` block: 1
 - New Telegram commands: 0
-- Startup path: single authoritative path
-- Identity application: process-once guard
-- Route installation: process-once guard
-- Compatibility recovery: process-once guard
-- Projection at module import: disabled
-- Trust at module import: disabled
-- Startup event dedupe: enabled
+- Trust query ledger append: NONE
+- Registry source: historical certified exact-341 baseline
+- Atomic backup: unique temp + lock + fsync + replace + one retry
 - Historical delete/rewrite: NONE
+- Synthetic completion: NONE
 - Gate/Threshold/Order mutation: NONE
 
-로컬 import 실행 검사는 컨테이너에 `apscheduler` 패키지가 없어 중단되었으며, 구문 검사는 통과했다. Railway requirements 환경에서 최종 runtime 검증이 필요하다.
+Runtime 의존 패키지가 없는 로컬 컨테이너에서는 전체 import 실행 검증을 수행하지 않았습니다. Railway 기존 requirements 환경에서 Registry 341 및 command routing을 최종 검증해야 합니다.

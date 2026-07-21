@@ -1,33 +1,36 @@
-# 설치 및 QA
+# 설치 및 Runtime QA
 
-1. ZIP을 기존 Railway 소스 루트에 덮어쓴다.
-2. 기존 `/data` volume을 보존한다.
-3. 재배포 후 startup 로그를 확인한다.
+1. ZIP을 기존 프로젝트 루트에 덮어씁니다.
+2. Railway에 재배포합니다.
+3. 아래 순서로 실행합니다.
 
-## 기대 startup 로그
-아래 Identity 블록은 컨테이너당 한 번만 출력되어야 한다.
-
-```text
-A100 V117.0 RC2 runtime identity: CURRENT
-A100 V117.0 RC2 build: ...
-A100 V117 certification authority: SSOT RULE ENGINE · LAZY
-A100 V117 immutable event ledger: APPEND ONLY · STARTUP DEDUPE
-A100 V117.0 RC2 live trading: OFF
-```
-
-## 검증 명령
 ```text
 /version
 /buildinfo
 /runtimehealth
 /versionaudit
-/commandcert
 /trustgate
+/trustgate
+/intelligencescore
+/commandcert
 /errors
 ```
 
-## 성능 검증
-- 컨테이너 시작부터 `worker running`까지 시간을 RC1과 비교
-- 동일 Identity 블록 반복 여부 확인
-- `/commandcert` 첫 호출은 lazy projection 계산으로 후속 호출보다 느릴 수 있음
-- 두 번째 `/commandcert` 및 `/trustgate`는 projection cache를 사용해야 함
+## 정상 기대값
+
+```text
+Registry 341/341
+Runtime Identity PASS
+Version Audit PASS
+Runtime Integrity 100%
+```
+
+`/trustgate`를 연속 두 번 실행해도 Ledger chain event 수가 증가하지 않아야 합니다.
+
+V75 백업 관련 로그에 아래 오류가 다시 나타나면 안 됩니다.
+
+```text
+No such file or directory: a100_v75_hybrid_backup.json.tmp
+```
+
+정상 저장은 고유 임시 파일을 사용하며 최종 파일로 원자적으로 교체됩니다.
