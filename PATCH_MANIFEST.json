@@ -1,27 +1,27 @@
 {
-  "version": "V118.0-RC3.5",
-  "build_id": "V118.0-RC3.5-20260722-RECOVERY-INTERNAL-PROFILING-SEMANTIC-WARM-CACHE-01",
-  "baseline": "V118.0-RC3.4",
+  "version": "V118.0-RC3.6",
+  "build_id": "V118.0-RC3.6-20260722-DEFERRED-MATRIX-RECOVERY-WARM-CACHE-STABILITY-01",
+  "baseline": "V118.0-RC3.5",
   "changed_files": [
     {
       "path": "main.py",
-      "sha256": "82a02a65979ce54dccfce2ef7bf8f558e4a7e5b5a9e3b02b71de3812b40c4827",
-      "size": 5047227
+      "sha256": "ad81a32af99315c45c45c6544c94e8cdd8a24071662cbb2b0d2ff51e22ffa23e",
+      "size": 5050434
     },
     {
       "path": "INSTALL_AND_QA_KR.md",
-      "sha256": "2a3e54dd7d48a838ecf42f4169dac00f7372a47d61a70af7f1f68c3df854abbe",
-      "size": 718
+      "sha256": "683017765d3f36a49236c86c5e11c16fd241494eedf3bc5ca3397bcd7eb23b40",
+      "size": 1042
     },
     {
       "path": "PREDEPLOY_AUDIT.md",
-      "sha256": "d874ed7a5de07ea2877a643020c35ce9f16655c61190de9e61297383953707b0",
-      "size": 486
+      "sha256": "9c001046d44cf92e5e1e53098a271014100318f6f19d76f49f9b159b8fc838ce",
+      "size": 763
     },
     {
       "path": "RELEASE_NOTES_KR.md",
-      "sha256": "bc5bf47c980e743a2dab58a65719b2e8ef6dc673ea50379c1dfa0ba074162a3e",
-      "size": 978
+      "sha256": "1c7addc8e48380015befb55319357bd62200e395ae2f6fe2325c5854833f33a0",
+      "size": 973
     }
   ]
 }
