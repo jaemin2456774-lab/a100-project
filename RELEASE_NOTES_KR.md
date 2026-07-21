@@ -1,20 +1,21 @@
-# A100 V117.0 RC3 릴리스 노트
+# A100 V117.0 RC4 릴리스 노트
 
-Build ID: `V117.0-RC3-20260721-REGISTRY-RECOVERY-READONLY-TRUST-ATOMIC-BACKUP-01`
+## Build
+- Version: V117.0-RC4
+- Build ID: V117.0-RC4-20260721-CERTIFICATION-AUTOMATION-PRIORITY-PROMOTION-01
 
-## 수정 내용
+## 핵심 변경
+- 기존 Safe QA Runner 위에 SSOT 기반 Certification Priority Queue 추가
+- PARTIAL 명령 중 PASS에 가까운 명령을 먼저 실행
+- 기존 quarantine 및 unsafe 명령 제외 정책 유지
+- Batch 종료 후 Certification Projection 재계산
+- 실제 PARTIAL/FAILED → PASS 상태 전환만 immutable ledger에 append
+- 중간 Probe 및 단순 조회는 ledger append 없음
+- `/commandcert status`에 Queue, PASS, Promotion, Projection 상태 추가
 
-- 인증된 historical exact-341 command baseline으로 Registry membership 복원
-- V117 RC2에서 현재 343개 Registry를 새 expected set으로 고정하던 회귀 제거
-- `/trustgate`, `/intelligencescore`를 완전 read-only Projection 조회로 변경
-- Trust 조회 시 trust snapshot 및 immutable ledger event append 금지
-- V75 volume backup 저장에 전용 lock, 고유 same-directory temp file, fsync, atomic replace 적용
-- 원자적 백업 실패 시 한 차례 bounded retry 후 warning/error ledger 기록
-- RC2의 single startup path와 lazy SSOT 성능 최적화 유지
-
-## 변경하지 않은 항목
-
-- Registry command 추가 없음
-- Historical 데이터 삭제 및 rewrite 없음
-- Entry Gate, Threshold, Learning, Attribution, Paper, Shadow, Live 경로 변경 없음
-- Live Trading OFF 유지
+## 불변 사항
+- Registry 341/341
+- Runtime First / Strict Read Only
+- Historical 삭제·정규화 없음
+- Gate/Threshold/Order mutation 없음
+- Live Trading OFF
