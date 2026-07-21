@@ -1,13 +1,21 @@
-# A100 V118.0 RC3.1 릴리스 노트
+# A100 V118.0 RC3.2 릴리즈 노트
 
-## 긴급 수정
-- RC3 BootManager에서 Architecture Guard가 registry 343 중간 상태를 즉시 실패 처리하던 문제 수정
-- baseline/routes 설치 후 canonical 341 registry reconcile 단계 추가
-- Guard 실패 시 bounded retry 1회 후에도 341이 아니면 기존처럼 엄격 실패
-- 제거된 비정규 alias 목록과 reconcile 결과를 boot state에 기록
+Build ID: `V118.0-RC3.2-20260722-AUTHORITATIVE-STARTUP-IDENTITY-LOG-UNIFICATION-01`
 
-## 유지
-- Registry 341/341
-- Runtime First / Strict Read Only
-- Immutable Ledger / Live Trading OFF
-- RC3 성능 계측 및 projection cache 수정 유지
+## 수정 사항
+
+- Railway 시작 로그의 authoritative identity를 V118.0 RC3.2로 단일화했습니다.
+- `V117.0-RC6 worker running`, 과거 `BUILD_ID=...`, V116/V90/V92 고정 버전 배너를 숨깁니다.
+- 레거시 초기화와 worker 기능은 제거하지 않고 그대로 실행합니다.
+- 일반 운영 로그와 오류 로그는 계속 출력합니다.
+- Registry 341/341, Runtime First, Strict Read Only, Live Trading OFF를 유지합니다.
+
+## 기대 시작 로그
+
+```text
+A100 V118.0 RC3.2 runtime identity: CURRENT
+A100 V118.0 RC3.2 build: V118.0-RC3.2-20260722-AUTHORITATIVE-STARTUP-IDENTITY-LOG-UNIFICATION-01
+A100 V118 architecture guard: PASS registry=341
+A100 V118 query kernel: PROJECTION HASH CACHE · PERFORMANCE SAMPLE VERDICT
+A100 V118.0 RC3.2 live trading: OFF
+```

@@ -1,26 +1,26 @@
 {
-  "version": "V118.0-RC3.1",
-  "build_id": "V118.0-RC3.1-20260722-BOUNDED-REGISTRY-POST-ROUTE-RECOVERY-HOTFIX-01",
+  "version": "V118.0-RC3.2",
+  "build_id": "V118.0-RC3.2-20260722-AUTHORITATIVE-STARTUP-IDENTITY-LOG-UNIFICATION-01",
   "files": [
     {
       "path": "main.py",
-      "sha256": "7d6d8a582eec8f39fd455f786ed064e9f15f49469ef8f3173fab37e281e5502b",
-      "size": 5034900
+      "sha256": "8fcd9cb9d5e581e25ca5cd006ea630982e5bea7849855e77dceb2699a1d5859b",
+      "size": 5036087
     },
     {
       "path": "INSTALL_AND_QA_KR.md",
-      "sha256": "ef24f841f1912a5c1a2b102de4d742ac9a436e0fe777725e13c31618ce2895ee",
-      "size": 488
+      "sha256": "46559c808688cce6e958aa022af3f50b0d4df24fbae93da3b363a55252a09f53",
+      "size": 720
     },
     {
       "path": "PREDEPLOY_AUDIT.md",
-      "sha256": "4327e15478980f746ceb6ee248ecb91396744d9341f93de750a9641e7d9f5c8c",
-      "size": 301
+      "sha256": "a75f78089d4d6f8b32432a94396732c071ed4bee27a23741c0f75dc961173623",
+      "size": 491
     },
     {
       "path": "RELEASE_NOTES_KR.md",
-      "sha256": "cbd7ca55ff725cdc7dcb33c28080d7995ced6c6376f001bbaabff40e857cdaed",
-      "size": 577
+      "sha256": "3c6e68f747ff12ae10f6795367df4befebac05cfe42765fdba2f11f498801c1b",
+      "size": 923
     }
   ]
 }
