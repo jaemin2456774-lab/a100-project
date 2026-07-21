@@ -1,22 +1,22 @@
 {
-  "version": "V118.0-RC1",
-  "build_id": "V118.0-RC1-20260722-LTS-FOUNDATION-BOOT-GUARD-PERFORMANCE-BUDGET-01",
+  "version": "V118.0-RC2",
+  "build_id": "V118.0-RC2-20260722-AUTHORITATIVE-TAIL-BOOT-PERFORMANCE-ROUTE-01",
   "files": {
     "main.py": {
-      "sha256": "6f64aca4e03a1e1186bc370b18d407b76749bde70b1cdbce90bb92202a9cc7b2",
-      "size": 5030914
-    },
-    "RELEASE_NOTES_KR.md": {
-      "sha256": "4dfbabf1783ad0662c6db791afc1017190d8834660cda6b6fcd75b6af92a7099",
-      "size": 867
+      "sha256": "d5abcd6de407d8aa4ff540b3c3e8145d303de18db9e55aecb38647c997a28f0e",
+      "size": 5030999
     },
     "INSTALL_AND_QA_KR.md": {
-      "sha256": "9b03c9b88168a35387624f57bc4f6e76702273088d389075e510eb22dc281d57",
-      "size": 636
+      "sha256": "c327ddbb7a26ffc502844396bcfc1a80f39ae3995769d77c8cbac5aedd3f5eba",
+      "size": 751
+    },
+    "RELEASE_NOTES_KR.md": {
+      "sha256": "f90cc06ee524f93ba6bbd5ad55ef5a04e8e20bc4a28d04f23a08e9e65d5f7574",
+      "size": 335
     },
     "PREDEPLOY_AUDIT.md": {
-      "sha256": "50fa43f8fcc95aba95651e6aa672184d50039577ef2fd893313f6d520dbc6f14",
-      "size": 339
+      "sha256": "f491cc83a1ef1d7f1a55dfce4e890359971c3cecc0c5cc7dc6b0a597827b3fd7",
+      "size": 258
     }
   }
 }

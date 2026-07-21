@@ -1,28 +1,29 @@
-# 설치 및 QA
+# A100 V118.0 RC2 설치 및 QA
 
-1. ZIP의 `main.py`를 기존 Railway 애플리케이션에 교체합니다.
-2. 기존 requirements와 volume을 유지한 채 재배포합니다.
-3. 다음 순서로 확인합니다.
+## 수정 목적
+V118 코드보다 앞선 RC5 실행 블록이 먼저 실행되어 V118 정의가 로드되지 않던 실행 순서 회귀를 수정합니다.
 
-```text
-/version
-/buildinfo
-/versionaudit
-/commandcert
-/commandcert
-/commandmatrix
-/commandmatrix
-/trustgate
-/trustgate
-/profiling   또는 /performance
-/errors
-```
+## 설치
+기존 main.py를 백업한 뒤 이 패키지의 main.py로 교체하고 재배포합니다.
+
+## 배포 후 확인
+1. /version
+2. /buildinfo
+3. /versionaudit
+4. /commandcert
+5. /commandcert
+6. /commandmatrix
+7. /commandmatrix
+8. /trustgate
+9. /trustgate
+10. /performance
+11. /errors
 
 ## 기대 결과
-- Registry 341/341
+- Running V118.0-RC2
+- Build ID V118.0-RC2-20260722-AUTHORITATIVE-TAIL-BOOT-PERFORMANCE-ROUTE-01
 - Architecture Guard PASS
-- 두 번째 조회에서 Cache HIT
-- Query render 시간이 첫 호출보다 감소
+- Registry 341/341
+- 반복 조회 Cache HIT
+- /performance에서 P50/P95/Hit Rate 표시
 - Trust 조회 Ledger append NONE
-- Historical new QA/BG/Unknown delta 0
-- 성능 진단에서 P50/P95 및 budget 표시
