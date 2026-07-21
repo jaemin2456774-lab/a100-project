@@ -1,28 +1,29 @@
-# A100 V118.0 RC3.4 설치 및 검수
+# A100 V118.0 RC3.5 설치 및 검수
 
-`main.py`를 기존 저장소에 덮어쓴 뒤 Railway에서 재배포한다.
+1. 기존 저장 데이터와 Railway 환경변수를 유지합니다.
+2. 패치의 `main.py`를 저장소에 덮어씁니다.
+3. Railway에 배포하고 신규 컨테이너가 안정적으로 실행되는지 확인합니다.
 
-## 검수 순서
-아래 각 쌍은 60초 이내 연속 실행한다.
+## 검수 명령
 
+```text
 /version
 /buildinfo
 /versionaudit
 /commandcert
-/commandcert
-/commandmatrix
 /commandmatrix
 /trustgate
-/trustgate
-/intelligencescore
 /intelligencescore
 /performance
 /errors
+```
 
-## 정상 기준
+## 확인 기준
+
 - Registry 341/341
 - Architecture Guard PASS
 - Version Audit PASS
-- 각 캐시 대상 두 번째 호출 `Cache HIT`
-- `/performance`에서 Hits 증가, Last HIT, TTL 양수 표시
-- 동일 Projection 의미 상태에서는 stable hash 유지
+- `/buildinfo`에 recovery 내부 5개 phase와 render_warmup 표시
+- 배포 후 핵심 명령이 Cache HIT로 응답
+- `/commandcert` 진단 TTL이 최대 300초로 표시
+- `/errors`에 배포 후 신규 Traceback 없음

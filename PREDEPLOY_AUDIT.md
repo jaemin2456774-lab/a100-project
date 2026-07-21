@@ -1,10 +1,11 @@
-# A100 V118.0 RC3.4 배포 전 감사
+# V118.0 RC3.5 배포 전 감사
 
-- Python compile: PASS
-- 단일 authoritative `__main__` 유지
-- Stable semantic hash는 volatile metadata 제외
-- Cache command key normalization 적용
-- Lookup/store key parity 적용
-- Trace ID는 cache key에서 제외
-- Registry canonical target 341 유지
-- Strict Read Only / Live Trading OFF 유지
+- [x] Python compile PASS
+- [x] 단일 authoritative main 진입점 유지
+- [x] Canonical Registry 341 복구 및 Guard 유지
+- [x] Recovery 내부 단계는 기존 함수와 동일한 순서 유지
+- [x] Render warmup은 read-only이며 Ledger append 없음
+- [x] Performance sample은 실제 사용자 명령만 기록
+- [x] commandcert semantic cache TTL 300초
+- [x] 기존 데이터 및 Railway 환경변수 변경 없음
+- [x] Live Trading OFF

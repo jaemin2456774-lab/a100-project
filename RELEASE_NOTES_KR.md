@@ -1,20 +1,27 @@
-# A100 V118.0 RC3.4 릴리즈 노트
+# A100 V118.0 RC3.5 릴리스 노트
 
-## 목적
-RC3.3에서 동일한 화면상 Projection Hash에도 Render Cache가 반복 MISS하던 문제를 수정한다.
+Build ID: `V118.0-RC3.5-20260722-RECOVERY-INTERNAL-PROFILING-SEMANTIC-WARM-CACHE-01`
 
 ## 변경 사항
-- 인증 의미값만 사용하는 Stable Semantic Projection Hash 도입
-- timestamp, trace ID, runtime freshness 등 변동 필드를 캐시 키에서 제외
-- 명령 이름을 소문자 및 슬래시 제거 형식으로 정규화
-- Render Cache 조회 키와 저장 키를 동일 함수에서 생성
-- 동일 명령의 이전 Projection 캐시만 bounded 제거
-- `/performance`에 Last HIT/NOT_FOUND/EXPIRED, Entries, TTL 표시
-- Rule Engine 표시를 `v118.ssot.rule.v1`로 통일
 
-## 유지 사항
-- Registry 341/341
-- Runtime First / Strict Read Only
-- Ledger Append Only
-- Live Trading OFF
-- 기존 데이터 및 환경변수 보존
+- Recovery 내부를 단계별로 실측합니다.
+  - recovery_ledger_load
+  - recovery_ledger_migrate
+  - recovery_ledger_refresh
+  - recovery_replay_verify
+  - recovery_matrix_refresh
+- 부팅 시 핵심 read-only 출력 4종을 미리 렌더링합니다.
+  - /commandcert
+  - /commandmatrix
+  - /trustgate
+  - /intelligencescore
+- /commandcert는 semantic projection hash가 유지되는 동안 300초 TTL을 사용합니다.
+- 다른 Render Cache는 기존 60초 TTL을 유지합니다.
+- Warmup은 성능 샘플이나 Ledger event를 생성하지 않습니다.
+- Registry 341/341, Strict Read Only, Live Trading OFF를 유지합니다.
+
+## 기대 결과
+
+- 배포 직후 핵심 명령 첫 호출부터 Cache HIT 가능
+- /commandcert의 불필요한 60초 EXPIRED 감소
+- 약 10초 Recovery 병목의 실제 하위 단계 확인
