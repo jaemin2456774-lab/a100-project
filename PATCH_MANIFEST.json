@@ -1,9 +1,8 @@
 {
-  "version": "V116.2-RC2.4.6",
-  "build_id": "V116.2-RC2.4.6-20260721-HISTORICAL-MUTATION-FIREWALL-01",
-  "files": [
+  "version": "V116.2-RC2.4.7",
+  "build_id": "V116.2-RC2.4.7-20260721-PROBE-TRANSACTION-ISOLATION-MUTATION-ATTRIBUTION-01",
+  "changed_files": [
     "main.py"
   ],
-  "registry_target": 341,
-  "strict_read_only": true
+  "registry_target": 341
 }
