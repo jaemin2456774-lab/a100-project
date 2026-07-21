@@ -1,21 +1,22 @@
 # 설치 및 QA
 
-Railway에 main.py를 배포한 후 다음 순서로 확인합니다.
+Railway에 main.py를 배포한 뒤 실행:
 
-```text
 /version
 /buildinfo
+/versionaudit
+/versionaudit
 /commandcert batch 1 run
 /commandcert status
+/versionaudit
 /commandcert
 /commandmatrix
-/versionaudit
 /errors
-```
 
-기대 결과:
-- Build/Wrapper RC2.4.5 정렬
-- Counter Reconciled PASS
-- Results = Probe + Timeout + Network partial + Failed + Skipped
-- New PASS transition만 Promoted에 포함
-- QA Timeout은 /errors 신규 기록에서 제외
+기대값:
+- Mutation Firewall Active
+- Batch historical reconciliation PASS
+- Mutation blocked 0
+- Upsert PASS
+- Post-firewall Delta 0/0/0
+- 두 번째 versionaudit PASS

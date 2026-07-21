@@ -1,8 +1,10 @@
-# A100 V116.2 RC2.4.5 릴리스 노트
+# A100 V116.2 RC2.4.6 릴리스 노트
 
-- Safe QA 직접 실행을 Runtime Ledger 측정 이벤트로 기록
-- 기존 PASS 재관측과 신규 PARTIAL→PASS Promotion을 분리
-- QA Timeout/Network partial을 시스템 오류와 분리
-- Runner 결과 카운터를 단일 상태 머신으로 재계산
-- /versionaudit 및 /commandmatrix authoritative wrapper를 RC2.4.5로 정렬
-- Gate, Threshold, Learning, Paper, Live 경로 변경 없음
+- Safe QA Runner 스레드 전용 Historical Mutation Firewall 추가
+- QA Probe 중 closed-loop 재동기화 및 durable state 저장 억제
+- Probe 전후 anomaly 증가 감지 시 MUTATION_BLOCKED 격리
+- Command 결과 immutable key upsert 및 중복 append 방지
+- 20초 이상 명령 Slow Queue 분리
+- Batch 종료 Historical Reconciliation 추가
+- 현재 보존 이력을 RC2.4.6 Isolation Baseline으로 1회 고정하고 이후 증가만 차단
+- Gate, Threshold, Learning, Paper, Live 로직 변경 없음

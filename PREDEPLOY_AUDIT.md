@@ -1,9 +1,9 @@
 # Predeploy Audit
 
 - Python compile: PASS
+- Single executable block: PASS
 - Registry target: 341
-- New Telegram command: 0
-- Safe QA probe ledger measurement: enabled
-- Promotion transition counting: enabled
-- Timeout system-error mutation: none
-- Gate/Threshold/Order mutation: none
+- New Telegram commands: 0
+- Historical data deletion: NONE
+- Gate/Threshold/Order mutation: NONE
+- Thread-local mutation firewall: ENABLED
