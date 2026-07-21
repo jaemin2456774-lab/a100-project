@@ -1,26 +1,28 @@
 # 설치 및 QA
 
-기존 main.py를 패치의 main.py로 교체하고 기존 requirements 및 volume을 유지해 재배포합니다.
+1. ZIP의 `main.py`를 기존 Railway 애플리케이션에 교체합니다.
+2. 기존 requirements와 volume을 유지한 채 재배포합니다.
+3. 다음 순서로 확인합니다.
 
-검증 순서:
-
-```
+```text
 /version
 /buildinfo
-/commandcert
-/commandcert status
-/commandmatrix
-/commandcert batch 1 run
-/commandcert status
 /versionaudit
+/commandcert
+/commandcert
+/commandmatrix
+/commandmatrix
 /trustgate
+/trustgate
+/profiling   또는 /performance
 /errors
 ```
 
-기대값:
-- 일반 조회 render 시간이 짧게 표시
-- 반복 조회 시 Projection hash와 PASS 수가 동일
-- 일반 timeout 6초, slow timeout 10초
-- 느린 명령이 있어도 Batch가 다음 명령으로 진행
-- Slow queue 수가 status에 표시
-- Counter 및 Historical reconciliation PASS
+## 기대 결과
+- Registry 341/341
+- Architecture Guard PASS
+- 두 번째 조회에서 Cache HIT
+- Query render 시간이 첫 호출보다 감소
+- Trust 조회 Ledger append NONE
+- Historical new QA/BG/Unknown delta 0
+- 성능 진단에서 P50/P95 및 budget 표시

@@ -1,27 +1,22 @@
 {
-  "name": "A100 V117.0 RC6 Query Cache Bounded Probe Performance",
-  "build_id": "V117.0-RC6-20260721-QUERY-CACHE-BOUNDED-PROBE-PERFORMANCE-01",
-  "created_at": 1784645591.7548125,
-  "files": [
-    {
-      "path": "main.py",
-      "size": 5014293,
-      "sha256": "b7962aeaa95d19412d822c1964198199ecb244876ff4330506f058122b0d359f"
+  "version": "V118.0-RC1",
+  "build_id": "V118.0-RC1-20260722-LTS-FOUNDATION-BOOT-GUARD-PERFORMANCE-BUDGET-01",
+  "files": {
+    "main.py": {
+      "sha256": "6f64aca4e03a1e1186bc370b18d407b76749bde70b1cdbce90bb92202a9cc7b2",
+      "size": 5030914
     },
-    {
-      "path": "RELEASE_NOTES_KR.md",
-      "size": 845,
-      "sha256": "2d74a5ad8ecfb4cf9a2c96980cc0b470537885f43cc92972262fae5407635080"
+    "RELEASE_NOTES_KR.md": {
+      "sha256": "4dfbabf1783ad0662c6db791afc1017190d8834660cda6b6fcd75b6af92a7099",
+      "size": 867
     },
-    {
-      "path": "PREDEPLOY_AUDIT.md",
-      "size": 291,
-      "sha256": "97cee3852be74f32b6b72b7ecb82577c39ffde9faec53ed23a5335f87c82fa1c"
+    "INSTALL_AND_QA_KR.md": {
+      "sha256": "9b03c9b88168a35387624f57bc4f6e76702273088d389075e510eb22dc281d57",
+      "size": 636
     },
-    {
-      "path": "INSTALL_AND_QA_KR.md",
-      "size": 610,
-      "sha256": "33661692fe79e6c9490ab07c4076671f6d94a048d2b69549c97607d6457fb2ad"
+    "PREDEPLOY_AUDIT.md": {
+      "sha256": "50fa43f8fcc95aba95651e6aa672184d50039577ef2fd893313f6d520dbc6f14",
+      "size": 339
     }
-  ]
+  }
 }
