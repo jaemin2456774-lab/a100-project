@@ -1,21 +1,7 @@
-# A100 V117.0 RC4 릴리스 노트
+# V117.0 RC5 Release Notes
 
-## Build
-- Version: V117.0-RC4
-- Build ID: V117.0-RC4-20260721-CERTIFICATION-AUTOMATION-PRIORITY-PROMOTION-01
-
-## 핵심 변경
-- 기존 Safe QA Runner 위에 SSOT 기반 Certification Priority Queue 추가
-- PARTIAL 명령 중 PASS에 가까운 명령을 먼저 실행
-- 기존 quarantine 및 unsafe 명령 제외 정책 유지
-- Batch 종료 후 Certification Projection 재계산
-- 실제 PARTIAL/FAILED → PASS 상태 전환만 immutable ledger에 append
-- 중간 Probe 및 단순 조회는 ledger append 없음
-- `/commandcert status`에 Queue, PASS, Promotion, Projection 상태 추가
-
-## 불변 사항
-- Registry 341/341
-- Runtime First / Strict Read Only
-- Historical 삭제·정규화 없음
-- Gate/Threshold/Order mutation 없음
-- Live Trading OFF
+- QA_CAUSED/UNKNOWN 명령의 PASS 승격을 차단하고 영속 격리합니다.
+- Batch provenance reconciliation 전 상태 전환 이벤트 append를 지연합니다.
+- 정상 전환만 CERTIFICATION_PROMOTION 이벤트로 Certification Ledger에 기록합니다.
+- Historical anomaly 원장은 삭제하거나 정규화하지 않습니다. RC5 시작 이전 이벤트를 보존 baseline으로 고정하고 이후 신규 증가만 인증합니다.
+- 격리 명령은 Projection에서 MANUAL_REVIEW/PARTIAL로 유지합니다.

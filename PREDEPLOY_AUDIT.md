@@ -1,12 +1,10 @@
 # Predeploy Audit
 
 - Python compile: PASS
-- Executable block: 1, physically last
-- New Telegram registry keys: 0
-- Canonical registry target: 341
-- Safe runner/mutation quarantine preserved
-- Intermediate probe ledger append: NONE
-- Promotion append: real state transition only
+- Registry target: 341
+- New Telegram keys: 0
 - Historical delete/rewrite: NONE
+- Promotion domain: CERTIFICATION only
+- QA/UNKNOWN promotion: BLOCKED
 - Gate/Threshold/Order mutation: NONE
-- Live Trading: OFF
+- Live trading: OFF

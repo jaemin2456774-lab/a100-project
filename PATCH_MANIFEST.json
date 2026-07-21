@@ -1,14 +1,11 @@
 {
-  "version": "V117.0-RC4",
-  "build_id": "V117.0-RC4-20260721-CERTIFICATION-AUTOMATION-PRIORITY-PROMOTION-01",
+  "version": "V117.0-RC5",
+  "build_id": "V117.0-RC5-20260721-CERTIFICATION-PROMOTION-PROVENANCE-ISOLATION-01",
   "files": [
     "main.py",
     "INSTALL_AND_QA_KR.md",
     "PREDEPLOY_AUDIT.md",
     "RELEASE_NOTES_KR.md"
   ],
-  "main_sha256": "46cb60eb221268dedcc477738724d0312d9d39da6d5ff073f3d30b5ebbc1e564",
-  "registry_target": 341,
-  "live_trading": false,
-  "historical_mutation": false
+  "generated_at": 1784640834.3680644
 }
