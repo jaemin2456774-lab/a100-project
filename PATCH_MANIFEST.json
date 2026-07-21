@@ -1,13 +1,16 @@
 {
-  "version": "V116.2-RC2.4.3",
-  "build_id": "V116.2-RC2.4.3-20260721-RUNNER-COMPLETION-TRACE-IDENTITY-ALIGNMENT-01",
+  "version": "V116.2-RC2.4.4",
+  "build_id": "V116.2-RC2.4.4-20260721-COMMAND-TIMEOUT-ISOLATION-CERTIFICATION-PROMOTION-01",
+  "base": "V116.2-RC2.4.3",
   "files": [
+    "main.py",
     "INSTALL_AND_QA_KR.md",
-    "PATCH_MANIFEST.json",
     "PREDEPLOY_AUDIT.md",
-    "RELEASE_NOTES_KR.md",
-    "SHA256SUMS",
-    "changed_files.manifest",
-    "main.py"
-  ]
+    "RELEASE_NOTES_KR.md"
+  ],
+  "sha256_main_py": "0709179dffecca27f79ba6aa5f712f9b91306633b26abd8231bd0c175fd3104c",
+  "registry_target": 341,
+  "new_command_keys": 0,
+  "strict_read_only": true,
+  "synthetic_completion": false
 }

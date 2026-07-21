@@ -1,13 +1,9 @@
 # 설치 및 QA
 
-1. 패치를 기존 방식으로 적용하고 Railway를 재배포합니다.
-2. `/version`, `/buildinfo`에서 RC2.4.3을 확인합니다.
-3. `/commandcert autorun` 실행 후 `/commandcert status`로 Batch가 계속 증가하는지 확인합니다.
-4. 중단 시험은 `/commandcert stop`으로만 수행합니다. 상태에 `Stop reason USER_COMMAND`가 표시되어야 합니다.
-5. 재시작 시 미완료 Batch부터 재검수되는지 확인합니다.
+1. ZIP을 기존 prebuilt patch와 동일한 방식으로 Railway에 배포합니다.
+2. 다음 순서로 실행합니다.
 
-검증 명령:
-```
+```text
 /version
 /buildinfo
 /commandcert autorun
@@ -15,5 +11,15 @@
 /commandcert status
 /commandcert stop
 /commandcert status
+/commandcert
+/commandmatrix
 /errors
 ```
+
+## 기대 결과
+- 버전 `V116.2-RC2.4.4`
+- `/ai` 등 느린 명령이 제한시간을 넘겨도 Runner가 다음 명령으로 진행
+- Status에 `Timeout`, `Slow`, `Promoted`, `Failed`가 분리 표시
+- Timeout만 발생한 경우 `/errors`에 Telegram TimedOut이 추가되지 않음
+- Probe 완료 후 PASS/Runtime/Evidence/Store/Output 수가 즉시 재평가됨
+- Gate/Threshold/Live mutation 없음
