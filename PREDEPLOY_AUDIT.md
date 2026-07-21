@@ -1,11 +1,10 @@
-# 배포 전 정적 검수
+# A100 V118.0 RC3.4 배포 전 감사
 
 - Python compile: PASS
-- Authoritative __main__: 단일 실행
-- Registry canonical target: 341
-- Snapshot Fast Path: ACTIVE
-- Render Cache: Projection Hash key
-- Trace ID: Cache key 제외
-- Strict Read Only: 유지
-- Live Trading: OFF
-- 데이터 및 환경변수 마이그레이션: 없음
+- 단일 authoritative `__main__` 유지
+- Stable semantic hash는 volatile metadata 제외
+- Cache command key normalization 적용
+- Lookup/store key parity 적용
+- Trace ID는 cache key에서 제외
+- Registry canonical target 341 유지
+- Strict Read Only / Live Trading OFF 유지

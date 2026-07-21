@@ -1,13 +1,20 @@
-# A100 V118.0 RC3.3 릴리즈 노트
+# A100 V118.0 RC3.4 릴리즈 노트
 
-Build ID: V118.0-RC3.3-20260722-RECOVERY-PROFILING-SNAPSHOT-RENDER-CACHE-FASTPATH-01
+## 목적
+RC3.3에서 동일한 화면상 Projection Hash에도 Render Cache가 반복 MISS하던 문제를 수정한다.
 
-## 수정 범위
-- Recovery 단계를 recovery_core / projection_warmup / trust_warmup으로 세분화
-- Projection Snapshot TTL 30초 추가
-- Trust Snapshot을 Projection Hash 기준으로 재사용
-- Render Cache 저장 시각을 build 완료 시점으로 수정
-- /commandcert, /commandmatrix, /trustgate, /intelligencescore Snapshot Fast Path 적용
-- /intelligencescore 레거시 end-to-end 호출 제거 및 Strict Read Only 렌더 경로 적용
-- /performance에 Hits / Misses 명시
-- Registry 341/341, Live Trading OFF, Ledger Append Only 유지
+## 변경 사항
+- 인증 의미값만 사용하는 Stable Semantic Projection Hash 도입
+- timestamp, trace ID, runtime freshness 등 변동 필드를 캐시 키에서 제외
+- 명령 이름을 소문자 및 슬래시 제거 형식으로 정규화
+- Render Cache 조회 키와 저장 키를 동일 함수에서 생성
+- 동일 명령의 이전 Projection 캐시만 bounded 제거
+- `/performance`에 Last HIT/NOT_FOUND/EXPIRED, Entries, TTL 표시
+- Rule Engine 표시를 `v118.ssot.rule.v1`로 통일
+
+## 유지 사항
+- Registry 341/341
+- Runtime First / Strict Read Only
+- Ledger Append Only
+- Live Trading OFF
+- 기존 데이터 및 환경변수 보존

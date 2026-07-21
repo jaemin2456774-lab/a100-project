@@ -1,8 +1,10 @@
-# 설치 및 QA
+# A100 V118.0 RC3.4 설치 및 검수
 
-기존 저장소에 패치 파일을 덮어쓴 뒤 Railway에서 재배포합니다.
+`main.py`를 기존 저장소에 덮어쓴 뒤 Railway에서 재배포한다.
 
-## 필수 확인
+## 검수 순서
+아래 각 쌍은 60초 이내 연속 실행한다.
+
 /version
 /buildinfo
 /versionaudit
@@ -17,10 +19,10 @@
 /performance
 /errors
 
-## 기대 결과
+## 정상 기준
 - Registry 341/341
 - Architecture Guard PASS
 - Version Audit PASS
-- Boot Phases에 recovery_core / projection_warmup / trust_warmup 표시
-- 동일 명령 두 번째 호출 Cache HIT
-- /performance에 Hits와 Misses가 분리 표시
+- 각 캐시 대상 두 번째 호출 `Cache HIT`
+- `/performance`에서 Hits 증가, Last HIT, TTL 양수 표시
+- 동일 Projection 의미 상태에서는 stable hash 유지

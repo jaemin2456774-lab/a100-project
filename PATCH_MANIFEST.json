@@ -1,29 +1,26 @@
 {
-  "version": "V118.0-RC3.3",
-  "build_id": "V118.0-RC3.3-20260722-RECOVERY-PROFILING-SNAPSHOT-RENDER-CACHE-FASTPATH-01",
-  "base": "V118.0-RC3.2",
-  "files": [
+  "version": "V118.0-RC3.4",
+  "build_id": "V118.0-RC3.4-20260722-STABLE-RENDER-CACHE-KEY-PRECOMPUTE-LOOKUP-01",
+  "changed_files": [
+    {
+      "path": "main.py",
+      "sha256": "b0036efb6781754f63ee36018ccb5de47f79fe38df9ac2f344b9acaa578549e7",
+      "size": 5040807
+    },
     {
       "path": "INSTALL_AND_QA_KR.md",
-      "size": 542,
-      "sha256": "c062f7f5a66f8252fd4791de9c98d58622158fe7f34d0ee1f847c34d2d4cdbaa"
+      "sha256": "ed7b39e39824f9e66c111fd529bed08b5411bc6e2424f0460ec06fc95215b9fa",
+      "size": 619
     },
     {
       "path": "PREDEPLOY_AUDIT.md",
-      "size": 321,
-      "sha256": "3a81313a8ffd6d3f1b7fa58b48817fcd7893dd6653592e47ab677a99363cb7d6"
+      "sha256": "b6b6f4606b59565ae6fdb4a9348ee0e84c24af60ba409e6a8127e249eccb0162",
+      "size": 349
     },
     {
       "path": "RELEASE_NOTES_KR.md",
-      "size": 680,
-      "sha256": "32c54a04c2362fd1a9752568713672f242dc615d17e63032972a522448d741d9"
-    },
-    {
-      "path": "main.py",
-      "size": 5038367,
-      "sha256": "180b0e166b1b1728d27be6d9993c83c45be1c4c68a0186d87f9198c53a3f551f"
+      "sha256": "3e441db7eef9dd6a5e18fc319cee61845c4b269918c6d3972416e007edee98be",
+      "size": 820
     }
-  ],
-  "preserve_data": true,
-  "registry_target": 341
+  ]
 }
