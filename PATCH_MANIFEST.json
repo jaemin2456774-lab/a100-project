@@ -1,11 +1,27 @@
 {
-  "version": "V117.0-RC5",
-  "build_id": "V117.0-RC5-20260721-CERTIFICATION-PROMOTION-PROVENANCE-ISOLATION-01",
+  "name": "A100 V117.0 RC6 Query Cache Bounded Probe Performance",
+  "build_id": "V117.0-RC6-20260721-QUERY-CACHE-BOUNDED-PROBE-PERFORMANCE-01",
+  "created_at": 1784645591.7548125,
   "files": [
-    "main.py",
-    "INSTALL_AND_QA_KR.md",
-    "PREDEPLOY_AUDIT.md",
-    "RELEASE_NOTES_KR.md"
-  ],
-  "generated_at": 1784640834.3680644
+    {
+      "path": "main.py",
+      "size": 5014293,
+      "sha256": "b7962aeaa95d19412d822c1964198199ecb244876ff4330506f058122b0d359f"
+    },
+    {
+      "path": "RELEASE_NOTES_KR.md",
+      "size": 845,
+      "sha256": "2d74a5ad8ecfb4cf9a2c96980cc0b470537885f43cc92972262fae5407635080"
+    },
+    {
+      "path": "PREDEPLOY_AUDIT.md",
+      "size": 291,
+      "sha256": "97cee3852be74f32b6b72b7ecb82577c39ffde9faec53ed23a5335f87c82fa1c"
+    },
+    {
+      "path": "INSTALL_AND_QA_KR.md",
+      "size": 610,
+      "sha256": "33661692fe79e6c9490ab07c4076671f6d94a048d2b69549c97607d6457fb2ad"
+    }
+  ]
 }

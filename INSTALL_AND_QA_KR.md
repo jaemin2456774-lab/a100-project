@@ -1,20 +1,26 @@
-# V117.0 RC5 설치 및 QA
+# 설치 및 QA
 
-1. 기존 main.py를 백업합니다.
-2. 이 패치의 main.py로 교체 후 기존 requirements로 배포합니다.
-3. 검증 순서:
+기존 main.py를 패치의 main.py로 교체하고 기존 requirements 및 volume을 유지해 재배포합니다.
 
-```text
+검증 순서:
+
+```
 /version
 /buildinfo
-/versionaudit
+/commandcert
 /commandcert status
+/commandmatrix
 /commandcert batch 1 run
 /commandcert status
-/commandcert
-/commandmatrix
+/versionaudit
 /trustgate
 /errors
 ```
 
-기대값: Registry 341/341, QA/Unknown 신규 증가 0, 안전한 Promotion만 append, 격리 명령은 MANUAL_REVIEW/PARTIAL 유지, Trust Historical Integrity 100%.
+기대값:
+- 일반 조회 render 시간이 짧게 표시
+- 반복 조회 시 Projection hash와 PASS 수가 동일
+- 일반 timeout 6초, slow timeout 10초
+- 느린 명령이 있어도 Batch가 다음 명령으로 진행
+- Slow queue 수가 status에 표시
+- Counter 및 Historical reconciliation PASS

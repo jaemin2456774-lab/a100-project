@@ -1,10 +1,11 @@
-# Predeploy Audit
+# 사전 배포 감사
 
 - Python compile: PASS
-- Registry target: 341
-- New Telegram keys: 0
+- 최종 실행 블록: 1
+- 신규 Telegram registry key: 0
+- Registry 목표: 341
+- Query paths: cache/read-only
+- Batch strong reconciliation: 유지
 - Historical delete/rewrite: NONE
-- Promotion domain: CERTIFICATION only
-- QA/UNKNOWN promotion: BLOCKED
 - Gate/Threshold/Order mutation: NONE
-- Live trading: OFF
+- Live Trading: OFF
