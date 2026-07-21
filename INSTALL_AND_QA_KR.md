@@ -1,32 +1,20 @@
-# A100 V118.0 RC3 설치 및 검수
+# 설치 및 QA · V118.0 RC3.1
 
-1. 기존 프로젝트의 `main.py`를 이 패치의 파일로 덮어씁니다.
-2. Railway에 배포 후 재시작 로그에서 V118.0 RC3 Build ID와 Registry 341을 확인합니다.
-3. 아래 명령을 순서대로 실행합니다.
+기존 프로젝트에 `main.py`를 덮어쓰고 Railway에서 재배포합니다. 데이터 볼륨과 환경변수는 변경하지 않습니다.
 
+## 시작 로그 필수 확인
+```text
+A100 V118.0 RC3.1 runtime identity: CURRENT
+A100 V118 architecture guard: PASS registry=341
+```
+
+## 텔레그램 검수
 ```text
 /version
 /buildinfo
 /versionaudit
-/commandcert
-/commandcert
-/commandmatrix
-/commandmatrix
-/trustgate
-/trustgate
-/intelligencescore
 /performance
+/errors
 ```
 
-성능 최종 판정에는 기본 5개 샘플이 필요합니다. 동일 명령을 60초 TTL 안에서 총 5회 실행한 후 `/performance`를 다시 확인합니다.
-
-## 필수 확인
-
-- `/versionaudit` Result PASS
-- `QA Provenance Isolated` PASS
-- Background / Unknown 0
-- Registry 341/341
-- 두 번째 `/commandmatrix`, `/trustgate`, `/commandcert`에서 Cache HIT
-- `/performance`에서 Samples, Hits/Misses 표시
-- 샘플 0건이 PASS로 표시되지 않음
-- Live Trading OFF
+`/buildinfo`에서 Registry 341/341, Architecture Guard PASS를 확인합니다.

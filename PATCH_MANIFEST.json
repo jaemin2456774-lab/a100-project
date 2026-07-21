@@ -1,27 +1,26 @@
 {
-  "schema": "a100.patch.manifest.v1",
-  "version": "V118.0-RC3",
-  "build_id": "V118.0-RC3-20260722-QA-PROVENANCE-PERFORMANCE-SAMPLE-STATIC-FASTPATH-BOOT-PHASE-01",
+  "version": "V118.0-RC3.1",
+  "build_id": "V118.0-RC3.1-20260722-BOUNDED-REGISTRY-POST-ROUTE-RECOVERY-HOTFIX-01",
   "files": [
     {
       "path": "main.py",
-      "size": 5034214,
-      "sha256": "fbe49fadab83631a1c0a77eef355fb79e43bada7045d182071fe537948dbf7c1"
+      "sha256": "7d6d8a582eec8f39fd455f786ed064e9f15f49469ef8f3173fab37e281e5502b",
+      "size": 5034900
     },
     {
       "path": "INSTALL_AND_QA_KR.md",
-      "size": 913,
-      "sha256": "08dbf9a2b1ae6634dd75b9bde8ffdcbb9579d4751c506e9ecde1576548ce5f25"
+      "sha256": "ef24f841f1912a5c1a2b102de4d742ac9a436e0fe777725e13c31618ce2895ee",
+      "size": 488
     },
     {
       "path": "PREDEPLOY_AUDIT.md",
-      "size": 524,
-      "sha256": "be16ed3601e25bd02f241524d23e1e2de115e8e58b0638b29609e90c1c13e14e"
+      "sha256": "4327e15478980f746ceb6ee248ecb91396744d9341f93de750a9641e7d9f5c8c",
+      "size": 301
     },
     {
       "path": "RELEASE_NOTES_KR.md",
-      "size": 1251,
-      "sha256": "707441d60cbcdb362d4b8c44fc420a2ef1d3f8945877da6ba04f8ff928d90ce2"
+      "sha256": "cbd7ca55ff725cdc7dcb33c28080d7995ced6c6376f001bbaabff40e857cdaed",
+      "size": 577
     }
   ]
 }
