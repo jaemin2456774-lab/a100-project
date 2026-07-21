@@ -1,8 +1,13 @@
 {
-  "version": "V116.2-RC2.4.7",
-  "build_id": "V116.2-RC2.4.7-20260721-PROBE-TRANSACTION-ISOLATION-MUTATION-ATTRIBUTION-01",
-  "changed_files": [
-    "main.py"
-  ],
-  "registry_target": 341
+  "version": "V116.2-RC2.4.8",
+  "build_id": "V116.2-RC2.4.8-20260721-QA-PROVENANCE-CONCURRENT-DELTA-SEPARATION-01",
+  "base": "V116.2-RC2.4.7",
+  "sha256_main_py": "26d5cfb3b06bccbd49aa61468ad6446332a3e0a105418fb3aff2e9cd86ecb029",
+  "files": [
+    "main.py",
+    "INSTALL_AND_QA_KR.md",
+    "PREDEPLOY_AUDIT.md",
+    "RELEASE_NOTES_KR.md",
+    "changed_files.manifest"
+  ]
 }

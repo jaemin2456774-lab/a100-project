@@ -1,8 +1,15 @@
-# A100 V116.2 RC2.4.7
+# A100 V116.2 RC2.4.8 릴리스 노트
 
-- Probe별 mutation source 함수 추적 및 bounded quarantine
-- MUTATION_BLOCKED를 Runner counter 공식에 포함
-- mutation-risk 명령을 이후 Safe Auto Runner에서 자동 제외
-- V106/V107 및 AI 상태 저장 경로를 QA mutation firewall에 추가
-- 중복 진입 차단을 EXPECTED_GUARD로 재분류하여 /errors에서 제외
-- Historical 데이터 삭제 및 합성 completion 없음
+## 변경 사항
+- Safe QA Probe마다 immutable `qa_probe_id` 부여
+- Historical anomaly를 신규 ID 단위로 비교
+- 증가 원인을 `QA_CAUSED`, `BACKGROUND_CONCURRENT`, `UNKNOWN`으로 분리
+- `/aidashboard` 및 기존 mutation-risk 명령 영속 격리 유지
+- Batch reconciliation을 global counter가 아닌 provenance event 기준으로 판정
+- Version Audit에서 QA와 Background 파이프라인을 별도 인증
+
+## 불변 사항
+- Historical 데이터 삭제/정규화 없음
+- Synthetic completion 없음
+- Gate, Threshold, 주문 및 Live 경로 변경 없음
+- Registry 341/341 유지
