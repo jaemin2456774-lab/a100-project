@@ -50,3 +50,10 @@ These files are replaceable projections, not ledger or learning state.
 - Baseline: last known responding V118.0-RC3.10.1.
 - Scope: Telegram startup observability and bounded process-lock recovery only.
 - No Command DNA, certification, ledger, learning, or trading-gate changes.
+
+
+## Current Recovery Candidate
+- V118.0-RC3.10.3
+- Adds direct Telegram RECEIVE/SEND probes and dispatcher observability.
+- `/ping` is registry-neutral and intended only for recovery verification.
+- Certification, Ledger, Learning, and Trading Gate remain unchanged.

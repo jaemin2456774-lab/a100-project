@@ -85,3 +85,11 @@
 - Telegram lifecycle logs must remain visible.
 - `/tmp/a100_telegram_ready.json` records LOCK_WAIT, LOCK_ACQUIRED, INITIALIZING,
   FAILED, CANCELLED, or timeout state without touching `/data` or trading state.
+
+
+## V118.0 RC3.10.3 Telegram Update/Dispatch Recovery
+- Polling-started logs alone are not treated as proof of command operation.
+- Telegram RECEIVE, direct SEND, and legacy dispatcher are measured separately.
+- `/version` and registry-neutral `/ping` probes run before the legacy dispatcher.
+- Direct probes do not add entries to the authoritative 341 command registry.
+- Every received command logs update_id/chat_id and dispatcher entry/completion/failure.
