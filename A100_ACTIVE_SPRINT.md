@@ -4,19 +4,19 @@
 V118.0 RC3.11.x — Performance and stabilization.
 
 ## Current objectives
-- Remove avoidable cold-query cost.
-- Prebuild authoritative Projection and Trust snapshots once.
-- Warm Shared Cache before the first user query.
-- Measure real warm lookups and stabilize Performance Budget evidence.
-- Keep Telegram event loop non-blocking.
-- Continue fixing observed timeouts and regressions inside this sprint.
-- Do not add unplanned product features.
+- Complete core-command boot warmup, including `/version`.
+- Unify user-visible cache status around Shared Cache.
+- Remove contradictory nested `Cache MISS` / `Shared cache HIT` output.
+- Stabilize Performance Budget evidence and display.
+- Continue observed hotfixes without changing the approved roadmap.
+- No unplanned product features.
 
 ## Exit criteria
 - Registry 341/341.
-- Runtime identity and architecture guard PASS.
-- No new crash, timeout loop, or data corruption.
-- Core monitoring commands are ready in Shared Cache after boot.
-- Warm samples are based on real cache lookups.
-- Certification counts remain SSOT-controlled and non-synthetic.
+- Boot Warmup READY with eight core commands and 40 real warm lookup samples.
+- `/version` reaches measured warm readiness.
+- No `6/5`-style confusing display.
+- Shared Cache state is the sole user-facing cache verdict.
+- No new timeout, crash, data corruption, or certification mutation.
+- MOBILE FLAT packaging maintained.
 - Roadmap Integrity PASS.

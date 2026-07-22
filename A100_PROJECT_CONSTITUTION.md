@@ -24,3 +24,9 @@
 - Explainable evidence from chart, news, funding, OI, volume, whale, regime, and learning.
 - Quiet Monitoring + Daily Brief + high-quality Opportunity Alert.
 - Alerts should be rare enough that an A100 alert is worth checking.
+
+
+## Mobile-first release rule
+- Default distribution is a MOBILE FLAT incremental patch.
+- No manual folder creation is required for GitHub upload from a phone.
+- Full/nested packages are exceptional and require explicit user approval.
