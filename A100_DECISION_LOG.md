@@ -21,3 +21,9 @@
 - Import-time symbol references must never be assigned before the referenced function exists.
 - Warmup wrappers must not self-reference or recursively capture themselves.
 - Boot-critical patches require compile validation and import-order inspection.
+
+
+## RC3.11.3.2 boot-definition recovery
+- Marker-based replacement must not span unrelated boot classes.
+- Every instantiated class must be statically verified as defined earlier in the module.
+- Boot-critical symbol integrity is checked before packaging.
