@@ -4,19 +4,17 @@
 V118.0 RC3.11.x — Performance and stabilization.
 
 ## Current objectives
-- Complete core-command boot warmup, including `/version`.
-- Unify user-visible cache status around Shared Cache.
-- Remove contradictory nested `Cache MISS` / `Shared cache HIT` output.
-- Stabilize Performance Budget evidence and display.
+- Keep seven stable core outputs boot-warmed.
+- Render `/performance` live so warmup and cache state cannot become stale.
+- Measure `/version` through the same isolated warmup path.
 - Continue observed hotfixes without changing the approved roadmap.
 - No unplanned product features.
 
 ## Exit criteria
 - Registry 341/341.
-- Boot Warmup READY with eight core commands and 40 real warm lookup samples.
-- `/version` reaches measured warm readiness.
-- No `6/5`-style confusing display.
-- Shared Cache state is the sole user-facing cache verdict.
+- Boot Warmup READY · Cached Commands 7/7 · Samples 35/35.
+- `/version` Warm READY and Shared Cache READY.
+- `/performance` displays LIVE DIAGNOSTIC / Shared Cache BYPASS.
+- No stale RUNNING state after warmup.
 - No new timeout, crash, data corruption, or certification mutation.
 - MOBILE FLAT packaging maintained.
-- Roadmap Integrity PASS.

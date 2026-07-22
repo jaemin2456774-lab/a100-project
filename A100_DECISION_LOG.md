@@ -33,3 +33,9 @@
 - New handlers must be validated against all referenced global names, not only Python syntax.
 - Static compile does not detect runtime global-name resolution failures.
 - Release validation must include symbol existence and handler smoke execution.
+
+
+## RC3.11.3.4 live diagnostic rule
+- Commands that report cache/warmup/metric state must not cache their own output.
+- `/performance` is a live diagnostic and always bypasses Shared Cache.
+- Stable command outputs may be boot-warmed; live state dashboards must render current state.
