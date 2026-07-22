@@ -1,45 +1,40 @@
-# A100 HANDOFF — V118.0 RC3.9 S1.1
+# A100 V118.0 RC3.11 Handoff
 
-## Baseline
-- Input patch: V118.0-RC3.8 Warm/Cold Isolation True Render Fast Path.
-- Output build: V118.0-RC3.9 Authoritative Command Inventory DNA Foundation.
+## Current Baseline
+- Version: V118.0-RC3.11
+- Build: V118.0-RC3.11-20260722-COMMAND-HEALTH-INTELLIGENCE-FOUNDATION-01
+- Runtime First / Strict Read Only / Registry 341/341 / Live Trading OFF
 
 ## Completed
-- Added a root-level read-only Command DNA inventory module.
-- Added authoritative export of all runtime registry commands after BootManager route installation.
-- Added atomic projection files under `A100_DATA_DIR` (normally `/data`).
-- Added startup inventory verdict and projection hash prefix.
-- Preserved registry count and added no Telegram commands.
-- Consolidated project memory and mobile-first operating rules.
+- RC3.10.1 Trust Runtime Fresh cache coherency hotfix retained.
+- Command DNA schema upgraded from v2 to v3.
+- Added measured Command Health Score, health band, blockers, next transition, risk and priority score.
+- Added `/data/a100_v118_command_health_report.json` with top 50 improvement priorities.
+- No command execution, ledger append, gate change, synthetic PASS or learning mutation.
+- Product-quality meeting principles recorded in MASTER_MEMORY.
 
-## Runtime projection outputs
-- `/data/a100_v118_command_inventory.json`
-- `/data/a100_v118_certification_matrix_seed.json`
+## Validation Required After Railway Deploy
+- `/version`
+- `/buildinfo`
+- `/versionaudit`
+- `/commandcert`
+- `/commandmatrix`
+- `/trustgate`
+- `/intelligencescore`
+- `/performance`
+- `/errors`
 
-These files are replaceable projections, not ledger or learning state.
-
-## In progress
-- Owner/category mapping refinement from actual handlers and engine paths.
-- Evidence/output/storage/replay mapping from measured runtime sources.
-- Command DNA linkage to existing certification projection.
+## Expected
+- Version V118.0-RC3.11
+- Registry 341/341
+- Version Audit PASS
+- Runtime Integrity 100%
+- Trust remains 83.28% unless measured certification changes
+- PASS/PARTIAL/FAILED counts remain Certification SSOT values
+- Startup log contains `command Health DNA v3`
+- No new V88 errors
 
 ## Next
-- RC3.10: authoritative handler/engine/evidence mapping with no synthetic PASS.
-- Begin command cohorts from identity/certification/performance paths.
-
-## Risks
-- Disk capacity must remain healthy because projection files are written to `/data`.
-- Runtime inventory PASS requires exactly 341 callable registry entries.
-- A mismatch records an error but does not mutate registry, ledger or trading state.
-
-
-## Current Build
-- V118.0-RC3.10
-- Build ID V118.0-RC3.10-20260722-COMMAND-DNA-SSOT-LINKAGE-CORE-PHASE-01
-- Next: measured output/performance linkage for core commands without mutating certification.
-
-
-## Current Hotfix
-- Version: V118.0-RC3.10.1
-- Fix: stale boot-time trust cache could preserve Runtime Integrity 0 after Runtime Fresh PASS.
-- Expected: Trust Runtime 100.0, Overall 83.28% with current 56/341 coverage.
+- Expose read-only Command Health and priority summaries through an existing authoritative certification output or a registry-neutral detail route.
+- Begin measured output/performance linkage for the Core Phase commands without synthetic promotion.
+- Opportunity/WAIT intelligence remains a product direction; do not change trade gates until its evidence contract and Shadow validation are defined.

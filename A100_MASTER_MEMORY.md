@@ -76,3 +76,12 @@
 - Boot warmup before live-worker freshness could cache Runtime Integrity 0.
 - Trust snapshots and trust render cache are now keyed by authoritative runtime freshness generation (`rf0`/`rf1`).
 - Version Audit and Platform Trust must remain internally consistent after worker freshness becomes PASS.
+
+## V118 RC3.11 Product Quality Constitution (2026-07-22)
+- Build Less. Refine More: new features are subordinate to verification, optimization, and integration of existing capabilities.
+- Opportunity First: A100 searches for high-quality opportunities, not trade frequency.
+- WAIT is Intelligence: WAIT is an active, explainable decision and a future learning target.
+- Trade Quality > Trade Count.
+- A100's product mission is to support trustworthy decisions: explain LONG/SHORT/WAIT, admit insufficient evidence, and act only when evidence is sufficient.
+- RC3.11 scope is intentionally bounded to Command Health Intelligence. It does not mutate trading gates or synthesize command PASS states.
+- Command Health dimensions: Runtime, Evidence, Output, Storage, Replay, Performance, Documentation. Health is diagnostic and never replaces Certification SSOT.

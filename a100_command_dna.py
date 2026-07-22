@@ -1,4 +1,4 @@
-"""A100 V118 RC3.10 authoritative Command DNA v2 projection.
+"""A100 V118 RC3.11 authoritative Command Health DNA v3 projection.
 
 Strict read-only with respect to runtime, certification ledger, learning, and
 trading state. This module mirrors already measured Certification SSOT fields
@@ -15,10 +15,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-SCHEMA_VERSION = "a100.command.dna.v2"
+SCHEMA_VERSION = "a100.command.dna.v3"
 INVENTORY_FILENAME = "a100_v118_command_inventory.json"
 MATRIX_FILENAME = "a100_v118_certification_matrix_seed.json"
 CORE_REPORT_FILENAME = "a100_v118_core_command_linkage_report.json"
+HEALTH_REPORT_FILENAME = "a100_v118_command_health_report.json"
 DEFAULT_PROJECTION_FILENAME = "a100_v117_certification_projection.json"
 CORE_PHASE_COMMANDS = (
     "version", "buildinfo", "versionaudit", "performance", "profiling",
@@ -113,6 +114,53 @@ def _status(value: Any, *, applicable: bool = True) -> str:
     return "PASS" if bool(value) else "NOT_MEASURED"
 
 
+
+
+_HEALTH_WEIGHTS = {
+    "runtime": 20,
+    "evidence": 20,
+    "output": 20,
+    "storage": 10,
+    "replay": 10,
+    "performance": 10,
+    "documentation": 10,
+}
+
+def _dimension_points(status: str, weight: int) -> float:
+    value = str(status or "").upper()
+    if value == "PASS":
+        return float(weight)
+    if value == "NOT_APPLICABLE":
+        return float(weight)
+    if value in {"PARTIAL", "MEASURED_PARTIAL"}:
+        return float(weight) * 0.5
+    return 0.0
+
+def _health_profile(row: Mapping[str, Any]) -> dict[str, Any]:
+    score = round(sum(_dimension_points(str(row.get(name)), weight) for name, weight in _HEALTH_WEIGHTS.items()), 2)
+    blockers = [name for name in _HEALTH_WEIGHTS if str(row.get(name) or "").upper() not in {"PASS", "NOT_APPLICABLE"}]
+    cert = str(row.get("certification") or "PARTIAL").upper()
+    if cert == "FAILED" or not bool(row.get("callable")):
+        risk = "CRITICAL"
+    elif score < 40:
+        risk = "HIGH"
+    elif score < 75:
+        risk = "MEDIUM"
+    else:
+        risk = "LOW"
+    phase_bonus = 30 if row.get("phase") == "CORE_PHASE_1" else 0
+    impact_bonus = {"IDENTITY": 25, "CERTIFICATION": 25, "PERFORMANCE": 20, "OPERATIONS": 15, "TRADING": 10, "INTELLIGENCE": 10}.get(str(row.get("category")), 5)
+    priority_score = min(100, int(round((100.0 - score) * 0.55 + phase_bonus + impact_bonus)))
+    return {
+        "health_score": score,
+        "health_band": "HEALTHY" if score >= 90 else "DEVELOPING" if score >= 70 else "WEAK" if score >= 40 else "CRITICAL",
+        "blockers": blockers,
+        "next_transition": blockers[0] if blockers else "CERTIFIED",
+        "risk": risk,
+        "priority_score": priority_score,
+    }
+
+
 def build_command_inventory(
     registry: Mapping[str, Callable[..., Any]],
     *,
@@ -156,8 +204,8 @@ def build_command_inventory(
             "certification_source": "CERTIFICATION_SSOT_PROJECTION" if measured else "AUTHORITATIVE_REGISTRY",
             "certification_projection_hash": str((certification_projection or {}).get("projection_hash") or ""),
             "phase": "CORE_PHASE_1" if command in CORE_PHASE_COMMANDS else "BACKLOG",
-            "risk": "LOW" if command in CORE_PHASE_COMMANDS else "UNCLASSIFIED",
         }
+        row.update(_health_profile(row))
         rows.append(row)
     canonical = [{k: row[k] for k in (
         "command_id", "command", "handler", "owner", "category", "registered",
@@ -176,6 +224,13 @@ def build_command_inventory(
         "callable_handlers": sum(1 for row in rows if row["callable"]),
         "non_callable_handlers": sum(1 for row in rows if not row["callable"]),
         "counts": counts,
+        "health": {
+            "average": round(sum(float(row["health_score"]) for row in rows) / max(1, len(rows)), 2),
+            "healthy": sum(1 for row in rows if row["health_band"] == "HEALTHY"),
+            "developing": sum(1 for row in rows if row["health_band"] == "DEVELOPING"),
+            "weak": sum(1 for row in rows if row["health_band"] == "WEAK"),
+            "critical": sum(1 for row in rows if row["health_band"] == "CRITICAL"),
+        },
         "inventory_hash": inventory_hash,
         "projection_hash": str((certification_projection or {}).get("projection_hash") or ""),
         "rows": rows,
@@ -202,6 +257,7 @@ def export_authoritative_command_inventory(
     inventory_path = base / INVENTORY_FILENAME
     matrix_path = base / MATRIX_FILENAME
     core_report_path = base / CORE_REPORT_FILENAME
+    health_report_path = base / HEALTH_REPORT_FILENAME
     matrix = {
         "schema": "a100.certification.matrix.seed.v2",
         "generated_at": inventory["generated_at"],
@@ -215,7 +271,9 @@ def export_authoritative_command_inventory(
         "rows": [{key: row[key] for key in (
             "command_id", "command", "phase", "runtime", "evidence", "output",
             "storage", "replay", "performance", "documentation", "certification",
-            "certification_state", "reason", "certification_source"
+            "certification_state", "reason", "certification_source",
+            "health_score", "health_band", "blockers", "next_transition",
+            "risk", "priority_score"
         )} for row in inventory["rows"]],
     }
     core_rows = [row for row in inventory["rows"] if row["phase"] == "CORE_PHASE_1"]
@@ -232,9 +290,30 @@ def export_authoritative_command_inventory(
         "failed": sum(1 for row in core_rows if row["certification"] == "FAILED"),
         "rows": core_rows,
     }
+    priority_rows = sorted(inventory["rows"], key=lambda row: (-int(row["priority_score"]), str(row["command"])))
+    health_report = {
+        "schema": "a100.command.health.v1",
+        "generated_at": inventory["generated_at"],
+        "version": version,
+        "build_id": build_id,
+        "policy": "measured dimensions only; no synthetic PASS; strict read-only",
+        "inventory_hash": inventory["inventory_hash"],
+        "projection_hash": inventory["projection_hash"],
+        "summary": inventory["health"],
+        "top_priorities": [{key: row[key] for key in (
+            "command", "category", "phase", "certification", "health_score",
+            "health_band", "blockers", "next_transition", "risk", "priority_score"
+        )} for row in priority_rows[:50]],
+        "rows": [{key: row[key] for key in (
+            "command_id", "command", "category", "phase", "certification",
+            "health_score", "health_band", "blockers", "next_transition",
+            "risk", "priority_score"
+        )} for row in inventory["rows"]],
+    }
     _atomic_json(inventory_path, inventory)
     _atomic_json(matrix_path, matrix)
     _atomic_json(core_report_path, core_report)
+    _atomic_json(health_report_path, health_report)
     return {
         "ok": inventory["total"] == 341 and inventory["non_callable_handlers"] == 0,
         "total": inventory["total"],
@@ -242,9 +321,12 @@ def export_authoritative_command_inventory(
         "non_callable_handlers": inventory["non_callable_handlers"],
         "counts": inventory["counts"],
         "core": {k: core_report[k] for k in ("total", "pass", "partial", "failed")},
+        "health": inventory["health"],
+        "top_priorities": [row["command"] for row in priority_rows[:10]],
         "inventory_hash": inventory["inventory_hash"],
         "projection_hash": inventory["projection_hash"],
         "inventory_path": str(inventory_path),
         "matrix_path": str(matrix_path),
         "core_report_path": str(core_report_path),
+        "health_report_path": str(health_report_path),
     }
