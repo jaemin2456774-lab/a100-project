@@ -1,27 +1,33 @@
 {
-  "version": "V118.0-RC3.6",
-  "build_id": "V118.0-RC3.6-20260722-DEFERRED-MATRIX-RECOVERY-WARM-CACHE-STABILITY-01",
-  "baseline": "V118.0-RC3.5",
+  "package": "A100_V118_0_RC3_7_PERFORMANCE_ALIAS_AUTHORITATIVE_ROUTE_COMPATIBILITY_PREBUILT_PATCH",
+  "version": "V118.0-RC3.7",
+  "build_id": "V118.0-RC3.7-20260722-PERFORMANCE-ALIAS-AUTHORITATIVE-ROUTE-COMPATIBILITY-01",
   "changed_files": [
     {
       "path": "main.py",
-      "sha256": "ad81a32af99315c45c45c6544c94e8cdd8a24071662cbb2b0d2ff51e22ffa23e",
-      "size": 5050434
+      "size": 5050578,
+      "sha256": "7c913f431e5a6f60b9a2e90e4b715a3febf0ce0fb97502fc3aed138ec08e0d9a"
     },
     {
       "path": "INSTALL_AND_QA_KR.md",
-      "sha256": "683017765d3f36a49236c86c5e11c16fd241494eedf3bc5ca3397bcd7eb23b40",
-      "size": 1042
+      "size": 613,
+      "sha256": "b1774bffb55fbb3a05739293f72eaf33d15913b149c71b9f3181a19671444376"
     },
     {
       "path": "PREDEPLOY_AUDIT.md",
-      "sha256": "9c001046d44cf92e5e1e53098a271014100318f6f19d76f49f9b159b8fc838ce",
-      "size": 763
+      "size": 362,
+      "sha256": "ca99c8993b108d33463f951d742f9c25f00902944f3d0245027087b931485f4a"
     },
     {
       "path": "RELEASE_NOTES_KR.md",
-      "sha256": "1c7addc8e48380015befb55319357bd62200e395ae2f6fe2325c5854833f33a0",
-      "size": 973
+      "size": 733,
+      "sha256": "820847db8ed925c99de45379786047b1c6a3df0a03ff6165daf3b10101581567"
     }
-  ]
+  ],
+  "constraints": {
+    "registry": "341/341",
+    "runtime_first": true,
+    "strict_read_only": true,
+    "live_trading": false
+  }
 }
