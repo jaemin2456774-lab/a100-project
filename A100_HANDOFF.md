@@ -43,3 +43,10 @@ These files are replaceable projections, not ledger or learning state.
 - Version: V118.0-RC3.10.1
 - Fix: stale boot-time trust cache could preserve Runtime Integrity 0 after Runtime Fresh PASS.
 - Expected: Trust Runtime 100.0, Overall 83.28% with current 56/341 coverage.
+
+
+## Current Recovery Candidate
+- V118.0-RC3.10.2
+- Baseline: last known responding V118.0-RC3.10.1.
+- Scope: Telegram startup observability and bounded process-lock recovery only.
+- No Command DNA, certification, ledger, learning, or trading-gate changes.
