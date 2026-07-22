@@ -109,3 +109,16 @@
 - Up to four core commands can execute concurrently.
 - Telegram's main asyncio loop stays responsive while file, ledger, projection, or cache work runs.
 - Registry, Certification, Ledger, Learning, and Trading Gate remain unchanged.
+
+
+## V118.0 RC3.10.6 Exclusive Direct Route
+- PTB `block=False` was removed from direct handlers because it allowed the same
+  update to continue into the legacy generic dispatcher.
+- Direct commands now use `block=True` and `ApplicationHandlerStop`, guaranteeing
+  one update is processed by exactly one route.
+- Update-level concurrency is enabled separately, allowing independent Telegram
+  updates to run concurrently without duplicate execution.
+- A secondary duplicate-dispatch firewall suppresses direct commands inside the
+  legacy dispatcher even if handler-group behavior changes.
+- This removes duplicate timeout notices, late duplicate outputs, and duplicate
+  error records while preserving Registry 341 and all authoritative renderers.

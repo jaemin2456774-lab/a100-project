@@ -71,3 +71,10 @@ These files are replaceable projections, not ledger or learning state.
 - Seven slow monitoring commands use isolated concurrent render workers.
 - Compute and Telegram send time are logged separately.
 - Legacy commands remain available with non-blocking dispatch and timeout protection.
+
+
+## Current Recovery Baseline
+- V118.0-RC3.10.6
+- Fixes RC3.10.5 double execution caused by direct handlers using `block=False`.
+- Routing invariant: one Telegram update → one command route → one response.
+- Separate updates may execute concurrently; the same update may not.
