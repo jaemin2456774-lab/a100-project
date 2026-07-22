@@ -57,3 +57,10 @@ These files are replaceable projections, not ledger or learning state.
 - Adds direct Telegram RECEIVE/SEND probes and dispatcher observability.
 - `/ping` is registry-neutral and intended only for recovery verification.
 - Certification, Ledger, Learning, and Trading Gate remain unchanged.
+
+
+## Current Recovery Candidate
+- V118.0-RC3.10.4
+- Fixes the observed `/help` dispatcher stall and blocked Telegram update queue.
+- Direct recovery commands run before the legacy dispatcher.
+- Legacy commands are cancelled after a bounded timeout to release the queue.

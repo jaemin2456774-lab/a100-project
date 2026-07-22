@@ -93,3 +93,11 @@
 - `/version` and registry-neutral `/ping` probes run before the legacy dispatcher.
 - Direct probes do not add entries to the authoritative 341 command registry.
 - Every received command logs update_id/chat_id and dispatcher entry/completion/failure.
+
+
+## V118.0 RC3.10.4 Dispatcher Deadlock Recovery
+- One blocked command must never hold the sequential Telegram update queue indefinitely.
+- The legacy dispatcher has a bounded 12-second outer timeout and releases the queue.
+- `/help`, `/start`, `/commands`, `/version`, and registry-neutral `/ping` use direct handlers.
+- Direct sends have a bounded timeout with sent/failed/timeout evidence.
+- Registry, Certification, Ledger, Learning, and Trading Gate remain unchanged.
