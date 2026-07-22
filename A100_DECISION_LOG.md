@@ -45,3 +45,12 @@
 - Direct Telegram sender calls use:
   `_v1180_send_direct(update, text, command)`.
 - Packaging validation uses Python AST to verify every call site.
+
+
+## RC3.11.4 heavy-command isolation
+- Heavy read-only commands must not execute inside Telegram's dispatcher timeout.
+- `/paper`, `/sniper`, and `/shadow` use background authoritative rendering plus
+  bounded snapshots.
+- First request may report preparation; subsequent requests use FAST PATH.
+- Stale-while-refresh is allowed for monitoring output and is labeled clearly.
+- No synthetic trading/certification evidence is created.

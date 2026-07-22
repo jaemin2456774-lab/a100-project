@@ -1,17 +1,23 @@
 # CHAT HANDOFF — CURRENT
 
 ## Authoritative baseline
-- V118.0-RC3.11.3.5
-- Build ID: V118.0-RC3.11.3.5-20260723-SEND-DIRECT-COMMAND-SIGNATURE-HOTFIX-01
-- Base: V118.0-RC3.11.3.4
+- V118.0-RC3.11.4
+- Build ID: V118.0-RC3.11.4-20260723-HEAVY-COMMAND-SNAPSHOT-ISOLATION-01
+- Base: V118.0-RC3.11.3.5
 
-## Critical hotfix
-- `/performance` live fast path called `_v1180_send_direct` without the required
-  `command` argument.
-- Fixed the call to use `_v1180_send_direct(update, text, command)`.
-- Parsed the complete module AST and verified every direct-sender call uses
-  exactly three arguments.
-- No roadmap, Registry, Certification, Ledger, Learning, or Trading Gate changes.
+## Current sprint work
+- Preserved the verified core performance baseline.
+- Added registry-neutral heavy snapshot paths for:
+  - `/paper`
+  - `/sniper`
+  - `/shadow`
+- Legacy authoritative renderers now run in background threads.
+- Telegram receives an immediate response and is never held for the old
+  12-second dispatcher timeout.
+- Fresh snapshots are served immediately.
+- Usable stale snapshots are served while a refresh runs.
+- The first request without a snapshot returns a clear preparation status.
+- Certification, Ledger, Learning, Trading Gate, and roadmap remain unchanged.
 
 ## Distribution
 - MOBILE FLAT
