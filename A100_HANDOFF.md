@@ -91,3 +91,10 @@ These files are replaceable projections, not ledger or learning state.
 - V118.0-RC3.10.8
 - Shared output cache + SingleFlight + background boot warmup.
 - Primary target: `/versionaudit` cold 1.7s → user-facing cache HIT.
+
+
+## Current Development Baseline
+- V118.0-RC3.11.0
+- Performance metrics now represent actual Shared Cache and isolated Fast Path use.
+- Certification promotion readiness is observable, evidence-only, and non-mutating.
+- Next step: expand real E2E evidence collection beyond the current core commands.

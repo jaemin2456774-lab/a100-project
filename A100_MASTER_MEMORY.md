@@ -139,3 +139,12 @@
 - SingleFlight prevents duplicate concurrent rebuilds.
 - A daemon warmup precomputes the seven core outputs without Telegram transport.
 - No ledger append, certification mutation, learning mutation, or trading-gate change.
+
+
+## V118.0 RC3.11.0 Performance Metric Unification + Certification Readiness
+- Shared-cache HIT latency, isolated compute latency, and boot warmup latency are
+  recorded in the authoritative performance metric stream.
+- Runtime-observed command evidence tracks successful runs, failures, cache hits,
+  last latency, and scope without changing certification status.
+- `/commandcert` displays promotion readiness evidence but does not auto-promote.
+- Synthetic promotion remains OFF; PASS/PARTIAL counts remain SSOT-controlled.
