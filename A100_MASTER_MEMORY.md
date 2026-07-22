@@ -131,3 +131,11 @@
 - Telegram sends are serialized and retried once, preventing burst send timeouts when
   multiple concurrent renderers finish simultaneously.
 - One update / one route / one response remains enforced.
+
+
+## V118.0 RC3.10.8 Shared Read-Only Cache
+- Seven authoritative monitoring outputs share a bounded 900-second cache.
+- Cache keys include command, arguments, running build identity, and projection generation.
+- SingleFlight prevents duplicate concurrent rebuilds.
+- A daemon warmup precomputes the seven core outputs without Telegram transport.
+- No ledger append, certification mutation, learning mutation, or trading-gate change.

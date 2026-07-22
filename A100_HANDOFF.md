@@ -85,3 +85,9 @@ These files are replaceable projections, not ledger or learning state.
 - Root cause fixed: isolated SimpleNamespace lacked `message`.
 - Adds compatibility-complete fake Update/Context and serialized Telegram sender.
 - `/errors` is now a direct isolated command.
+
+
+## Current Optimization Baseline
+- V118.0-RC3.10.8
+- Shared output cache + SingleFlight + background boot warmup.
+- Primary target: `/versionaudit` cold 1.7s → user-facing cache HIT.
