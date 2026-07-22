@@ -78,3 +78,10 @@ These files are replaceable projections, not ledger or learning state.
 - Fixes RC3.10.5 double execution caused by direct handlers using `block=False`.
 - Routing invariant: one Telegram update → one command route → one response.
 - Separate updates may execute concurrently; the same update may not.
+
+
+## Current Recovery Candidate
+- V118.0-RC3.10.7
+- Root cause fixed: isolated SimpleNamespace lacked `message`.
+- Adds compatibility-complete fake Update/Context and serialized Telegram sender.
+- `/errors` is now a direct isolated command.

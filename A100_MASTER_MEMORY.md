@@ -122,3 +122,12 @@
   legacy dispatcher even if handler-group behavior changes.
 - This removes duplicate timeout notices, late duplicate outputs, and duplicate
   error records while preserving Registry 341 and all authoritative renderers.
+
+
+## V118.0 RC3.10.7 Fake Update Compatibility + Sender Queue
+- Isolated renderers now expose both `update.message` and `update.effective_message`.
+- Fake context includes application, bot, bot_data, chat_data, user_data, error, and job.
+- `/errors` is moved to the isolated direct route.
+- Telegram sends are serialized and retried once, preventing burst send timeouts when
+  multiple concurrent renderers finish simultaneously.
+- One update / one route / one response remains enforced.
