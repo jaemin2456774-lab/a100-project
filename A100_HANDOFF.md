@@ -98,3 +98,9 @@ These files are replaceable projections, not ledger or learning state.
 - Performance metrics now represent actual Shared Cache and isolated Fast Path use.
 - Certification promotion readiness is observable, evidence-only, and non-mutating.
 - Next step: expand real E2E evidence collection beyond the current core commands.
+
+
+## Mandatory Repository Memory
+Before continuing in another chat, read `A100_MEMORY_READ_FIRST.md` and
+`A100_CHAT_HANDOFF_CURRENT.md`. These files are part of the deployment patch
+and must be committed with the source.

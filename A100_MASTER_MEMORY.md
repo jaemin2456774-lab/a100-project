@@ -148,3 +148,9 @@
   last latency, and scope without changing certification status.
 - `/commandcert` displays promotion readiness evidence but does not auto-promote.
 - Synthetic promotion remains OFF; PASS/PARTIAL counts remain SSOT-controlled.
+
+
+## Repository Project Memory Lock — V118.0 RC3.11.2
+The canonical governance, roadmap, active sprint, decision log, lessons, future
+queue, and chat handoff are now shipped under `UPLOAD_FILES` 루트의 A100 프로젝트 기억 파일.
+Every future patch must preserve and update these files.
