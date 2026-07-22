@@ -63,3 +63,10 @@
 - Do not make mobile users manually recreate complex directory trees.
 - Do not change gate calculations while performing observability or documentation work.
 - Do not silently lose previously agreed roadmap items when moving chats.
+
+
+## V118.0 RC3.10
+- Command DNA v2 mirrors measured Certification SSOT into the inventory projection.
+- No synthetic PASS, no ledger append, no command execution at boot.
+- Core Phase-1 commands are tagged and reported separately.
+- Mobile-First incremental patch remains mandatory.

@@ -1,7 +1,9 @@
-"""A100 V118 RC3.9 authoritative command inventory and Command DNA projection.
+"""A100 V118 RC3.10 authoritative Command DNA v2 projection.
 
-Read-only with respect to runtime/ledger/trading state. The module snapshots the
-already-authoritative runtime registry and writes replaceable projection files.
+Strict read-only with respect to runtime, certification ledger, learning, and
+trading state. This module mirrors already measured Certification SSOT fields
+into a replaceable Command DNA projection. It never promotes a command by
+registration alone and never appends certification events.
 """
 from __future__ import annotations
 
@@ -13,9 +15,15 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-SCHEMA_VERSION = "a100.command.dna.v1"
+SCHEMA_VERSION = "a100.command.dna.v2"
 INVENTORY_FILENAME = "a100_v118_command_inventory.json"
 MATRIX_FILENAME = "a100_v118_certification_matrix_seed.json"
+CORE_REPORT_FILENAME = "a100_v118_core_command_linkage_report.json"
+DEFAULT_PROJECTION_FILENAME = "a100_v117_certification_projection.json"
+CORE_PHASE_COMMANDS = (
+    "version", "buildinfo", "versionaudit", "performance", "profiling",
+    "commandcert", "commandmatrix", "trustgate", "intelligencescore", "errors",
+)
 
 
 def _normalize(name: Any) -> str:
@@ -44,10 +52,19 @@ def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
             pass
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
 def _category(command: str) -> str:
     groups = (
         ("IDENTITY", {"version", "buildinfo", "versionaudit", "status", "runtimehealth"}),
-        ("CERTIFICATION", {"commandcert", "commandmatrix", "trustgate", "releasegate", "ltscertification", "regressionguard"}),
+        ("CERTIFICATION", {"commandcert", "commandmatrix", "trustgate", "releasegate", "ltscertification", "regressionguard", "intelligencescore"}),
         ("PERFORMANCE", {"performance", "performancebudget", "perf", "latency", "commandperformance", "profiling"}),
         ("OPERATIONS", {"errors", "cache", "cachehealth", "apicheck", "health", "selfcheck"}),
         ("LEARNING", {"outcome", "attributioncheck", "attributiondebug", "calibration2", "champion", "closedloop", "coach"}),
@@ -81,15 +98,42 @@ def _callback_name(callback: Any) -> str:
     return str(getattr(callback, "__name__", type(callback).__name__))
 
 
-def build_command_inventory(registry: Mapping[str, Callable[..., Any]], *, build_id: str, version: str) -> dict[str, Any]:
+def _projection_rows(projection: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    rows = projection.get("rows") if isinstance(projection, Mapping) else []
+    return {
+        _normalize(row.get("command")): row
+        for row in (rows or [])
+        if isinstance(row, dict) and _normalize(row.get("command"))
+    }
+
+
+def _status(value: Any, *, applicable: bool = True) -> str:
+    if not applicable:
+        return "NOT_APPLICABLE"
+    return "PASS" if bool(value) else "NOT_MEASURED"
+
+
+def build_command_inventory(
+    registry: Mapping[str, Callable[..., Any]],
+    *,
+    build_id: str,
+    version: str,
+    certification_projection: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     if not isinstance(registry, Mapping):
         raise TypeError("registry must be a mapping")
+    measured_by_command = _projection_rows(certification_projection or {})
     rows: list[dict[str, Any]] = []
     for index, (raw_name, callback) in enumerate(sorted(registry.items(), key=lambda item: _normalize(item[0])), start=1):
         command = _normalize(raw_name)
         category = _category(command)
         callable_ok = callable(callback)
-        rows.append({
+        measured = measured_by_command.get(command) or {}
+        cert = str(measured.get("cert") or ("PARTIAL" if callable_ok else "FAILED"))
+        state = str(measured.get("state") or ("REGISTERED" if callable_ok else "DISCOVERED"))
+        reason = str(measured.get("reason") or ("authoritative_registry_callable_only" if callable_ok else "registered_handler_not_callable"))
+        storage_applicable = bool(measured) or category in {"LEARNING", "TRADING", "CERTIFICATION", "OPERATIONS"}
+        row = {
             "command_id": f"CMD-{index:03d}",
             "command": command,
             "owner": _owner(category),
@@ -98,56 +142,109 @@ def build_command_inventory(registry: Mapping[str, Callable[..., Any]], *, build
             "handler_module": str(getattr(callback, "__module__", "")),
             "registered": True,
             "callable": callable_ok,
-            "runtime": "PASS" if callable_ok else "FAILED",
-            "evidence": "NOT_MEASURED",
-            "output": "NOT_MEASURED",
-            "storage": "NOT_APPLICABLE",
-            "replay": "NOT_MEASURED",
+            "authoritative_route": callable_ok,
+            "runtime": _status(measured.get("runtime")) if measured else ("PASS" if callable_ok else "FAILED"),
+            "evidence": _status(measured.get("evidence")) if measured else "NOT_MEASURED",
+            "output": _status(measured.get("output")) if measured else "NOT_MEASURED",
+            "storage": _status(measured.get("store"), applicable=storage_applicable) if measured else ("NOT_MEASURED" if storage_applicable else "NOT_APPLICABLE"),
+            "replay": _status(measured.get("replay")) if measured else "NOT_MEASURED",
             "performance": "NOT_MEASURED",
             "documentation": "NOT_MEASURED",
-            "certification": "PARTIAL" if callable_ok else "FAILED",
-            "reason": "authoritative_registry_callable_only" if callable_ok else "registered_handler_not_callable",
-        })
-    canonical = [{k: row[k] for k in ("command_id", "command", "handler", "owner", "category", "registered", "callable")} for row in rows]
+            "certification": cert,
+            "certification_state": state,
+            "reason": reason,
+            "certification_source": "CERTIFICATION_SSOT_PROJECTION" if measured else "AUTHORITATIVE_REGISTRY",
+            "certification_projection_hash": str((certification_projection or {}).get("projection_hash") or ""),
+            "phase": "CORE_PHASE_1" if command in CORE_PHASE_COMMANDS else "BACKLOG",
+            "risk": "LOW" if command in CORE_PHASE_COMMANDS else "UNCLASSIFIED",
+        }
+        rows.append(row)
+    canonical = [{k: row[k] for k in (
+        "command_id", "command", "handler", "owner", "category", "registered",
+        "callable", "certification", "certification_state", "phase"
+    )} for row in rows]
     inventory_hash = _sha256_json(canonical)
+    counts = {name: sum(1 for row in rows if row["certification"] == name) for name in ("PASS", "PARTIAL", "FAILED")}
     return {
         "schema": SCHEMA_VERSION,
         "generated_at": time.time(),
         "version": version,
         "build_id": build_id,
-        "source": "V90_COMMAND_REGISTRY",
+        "source": "V90_COMMAND_REGISTRY + CERTIFICATION_SSOT_PROJECTION",
         "policy": "strict_read_only_projection; no ledger append; no synthetic PASS",
         "total": len(rows),
         "callable_handlers": sum(1 for row in rows if row["callable"]),
         "non_callable_handlers": sum(1 for row in rows if not row["callable"]),
+        "counts": counts,
         "inventory_hash": inventory_hash,
+        "projection_hash": str((certification_projection or {}).get("projection_hash") or ""),
         "rows": rows,
     }
 
 
-def export_authoritative_command_inventory(*, registry: Mapping[str, Callable[..., Any]], build_id: str, version: str, data_dir: str = "/data") -> dict[str, Any]:
-    inventory = build_command_inventory(registry, build_id=build_id, version=version)
+def export_authoritative_command_inventory(
+    *,
+    registry: Mapping[str, Callable[..., Any]],
+    build_id: str,
+    version: str,
+    data_dir: str = "/data",
+    certification_projection_path: str | None = None,
+) -> dict[str, Any]:
     base = Path(data_dir)
+    projection_path = Path(certification_projection_path) if certification_projection_path else base / DEFAULT_PROJECTION_FILENAME
+    projection = _read_json(projection_path)
+    inventory = build_command_inventory(
+        registry,
+        build_id=build_id,
+        version=version,
+        certification_projection=projection,
+    )
     inventory_path = base / INVENTORY_FILENAME
     matrix_path = base / MATRIX_FILENAME
+    core_report_path = base / CORE_REPORT_FILENAME
     matrix = {
-        "schema": "a100.certification.matrix.seed.v1",
+        "schema": "a100.certification.matrix.seed.v2",
         "generated_at": inventory["generated_at"],
         "version": version,
         "build_id": build_id,
         "inventory_hash": inventory["inventory_hash"],
+        "projection_hash": inventory["projection_hash"],
         "total": inventory["total"],
+        "counts": inventory["counts"],
         "dimensions": ["runtime", "evidence", "output", "storage", "replay", "performance", "documentation", "certification"],
-        "rows": [{key: row[key] for key in ("command_id", "command", "runtime", "evidence", "output", "storage", "replay", "performance", "documentation", "certification", "reason")} for row in inventory["rows"]],
+        "rows": [{key: row[key] for key in (
+            "command_id", "command", "phase", "runtime", "evidence", "output",
+            "storage", "replay", "performance", "documentation", "certification",
+            "certification_state", "reason", "certification_source"
+        )} for row in inventory["rows"]],
+    }
+    core_rows = [row for row in inventory["rows"] if row["phase"] == "CORE_PHASE_1"]
+    core_report = {
+        "schema": "a100.command.dna.core.linkage.v1",
+        "generated_at": inventory["generated_at"],
+        "version": version,
+        "build_id": build_id,
+        "policy": "mirror measured SSOT only; no command execution; no certification mutation",
+        "projection_hash": inventory["projection_hash"],
+        "total": len(core_rows),
+        "pass": sum(1 for row in core_rows if row["certification"] == "PASS"),
+        "partial": sum(1 for row in core_rows if row["certification"] == "PARTIAL"),
+        "failed": sum(1 for row in core_rows if row["certification"] == "FAILED"),
+        "rows": core_rows,
     }
     _atomic_json(inventory_path, inventory)
     _atomic_json(matrix_path, matrix)
+    _atomic_json(core_report_path, core_report)
     return {
         "ok": inventory["total"] == 341 and inventory["non_callable_handlers"] == 0,
         "total": inventory["total"],
         "callable_handlers": inventory["callable_handlers"],
         "non_callable_handlers": inventory["non_callable_handlers"],
+        "counts": inventory["counts"],
+        "core": {k: core_report[k] for k in ("total", "pass", "partial", "failed")},
         "inventory_hash": inventory["inventory_hash"],
+        "projection_hash": inventory["projection_hash"],
         "inventory_path": str(inventory_path),
         "matrix_path": str(matrix_path),
+        "core_report_path": str(core_report_path),
     }

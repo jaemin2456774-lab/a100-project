@@ -31,3 +31,9 @@ These files are replaceable projections, not ledger or learning state.
 - Disk capacity must remain healthy because projection files are written to `/data`.
 - Runtime inventory PASS requires exactly 341 callable registry entries.
 - A mismatch records an error but does not mutate registry, ledger or trading state.
+
+
+## Current Build
+- V118.0-RC3.10
+- Build ID V118.0-RC3.10-20260722-COMMAND-DNA-SSOT-LINKAGE-CORE-PHASE-01
+- Next: measured output/performance linkage for core commands without mutating certification.
