@@ -37,3 +37,9 @@ These files are replaceable projections, not ledger or learning state.
 - V118.0-RC3.10
 - Build ID V118.0-RC3.10-20260722-COMMAND-DNA-SSOT-LINKAGE-CORE-PHASE-01
 - Next: measured output/performance linkage for core commands without mutating certification.
+
+
+## Current Hotfix
+- Version: V118.0-RC3.10.1
+- Fix: stale boot-time trust cache could preserve Runtime Integrity 0 after Runtime Fresh PASS.
+- Expected: Trust Runtime 100.0, Overall 83.28% with current 56/341 coverage.

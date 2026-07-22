@@ -70,3 +70,9 @@
 - No synthetic PASS, no ledger append, no command execution at boot.
 - Core Phase-1 commands are tagged and reported separately.
 - Mobile-First incremental patch remains mandatory.
+
+
+## RC3.10.1 Trust Cache Coherency Hotfix
+- Boot warmup before live-worker freshness could cache Runtime Integrity 0.
+- Trust snapshots and trust render cache are now keyed by authoritative runtime freshness generation (`rf0`/`rf1`).
+- Version Audit and Platform Trust must remain internally consistent after worker freshness becomes PASS.
