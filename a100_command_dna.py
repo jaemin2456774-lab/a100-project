@@ -1,4 +1,4 @@
-"""A100 V118 RC3.11.1 authoritative Command DNA v2 with isolated health sidecar.
+"""A100 V118 RC3.10 authoritative Command DNA v2 projection.
 
 Strict read-only with respect to runtime, certification ledger, learning, and
 trading state. This module mirrors already measured Certification SSOT fields
@@ -19,7 +19,6 @@ SCHEMA_VERSION = "a100.command.dna.v2"
 INVENTORY_FILENAME = "a100_v118_command_inventory.json"
 MATRIX_FILENAME = "a100_v118_certification_matrix_seed.json"
 CORE_REPORT_FILENAME = "a100_v118_core_command_linkage_report.json"
-HEALTH_REPORT_FILENAME = "a100_v118_command_health_report.json"
 DEFAULT_PROJECTION_FILENAME = "a100_v117_certification_projection.json"
 CORE_PHASE_COMMANDS = (
     "version", "buildinfo", "versionaudit", "performance", "profiling",
@@ -113,108 +112,6 @@ def _status(value: Any, *, applicable: bool = True) -> str:
         return "NOT_APPLICABLE"
     return "PASS" if bool(value) else "NOT_MEASURED"
 
-
-
-_HEALTH_WEIGHTS = {
-    "runtime": 20,
-    "evidence": 20,
-    "output": 20,
-    "storage": 10,
-    "replay": 10,
-    "performance": 10,
-    "documentation": 10,
-}
-
-
-def _health_points(status: Any, weight: int) -> float:
-    value = str(status or "").upper()
-    if value in {"PASS", "NOT_APPLICABLE"}:
-        return float(weight)
-    if value in {"PARTIAL", "MEASURED_PARTIAL"}:
-        return float(weight) * 0.5
-    return 0.0
-
-
-def _build_health_sidecar(inventory: Mapping[str, Any]) -> dict[str, Any]:
-    """Build a detached report without mutating authoritative inventory rows."""
-    sidecar_rows: list[dict[str, Any]] = []
-    for source in inventory.get("rows") or []:
-        if not isinstance(source, Mapping):
-            continue
-        score = round(sum(
-            _health_points(source.get(name), weight)
-            for name, weight in _HEALTH_WEIGHTS.items()
-        ), 2)
-        blockers = [
-            name for name in _HEALTH_WEIGHTS
-            if str(source.get(name) or "").upper() not in {"PASS", "NOT_APPLICABLE"}
-        ]
-        cert = str(source.get("certification") or "PARTIAL").upper()
-        if cert == "FAILED" or not bool(source.get("callable")):
-            risk = "CRITICAL"
-        elif score < 40:
-            risk = "HIGH"
-        elif score < 75:
-            risk = "MEDIUM"
-        else:
-            risk = "LOW"
-        band = (
-            "HEALTHY" if score >= 90 else
-            "DEVELOPING" if score >= 70 else
-            "WEAK" if score >= 40 else
-            "CRITICAL"
-        )
-        phase_bonus = 30 if source.get("phase") == "CORE_PHASE_1" else 0
-        impact_bonus = {
-            "IDENTITY": 25,
-            "CERTIFICATION": 25,
-            "PERFORMANCE": 20,
-            "OPERATIONS": 15,
-            "TRADING": 10,
-            "INTELLIGENCE": 10,
-        }.get(str(source.get("category")), 5)
-        priority = min(100, int(round((100.0 - score) * 0.55 + phase_bonus + impact_bonus)))
-        sidecar_rows.append({
-            "command_id": source.get("command_id"),
-            "command": source.get("command"),
-            "category": source.get("category"),
-            "phase": source.get("phase"),
-            "certification": cert,
-            "health_score": score,
-            "health_band": band,
-            "blockers": blockers,
-            "next_transition": blockers[0] if blockers else "CERTIFIED",
-            "risk": risk,
-            "priority_score": priority,
-        })
-    ordered = sorted(
-        sidecar_rows,
-        key=lambda row: (-int(row["priority_score"]), str(row["command"])),
-    )
-    total = max(1, len(sidecar_rows))
-    return {
-        "schema": "a100.command.health.sidecar.v1",
-        "generated_at": inventory.get("generated_at"),
-        "version": inventory.get("version"),
-        "build_id": inventory.get("build_id"),
-        "policy": (
-            "isolated fail-open sidecar; authoritative command DNA unchanged; "
-            "strict read-only; no synthetic PASS; no ledger append"
-        ),
-        "inventory_hash": inventory.get("inventory_hash"),
-        "projection_hash": inventory.get("projection_hash"),
-        "summary": {
-            "average": round(
-                sum(float(row["health_score"]) for row in sidecar_rows) / total, 2
-            ),
-            "healthy": sum(1 for row in sidecar_rows if row["health_band"] == "HEALTHY"),
-            "developing": sum(1 for row in sidecar_rows if row["health_band"] == "DEVELOPING"),
-            "weak": sum(1 for row in sidecar_rows if row["health_band"] == "WEAK"),
-            "critical": sum(1 for row in sidecar_rows if row["health_band"] == "CRITICAL"),
-        },
-        "top_priorities": ordered[:50],
-        "rows": sidecar_rows,
-    }
 
 def build_command_inventory(
     registry: Mapping[str, Callable[..., Any]],
@@ -338,25 +235,6 @@ def export_authoritative_command_inventory(
     _atomic_json(inventory_path, inventory)
     _atomic_json(matrix_path, matrix)
     _atomic_json(core_report_path, core_report)
-
-    # Detached sidecar: any failure is contained and cannot affect startup,
-    # Telegram polling, authoritative DNA, certification, ledger, or trading state.
-    health_report_path = base / HEALTH_REPORT_FILENAME
-    health_sidecar_status = "PASS"
-    health_summary: dict[str, Any] = {}
-    top_priorities: list[str] = []
-    try:
-        health_report = _build_health_sidecar(inventory)
-        _atomic_json(health_report_path, health_report)
-        health_summary = dict(health_report.get("summary") or {})
-        top_priorities = [
-            str(row.get("command") or "")
-            for row in (health_report.get("top_priorities") or [])[:10]
-            if isinstance(row, Mapping)
-        ]
-    except Exception as exc:
-        health_sidecar_status = f"FAIL_OPEN:{type(exc).__name__}"
-
     return {
         "ok": inventory["total"] == 341 and inventory["non_callable_handlers"] == 0,
         "total": inventory["total"],
@@ -364,13 +242,9 @@ def export_authoritative_command_inventory(
         "non_callable_handlers": inventory["non_callable_handlers"],
         "counts": inventory["counts"],
         "core": {k: core_report[k] for k in ("total", "pass", "partial", "failed")},
-        "health_sidecar_status": health_sidecar_status,
-        "health": health_summary,
-        "top_priorities": top_priorities,
         "inventory_hash": inventory["inventory_hash"],
         "projection_hash": inventory["projection_hash"],
         "inventory_path": str(inventory_path),
         "matrix_path": str(matrix_path),
         "core_report_path": str(core_report_path),
-        "health_report_path": str(health_report_path),
     }
