@@ -27,3 +27,9 @@
 - Marker-based replacement must not span unrelated boot classes.
 - Every instantiated class must be statically verified as defined earlier in the module.
 - Boot-critical symbol integrity is checked before packaging.
+
+
+## RC3.11.3.3 performance symbol compatibility
+- New handlers must be validated against all referenced global names, not only Python syntax.
+- Static compile does not detect runtime global-name resolution failures.
+- Release validation must include symbol existence and handler smoke execution.
