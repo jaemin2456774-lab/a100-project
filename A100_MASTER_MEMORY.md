@@ -101,3 +101,11 @@
 - `/help`, `/start`, `/commands`, `/version`, and registry-neutral `/ping` use direct handlers.
 - Direct sends have a bounded timeout with sent/failed/timeout evidence.
 - Registry, Certification, Ledger, Learning, and Trading Gate remain unchanged.
+
+
+## V118.0 RC3.10.5 Concurrent Core Thread Fast Path
+- Slow core monitoring commands run in isolated worker threads with private event loops.
+- Fake Telegram replies capture rendered output, preventing late duplicate responses after timeout.
+- Up to four core commands can execute concurrently.
+- Telegram's main asyncio loop stays responsive while file, ledger, projection, or cache work runs.
+- Registry, Certification, Ledger, Learning, and Trading Gate remain unchanged.

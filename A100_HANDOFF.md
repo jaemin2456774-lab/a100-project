@@ -64,3 +64,10 @@ These files are replaceable projections, not ledger or learning state.
 - Fixes the observed `/help` dispatcher stall and blocked Telegram update queue.
 - Direct recovery commands run before the legacy dispatcher.
 - Legacy commands are cancelled after a bounded timeout to release the queue.
+
+
+## Current Optimization Candidate
+- V118.0-RC3.10.5
+- Seven slow monitoring commands use isolated concurrent render workers.
+- Compute and Telegram send time are logged separately.
+- Legacy commands remain available with non-blocking dispatch and timeout protection.
