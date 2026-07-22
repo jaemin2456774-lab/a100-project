@@ -54,3 +54,10 @@
 - First request may report preparation; subsequent requests use FAST PATH.
 - Stale-while-refresh is allowed for monitoring output and is labeled clearly.
 - No synthetic trading/certification evidence is created.
+
+
+## RC3.11.5 heavy snapshot persistence
+- Heavy output snapshots persist on Railway volume.
+- Heavy refresh concurrency is one.
+- User requests receive refresh priority.
+- Persisted output is read-only cache, never certification evidence.

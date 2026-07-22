@@ -1,23 +1,17 @@
 # CHAT HANDOFF — CURRENT
 
 ## Authoritative baseline
-- V118.0-RC3.11.4
-- Build ID: V118.0-RC3.11.4-20260723-HEAVY-COMMAND-SNAPSHOT-ISOLATION-01
-- Base: V118.0-RC3.11.3.5
+- V118.0-RC3.11.5
+- Build ID: V118.0-RC3.11.5-20260723-HEAVY-SNAPSHOT-PERSISTENCE-SCHEDULER-01
+- Base: V118.0-RC3.11.4
 
 ## Current sprint work
-- Preserved the verified core performance baseline.
-- Added registry-neutral heavy snapshot paths for:
-  - `/paper`
-  - `/sniper`
-  - `/shadow`
-- Legacy authoritative renderers now run in background threads.
-- Telegram receives an immediate response and is never held for the old
-  12-second dispatcher timeout.
-- Fresh snapshots are served immediately.
-- Usable stale snapshots are served while a refresh runs.
-- The first request without a snapshot returns a clear preparation status.
-- Certification, Ledger, Learning, Trading Gate, and roadmap remain unchanged.
+- Heavy snapshots persist to Railway `/data`.
+- Restores `/paper`, `/sniper`, and `/shadow` output after restart.
+- Heavy refresh concurrency is one to avoid DB/disk contention.
+- User-requested refresh receives queue priority.
+- TTL: paper 60s, sniper 120s, shadow 300s.
+- Certification, Registry, Ledger, Learning, Trading Gate, and roadmap unchanged.
 
 ## Distribution
 - MOBILE FLAT
