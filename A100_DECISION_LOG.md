@@ -15,3 +15,9 @@
 - `UPLOAD_FILES` must contain root files only unless the user explicitly requests folders.
 - The user must not be required to create directories from a phone.
 - Project-memory files are shipped as flat root files and committed with the source.
+
+
+## RC3.11.3.1 boot hotfix
+- Import-time symbol references must never be assigned before the referenced function exists.
+- Warmup wrappers must not self-reference or recursively capture themselves.
+- Boot-critical patches require compile validation and import-order inspection.
