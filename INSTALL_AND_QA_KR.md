@@ -1,21 +1,30 @@
-# A100 V118.0 RC3.7 설치 및 QA
+# A100 V118.0 RC3.8 설치 및 QA
 
-1. 패치의 `main.py`를 기존 프로젝트에 덮어씁니다.
-2. Railway에서 재배포 또는 재시작합니다.
-3. 아래 명령을 실행합니다.
+기존 프로젝트에 `main.py`를 덮어쓰고 Railway에서 재배포 또는 재시작합니다. 데이터와 환경변수는 변경하지 않습니다.
 
-```text
+## 기본 검수
 /version
 /buildinfo
 /versionaudit
+/errors
+
+## True Fast Path 검수
+아래 각 명령을 900초 이내에 6회 실행합니다.
+/commandcert
+/commandmatrix
+/trustgate
+/intelligencescore
+
+마지막으로 실행합니다.
 /performance
 /performancebudget
 /perf
-/errors
-```
 
 ## 기대 결과
-- 세 성능 명령이 같은 `A100 PERFORMANCE BUDGET · V118.0 RC3.7` 출력을 반환합니다.
-- `/performancebudget`, `/perf`가 더 이상 지원하지 않는 명령으로 표시되지 않습니다.
-- Registry는 341/341을 유지합니다.
-- Architecture Guard와 Version Audit은 PASS여야 합니다.
+- Registry 341/341
+- Architecture Guard PASS
+- Version Audit PASS
+- 두 번째 호출부터 Cache HIT
+- Warm P50/P95와 Cold P50/P95가 분리 표시
+- 최소 Warm Samples 5개 이후 Warm P95 기준 PASS/FAIL
+- Cache HIT 시 Query render가 큰 폭으로 감소

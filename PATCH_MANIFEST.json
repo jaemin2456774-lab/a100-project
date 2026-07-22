@@ -1,33 +1,29 @@
 {
-  "package": "A100_V118_0_RC3_7_PERFORMANCE_ALIAS_AUTHORITATIVE_ROUTE_COMPATIBILITY_PREBUILT_PATCH",
-  "version": "V118.0-RC3.7",
-  "build_id": "V118.0-RC3.7-20260722-PERFORMANCE-ALIAS-AUTHORITATIVE-ROUTE-COMPATIBILITY-01",
+  "version": "V118.0-RC3.8",
+  "build_id": "V118.0-RC3.8-20260722-WARM-COLD-ISOLATION-TRUE-RENDER-FASTPATH-01",
+  "package_type": "PREBUILT_PATCH",
   "changed_files": [
     {
       "path": "main.py",
-      "size": 5050578,
-      "sha256": "7c913f431e5a6f60b9a2e90e4b715a3febf0ce0fb97502fc3aed138ec08e0d9a"
-    },
-    {
-      "path": "INSTALL_AND_QA_KR.md",
-      "size": 613,
-      "sha256": "b1774bffb55fbb3a05739293f72eaf33d15913b149c71b9f3181a19671444376"
-    },
-    {
-      "path": "PREDEPLOY_AUDIT.md",
-      "size": 362,
-      "sha256": "ca99c8993b108d33463f951d742f9c25f00902944f3d0245027087b931485f4a"
+      "size": 5064464,
+      "sha256": "9fdb1f02579c855f1220aa8eaa5b5030a0dcf195b6e3a6141e7062ec1e04748d"
     },
     {
       "path": "RELEASE_NOTES_KR.md",
-      "size": 733,
-      "sha256": "820847db8ed925c99de45379786047b1c6a3df0a03ff6165daf3b10101581567"
+      "size": 894,
+      "sha256": "d4b5471f2c8cbc4da566fe46d2e297bee3d685ea232541440e0919ae7b7080d6"
+    },
+    {
+      "path": "INSTALL_AND_QA_KR.md",
+      "size": 748,
+      "sha256": "837b389b15a8763c32b9b5eca4175f85313121edcaa1ffc1ef1e23fc45fad048"
+    },
+    {
+      "path": "PREDEPLOY_AUDIT.md",
+      "size": 388,
+      "sha256": "fdc5f58fe885c893695926d1d5cca9d9702c985d8037558d002bc1deb58c17ea"
     }
   ],
-  "constraints": {
-    "registry": "341/341",
-    "runtime_first": true,
-    "strict_read_only": true,
-    "live_trading": false
-  }
+  "registry_contract": "341/341",
+  "live_trading": "OFF"
 }

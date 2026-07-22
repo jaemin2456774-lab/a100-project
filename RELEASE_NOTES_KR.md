@@ -1,18 +1,16 @@
-# A100 V118.0 RC3.7 릴리즈 노트
+# A100 V118.0 RC3.8 릴리스 노트
 
-Build ID: V118.0-RC3.7-20260722-PERFORMANCE-ALIAS-AUTHORITATIVE-ROUTE-COMPATIBILITY-01
+Build ID: `V118.0-RC3.8-20260722-WARM-COLD-ISOLATION-TRUE-RENDER-FASTPATH-01`
 
 ## 변경 사항
-- `/performancebudget`을 기존 authoritative `/performance` 경로로 위임합니다.
-- `/perf`를 기존 authoritative `/performance` 경로로 위임합니다.
-- Alias는 Registry에 추가하지 않아 341/341 계약을 유지합니다.
-- `/performance` 출력에 Registry-neutral alias 안내를 추가했습니다.
-- 기존 BootManager, Architecture Guard, Deferred Matrix Recovery, Warm Cache 정책을 유지합니다.
+- Render Cache HIT 시 Projection, Trust, Ledger, Matrix를 다시 계산하지 않는 Full-Text Fast Path 적용
+- 부팅 Warmup에서 생성한 Stable Semantic Projection Hash를 Active Generation으로 고정
+- `/versionaudit`, `/commandcert`, `/commandmatrix`, `/trustgate`, `/intelligencescore`가 Active Generation 캐시를 우선 조회
+- Warm/Cold 성능 통계 분리
+- 운영 성능 판정은 Warm P95 기준
+- Cold P95는 진단 지표로만 유지
+- 캐시 진단을 Last Result, Last Miss Reason, Entry Age, TTL Remaining, Warm Used, Generation으로 분리
+- `/performancebudget`, `/perf` Registry-neutral alias 유지
 
-## 불변 조건
-- Runtime First
-- Strict Read Only
-- Ledger Append Only
-- Registry 341/341
-- Live Trading OFF
-- 기존 데이터와 환경변수 변경 없음
+## 불변 원칙
+Registry 341/341, Runtime First, Strict Read Only, Ledger Append Only, Live Trading OFF를 유지합니다.

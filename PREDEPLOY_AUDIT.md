@@ -1,12 +1,12 @@
-# A100 V118.0 RC3.7 사전 검수
+# PREDEPLOY AUDIT · V118.0 RC3.8
 
 - Python compile: PASS
-- Authoritative `__main__`: 1개
-- `/performancebudget` dispatcher alias: PASS
-- `/perf` dispatcher alias: PASS
-- Alias Registry 증가: 없음
-- Authoritative target: `/performance`
-- Registry 목표: 341/341
-- Strict Read Only: 유지
-- Live Trading OFF: 유지
-- 데이터/환경변수 변경: 없음
+- AST parse: PASS
+- Registry contract: 341/341 preserved
+- True full-text cache lookup before Projection rebuild: ACTIVE
+- Warm/Cold metric isolation: ACTIVE
+- Warm P95 authoritative performance verdict: ACTIVE
+- Shared semantic generation: ACTIVE
+- Strict Read Only: PRESERVED
+- Ledger Append Only: PRESERVED
+- Live Trading: OFF
