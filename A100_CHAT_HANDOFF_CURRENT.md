@@ -1,23 +1,17 @@
 # CHAT HANDOFF — CURRENT
 
 ## Authoritative baseline
-- V118.0-RC3.11.3.4
-- Build ID: V118.0-RC3.11.3.4-20260723-LIVE-PERFORMANCE-VERSION-WARMUP-STATE-HOTFIX-01
-- Base: V118.0-RC3.11.3.3
+- V118.0-RC3.11.3.5
+- Build ID: V118.0-RC3.11.3.5-20260723-SEND-DIRECT-COMMAND-SIGNATURE-HOTFIX-01
+- Base: V118.0-RC3.11.3.4
 
-## Hotfix
-- `/performance` was cached while Boot Warmup was still RUNNING, so the stale
-  RUNNING/0/0 screen was served for the full cache TTL.
-- `/performance` is now a live non-cached diagnostic rendered off the main loop.
-- `/version` was missing from the isolated warmup renderer and is now included.
-- Boot warmup now caches 7 stable commands and records 35 real lookup samples.
-- Any stale performance cache is removed when warmup completes.
-
-## Unchanged
-- Registry 341/341
-- PASS 56 / PARTIAL 285 / FAILED 0
-- Runtime First / Strict Read Only / Live Trading OFF
-- Ledger, Learning, Trading Gate, and locked roadmap
+## Critical hotfix
+- `/performance` live fast path called `_v1180_send_direct` without the required
+  `command` argument.
+- Fixed the call to use `_v1180_send_direct(update, text, command)`.
+- Parsed the complete module AST and verified every direct-sender call uses
+  exactly three arguments.
+- No roadmap, Registry, Certification, Ledger, Learning, or Trading Gate changes.
 
 ## Distribution
 - MOBILE FLAT

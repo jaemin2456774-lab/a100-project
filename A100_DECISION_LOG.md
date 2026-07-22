@@ -39,3 +39,9 @@
 - Commands that report cache/warmup/metric state must not cache their own output.
 - `/performance` is a live diagnostic and always bypasses Shared Cache.
 - Stable command outputs may be boot-warmed; live state dashboards must render current state.
+
+
+## RC3.11.3.5 sender contract hotfix
+- Direct Telegram sender calls use:
+  `_v1180_send_direct(update, text, command)`.
+- Packaging validation uses Python AST to verify every call site.
