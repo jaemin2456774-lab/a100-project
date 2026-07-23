@@ -99,3 +99,10 @@
 - READY requires post-commit verification.
 - Failed verification must not report READY.
 - Latest deployed ZIP remains development SSOT.
+
+
+## RC3.12.4
+- Renderer sub-stage labels must be derived from the actually executing stack.
+- Stack sampling is diagnostic only and cannot mutate engine decisions.
+- Active function, line, sample count, and unchanged duration identify the real
+  bottleneck before optimization.
