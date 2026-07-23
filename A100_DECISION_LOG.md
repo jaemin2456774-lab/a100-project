@@ -84,3 +84,12 @@
 - Invalid/delisted symbols are quarantined; transient API failures are retried.
 - PRICE_UNAVAILABLE is an external data condition, not a strategy failure.
 - Latest deployed ZIP is the mandatory development SSOT.
+
+
+## RC3.12.2 heavy stage budget decisions
+- A queued command is WAITING, never EMPTY.
+- Heavy state is WAITING → BUILDING_RENDER → COMMITTING → READY.
+- Lease budgets are command-specific and based on observed runtime cost.
+- Automatic retry is bounded; endless requeue loops are prohibited.
+- Cold boot eagerly computes only Sniper to reduce contention.
+- Paper and Shadow are lazy heavy snapshots.
