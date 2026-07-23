@@ -140,3 +140,10 @@
 ## RC3.12.8.1
 - Stack classifier local variables must be initialized before any branch uses them.
 - This release is a minimal runtime hotfix; no architecture or roadmap changes.
+
+
+## RC3.12.9
+- Runtime Scan Cache requires an explicit producer; Snapshot must remain a consumer.
+- Every producer commit is generation-monotonic and verified.
+- Empty scan, empty filter, empty cache, and failed commit are distinct states.
+- Heavy warmup should not race ahead of the first producer cycle.
