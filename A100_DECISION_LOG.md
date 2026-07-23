@@ -204,3 +204,11 @@
 - A verified non-empty last-good View has precedence over degraded/timeout empty data.
 - First boot uses bounded Raw-first evidence; analysis readers wait rather than certify empty.
 - Reader output must disclose LAST_GOOD/CURRENT and pending refinement state.
+
+
+## RC3.13.9
+- Reader attachment is idempotent for a Producer generation.
+- Direct user requests may promote queued work; background fanout may not starve them.
+- Ultimate is on-demand, not Producer-eager.
+- A usable last-good snapshot is served immediately while replacement renders.
+- ATTACH_OK requires a real Shared View ID.

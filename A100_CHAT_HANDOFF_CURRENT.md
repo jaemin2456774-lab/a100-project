@@ -1,25 +1,26 @@
 # CHAT HANDOFF — CURRENT
 
 ## Authoritative baseline
-- V118.0-RC3.13.8
-- Build ID: V118.0-RC3.13.8-20260724-LAST-GOOD-VIEW-RAW-FIRST-REFINEMENT-01
-- Base: latest deployed RC3.13.7 ZIP supplied by user
+- V118.0-RC3.13.9
+- Build ID: V118.0-RC3.13.9-20260724-READER-ATTACH-IDEMPOTENT-QUEUE-PROMOTION-01
+- Base: latest deployed RC3.13.8 ZIP supplied by user
 
-## Resolved in RC3.13.8
-- Slow FILTERED_SCAN is no longer on the authoritative first-response path.
-- Existing verified Runtime cache is handed to readers immediately.
-- On first boot, bounded Raw Scan runs first; Filtered Scan becomes background refinement.
-- Timeout/degraded empty data never replaces a non-empty last-good analysis View.
-- /ultimate and /sniper do not create FRESH empty snapshots before real evidence exists.
-- Last-good View is served with explicit pending/refinement state during refresh.
-- Coverage invariant, Reader generation telemetry, Shared View, Raw Recovery,
-  Mutation Firewall and Async Persistence remain.
+## RC3.13.9 fixes
+- Reader attachment is idempotent per Producer generation.
+- VIEW_READY cannot regress to ATTACH_START/OK for the same generation.
+- A direct user request can promote an already queued Heavy command.
+- Ultimate is no longer eagerly queued by Producer/refinement; it is on-demand priority.
+- Existing usable snapshot is returned immediately as LAST-GOOD-WHILE-REFRESH.
+- Shared-view absence is reported as WAITING_FOR_SHARED_VIEW, not false ATTACH_OK.
+- Sniper/Ultimate publish can use verified CACHE_REUSE or last-good evidence.
+- Pending telemetry shows delta and target generation.
 
-## Fixed architecture
+## Preserved
 - Runtime First / Strict Read Only / Registry 341/341 / Live OFF.
-- Ledger, Certification, Learning, Gate, Threshold, Weight and roadmap unchanged.
+- Raw-first Producer, background Filter Refinement, Last-Good retention.
+- Filtered Cache, Shared View, Coverage Sum PASS, Mutation Firewall,
+  Async Persistence, Learning/Ledger/Gates/Thresholds/Weights.
 - MOBILE FLAT.
 
-## Next optimization
-- Shadow Dashboard Cache MISS (~26–30s) must be detached from reader render.
-- Add prebuilt Dashboard Projection Cache after RC3.13.8 runtime verification.
+## Next measured target
+- Shadow Dashboard projection cache: remove 26–30s Cache MISS render path.
