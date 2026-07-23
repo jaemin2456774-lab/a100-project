@@ -135,3 +135,8 @@
 - Worker entry exceptions must never terminate the scheduler silently.
 - Queue pop and worker entry are explicit guarded transitions.
 - New queue requests reset stale display telemetry.
+
+
+## RC3.12.8.1
+- Stack classifier local variables must be initialized before any branch uses them.
+- This release is a minimal runtime hotfix; no architecture or roadmap changes.
