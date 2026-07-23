@@ -67,3 +67,11 @@
 - Warm Path is cache readiness SSOT.
 - Snapshot older than 3×TTL is EXPIRED and not displayed.
 - Scheduler status must show running/waiting/queue.
+
+
+## RC3.12.0 real runtime factor bridge
+- Producer output and consensus input names are a versioned contract.
+- Structured real observations may be exposed through numeric compatibility
+  fields with explicit provenance.
+- Missing News remains missing unless a real numeric observation exists.
+- Synthetic zero-fill and fabricated coverage are prohibited.
