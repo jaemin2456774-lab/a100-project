@@ -93,3 +93,9 @@
 - Automatic retry is bounded; endless requeue loops are prohibited.
 - Cold boot eagerly computes only Sniper to reduce contention.
 - Paper and Shadow are lazy heavy snapshots.
+
+## RC3.12.3
+- Measure only real pipeline stages.
+- READY requires post-commit verification.
+- Failed verification must not report READY.
+- Latest deployed ZIP remains development SSOT.
