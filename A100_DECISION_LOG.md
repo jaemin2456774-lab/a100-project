@@ -185,3 +185,9 @@
 - The same generation may be rendered once per reader, not repeatedly queued.
 - Sniper completion fans out Paper and Shadow with fair queue priority.
 - Reader state transitions are observable and persistent in telemetry.
+
+## RC3.13.6
+- Filtering is published once per Producer generation.
+- All Heavy readers share one immutable View identity.
+- Unknown coverage loss is reported as UNCLASSIFIED, never invented.
+- Raw Recovery remains background-only.

@@ -1,17 +1,10 @@
 # CHAT HANDOFF — CURRENT
-
-## Authoritative baseline
-- V118.0-RC3.13.5
-- Build ID: V118.0-RC3.13.5-20260724-READER-ATTACH-FANOUT-QUEUE-FAIRNESS-01
-- Base: latest deployed RC3.13.4 ZIP supplied by user
-
-## Stabilization
-- Verified Runtime generation is attached to Sniper, Paper and Shadow readers.
-- Reader states: READER_ATTACH_START → READER_ATTACH_OK → VIEW_SELECTED → VIEW_READY.
-- Sniper READY fans out Paper and Shadow exactly once per producer generation.
-- Repeated Producer cycles no longer requeue the same Sniper generation.
-- Paper/Shadow use normal-priority fanout, preventing priority starvation.
-- Existing valid reader views are reused while the producer refreshes.
-- Render mutation firewall, async persistence, raw recovery and all fixed
-  architecture/roadmap constraints remain unchanged.
+- Current: V118.0-RC3.13.6
+- Base: latest deployed RC3.13.5 ZIP
+- One Filtered View per Producer generation.
+- Sniper/Paper/Shadow share the same immutable View ID.
+- Heavy isolated render does not recompute filtering or start network I/O.
+- Coverage Audit records Raw→Filtered losses; unknown causes remain UNCLASSIFIED.
+- Raw Recovery remains background-only.
+- Registry 341/341, Runtime First, Strict Read Only, Live OFF and roadmap unchanged.
 - MOBILE FLAT.
