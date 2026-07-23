@@ -67,3 +67,57 @@
 - Warm Path is cache readiness SSOT.
 - Snapshot older than 3×TTL is EXPIRED and not displayed.
 - Scheduler status must show running/waiting/queue.
+
+
+## RC3.12.0 real runtime factor bridge
+- Producer output and consensus input names are a versioned contract.
+- Structured real observations may be exposed through numeric compatibility
+  fields with explicit provenance.
+- Missing News remains missing unless a real numeric observation exists.
+- Synthetic zero-fill and fabricated coverage are prohibited.
+
+
+## RC3.12.1 stability decisions
+- Heavy render work uses a bounded lease token.
+- Expired or detached workers can never commit stale results.
+- Snapshot commit is atomic and generation-monotonic.
+- Invalid/delisted symbols are quarantined; transient API failures are retried.
+- PRICE_UNAVAILABLE is an external data condition, not a strategy failure.
+- Latest deployed ZIP is the mandatory development SSOT.
+
+
+## RC3.12.2 heavy stage budget decisions
+- A queued command is WAITING, never EMPTY.
+- Heavy state is WAITING → BUILDING_RENDER → COMMITTING → READY.
+- Lease budgets are command-specific and based on observed runtime cost.
+- Automatic retry is bounded; endless requeue loops are prohibited.
+- Cold boot eagerly computes only Sniper to reduce contention.
+- Paper and Shadow are lazy heavy snapshots.
+
+## RC3.12.3
+- Measure only real pipeline stages.
+- READY requires post-commit verification.
+- Failed verification must not report READY.
+- Latest deployed ZIP remains development SSOT.
+
+
+## RC3.12.4
+- Renderer sub-stage labels must be derived from the actually executing stack.
+- Stack sampling is diagnostic only and cannot mutate engine decisions.
+- Active function, line, sample count, and unchanged duration identify the real
+  bottleneck before optimization.
+
+
+## RC3.12.5
+- Repeated V91 state reads use file-signature cache rather than repeated JSON parsing.
+- Save refreshes the cache atomically after the state file replacement.
+- Cached state is returned as a defensive copy.
+- Telegram HTML parse failure must fall back to plain text instead of failing the command.
+
+
+## RC3.12.6
+- Heavy Snapshot generation is a read-only projection of existing Runtime data.
+- Private Snapshot event loops must never initiate exchange/network scans.
+- Stale real Runtime cache may be displayed with explicit age; missing cache
+  remains empty and cannot be synthetically completed.
+- Normal runtime scan authority remains unchanged.
