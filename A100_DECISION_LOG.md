@@ -197,3 +197,10 @@
 - /ultimate is a Heavy read-only view and must never run under the 12-second legacy dispatcher.
 - Coverage Audit must satisfy Classified + Unclassified = Dropped.
 - Reader lag is shown explicitly as Pending generation delta.
+
+
+## RC3.13.8
+- Slow filtered analysis is a background refinement, never a first-response dependency.
+- A verified non-empty last-good View has precedence over degraded/timeout empty data.
+- First boot uses bounded Raw-first evidence; analysis readers wait rather than certify empty.
+- Reader output must disclose LAST_GOOD/CURRENT and pending refinement state.
