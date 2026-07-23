@@ -128,3 +128,10 @@
 - Every queue push immediately sets the wake event.
 - Lease ownership starts after worker assignment.
 - READY follows COMMIT and VERIFY only.
+
+
+## RC3.12.8
+- A boolean worker-started flag is insufficient; thread liveness is authoritative.
+- Worker entry exceptions must never terminate the scheduler silently.
+- Queue pop and worker entry are explicit guarded transitions.
+- New queue requests reset stale display telemetry.
