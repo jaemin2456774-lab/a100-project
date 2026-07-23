@@ -167,3 +167,10 @@
 - Producer completion hands verified generation to Snapshot queue.
 - Incomplete producer state returns WAITING_FOR_RUNTIME_PRODUCER without render.
 - Last verified Snapshot remains the read-only fallback.
+
+
+## RC3.13.3
+- Filtered timeout must terminate in a safe committed state, not indefinite WAIT.
+- Existing verified cache is preferred over overwriting with timeout-empty data.
+- First-boot timeout may publish only explicit DEGRADED_EMPTY / WAIT evidence.
+- Raw fallback runs independently and single-flight, then upgrades the cache.
