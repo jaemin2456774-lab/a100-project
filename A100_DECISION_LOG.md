@@ -153,3 +153,10 @@
 - Unproduced or unverified empty Sniper output cannot be published FRESH.
 - Read-only projections use bounded structural read views.
 - Stabilization scope only; roadmap unchanged.
+
+
+## RC3.13.1
+- Heavy worker must not block on JSON serialization or fsync.
+- In-memory atomic swap is the query authority; persistence is background recovery evidence.
+- Persistence requests are coalesced through one worker.
+- Timeout-produced empty data is not equivalent to a successful empty scan.

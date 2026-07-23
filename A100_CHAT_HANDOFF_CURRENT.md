@@ -1,9 +1,18 @@
 # CHAT HANDOFF — CURRENT
-- Baseline: latest deployed V118.0 RC3.12.9 ZIP supplied by user
-- Current: V118.0 RC3.13.0
-- Bounded FILTERED_SCAN and RAW_FALLBACK stages
-- Explicit CACHE_COMMIT / CACHE_VERIFY_PASS
-- Sniper publish blocked until Producer generation and commit are verified
-- Runtime and V91 recursive deepcopy removed from targeted read paths
-- Runtime First, Strict Read Only, Registry 341/341, Live OFF and roadmap unchanged
-- MOBILE FLAT
+
+## Authoritative baseline
+- V118.0-RC3.13.1
+- Build ID: V118.0-RC3.13.1-20260724-ASYNC-PERSISTENCE-PRODUCER-CYCLE-GUARD-01
+- Base: latest deployed RC3.13.0 ZIP supplied by user
+
+## Stabilization
+- Heavy Snapshot in-memory commit is authoritative and releases the worker immediately.
+- Disk persistence moved to a single background worker.
+- Persistence requests coalesce; duplicate JSON dump/write is avoided.
+- Producer timeout commits are labeled SCAN_TIMEOUT_COMMITTED, never CACHE_VERIFY_PASS.
+- Successful real empty scans use CACHE_VERIFY_EMPTY.
+- Sniper publish allows PASS/EMPTY only when verified and without timeout.
+- Producer cycle budget and timeout telemetry added.
+- Registry, Runtime First, Strict Read Only, Live OFF, Ledger, Learning,
+  gates, thresholds, weights, and roadmap unchanged.
+- MOBILE FLAT.
