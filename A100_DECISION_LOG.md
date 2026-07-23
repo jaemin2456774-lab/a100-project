@@ -61,3 +61,9 @@
 - Heavy refresh concurrency is one.
 - User requests receive refresh priority.
 - Persisted output is read-only cache, never certification evidence.
+
+
+## RC3.11.6
+- Warm Path is cache readiness SSOT.
+- Snapshot older than 3×TTL is EXPIRED and not displayed.
+- Scheduler status must show running/waiting/queue.
