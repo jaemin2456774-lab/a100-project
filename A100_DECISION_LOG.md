@@ -174,3 +174,7 @@
 - Existing verified cache is preferred over overwriting with timeout-empty data.
 - First-boot timeout may publish only explicit DEGRADED_EMPTY / WAIT evidence.
 - Raw fallback runs independently and single-flight, then upgrades the cache.
+
+## RC3.13.4
+- Isolated query rendering may not mutate V91 state.
+- Render, commit, persistence queue, verification and READY are separate observable transitions.
