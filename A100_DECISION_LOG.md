@@ -106,3 +106,10 @@
 - Stack sampling is diagnostic only and cannot mutate engine decisions.
 - Active function, line, sample count, and unchanged duration identify the real
   bottleneck before optimization.
+
+
+## RC3.12.5
+- Repeated V91 state reads use file-signature cache rather than repeated JSON parsing.
+- Save refreshes the cache atomically after the state file replacement.
+- Cached state is returned as a defensive copy.
+- Telegram HTML parse failure must fall back to plain text instead of failing the command.
