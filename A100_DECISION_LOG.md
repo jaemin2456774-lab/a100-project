@@ -147,3 +147,9 @@
 - Every producer commit is generation-monotonic and verified.
 - Empty scan, empty filter, empty cache, and failed commit are distinct states.
 - Heavy warmup should not race ahead of the first producer cycle.
+
+## RC3.13.0
+- Producer stages must be bounded.
+- Unproduced or unverified empty Sniper output cannot be published FRESH.
+- Read-only projections use bounded structural read views.
+- Stabilization scope only; roadmap unchanged.
