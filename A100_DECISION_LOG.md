@@ -160,3 +160,10 @@
 - In-memory atomic swap is the query authority; persistence is background recovery evidence.
 - Persistence requests are coalesced through one worker.
 - Timeout-produced empty data is not equivalent to a successful empty scan.
+
+
+## RC3.13.2
+- Snapshot render cannot wait for Runtime Producer.
+- Producer completion hands verified generation to Snapshot queue.
+- Incomplete producer state returns WAITING_FOR_RUNTIME_PRODUCER without render.
+- Last verified Snapshot remains the read-only fallback.
