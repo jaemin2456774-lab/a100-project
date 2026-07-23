@@ -121,3 +121,10 @@
 - Stale real Runtime cache may be displayed with explicit age; missing cache
   remains empty and cannot be synthetically completed.
 - Normal runtime scan authority remains unchanged.
+
+
+## RC3.12.7
+- Heavy Scheduler wake is event-driven.
+- Every queue push immediately sets the wake event.
+- Lease ownership starts after worker assignment.
+- READY follows COMMIT and VERIFY only.
