@@ -178,3 +178,10 @@
 ## RC3.13.4
 - Isolated query rendering may not mutate V91 state.
 - Render, commit, persistence queue, verification and READY are separate observable transitions.
+
+
+## RC3.13.5
+- Producer generation is the Reader Attach identity.
+- The same generation may be rendered once per reader, not repeatedly queued.
+- Sniper completion fans out Paper and Shadow with fair queue priority.
+- Reader state transitions are observable and persistent in telemetry.
