@@ -1,19 +1,21 @@
 # ACTIVE SPRINT
 
 ## Version
-V118.0 RC3.12.x — Real runtime evidence coverage recovery.
+V118.0 RC3.12.x — Runtime stabilization.
 
 ## Current objectives
-- Preserve RC3.11.6 stability.
-- Recover real Volume, Momentum, and Volatility factor connectivity.
-- Connect News only from real numeric producer evidence.
-- Keep missing evidence honest.
-- Do not alter thresholds, weights, certification, gates, or order authority.
+- Eliminate Snapshot RUNNING deadlocks.
+- Guarantee atomic Snapshot swap and generation progression.
+- Recover stale leases automatically.
+- Separate invalid symbols from temporary price API failures.
+- Preserve Shadow positions during temporary price unavailability.
+- Keep the approved roadmap unchanged.
 
 ## Exit criteria
 - Registry 341/341.
-- Core Warmup READY 7/7 and 35/35.
-- Volume, Momentum, and Volatility are not MISSING when scanner data exists.
-- News remains MISSING when no real producer observation exists.
-- No synthetic evidence or runtime exception.
+- No indefinitely stuck `Refresh RUNNING`.
+- Lease timeout produces RECOVERED/FAILED evidence and releases the scheduler.
+- Successful refresh logs generation increment and age=0.
+- Invalid symbols are quarantined.
+- Temporary price failures do not become V88 strategy errors.
 - MOBILE FLAT maintained.

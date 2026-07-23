@@ -1,19 +1,22 @@
 # CHAT HANDOFF — CURRENT
 
 ## Authoritative baseline
-- V118.0-RC3.12.0
-- Build ID: V118.0-RC3.12.0-20260723-REAL-RUNTIME-FACTOR-FIELD-BRIDGE-01
-- Base: V118.0-RC3.11.6
+- V118.0-RC3.12.1
+- Build ID: V118.0-RC3.12.1-20260723-SNAPSHOT-LEASE-SYMBOL-RESOLVER-STABILITY-01
+- Base: latest deployed V118.0-RC3.12.0 ZIP supplied by the user
 
-## Current sprint work
-- Connected existing real Volume, Momentum, and Volatility observations to the
-  numeric field names read by the consensus engine.
-- News is connected only when a real numeric runtime observation exists.
-- Missing News remains MISSING; no zero-fill or synthetic evidence.
-- Started a new Heavy Snapshot semantic generation to prevent old Sniper output
-  from being restored into RC3.12.0.
-- Registry, Certification, Ledger, Learning, gates, weights, and roadmap unchanged.
+## Stabilization work
+- Added timeout-bounded Heavy Snapshot leases.
+- A stale render thread cannot commit after its lease expires.
+- Scheduler automatically recovers stale RUNNING leases.
+- Snapshot is atomically swapped only after a successful complete render.
+- Generation increments and age resets to zero on commit.
+- Added price retry and authoritative Binance symbol refresh.
+- Invalid/delisted symbols are quarantined.
+- Temporary API failures preserve Shadow positions as PRICE_UNAVAILABLE instead
+  of recording strategy/runtime failures.
+- No roadmap, threshold, weight, certification, ledger, learning, or gate change.
 
-## Distribution
-- MOBILE FLAT
-- No folder creation required
+## Mandatory workflow
+- Every future modification starts from the latest deployed ZIP as SSOT.
+- MOBILE FLAT remains the default package format.

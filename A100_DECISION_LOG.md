@@ -75,3 +75,12 @@
   fields with explicit provenance.
 - Missing News remains missing unless a real numeric observation exists.
 - Synthetic zero-fill and fabricated coverage are prohibited.
+
+
+## RC3.12.1 stability decisions
+- Heavy render work uses a bounded lease token.
+- Expired or detached workers can never commit stale results.
+- Snapshot commit is atomic and generation-monotonic.
+- Invalid/delisted symbols are quarantined; transient API failures are retried.
+- PRICE_UNAVAILABLE is an external data condition, not a strategy failure.
+- Latest deployed ZIP is the mandatory development SSOT.
