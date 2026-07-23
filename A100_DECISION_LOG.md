@@ -191,3 +191,9 @@
 - All Heavy readers share one immutable View identity.
 - Unknown coverage loss is reported as UNCLASSIFIED, never invented.
 - Raw Recovery remains background-only.
+
+
+## RC3.13.7
+- /ultimate is a Heavy read-only view and must never run under the 12-second legacy dispatcher.
+- Coverage Audit must satisfy Classified + Unclassified = Dropped.
+- Reader lag is shown explicitly as Pending generation delta.
