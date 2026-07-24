@@ -232,3 +232,10 @@
 - Startup audits all direct handlers together before application construction.
 - Missing route symbols must fail once with a complete list, never serially
   across repeated deployments.
+
+
+## RC3.13.13
+- Default /ultimate is a compact runtime-cache reader, not a Heavy renderer.
+- Heavy Ultimate is explicit through /ultimate detail only.
+- /start and /help must use the current product contract, never legacy banners.
+- /commands is derived from the authoritative registry.

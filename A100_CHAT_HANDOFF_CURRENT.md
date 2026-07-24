@@ -1,21 +1,21 @@
 # CHAT HANDOFF — CURRENT
 
 ## Authoritative baseline
-- V118.0-RC3.13.12
-- Build ID: V118.0-RC3.13.12-20260724-DIRECT-ROUTE-SYMBOL-CLOSURE-01
-- Base: user-deployed RC3.13.11 ZIP
+- V118.0-RC3.13.13
+- Build ID: V118.0-RC3.13.13-20260724-ULTIMATE-COMPACT-FASTPATH-START-HELP-CONTRACT-01
+- Base: user-deployed RC3.13.12 ZIP
 
-## RC3.13.12 boot-chain closure
-- Restored missing _v1180_direct_start_probe.
-- Restored missing _v1180_direct_commands_probe.
-- Added one shared authoritative-handler delegation helper.
-- Added startup audit for all 17 final V118 direct route symbols.
-- Application construction aborts with one complete missing-symbol list instead
-  of revealing one NameError per deployment.
-- RC3.13.11 V925 task-scope recovery remains.
+## RC3.13.13
+- /ultimate default bypasses the 90-second Heavy renderer.
+- /ultimate returns a compact Runtime Cache summary immediately.
+- /ultimate detail retains Heavy Snapshot behavior.
+- Ultimate is removed from automatic Heavy warmup.
+- /start and /help no longer delegate to legacy v45.1 banners.
+- /commands is generated from the authoritative 341-command registry.
+- RC3.13.12 direct-route 17/17 symbol audit remains.
 
 ## Preserved
 - Runtime First / Strict Read Only / Registry 341/341 / Live OFF.
-- Output Chunk / Ultimate Compact / Stable View / Reader Attach.
+- Output Chunk / Stable View / Reader Attach / Queue Promotion.
 - Learning / Ledger / Gate / Threshold / Weight unchanged.
 - MOBILE FLAT.
