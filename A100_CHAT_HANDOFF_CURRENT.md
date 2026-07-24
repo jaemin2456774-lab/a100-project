@@ -1,17 +1,17 @@
 # CHAT HANDOFF — CURRENT
 
 ## Baseline
-V118.0-RC3.13.17
-Build: V118.0-RC3.13.17-20260724-RUNTIME-SYMBOL-RECOVERY-ULTIMATE-FANOUT-RETIREMENT-01
+V118.0-RC3.13.18
+Build: V118.0-RC3.13.18-20260724-GENERATION-SSOT-STAGE-FRESHNESS-CACHE-01
 
-## Root cause
-RC3.13.16 function replacement consumed the module-level runtime declaration block.
-This removed the isolated-render thread local and filtered/refinement locks.
+## Verified fixes
+- RC3.13.17 runtime symbols remain intact.
+- Ultimate Heavy renderer remains retired.
+- Generation alignment uses Producer SSOT with bounded read-view delta.
+- Legacy stages normalize to WATCH / READY / ENTRY.
+- Sniper freshness is normalized from Runtime Producer SSOT.
+- Filter refinement has a 30-second single-flight cache hold.
+- Paper/Shadow automatic fanout respects snapshot TTL.
 
-## Fix
-- Rebuilt from verified RC3.13.15 source.
-- Runtime globals preserved and audited 8/8.
-- Ultimate direct/default/detail use fast Runtime Read View only.
-- Ultimate removed from automatic reader fanout.
-- Heavy dispatcher blocks Ultimate.
-- Sniper/Paper/Shadow retained.
+## Next runtime evidence
+Check /version /performance /ultimate /ultimate detail /sniper /paper /shadow /errors.

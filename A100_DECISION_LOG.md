@@ -256,3 +256,11 @@
 - Function replacement boundaries must stop before module globals.
 - Runtime global symbol audit is mandatory before release.
 - Ultimate is excluded from automatic heavy reader fanout.
+
+
+## RC3.13.18
+- Producer generation is the SSOT; a committed read view may be Δ0 or Δ+1 without drift.
+- Legacy candidate stages must render as WATCH/READY/ENTRY.
+- Sniper freshness must use Runtime Producer SSOT, never UNKNOWN when the producer is current.
+- Paper/Shadow fanout refreshes by TTL rather than every producer generation.
+- Filter refinement uses a bounded 30-second cache hold after READY/EMPTY.
