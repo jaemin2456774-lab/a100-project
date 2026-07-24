@@ -212,3 +212,11 @@
 - Ultimate is on-demand, not Producer-eager.
 - A usable last-good snapshot is served immediately while replacement renders.
 - ATTACH_OK requires a real Shared View ID.
+
+
+## RC3.13.10
+- Telegram output must be paginated before transport.
+- Default /ultimate is compact; detail is explicit.
+- Identical Producer generation/content maps to one stable View ID.
+- Empty evidence is cacheable and must not cause View churn.
+- Every dropped row is visible as a classified bucket or Unclassified.
