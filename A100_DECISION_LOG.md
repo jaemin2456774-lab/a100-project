@@ -243,3 +243,10 @@
 ## RC3.13.14
 - Compact renderers must tolerate runtime schema variation.
 - Unknown candidate schemas must render safe key hints, never blank output.
+
+
+## RC3.13.15
+- Runtime candidates may be dictionaries, dataclasses, or ordinary objects.
+- Compact renderers use a shared safe attribute adapter.
+- Result.sym/action/confidence/score/prob24 are authoritative fallback fields.
+- Old errors remain evidence and are visually distinguished from new failures.
