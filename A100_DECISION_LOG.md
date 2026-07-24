@@ -250,3 +250,11 @@
 - Compact renderers use a shared safe attribute adapter.
 - Result.sym/action/confidence/score/prob24 are authoritative fallback fields.
 - Old errors remain evidence and are visually distinguished from new failures.
+
+
+## RC3.13.16
+- Ultimate is permanently a bounded Runtime Read View.
+- Ultimate Heavy rendering is retired, including detail and accidental calls.
+- Freshness is computed from one authoritative timestamp and synchronized
+  generation set.
+- Heavy rendering remains only for Sniper/Paper/Shadow until separately retired.
