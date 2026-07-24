@@ -239,3 +239,7 @@
 - Heavy Ultimate is explicit through /ultimate detail only.
 - /start and /help must use the current product contract, never legacy banners.
 - /commands is derived from the authoritative registry.
+
+## RC3.13.14
+- Compact renderers must tolerate runtime schema variation.
+- Unknown candidate schemas must render safe key hints, never blank output.
