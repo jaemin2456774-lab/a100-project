@@ -225,3 +225,10 @@
 - Startup task handles require explicit global scope.
 - All legacy run_bot_async variants must be audited.
 - Direct handler symbols must exist before final application construction.
+
+
+## RC3.13.12
+- Final direct-route registration requires complete symbol closure.
+- Startup audits all direct handlers together before application construction.
+- Missing route symbols must fail once with a complete list, never serially
+  across repeated deployments.
