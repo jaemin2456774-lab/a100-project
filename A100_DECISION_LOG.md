@@ -252,9 +252,7 @@
 - Old errors remain evidence and are visually distinguished from new failures.
 
 
-## RC3.13.16
-- Ultimate is permanently a bounded Runtime Read View.
-- Ultimate Heavy rendering is retired, including detail and accidental calls.
-- Freshness is computed from one authoritative timestamp and synchronized
-  generation set.
-- Heavy rendering remains only for Sniper/Paper/Shadow until separately retired.
+## RC3.13.17
+- Function replacement boundaries must stop before module globals.
+- Runtime global symbol audit is mandatory before release.
+- Ultimate is excluded from automatic heavy reader fanout.
