@@ -264,3 +264,11 @@
 - Sniper freshness must use Runtime Producer SSOT, never UNKNOWN when the producer is current.
 - Paper/Shadow fanout refreshes by TTL rather than every producer generation.
 - Filter refinement uses a bounded 30-second cache hold after READY/EMPTY.
+
+
+## RC3.13.19
+- Empty Runtime commits must not be promoted as Last Good.
+- EMPTY refinement bypasses cache hold and remains pending for retry.
+- Basic /sniper is a compact Runtime Fast Path; only /sniper detail uses heavy rendering.
+- Empty generations never enqueue a Sniper heavy snapshot.
+- Automatic Paper/Shadow reader fanout is retired; each reader is on-demand and TTL-bound.
