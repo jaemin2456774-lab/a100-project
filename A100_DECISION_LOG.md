@@ -272,3 +272,11 @@
 - Basic /sniper is a compact Runtime Fast Path; only /sniper detail uses heavy rendering.
 - Empty generations never enqueue a Sniper heavy snapshot.
 - Automatic Paper/Shadow reader fanout is retired; each reader is on-demand and TTL-bound.
+
+
+## RC3.13.20
+- Filter Refinement must always leave RUNNING/QUEUED through a finally-guarded terminal state.
+- Empty and timeout refinements automatically schedule bounded Raw Recovery.
+- Empty producer status is represented as EMPTY_PENDING_REFINEMENT.
+- /sniper detail does not invoke Heavy Renderer until real candidates exist.
+- Boot cache warmup uses bounded four-worker parallel execution.
