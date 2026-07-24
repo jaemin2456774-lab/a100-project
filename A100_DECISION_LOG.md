@@ -220,3 +220,8 @@
 - Identical Producer generation/content maps to one stable View ID.
 - Empty evidence is cacheable and must not cause View churn.
 - Every dropped row is visible as a classified bucket or Unclassified.
+
+## RC3.13.11
+- Startup task handles require explicit global scope.
+- All legacy run_bot_async variants must be audited.
+- Direct handler symbols must exist before final application construction.
